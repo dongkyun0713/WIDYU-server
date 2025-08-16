@@ -1,4 +1,4 @@
-package shop.itcontest17.widyu;
+package com.widyu;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
