@@ -15,6 +15,7 @@ src/**/application-*.yaml
 .env.*
 # macOS
 .DS_Store
+src/**/firebase
 
 ### STS ###
 .apt_generated
