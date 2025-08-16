@@ -1,18 +1,8 @@
 spring:
+  application:
+    name: SGMarket-Backend
   profiles:
-    active: prod
-
-  datasource:
-    url: ${spring.datasource.url}
-    username: ${spring.datasource.username}
-    password: ${spring.datasource.password}
-    driver-class-name: ${spring.datasource.driver-class-name}
-
-  jpa:
-    hibernate:
-      ddl-auto: create
-    properties:
-      hibernate:
-        show_sql: true
-        format_sql: true
-    open-in-view: false
+    group:
+      local: "local, datasource"
+      dev: "dev, datasource
+      "
