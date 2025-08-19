@@ -1,33 +1,52 @@
 package com.widyu.global.response;
 
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 @Getter
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class ApiResponseTemplate<T> {
 
-    private String code;
-    private String message;
-    private T data;
+    private final String code;
+    private final String message;
+    private final T data;
 
-    public static <T> ApiResponseTemplate<T> ok() {
-        return new ApiResponseTemplate<>();
+    public static BodyBuilder ok() {
+        return new DefaultBodyBuilder();
     }
 
-    public ApiResponseTemplate<T> code(String code) {
-        this.code = code;
-        return this;
+    public interface BodyBuilder {
+        BodyBuilder code(String code);
+        BodyBuilder message(String message);
+        <T> ApiResponseTemplate<T> body(T data);
+        <T> ApiResponseTemplate<T> build();
     }
 
-    public ApiResponseTemplate<T> message(String message) {
-        this.message = message;
-        return this;
-    }
+    private static final class DefaultBodyBuilder implements BodyBuilder {
+        private String code;
+        private String message;
 
-    public ApiResponseTemplate<T> data(T data) {
-        this.data = data;
-        return this;
+        @Override
+        public BodyBuilder code(String code) {
+            this.code = code;
+            return this;
+        }
+
+        @Override
+        public BodyBuilder message(String message) {
+            this.message = message;
+            return this;
+        }
+
+        @Override
+        public <T> ApiResponseTemplate<T> body(T data) {
+            return new ApiResponseTemplate<>(this.code, this.message, data);
+        }
+
+        @Override
+        public <T> ApiResponseTemplate<T> build() {
+            return new ApiResponseTemplate<>(this.code, this.message, null);
+        }
     }
 }
