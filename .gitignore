@@ -7,9 +7,6 @@ build/
 src/**/application-prod.yml   # 기존
 
 ### 🔒 Secrets & Env files (추가) ###
-src/**/application.yaml
-src/**/application-*.yml
-src/**/application-*.yaml
 .env
 *.env
 .env.*

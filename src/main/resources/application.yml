@@ -1,18 +1,11 @@
 spring:
+  application:
+    name: SGMarket-Backend
   profiles:
-    active: prod
+    group:
+      local: "local, datasource"
+      dev: "dev, datasource"
 
-  datasource:
-    url: ${spring.datasource.url}
-    username: ${spring.datasource.username}
-    password: ${spring.datasource.password}
-    driver-class-name: ${spring.datasource.driver-class-name}
-
-  jpa:
-    hibernate:
-      ddl-auto: create
-    properties:
-      hibernate:
-        show_sql: true
-        format_sql: true
-    open-in-view: false
+swagger:
+  version: ${SWAGGER_VERSION:0.0.1}
+  url: ${SWAGGER_URL:http://localhost:8080}
