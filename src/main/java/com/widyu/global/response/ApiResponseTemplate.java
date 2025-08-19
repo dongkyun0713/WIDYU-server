@@ -17,9 +17,9 @@ public class ApiResponseTemplate<T> {
     }
 
     public interface BodyBuilder {
-        BodyBuilder code(String code);
-        BodyBuilder message(String message);
-        <T> ApiResponseTemplate<T> body(T data);
+        BodyBuilder code(final String code);
+        BodyBuilder message(final String message);
+        <T> ApiResponseTemplate<T> body(final T data);
         <T> ApiResponseTemplate<T> build();
     }
 
@@ -28,19 +28,19 @@ public class ApiResponseTemplate<T> {
         private String message;
 
         @Override
-        public BodyBuilder code(String code) {
+        public BodyBuilder code(final String code) {
             this.code = code;
             return this;
         }
 
         @Override
-        public BodyBuilder message(String message) {
+        public BodyBuilder message(final String message) {
             this.message = message;
             return this;
         }
 
         @Override
-        public <T> ApiResponseTemplate<T> body(T data) {
+        public <T> ApiResponseTemplate<T> body(final T data) {
             return new ApiResponseTemplate<>(this.code, this.message, data);
         }
 
