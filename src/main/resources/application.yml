@@ -3,8 +3,8 @@ spring:
     name: SGMarket-Backend
   profiles:
     group:
-      local: "local, datasource"
-      dev: "dev, datasource"
+      local: "local, datasource, fcm"
+      dev: "dev, datasource, fcm"
 
 swagger:
   version: ${SWAGGER_VERSION:0.0.1}

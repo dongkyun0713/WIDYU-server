@@ -44,3 +44,7 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Firebase secrets
+src/main/resources/firebase/
+*.json

@@ -1,0 +1,7 @@
+spring:
+  config:
+    activate:
+      on-profile: "fcm"
+
+firebase:
+  config-path: ${FIREBASE_CONFIG_PATH}
