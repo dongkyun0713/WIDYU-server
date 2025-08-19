@@ -12,6 +12,7 @@ src/**/application-prod.yml   # 기존
 .env.*
 # macOS
 .DS_Store
+src/**/firebase
 
 ### STS ###
 .apt_generated
