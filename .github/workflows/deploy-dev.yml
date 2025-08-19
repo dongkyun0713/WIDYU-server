@@ -1,0 +1,74 @@
+name: Deploy to AWS EC2 using Docker
+
+on:
+  push:
+    branches:
+      - develop
+
+env:
+  DOCKER_IMAGE_NAME: ${{ secrets.DEV_DOCKER_IMAGE_NAME }}  
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_SSH_USER: ec2-user
+  PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+  CONTAINER_NAME: ${{ secrets.DEV_CONTAINER_NAME }}  
+
+jobs:
+  build-and-push-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and Push Image (latest + sha)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE_NAME }}:latest
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+  deploy-to-ec2:
+    needs: build-and-push-docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_SSH_USER }}
+          key: ${{ env.PRIVATE_KEY }}
+          script: |
+            set -e
+
+            IMAGE=${{ env.DOCKER_IMAGE_NAME }}
+            TAG=${{ github.sha }}   # 특정 버전으로 고정 배포 (rollback 용이)
+            NAME=${{ env.CONTAINER_NAME }}
+
+            # 최신 이미지 Pull
+            docker pull ${IMAGE}:${TAG}
+
+            # 기존 컨테이너 중지/삭제
+            if [ "$(docker ps -q -f name=^/${NAME}$)" ]; then
+              docker stop ${NAME}
+            fi
+            if [ "$(docker ps -aq -f name=^/${NAME}$)" ]; then
+              docker rm ${NAME}
+            fi
+
+            # 오래된 dangling 이미지 정리
+            docker image prune -f
+
+            docker run -d --name ${NAME} \
+              --env-file /home/ec2-user/.env \
+              -e TZ=Asia/Seoul \
+              -p 8080:8080 \
+              --restart=always \
+              ${IMAGE}:${TAG}
