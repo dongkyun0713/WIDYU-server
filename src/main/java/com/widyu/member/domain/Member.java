@@ -50,8 +50,7 @@ public class Member extends BaseTimeEntity {
     private Status status;
 
     @Builder(access = AccessLevel.PRIVATE)
-
-    public Member(MemberRole role, MemberType type, String name, String phone, LocalAccount localAccount,
+    private Member(MemberRole role, MemberType type, String name, String phone, LocalAccount localAccount,
                   List<SocialAccount> socialAccounts, Status status) {
         this.role = role;
         this.type = type;
