@@ -10,6 +10,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -17,9 +19,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @Table(uniqueConstraints = {
-                @UniqueConstraint(name="uk_local_member", columnNames="member_id"),
-                @UniqueConstraint(name="uk_local_email", columnNames="email")
-        }
+        @UniqueConstraint(name = "uk_local_member", columnNames = "member_id"),
+        @UniqueConstraint(name = "uk_local_email", columnNames = "email")
+}
 )
 public class LocalAccount {
 
@@ -37,4 +39,20 @@ public class LocalAccount {
 
     @Column(name = "is_first")
     private boolean isFirst;
+
+    @Builder(access = AccessLevel.PRIVATE)
+    private LocalAccount(final Member member, final String email, final String passwordHash) {
+        this.member = member;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.isFirst = true;
+    }
+
+    public static LocalAccount createLocalAccount(final Member member, final String email, final String passwordHash) {
+        return LocalAccount.builder()
+                .member(member)
+                .email(email)
+                .passwordHash(passwordHash)
+                .build();
+    }
 }

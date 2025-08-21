@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
-        uniqueConstraints = @UniqueConstraint(name="uk_provider_user", columnNames={"provider","providerUserId"})
+        uniqueConstraints = @UniqueConstraint(name = "uk_provider_user", columnNames = {"provider", "providerUserId"})
 )
 public class SocialAccount {
     @Id

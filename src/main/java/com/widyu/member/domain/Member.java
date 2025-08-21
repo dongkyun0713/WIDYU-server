@@ -10,7 +10,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
@@ -18,7 +17,6 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 
 @Entity
 @Getter
@@ -38,10 +36,7 @@ public class Member extends BaseTimeEntity {
 
     private String name;
 
-    private String phone;
-
-    @OneToOne(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
-    private LocalAccount localAccount;
+    private String phoneNumber;
 
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SocialAccount> socialAccounts = new ArrayList<>();
@@ -50,26 +45,22 @@ public class Member extends BaseTimeEntity {
     private Status status;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private Member(MemberRole role, MemberType type, String name, String phone, LocalAccount localAccount,
-                  List<SocialAccount> socialAccounts, Status status) {
+    private Member(final MemberRole role, final MemberType type, final String name, final String phoneNumber,
+                   final List<SocialAccount> socialAccounts, final Status status) {
         this.role = role;
         this.type = type;
         this.name = name;
-        this.phone = phone;
-        this.localAccount = localAccount;
+        this.phoneNumber = phoneNumber;
         this.socialAccounts = socialAccounts;
         this.status = status;
     }
 
-    public static Member createMember(MemberRole role, MemberType type, String name, String phone,
-                                      LocalAccount localAccount, List<SocialAccount> socialAccounts) {
+    public static Member createMember(final MemberType type, final String name, final String phoneNumber) {
         return Member.builder()
-                .role(role)
+                .role(MemberRole.USER)
                 .type(type)
                 .name(name)
-                .phone(phone)
-                .localAccount(localAccount)
-                .socialAccounts(socialAccounts)
+                .phoneNumber(phoneNumber)
                 .status(Status.ACTIVE)
                 .build();
     }
