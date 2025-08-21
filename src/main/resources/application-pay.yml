@@ -1,0 +1,7 @@
+spring:
+  config:
+    activate:
+      on-profile: "pay"
+  payment:
+    secret-key: ${PAYMENT_SECRET_KEY}
+    base-url: ${PAYMENT_BASE_URL:https://api.tosspayments.com/v1/payments}

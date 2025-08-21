@@ -63,8 +63,17 @@ dependencies {
 
     // message
     implementation 'net.nurigo:sdk:4.2.7'
+
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:2023.0.1"
+    }
 }

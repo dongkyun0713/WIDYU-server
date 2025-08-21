@@ -3,8 +3,8 @@ spring:
     name: SGMarket-Backend
   profiles:
     group:
-      local: "local, datasource, fcm"
-      dev: "dev, datasource, fcm"
+      local: "local, datasource, fcm, pay"
+      dev: "dev, datasource, fcm, pay"
 
     include:
       - security
