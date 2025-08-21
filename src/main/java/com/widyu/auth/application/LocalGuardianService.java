@@ -2,6 +2,7 @@ package com.widyu.auth.application;
 
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;
+import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class SignupService {
+public class LocalGuardianService {
 
     private final PasswordEncoder passwordEncoder;
     private final MemberRepository memberRepository;
@@ -52,5 +53,25 @@ public class SignupService {
     @Transactional(readOnly = true)
     public boolean isEmailRegistered(EmailCheckRequest request) {
         return !localAccountRepository.existsByEmail(request.email());
+    }
+
+    @Transactional(readOnly = true)
+    public TokenPairResponse signIn(LocalGuardianSignInRequest request) {
+        LocalAccount localAccount = findLocalAccountByEmail(request.email());
+        validatePassword(request.password(), localAccount.getPassword());
+
+        Member member = localAccount.getMember();
+        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+    }
+
+    private LocalAccount findLocalAccountByEmail(String email) {
+        return localAccountRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_EMAIL));
+    }
+
+    private void validatePassword(String rawPassword, String encodedPassword) {
+        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
     }
 }

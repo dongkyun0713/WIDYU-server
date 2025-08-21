@@ -35,24 +35,24 @@ public class LocalAccount {
 
     private String email;
 
-    private String passwordHash;
+    private String password;
 
     @Column(name = "is_first")
     private boolean isFirst;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private LocalAccount(final Member member, final String email, final String passwordHash) {
+    private LocalAccount(final Member member, final String email, final String password) {
         this.member = member;
         this.email = email;
-        this.passwordHash = passwordHash;
+        this.password = password;
         this.isFirst = true;
     }
 
-    public static LocalAccount createLocalAccount(final Member member, final String email, final String passwordHash) {
+    public static LocalAccount createLocalAccount(final Member member, final String email, final String password) {
         return LocalAccount.builder()
                 .member(member)
                 .email(email)
-                .passwordHash(passwordHash)
+                .password(password)
                 .build();
     }
 }

@@ -15,6 +15,8 @@ public enum ErrorCode {
     TEMPORARY_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_4014", "임시 토큰이 만료되었습니다."),
     ALREADY_REGISTERED_EMAIL(HttpStatus.BAD_REQUEST, "AUTH_4001", "이미 등록된 이메일입니다."),
     INVALID_TEMPORARY_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_4015", "유효하지 않은 임시 토큰입니다."),
+    INVALID_EMAIL(HttpStatus.UNAUTHORIZED, "AUTH_4011", "이메일이 올바르지 않습니다."),
+    INVALID_PASSWORD(HttpStatus.UNAUTHORIZED, "AUTH_4012", "비밀번호가 올바르지 않습니다."),
 
     // 문자 인증
     SMS_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "SMS_4040", "문자 인증 코드가 존재하지 않습니다."),

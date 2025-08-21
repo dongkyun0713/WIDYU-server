@@ -2,6 +2,7 @@ package com.widyu.auth.api;
 
 import com.widyu.auth.application.AuthService;
 import com.widyu.auth.dto.request.EmailCheckRequest;
+import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -58,5 +59,14 @@ public class AuthController implements AuthDocs {
                 .code("AUTH_2002")
                 .message("로컬 보호자 회원가입이 성공적으로 완료되었습니다.")
                 .body(authService.localGuardianSignup(httpServletRequest, request));
+    }
+
+    @PostMapping("/signin/local/guardian")
+    public ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(@RequestBody @Valid final LocalGuardianSignInRequest request) {
+        TokenPairResponse response = authService.localGuardianSignIn(request);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2003")
+                .message("로컬 보호자 로그인 성공")
+                .body(response);
     }
 }

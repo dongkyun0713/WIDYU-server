@@ -3,6 +3,7 @@ package com.widyu.auth.application;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.TemporaryTokenDto;
 import com.widyu.auth.dto.request.EmailCheckRequest;
+import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -20,7 +21,8 @@ public class AuthService {
     private final SmsService smsService;
     private final VerificationService verificationService;
     private final TemporaryTokenService temporaryTokenService;
-    private final SignupService signupService;
+    private final LocalGuardianService localGuardianService;
+
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -32,6 +34,11 @@ public class AuthService {
         return verificationService.verifyAndIssueTemporaryToken(request.phoneNumber(), request.code());
     }
 
+    @Transactional(readOnly = true)
+    public boolean isEmailRegistered(EmailCheckRequest request) {
+        return localGuardianService.isEmailRegistered(request);
+    }
+
     // 로컬 보호자 회원가입
     @Transactional
     public TokenPairResponse localGuardianSignup(HttpServletRequest httpServletRequest,
@@ -40,14 +47,14 @@ public class AuthService {
         TemporaryTokenDto dto = temporaryTokenService.parseAndValidate(tempToken);
         TemporaryMember temp = temporaryTokenService.loadTemporaryMemberOrThrow(dto.temporaryMemberId());
 
-        TokenPairResponse tokens = signupService.signupGuardianWithLocal(temp, request.email(), request.password());
+        TokenPairResponse tokens = localGuardianService.signupGuardianWithLocal(temp, request.email(), request.password());
 
         temporaryTokenService.deleteTemporaryMember(temp.getId());
         return tokens;
     }
 
-    @Transactional(readOnly = true)
-    public boolean isEmailRegistered(EmailCheckRequest request) {
-        return signupService.isEmailRegistered(request);
+    @Transactional
+    public TokenPairResponse localGuardianSignIn(LocalGuardianSignInRequest request) {
+        return localGuardianService.signIn(request);
     }
 }
