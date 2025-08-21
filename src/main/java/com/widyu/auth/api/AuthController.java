@@ -27,7 +27,7 @@ public class AuthController implements AuthDocs {
     public ApiResponseTemplate<Void> sendSmsVerification(@Valid @RequestBody final SmsVerificationRequest request) {
         authService.sendSmsVerification(request);
         return ApiResponseTemplate.ok()
-                .code("AUTH_2001")
+                .code("SMS_2001")
                 .message("문자가 성공적으로 전송되었습니다.")
                 .body(null);
     }
@@ -36,18 +36,17 @@ public class AuthController implements AuthDocs {
     public ApiResponseTemplate<TemporaryTokenResponse> verifySmsCode(@RequestBody @Valid final SmsCodeRequest request) {
         TemporaryTokenResponse response = authService.verifySmsCode(request);
         return ApiResponseTemplate.ok()
-                .code("AUTH_2002")
+                .code("SMS_2002")
                 .message("SMS 인증이 성공적으로 완료되었습니다.")
                 .body(response);
     }
 
-    @PostMapping("/local-guardian/signup")
+    @PostMapping("/signup/local/guardian")
     public ApiResponseTemplate<TokenPairResponse> localGuardianSignup(HttpServletRequest httpServletRequest,
                                                                       @RequestBody @Valid final LocalGuardianSignupRequest request) {
         return ApiResponseTemplate.ok()
-                .code("AUTH_2003")
-                .message("로컬 가디언 회원가입이 성공적으로 완료되었습니다.")
+                .code("AUTH_2001")
+                .message("로컬 보호자 회원가입이 성공적으로 완료되었습니다.")
                 .body(authService.localGuardianSignup(httpServletRequest, request));
     }
-
 }
