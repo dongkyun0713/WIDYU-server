@@ -1,5 +1,6 @@
 package com.widyu.auth.api;
 
+import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -32,7 +33,7 @@ public interface AuthDocs {
                             name = "성공 응답",
                             value = """
                                     {
-                                      "code": "AUTH_2001",
+                                      "code": "SMS_2001",
                                       "message": "문자가 성공적으로 전송되었습니다.",
                                       "data": null
                                     }
@@ -73,7 +74,7 @@ public interface AuthDocs {
                             name = "성공 응답",
                             value = """
                                     {
-                                      "code": "AUTH_2002",
+                                      "code": "SMS_2002",
                                       "message": "SMS 인증이 성공적으로 완료되었습니다.",
                                       "data": {
                                         "temporaryToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -104,6 +105,47 @@ public interface AuthDocs {
     );
 
     @Operation(
+            summary = "이메일 중복 검사",
+            description = "회원가입 시 입력한 이메일이 이미 등록되어 있는지 확인합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "검사 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                {
+                                  "code": "AUTH_2001",
+                                  "message": "이메일 등록 여부 확인 완료",
+                                  "data": false
+                                }
+                                """
+                    )
+            )
+    )
+    ApiResponseTemplate<Boolean> isEmailRegistered(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "중복 여부 확인할 이메일",
+                    content = @Content(
+                            schema = @Schema(implementation = EmailCheckRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                        {
+                                          "email": "widyu123"
+                                        }
+                                        """
+                            )
+                    )
+            ) final EmailCheckRequest request
+    );
+
+
+    @Operation(
             summary = "로컬 보호자 회원가입",
             description = """
                     SMS 인증 후 발급받은 임시 토큰을 Authorization 헤더(스킴: `Bearer`)로 전달해야 합니다.
@@ -119,7 +161,7 @@ public interface AuthDocs {
                             name = "성공 응답",
                             value = """
                                     {
-                                      "code": "AUTH_2003",
+                                      "code": "AUTH_2002",
                                       "message": "로컬 가디언 회원가입이 성공적으로 완료되었습니다.",
                                       "data": {
                                         "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
