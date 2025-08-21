@@ -1,6 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.dto.request.EmailCheckRequest;
+import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -193,5 +194,49 @@ public interface AuthDocs {
                             )
                     )
             ) final LocalGuardianSignupRequest request
+    );
+
+    @Operation(
+            summary = "로컬 보호자 로그인",
+            description = "이메일과 비밀번호로 로그인하여 Access/Refresh 토큰을 발급합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "로그인 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                {
+                                  "code": "AUTH_2003",
+                                  "message": "로컬 보호자 로그인 성공",
+                                  "data": {
+                                    "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                  }
+                                }
+                                """
+                    )
+            )
+    )
+    ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "이메일/비밀번호",
+                    content = @Content(
+                            schema = @Schema(implementation = LocalGuardianSignInRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                        {
+                                          "email": "widyu123",
+                                          "password": "Test@1234"
+                                        }
+                                        """
+                            )
+                    )
+            ) final LocalGuardianSignInRequest request
     );
 }

@@ -64,6 +64,7 @@ public class AuthController implements AuthDocs {
     @PostMapping("/signin/local/guardian")
     public ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(@RequestBody @Valid final LocalGuardianSignInRequest request) {
         TokenPairResponse response = authService.localGuardianSignIn(request);
+
         return ApiResponseTemplate.ok()
                 .code("AUTH_2003")
                 .message("로컬 보호자 로그인 성공")
