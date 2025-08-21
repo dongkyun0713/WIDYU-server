@@ -2,14 +2,18 @@ package com.widyu.global.error;
 
 import com.widyu.global.log.BusinessExceptionLogEntry;
 import com.widyu.global.log.ExceptionLogEntry;
+import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -18,12 +22,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
-    private static final String UNEXPECTED_SERVER_ERROR_MESSAGE = "예상치 못한 서버 에러입니다.";
     private static final String BUSINESS_LOG_MARKER = "BUSINESS-EXCEPTION-LOG";
     private static final String SYSTEM_LOG_MARKER = "EXCEPTION-LOG";
 
     @ExceptionHandler(BusinessException.class)
-    public ErrorResponse handleBusinessException(
+    public ApiResponseTemplate<Void> handleBusinessException(
             final BusinessException ex,
             final HttpServletRequest request
     ) {
@@ -32,23 +35,35 @@ public class GlobalExceptionHandler {
         final ErrorCode errorCode = ex.getErrorCode();
         final String detail = nullSafe(ex.getMessage(), errorCode.getMessage());
 
-        return ErrorResponse.of(
-                errorCode.getCode(),
-                detail
-        );
+        return ApiResponseTemplate.error()
+                .code(errorCode.getCode())
+                .message(detail)
+                .body(null);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    protected ApiResponseTemplate<Void> handleMethodArgumentNotValidException(final MethodArgumentNotValidException e) {
+        FieldError fieldError = Objects.requireNonNull(e.getFieldError());
+
+        log.error("Validation error for field {}: {}", fieldError.getField(), fieldError.getDefaultMessage());
+        return ApiResponseTemplate.error()
+                .code(ErrorCode.BAD_REQUEST.getCode())
+                .message(String.format("%s. (%s)", fieldError.getDefaultMessage(), fieldError.getField()))
+                .body(null);
+
     }
 
     @ExceptionHandler(Exception.class)
-    public ErrorResponse handleException(
+    public ApiResponseTemplate<Void> handleException(
             final Exception ex,
             final HttpServletRequest request
     ) {
         doSystemLog(ex, request);
 
-        return ErrorResponse.of(
-                ErrorCode.INTERNAL_SERVER_ERROR.getCode(),
-                UNEXPECTED_SERVER_ERROR_MESSAGE
-        );
+        return ApiResponseTemplate.error()
+                .code(ErrorCode.INTERNAL_SERVER_ERROR.getCode())
+                .message(ErrorCode.INTERNAL_SERVER_ERROR.getMessage())
+                .body(null);
     }
 
     private void doBusinessLog(final RuntimeException runtimeException, final HttpServletRequest request) {

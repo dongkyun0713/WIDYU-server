@@ -11,6 +11,7 @@ public class BusinessExceptionLogEntry {
     private String exceptionType;
     private String message;
     private String requestUri;
+    private String stackTrace;
 
     public String toLogString() {
         return String.format("""
@@ -20,12 +21,15 @@ public class BusinessExceptionLogEntry {
               ExceptionType : %s
               Message       : %s
               Request URI   : %s
+            -------------------- Stack Trace -------------------
+            %s
             ----------------------------------------------------
             """,
                 timestamp,
                 exceptionType,
                 message,
-                requestUri
+                requestUri,
+                stackTrace
         );
     }
 }
