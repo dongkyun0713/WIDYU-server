@@ -1,12 +1,13 @@
 package com.widyu.auth.application;
 
+import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.TemporaryTokenDto;
+import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
-import com.widyu.auth.domain.TemporaryMember;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -43,5 +44,10 @@ public class AuthService {
 
         temporaryTokenService.deleteTemporaryMember(temp.getId());
         return tokens;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isEmailRegistered(EmailCheckRequest request) {
+        return signupService.isEmailRegistered(request);
     }
 }

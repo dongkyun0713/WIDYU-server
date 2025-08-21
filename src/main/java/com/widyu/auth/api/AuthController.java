@@ -1,6 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.application.AuthService;
+import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -41,11 +42,20 @@ public class AuthController implements AuthDocs {
                 .body(response);
     }
 
+    @PostMapping("/signup/email/check")
+    public ApiResponseTemplate<Boolean> isEmailRegistered(@RequestBody @Valid final EmailCheckRequest request) {
+        boolean isRegistered = authService.isEmailRegistered(request);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2001")
+                .message("이메일 등록 여부 확인 완료")
+                .body(isRegistered);
+    }
+
     @PostMapping("/signup/local/guardian")
     public ApiResponseTemplate<TokenPairResponse> localGuardianSignup(HttpServletRequest httpServletRequest,
                                                                       @RequestBody @Valid final LocalGuardianSignupRequest request) {
         return ApiResponseTemplate.ok()
-                .code("AUTH_2001")
+                .code("AUTH_2002")
                 .message("로컬 보호자 회원가입이 성공적으로 완료되었습니다.")
                 .body(authService.localGuardianSignup(httpServletRequest, request));
     }

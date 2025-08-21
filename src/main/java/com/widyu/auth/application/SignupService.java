@@ -1,6 +1,7 @@
 package com.widyu.auth.application;
 
 import com.widyu.auth.domain.TemporaryMember;
+import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -46,5 +47,10 @@ public class SignupService {
         localAccountRepository.save(local);
 
         return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isEmailRegistered(EmailCheckRequest request) {
+        return !localAccountRepository.existsByEmail(request.email());
     }
 }
