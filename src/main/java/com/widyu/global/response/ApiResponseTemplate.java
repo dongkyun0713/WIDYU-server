@@ -16,10 +16,17 @@ public class ApiResponseTemplate<T> {
         return new DefaultBodyBuilder();
     }
 
+    public static BodyBuilder error() {
+        return new DefaultBodyBuilder();
+    }
+
     public interface BodyBuilder {
         BodyBuilder code(final String code);
+
         BodyBuilder message(final String message);
+
         <T> ApiResponseTemplate<T> body(final T data);
+
         <T> ApiResponseTemplate<T> build();
     }
 
