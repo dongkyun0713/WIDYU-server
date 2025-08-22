@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class VerificationService {
+public class VerificationCodeService {
 
     private final SmsService smsService;
     private final VerificationCodeRepository verificationCodeRepository;

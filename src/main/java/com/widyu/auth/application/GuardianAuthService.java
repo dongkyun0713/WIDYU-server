@@ -16,10 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+public class GuardianAuthService {
 
     private final SmsService smsService;
-    private final VerificationService verificationService;
+    private final VerificationCodeService verificationCodeService;
     private final TemporaryTokenService temporaryTokenService;
     private final LocalGuardianService localGuardianService;
 
@@ -31,7 +31,7 @@ public class AuthService {
 
     @Transactional
     public TemporaryTokenResponse verifySmsCode(final SmsCodeRequest request) {
-        return verificationService.verifyAndIssueTemporaryToken(request.phoneNumber(), request.code());
+        return verificationCodeService.verifyAndIssueTemporaryToken(request.phoneNumber(), request.code());
     }
 
     @Transactional(readOnly = true)
