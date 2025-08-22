@@ -1,6 +1,6 @@
 package com.widyu.pay.config;
 
-import com.widyu.pay.api.dto.PaymentProperties;
+import com.widyu.pay.api.dto.request.PaymentProperties;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import java.nio.charset.StandardCharsets;

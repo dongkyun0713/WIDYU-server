@@ -1,5 +1,6 @@
 package com.widyu.pay.domain;
 
+import com.widyu.member.domain.Member;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -39,6 +40,10 @@ public class Payment {
     @OneToOne(mappedBy = "payment", cascade = CascadeType.ALL)
     private PaymentEasyPay easyPay;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id")
+    private Member member;
+
     // Payment.java
     public void setCard(PaymentCard card) {
         this.card = card;
@@ -68,4 +73,8 @@ public class Payment {
         }
     }
 
+    public void cancel() {
+        this.status = "CANCELED";
+        this.approvedAt = null;
+    }
 }

@@ -1,4 +1,4 @@
-package com.widyu.pay.api.dto;
+package com.widyu.pay.api.dto.request;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;

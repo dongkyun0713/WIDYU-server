@@ -1,4 +1,4 @@
-package com.widyu.pay.api.dto;
+package com.widyu.pay.api.dto.response;
 
 import com.widyu.pay.domain.*;
 import lombok.Getter;
@@ -124,4 +124,65 @@ public class PaymentConfirmResponse {
 
         return payment;
     }
+
+    // ---------------------- 정적 팩토리 메서드 ----------------------
+    public static PaymentConfirmResponse fromEntity(Payment payment) {
+        PaymentConfirmResponse response = new PaymentConfirmResponse();
+
+        response.paymentKey = payment.getPaymentKey();
+        response.orderId = payment.getOrderId();
+        response.orderName = payment.getOrderName();
+        response.amount = payment.getAmount();
+        response.status = payment.getStatus();
+        response.requestedAt = payment.getRequestedAt();
+        response.approvedAt = payment.getApprovedAt();
+        response.cultureExpense = payment.isCultureExpense();
+
+        // 카드 결제 매핑
+        if (payment.getCard() != null) {
+            PaymentCard card = payment.getCard();
+            Card cardDto = new Card();
+            cardDto.issuerCode = card.getIssuerCode();
+            cardDto.acquirerCode = card.getAcquirerCode();
+            cardDto.number = card.getNumber();
+            cardDto.installmentPlanMonths = card.getInstallmentPlanMonths();
+            cardDto.isInterestFree = card.isInterestFree();
+            cardDto.approveNo = card.getApproveNo();
+            cardDto.cardType = card.getCardType();
+
+            response.card = cardDto;
+        }
+
+        // 간편결제 매핑
+        if (payment.getEasyPay() != null) {
+            PaymentEasyPay easyPay = payment.getEasyPay();
+            EasyPay easyPayDto = new EasyPay();
+            easyPayDto.provider = easyPay.getProvider();
+            easyPayDto.amount = easyPay.getAmount();
+            response.easyPay = easyPayDto;
+        }
+
+        // 계좌이체 매핑
+        if (payment.getTransfer() != null) {
+            PaymentTransfer transfer = payment.getTransfer();
+            Transfer transferDto = new Transfer();
+            transferDto.bankCode = transfer.getBankCode();
+            transferDto.settlementStatus = transfer.getSettlementStatus();
+            response.transfer = transferDto;
+        }
+
+        // 가상계좌 매핑
+        if (payment.getVirtualAccount() != null) {
+            PaymentVirtualAccount va = payment.getVirtualAccount();
+            VirtualAccount vaDto = new VirtualAccount();
+            vaDto.accountNumber = va.getAccountNumber();
+            vaDto.bankCode = va.getBankCode();
+            vaDto.dueDate = va.getDueDate();
+            vaDto.expired = va.isExpired();
+            response.virtualAccount = vaDto;
+        }
+
+        return response;
+    }
+
 }
