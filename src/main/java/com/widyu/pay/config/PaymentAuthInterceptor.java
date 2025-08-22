@@ -13,7 +13,7 @@ public class PaymentAuthInterceptor implements RequestInterceptor {
     private final PaymentProperties paymentProperties;
 
     @Override
-    public void apply(final RequestTemplate template) {
+    public void apply(RequestTemplate template) {
         final String authHeader = createPaymentAuthorizationHeader();
         template.header("Authorization", authHeader);
     }

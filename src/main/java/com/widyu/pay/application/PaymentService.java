@@ -16,8 +16,8 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
 
     public PaymentConfirmResponse confirmPayment(PaymentConfirmRequest paymentConfirmRequest, Long reservationId) {
-        final PaymentConfirmResponse paymentConfirmResponse = paymentClient.confirmPayment(paymentConfirmRequest);
-        final Payment payment = paymentConfirmResponse.toPayment(reservationId);
+        PaymentConfirmResponse paymentConfirmResponse = paymentClient.confirmPayment(paymentConfirmRequest);
+        Payment payment = paymentConfirmResponse.toPayment(reservationId);
 
         paymentRepository.save(payment);
         return paymentConfirmResponse;
