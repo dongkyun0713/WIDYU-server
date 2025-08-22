@@ -7,9 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/api/v1/payment")
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -18,9 +20,10 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
-    @PostMapping("/api/{reservationId}/payment")
-    public ResponseEntity<PaymentConfirmResponse> confirm(@RequestBody PaymentConfirmRequest paymentConfirmRequest, @PathVariable("reservationId") Long reservationId) {
-        final PaymentConfirmResponse paymentConfirmResponse =  paymentService.confirmPayment(paymentConfirmRequest, reservationId);
+    @PostMapping
+    public ResponseEntity<PaymentConfirmResponse> confirm(@RequestBody PaymentConfirmRequest paymentConfirmRequest) {
+        PaymentConfirmResponse paymentConfirmResponse = paymentService.confirmPayment(paymentConfirmRequest);
+
         return ResponseEntity.ok(paymentConfirmResponse);
     }
 }

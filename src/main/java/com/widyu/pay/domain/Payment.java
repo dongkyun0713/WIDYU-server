@@ -24,7 +24,6 @@ public class Payment {
     private ZonedDateTime requestedAt;
     private ZonedDateTime approvedAt;
 
-    private Long reservationId;
     private boolean cultureExpense;
 
     // 결제 수단별 상세

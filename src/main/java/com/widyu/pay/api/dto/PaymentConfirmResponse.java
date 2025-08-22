@@ -66,7 +66,7 @@ public class PaymentConfirmResponse {
     }
 
     // ---------------------- 매핑 ----------------------
-    public Payment toPayment(Long reservationId) {
+    public Payment toPayment() {
         Payment payment = Payment.builder()
                 .paymentKey(paymentKey)
                 .orderId(orderId)
@@ -75,7 +75,6 @@ public class PaymentConfirmResponse {
                 .status(status)
                 .requestedAt(requestedAt)
                 .approvedAt(approvedAt)
-                .reservationId(reservationId)
                 .build();
 
         // 카드 결제
