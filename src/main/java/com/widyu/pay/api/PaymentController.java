@@ -1,21 +1,16 @@
 package com.widyu.pay.api;
 
+import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
 import com.widyu.pay.application.PaymentService;
 import java.util.List;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/payment")
-public class PaymentController {
+public class PaymentController implements PaymentDocs {
 
     private final PaymentService paymentService;
 
@@ -24,25 +19,37 @@ public class PaymentController {
     }
 
     @PostMapping
-    public ResponseEntity<PaymentConfirmResponse> confirm(@RequestBody PaymentConfirmRequest paymentConfirmRequest) {
-        PaymentConfirmResponse paymentConfirmResponse = paymentService.confirmPayment(paymentConfirmRequest);
+    public ApiResponseTemplate<PaymentConfirmResponse> confirm(
+            @RequestBody PaymentConfirmRequest paymentConfirmRequest
+    ) {
+        PaymentConfirmResponse response = paymentService.confirmPayment(paymentConfirmRequest);
 
-        return ResponseEntity.ok(paymentConfirmResponse);
+        return ApiResponseTemplate.ok()
+                .code("PAY_2001")
+                .message("결제 승인 성공")
+                .body(response);
     }
 
     @PostMapping("/{paymentKey}/cancel")
-    public ResponseEntity<PaymentConfirmResponse> cancelPayment(
+    public ApiResponseTemplate<PaymentConfirmResponse> cancelPayment(
             @PathVariable String paymentKey,
             @RequestBody(required = false) CancelRequest cancelRequest
     ) {
         PaymentConfirmResponse response = paymentService.cancelPayment(paymentKey, cancelRequest);
-        return ResponseEntity.ok(response);
+
+        return ApiResponseTemplate.ok()
+                .code("PAY_2002")
+                .message("결제 취소 성공")
+                .body(response);
     }
 
     @GetMapping("/me")
-    public ResponseEntity<List<PaymentConfirmResponse>> getPaymentsByUser(
-    ) {
+    public ApiResponseTemplate<List<PaymentConfirmResponse>> getPaymentsByUser() {
         List<PaymentConfirmResponse> payments = paymentService.getPaymentsByUser();
-        return ResponseEntity.ok(payments);
+
+        return ApiResponseTemplate.ok()
+                .code("PAY_2003")
+                .message("결제 목록 조회 성공")
+                .body(payments);
     }
 }
