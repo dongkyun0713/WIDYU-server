@@ -1,6 +1,6 @@
 package com.widyu.auth.api;
 
-import com.widyu.auth.application.AuthService;
+import com.widyu.auth.application.GuardianAuthService;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
@@ -22,12 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth")
-public class AuthController implements AuthDocs {
-    private final AuthService authService;
+public class GuardianAuthController implements AuthDocs {
+    private final GuardianAuthService guardianAuthService;
 
     @PostMapping("/sms/send")
     public ApiResponseTemplate<Void> sendSmsVerification(@Valid @RequestBody final SmsVerificationRequest request) {
-        authService.sendSmsVerification(request);
+        guardianAuthService.sendSmsVerification(request);
         return ApiResponseTemplate.ok()
                 .code("SMS_2001")
                 .message("문자가 성공적으로 전송되었습니다.")
@@ -36,7 +36,7 @@ public class AuthController implements AuthDocs {
 
     @PostMapping("/sms/verify")
     public ApiResponseTemplate<TemporaryTokenResponse> verifySmsCode(@RequestBody @Valid final SmsCodeRequest request) {
-        TemporaryTokenResponse response = authService.verifySmsCode(request);
+        TemporaryTokenResponse response = guardianAuthService.verifySmsCode(request);
         return ApiResponseTemplate.ok()
                 .code("SMS_2002")
                 .message("SMS 인증이 성공적으로 완료되었습니다.")
@@ -45,7 +45,7 @@ public class AuthController implements AuthDocs {
 
     @PostMapping("/signup/email/check")
     public ApiResponseTemplate<Boolean> isEmailRegistered(@RequestBody @Valid final EmailCheckRequest request) {
-        boolean isRegistered = authService.isEmailRegistered(request);
+        boolean isRegistered = guardianAuthService.isEmailRegistered(request);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2001")
                 .message("이메일 등록 여부 확인 완료")
@@ -58,12 +58,12 @@ public class AuthController implements AuthDocs {
         return ApiResponseTemplate.ok()
                 .code("AUTH_2002")
                 .message("로컬 보호자 회원가입이 성공적으로 완료되었습니다.")
-                .body(authService.localGuardianSignup(httpServletRequest, request));
+                .body(guardianAuthService.localGuardianSignup(httpServletRequest, request));
     }
 
     @PostMapping("/signin/local/guardian")
     public ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(@RequestBody @Valid final LocalGuardianSignInRequest request) {
-        TokenPairResponse response = authService.localGuardianSignIn(request);
+        TokenPairResponse response = guardianAuthService.localGuardianSignIn(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2003")
