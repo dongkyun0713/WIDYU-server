@@ -18,7 +18,7 @@ public class PaymentConfirmResponse {
     private String orderName;
     private int amount;
     private int taxExemptionAmount;
-    private String status;
+    private PaymentStatus status;
     private ZonedDateTime requestedAt;
     private ZonedDateTime approvedAt;
     private boolean useEscrow;
@@ -74,7 +74,7 @@ public class PaymentConfirmResponse {
                 .orderId(orderId)
                 .orderName(orderName)
                 .amount(amount)
-                .status(status)
+                .status(PaymentStatus.DONE)
                 .requestedAt(requestedAt)
                 .approvedAt(approvedAt)
                 .build();

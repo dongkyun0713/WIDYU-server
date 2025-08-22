@@ -17,17 +17,29 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // PG사에서 제공하는 결제 키
     private String paymentKey;
+
+    // 주문 관련 정보
     private String orderId;
     private String orderName;
     private int amount;
-    private String status;
-    private ZonedDateTime requestedAt;
-    private ZonedDateTime approvedAt;
 
-    private boolean cultureExpense;
+    // 결제 상태
+    @Enumerated(EnumType.STRING)
+    private PaymentStatus status;
 
-    // 결제 수단별 상세
+    // 결제 시각 정보
+    private ZonedDateTime requestedAt; // 결제 요청 시각
+    private ZonedDateTime approvedAt;  // 결제 승인 시각
+
+    // 취소 관련 필드
+    private String cancelReason;       // 취소 사유
+    private ZonedDateTime canceledAt;  // 취소된 시각
+
+    private boolean cultureExpense;    // 문화비 여부
+
+    // 결제 수단별 상세 매핑 (1:1 관계)
     @OneToOne(mappedBy = "payment", cascade = CascadeType.ALL)
     private PaymentCard card;
 
@@ -41,10 +53,10 @@ public class Payment {
     private PaymentEasyPay easyPay;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id")
+    @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    // Payment.java
+    // -------------------- 연관관계 편의 메서드 --------------------
     public void setCard(PaymentCard card) {
         this.card = card;
         if (card != null) {
@@ -73,8 +85,10 @@ public class Payment {
         }
     }
 
-    public void cancel() {
-        this.status = "CANCELED";
-        this.approvedAt = null;
+    public void cancel(String reason) {
+        this.status = PaymentStatus.CANCELED; // 상태 변경
+        this.cancelReason = reason;        // 취소 사유 저장
+        this.canceledAt = ZonedDateTime.now(); // 취소 시간 기록
+        this.approvedAt = null;            // 더 이상 승인 상태가 아님
     }
 }

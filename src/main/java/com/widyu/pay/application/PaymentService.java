@@ -41,7 +41,7 @@ public class PaymentService {
         Payment payment = paymentRepository.findByPaymentKey(paymentKey)
                 .orElseThrow(() -> new IllegalArgumentException("결제 내역을 찾을 수 없습니다."));
 
-        payment.cancel();
+        payment.cancel(cancelRequest.cancelReason());
 
         return response;
     }
