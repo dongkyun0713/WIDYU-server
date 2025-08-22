@@ -1,5 +1,6 @@
 package com.widyu.pay.api.dto.response;
 
+import com.widyu.member.domain.Member;
 import com.widyu.pay.domain.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -66,8 +67,9 @@ public class PaymentConfirmResponse {
     }
 
     // ---------------------- 매핑 ----------------------
-    public Payment toPayment() {
+    public Payment toPayment(Member member) {
         Payment payment = Payment.builder()
+                .member(member)
                 .paymentKey(paymentKey)
                 .orderId(orderId)
                 .orderName(orderName)

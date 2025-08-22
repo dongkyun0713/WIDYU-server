@@ -1,5 +1,7 @@
 package com.widyu.pay.application;
 
+import com.widyu.global.util.MemberUtil;
+import com.widyu.member.domain.Member;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
@@ -19,11 +21,13 @@ public class PaymentService {
 
     private final PaymentClient paymentClient;
     private final PaymentRepository paymentRepository;
+    private final MemberUtil memberUtil;
 
     @Transactional
     public PaymentConfirmResponse confirmPayment(PaymentConfirmRequest paymentConfirmRequest) {
         PaymentConfirmResponse paymentConfirmResponse = paymentClient.confirmPayment(paymentConfirmRequest);
-        Payment payment = paymentConfirmResponse.toPayment();
+        Member currentMember = memberUtil.getCurrentMember();
+        Payment payment = paymentConfirmResponse.toPayment(currentMember);
 
         paymentRepository.save(payment);
 
@@ -42,8 +46,9 @@ public class PaymentService {
         return response;
     }
 
-    public List<PaymentConfirmResponse> getPaymentsByUser(Long userId) {
-        List<Payment> payments = paymentRepository.findByMemberId((userId));
+    public List<PaymentConfirmResponse> getPaymentsByUser() {
+        Member currentMember = memberUtil.getCurrentMember();
+        List<Payment> payments = paymentRepository.findByMemberId((currentMember.getId()));
 
         if (payments.isEmpty()) {
             throw new IllegalArgumentException("해당 유저의 결제 내역을 찾을 수 없습니다.");

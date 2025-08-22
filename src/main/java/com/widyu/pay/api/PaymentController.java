@@ -30,7 +30,6 @@ public class PaymentController {
         return ResponseEntity.ok(paymentConfirmResponse);
     }
 
-    // 결제 취소
     @PostMapping("/{paymentKey}/cancel")
     public ResponseEntity<PaymentConfirmResponse> cancelPayment(
             @PathVariable String paymentKey,
@@ -40,13 +39,10 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/{userId}")
+    @GetMapping("/me")
     public ResponseEntity<List<PaymentConfirmResponse>> getPaymentsByUser(
-            @PathVariable Long userId
     ) {
-        List<PaymentConfirmResponse> payments = paymentService.getPaymentsByUser(userId);
+        List<PaymentConfirmResponse> payments = paymentService.getPaymentsByUser();
         return ResponseEntity.ok(payments);
     }
-
-    // 유저별 결제 리스트 조회
 }
