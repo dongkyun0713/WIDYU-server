@@ -57,31 +57,31 @@ public class Payment {
     private Member member;
 
     // -------------------- 연관관계 편의 메서드 --------------------
-    public void setCard(PaymentCard card) {
+    public void assignCard(PaymentCard card) {
         this.card = card;
         if (card != null) {
-            card.setPayment(this);
+            card.assignPayment(this);
         }
     }
 
-    public void setEasyPay(PaymentEasyPay easyPay) {
+    public void assignEasyPay(PaymentEasyPay easyPay) {
         this.easyPay = easyPay;
         if (easyPay != null) {
-            easyPay.setPayment(this);
+            easyPay.assignPayment(this);
         }
     }
 
-    public void setTransfer(PaymentTransfer transfer) {
+    public void assignTransfer(PaymentTransfer transfer) {
         this.transfer = transfer;
         if (transfer != null) {
-            transfer.setPayment(this);
+            transfer.assignPayment(this);
         }
     }
 
-    public void setVirtualAccount(PaymentVirtualAccount virtualAccount) {
+    public void assignVirtualAccount(PaymentVirtualAccount virtualAccount) {
         this.virtualAccount = virtualAccount;
         if (virtualAccount != null) {
-            virtualAccount.setPayment(this);
+            virtualAccount.assignPayment(this);
         }
     }
 

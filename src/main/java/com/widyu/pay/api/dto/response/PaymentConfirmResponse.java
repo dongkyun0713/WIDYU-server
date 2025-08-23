@@ -92,7 +92,7 @@ public class PaymentConfirmResponse {
                     .approveNo(card.getApproveNo())
                     .cardType(card.getCardType())
                     .build();
-            payment.setCard(paymentCard);
+            payment.assignCard(paymentCard);
         }
 
         // 간편결제
@@ -101,7 +101,7 @@ public class PaymentConfirmResponse {
                     .provider(easyPay.getProvider())
                     .amount(easyPay.getAmount())
                     .build();
-            payment.setEasyPay(paymentEasyPay);
+            payment.assignEasyPay(paymentEasyPay);
         }
 
         // 계좌이체
@@ -110,7 +110,7 @@ public class PaymentConfirmResponse {
                     .bankCode(transfer.getBankCode())
                     .settlementStatus(transfer.getSettlementStatus())
                     .build();
-            payment.setTransfer(paymentTransfer);
+            payment.assignTransfer(paymentTransfer);
         }
 
         // 가상계좌
@@ -121,7 +121,7 @@ public class PaymentConfirmResponse {
                     .dueDate(virtualAccount.getDueDate())
                     .expired(virtualAccount.isExpired())
                     .build();
-            payment.setVirtualAccount(paymentVirtualAccount);
+            payment.assignVirtualAccount(paymentVirtualAccount);
         }
 
         return payment;

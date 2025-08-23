@@ -5,7 +5,6 @@ import lombok.*;
 
 @Entity
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
@@ -27,4 +26,8 @@ public class PaymentCard {
     @OneToOne
     @JoinColumn(name = "payment_id")
     private Payment payment;
+
+    public void assignPayment(Payment payment) {
+        this.payment = payment;
+    }
 }
