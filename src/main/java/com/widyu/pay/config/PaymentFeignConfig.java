@@ -1,5 +1,6 @@
 package com.widyu.pay.config;
 
+import com.widyu.pay.api.dto.request.PaymentProperties;
 import feign.Request;
 import java.util.concurrent.TimeUnit;
 import org.springframework.context.annotation.Bean;

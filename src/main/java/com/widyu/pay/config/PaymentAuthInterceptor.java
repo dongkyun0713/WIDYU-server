@@ -1,5 +1,6 @@
 package com.widyu.pay.config;
 
+import com.widyu.pay.api.dto.request.PaymentProperties;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import java.nio.charset.StandardCharsets;
@@ -13,7 +14,7 @@ public class PaymentAuthInterceptor implements RequestInterceptor {
     private final PaymentProperties paymentProperties;
 
     @Override
-    public void apply(final RequestTemplate template) {
+    public void apply(RequestTemplate template) {
         final String authHeader = createPaymentAuthorizationHeader();
         template.header("Authorization", authHeader);
     }
