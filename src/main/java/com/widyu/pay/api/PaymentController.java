@@ -6,17 +6,15 @@ import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
 import com.widyu.pay.application.PaymentService;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/v1/payment")
 public class PaymentController implements PaymentDocs {
 
     private final PaymentService paymentService;
-
-    public PaymentController(PaymentService paymentService) {
-        this.paymentService = paymentService;
-    }
 
     @PostMapping
     public ApiResponseTemplate<PaymentConfirmResponse> confirm(
