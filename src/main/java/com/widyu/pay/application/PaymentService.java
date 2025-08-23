@@ -2,13 +2,13 @@ package com.widyu.pay.application;
 
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
+import com.widyu.pay.api.dto.mapper.PaymentMapper;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
 import com.widyu.pay.config.PaymentClient;
 import com.widyu.pay.domain.Payment;
 import com.widyu.pay.domain.repository.PaymentRepository;
-import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,15 +24,17 @@ public class PaymentService {
     private final MemberUtil memberUtil;
 
     @Transactional
-    public PaymentConfirmResponse confirmPayment(PaymentConfirmRequest paymentConfirmRequest) {
-        PaymentConfirmResponse paymentConfirmResponse = paymentClient.confirmPayment(paymentConfirmRequest);
-        Member currentMember = memberUtil.getCurrentMember();
-        Payment payment = paymentConfirmResponse.toPayment(currentMember);
+    public PaymentConfirmResponse confirmPayment(PaymentConfirmRequest request) {
+        PaymentConfirmResponse rawResponse = paymentClient.confirmPayment(request);
 
+        Member currentMember = memberUtil.getCurrentMember();
+
+        Payment payment = PaymentMapper.toEntity(rawResponse, currentMember);
         paymentRepository.save(payment);
 
-        return paymentConfirmResponse;
+        return PaymentConfirmResponse.from(payment);
     }
+
 
     @Transactional
     public PaymentConfirmResponse cancelPayment(String paymentKey, CancelRequest cancelRequest) {
@@ -43,7 +45,7 @@ public class PaymentService {
 
         payment.cancel(cancelRequest.cancelReason());
 
-        return response;
+        return PaymentConfirmResponse.from(payment);
     }
 
     public List<PaymentConfirmResponse> getPaymentsByUser() {
@@ -55,7 +57,7 @@ public class PaymentService {
         }
 
         return payments.stream()
-                .map(PaymentConfirmResponse::fromEntity)
+                .map(PaymentConfirmResponse::from)
                 .toList();
     }
 }

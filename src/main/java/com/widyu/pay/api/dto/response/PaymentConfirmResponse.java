@@ -66,69 +66,8 @@ public class PaymentConfirmResponse {
         private boolean expired;
     }
 
-    // ---------------------- 매핑 ----------------------
-    public Payment toPayment(Member member) {
-        Payment payment = Payment.builder()
-                .member(member)
-                .paymentKey(paymentKey)
-                .orderId(orderId)
-                .orderName(orderName)
-                .amount(amount)
-                .status(PaymentStatus.DONE)
-                .requestedAt(requestedAt)
-                .approvedAt(approvedAt)
-                .build();
-
-        // 카드 결제
-        if (card != null) {
-            PaymentCard paymentCard = PaymentCard.builder()
-                    .issuerCode(card.getIssuerCode())
-                    .acquirerCode(card.getAcquirerCode())
-                    .number(card.getNumber())
-                    .installmentPlanMonths(
-                            card.getInstallmentPlanMonths() != 0 ? card.getInstallmentPlanMonths() : 0
-                    )
-                    .isInterestFree(card.isInterestFree())
-                    .approveNo(card.getApproveNo())
-                    .cardType(card.getCardType())
-                    .build();
-            payment.assignCard(paymentCard);
-        }
-
-        // 간편결제
-        if (easyPay != null) {
-            PaymentEasyPay paymentEasyPay = PaymentEasyPay.builder()
-                    .provider(easyPay.getProvider())
-                    .amount(easyPay.getAmount())
-                    .build();
-            payment.assignEasyPay(paymentEasyPay);
-        }
-
-        // 계좌이체
-        if (transfer != null) {
-            PaymentTransfer paymentTransfer = PaymentTransfer.builder()
-                    .bankCode(transfer.getBankCode())
-                    .settlementStatus(transfer.getSettlementStatus())
-                    .build();
-            payment.assignTransfer(paymentTransfer);
-        }
-
-        // 가상계좌
-        if (virtualAccount != null) {
-            PaymentVirtualAccount paymentVirtualAccount = PaymentVirtualAccount.builder()
-                    .accountNumber(virtualAccount.getAccountNumber())
-                    .bankCode(virtualAccount.getBankCode())
-                    .dueDate(virtualAccount.getDueDate())
-                    .expired(virtualAccount.isExpired())
-                    .build();
-            payment.assignVirtualAccount(paymentVirtualAccount);
-        }
-
-        return payment;
-    }
-
     // ---------------------- 정적 팩토리 메서드 ----------------------
-    public static PaymentConfirmResponse fromEntity(Payment payment) {
+    public static PaymentConfirmResponse from(Payment payment) {
         PaymentConfirmResponse response = new PaymentConfirmResponse();
 
         response.paymentKey = payment.getPaymentKey();
