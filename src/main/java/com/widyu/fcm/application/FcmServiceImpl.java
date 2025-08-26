@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.widyu.fcm.api.dto.FcmMessageDto;
 import com.widyu.fcm.api.dto.FcmSendDto;
+import com.widyu.fcm.domain.FcmNotification;
+import com.widyu.fcm.domain.repository.FcmNotificationRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -19,10 +22,13 @@ import java.util.List;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FcmServiceImpl implements FcmService {
 
     @Value("${firebase.config-path}")
     private String firebaseConfigPath;
+
+    private final FcmNotificationRepository notificationRepository;
 
     @Override
     public int sendMessageTo(FcmSendDto fcmSendDto) throws IOException {
@@ -45,6 +51,13 @@ public class FcmServiceImpl implements FcmService {
                 restTemplate.exchange(API_URL, HttpMethod.POST, entity, String.class);
 
         log.info("[FCM Response] status: {}, body: {}", response.getStatusCode(), response.getBody());
+
+        notificationRepository.save(FcmNotification.builder()
+                .title(fcmSendDto.title())
+                .body(fcmSendDto.body())
+                .token(fcmSendDto.token())
+                .isRead(false)
+                .build());
 
         return response.getStatusCode() == HttpStatus.OK ? 1 : 0;
     }
