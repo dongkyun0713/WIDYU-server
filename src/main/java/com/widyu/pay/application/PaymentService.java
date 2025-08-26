@@ -8,6 +8,7 @@ import com.widyu.pay.api.dto.mapper.PaymentMapper;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
+import com.widyu.pay.api.dto.response.PaymentConfirmResponses;
 import com.widyu.pay.config.PaymentClient;
 import com.widyu.pay.domain.Payment;
 import com.widyu.pay.domain.repository.PaymentRepository;
@@ -50,16 +51,14 @@ public class PaymentService {
         return PaymentConfirmResponse.from(payment);
     }
 
-    public List<PaymentConfirmResponse> getPaymentsByUser() {
+    public PaymentConfirmResponses getPaymentsByUser() {
         Member currentMember = memberUtil.getCurrentMember();
-        List<Payment> payments = paymentRepository.findByMemberId((currentMember.getId()));
+        List<Payment> payments = paymentRepository.findByMemberId(currentMember.getId());
 
         if (payments.isEmpty()) {
             throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
         }
 
-        return payments.stream()
-                .map(PaymentConfirmResponse::from)
-                .toList();
+        return PaymentConfirmResponses.from(payments);
     }
 }

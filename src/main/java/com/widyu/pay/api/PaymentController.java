@@ -4,6 +4,7 @@ import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
+import com.widyu.pay.api.dto.response.PaymentConfirmResponses;
 import com.widyu.pay.application.PaymentService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -42,12 +43,10 @@ public class PaymentController implements PaymentDocs {
     }
 
     @GetMapping("/me")
-    public ApiResponseTemplate<List<PaymentConfirmResponse>> getPaymentsByUser() {
-        List<PaymentConfirmResponse> payments = paymentService.getPaymentsByUser();
-
+    public ApiResponseTemplate<PaymentConfirmResponses> getPaymentsByUser() {
         return ApiResponseTemplate.ok()
                 .code("PAY_2003")
                 .message("결제 목록 조회 성공")
-                .body(payments);
+                .body(paymentService.getPaymentsByUser());
     }
 }
