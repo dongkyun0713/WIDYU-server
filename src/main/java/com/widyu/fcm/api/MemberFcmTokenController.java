@@ -7,6 +7,7 @@ import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/fcm/token")
 @RequiredArgsConstructor
-public class MemberFcmTokenController implements MemberFcmTokenDocs{
+public class MemberFcmTokenController implements MemberFcmTokenDocs {
 
     private final MemberFcmTokenService memberFcmTokenService;
 
@@ -46,4 +47,10 @@ public class MemberFcmTokenController implements MemberFcmTokenDocs{
                 .message("로그아웃 시 FCM 토큰 비활성화 완료")
                 .build();
     }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    public void cleanUpInactiveFcmTokens() {
+        memberFcmTokenService.deactivateInactiveTokens();
+    }
+
 }

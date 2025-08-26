@@ -42,6 +42,8 @@ public class MemberFcmToken {
 
     private LocalDateTime expiredAt;
 
+    private LocalDateTime lastUsedAt;
+
     public void deactivate() {
         this.active = false;
         this.expiredAt = LocalDateTime.now();
@@ -50,12 +52,6 @@ public class MemberFcmToken {
     public void activate() {
         this.active = true;
         this.expiredAt = null;
-    }
-
-    public void updateToken(String fcmToken, LocalDateTime now) {
-        this.token = fcmToken;
-        this.registeredAt = now;
-        this.active = true;
-        this.expiredAt = null;
+        this.lastUsedAt = LocalDateTime.now();
     }
 }

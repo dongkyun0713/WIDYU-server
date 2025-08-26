@@ -5,6 +5,7 @@ import com.widyu.fcm.domain.repository.MemberFcmTokenRepository;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,4 +54,15 @@ public class MemberFcmTokenService {
         memberFcmTokenRepository.findByToken(fcmToken)
                 .ifPresent(MemberFcmToken::deactivate);
     }
+
+    @Transactional
+    public void deactivateInactiveTokens() {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(60);
+        List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByLastUsedAtBeforeAndActiveTrue(threshold);
+
+        for (MemberFcmToken token : tokens) {
+            token.deactivate();
+        }
+    }
+
 }

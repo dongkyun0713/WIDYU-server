@@ -2,6 +2,7 @@ package com.widyu.fcm.domain.repository;
 
 import com.widyu.fcm.domain.FcmNotification;
 import com.widyu.fcm.domain.MemberFcmToken;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -11,5 +12,7 @@ public interface MemberFcmTokenRepository extends JpaRepository<MemberFcmToken, 
     Optional<MemberFcmToken> findByToken(String fcmToken);
 
     List<MemberFcmToken> findAllByMemberIdAndActiveTrue(Long id);
+
+    List<MemberFcmToken> findAllByLastUsedAtBeforeAndActiveTrue(LocalDateTime threshold);
 }
 
