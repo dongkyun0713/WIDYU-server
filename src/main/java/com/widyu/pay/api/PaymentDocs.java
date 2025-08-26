@@ -4,6 +4,7 @@ import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
+import com.widyu.pay.api.dto.response.PaymentConfirmResponses;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -146,5 +147,5 @@ public interface PaymentDocs {
                     )
             )
     )
-    ApiResponseTemplate<List<PaymentConfirmResponse>> getPaymentsByUser();
+    ApiResponseTemplate<PaymentConfirmResponses> getPaymentsByUser();
 }

@@ -18,6 +18,7 @@ public class Payment {
     private Long id;
 
     // PG사에서 제공하는 결제 키
+    @Column(unique = true, nullable = false)
     private String paymentKey;
 
     // 주문 관련 정보
