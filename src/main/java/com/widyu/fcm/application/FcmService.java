@@ -11,6 +11,8 @@ import com.widyu.fcm.domain.FcmNotification;
 import com.widyu.fcm.domain.MemberFcmToken;
 import com.widyu.fcm.domain.repository.FcmNotificationRepository;
 import com.widyu.fcm.domain.repository.MemberFcmTokenRepository;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
 import lombok.RequiredArgsConstructor;
@@ -112,4 +114,25 @@ public class FcmService {
                 fcmNotificationRepository.findAllByMemberFcmToken_MemberIdOrderByCreatedAtDesc(member.getId())
         );
     }
+
+    // 알림 전체 읽기
+    @Transactional
+    public void markAllAsRead() {
+        Member member = memberUtil.getCurrentMember();
+        fcmNotificationRepository.markAllAsReadByMemberId(member.getId());
+    }
+
+    // 알림 개별 읽기
+    @Transactional
+    public void markAsRead(Long notificationId) {
+        Member member = memberUtil.getCurrentMember();
+        FcmNotification notification = fcmNotificationRepository
+                .findByIdAndMemberFcmToken_MemberId(notificationId, member.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FCM_NOTIFICATION_NOT_FOUND));
+
+        if (!notification.isRead()) {
+            notification.markAsRead();
+        }
+    }
+
 }
