@@ -1,6 +1,7 @@
 package com.widyu.fcm.api;
 
 import com.widyu.fcm.api.dto.FcmSendDto;
+import com.widyu.fcm.api.dto.response.FcmSendResponse;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.global.util.MemberUtil;
@@ -21,16 +22,12 @@ public class FcmController implements FcmDocs{
     private final FcmService fcmService;
 
     @PostMapping("/send")
-    public ApiResponseTemplate<Integer> pushMessage(
-            @RequestBody @Valid FcmSendDto fcmSendDto
-    ) throws IOException {
-        log.debug("[+] 로그인 유저에게 푸시 메시지를 전송합니다.");
-
-        int result = fcmService.sendMessageTo(fcmSendDto);
+    public ApiResponseTemplate<FcmSendResponse> pushMessage(@RequestBody FcmSendDto fcmSendDto) throws IOException {
+        FcmSendResponse response = fcmService.sendMessageTo(fcmSendDto);
 
         return ApiResponseTemplate.ok()
                 .code("FCM_2001")
                 .message("푸시 메시지 전송 성공")
-                .body(result);
+                .body(response);
     }
 }

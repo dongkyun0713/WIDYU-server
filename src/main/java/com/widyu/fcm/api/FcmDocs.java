@@ -1,6 +1,7 @@
 package com.widyu.fcm.api;
 
 import com.widyu.fcm.api.dto.FcmSendDto;
+import com.widyu.fcm.api.dto.response.FcmSendResponse;
 import com.widyu.global.response.ApiResponseTemplate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -29,13 +30,17 @@ public interface FcmDocs {
                                     {
                                       "code": "FCM_2001",
                                       "message": "푸시 메시지 전송 성공",
-                                      "data": 2
+                                      "data": {
+                                        "title": "새 공지사항",
+                                        "body": "새로운 공지사항이 등록되었습니다.",
+                                        "successCount": 2
+                                      }
                                     }
                                     """
                     )
             )
     )
-    ApiResponseTemplate<Integer> pushMessage(
+    ApiResponseTemplate<FcmSendResponse> pushMessage(
             @RequestBody(
                     required = true,
                     description = "푸시 메시지 요청 DTO",

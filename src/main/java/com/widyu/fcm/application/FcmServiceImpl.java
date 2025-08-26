@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.widyu.fcm.api.dto.FcmMessageDto;
 import com.widyu.fcm.api.dto.FcmSendDto;
+import com.widyu.fcm.api.dto.response.FcmSendResponse;
 import com.widyu.fcm.domain.FcmNotification;
 import com.widyu.fcm.domain.MemberFcmToken;
 import com.widyu.fcm.domain.repository.FcmNotificationRepository;
@@ -40,7 +41,7 @@ public class FcmServiceImpl implements FcmService {
 
     @Override
     @Transactional
-    public int sendMessageTo(FcmSendDto fcmSendDto) throws IOException {
+    public FcmSendResponse sendMessageTo(FcmSendDto fcmSendDto) throws IOException {
         Member member = memberUtil.getCurrentMember();
 
         List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(member.getId());
@@ -75,7 +76,7 @@ public class FcmServiceImpl implements FcmService {
             }
         }
 
-        return successCount;
+        return FcmSendResponse.of(fcmSendDto, successCount);
     }
 
     private String makeMessage(String token, FcmSendDto dto) throws JsonProcessingException {
@@ -104,4 +105,6 @@ public class FcmServiceImpl implements FcmService {
         googleCredentials.refreshIfExpired();
         return googleCredentials.getAccessToken().getTokenValue();
     }
+
+    // 유저별 알림 목록 조회 api 구현
 }
