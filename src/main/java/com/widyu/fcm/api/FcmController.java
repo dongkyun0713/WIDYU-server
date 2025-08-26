@@ -16,7 +16,7 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/api/v1/fcm")
 @RequiredArgsConstructor
-public class FcmController {
+public class FcmController implements FcmDocs{
 
     private final FcmService fcmService;
 
