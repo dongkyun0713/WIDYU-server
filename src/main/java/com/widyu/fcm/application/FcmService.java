@@ -104,12 +104,14 @@ public class FcmService {
                 .createScoped(List.of("https://www.googleapis.com/auth/firebase.messaging"));
 
         googleCredentials.refreshIfExpired();
+
         return googleCredentials.getAccessToken().getTokenValue();
     }
 
     // 유저별 알림 목록 조회 api 구현
     public FcmNotificationResponses getNotificationsForCurrentUser() {
         Member member = memberUtil.getCurrentMember();
+
         return FcmNotificationResponses.from(
                 fcmNotificationRepository.findAllByMemberFcmToken_MemberIdOrderByCreatedAtDesc(member.getId())
         );
