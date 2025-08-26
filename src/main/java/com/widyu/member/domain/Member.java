@@ -1,5 +1,6 @@
 package com.widyu.member.domain;
 
+import com.widyu.fcm.domain.MemberFcmToken;
 import com.widyu.global.domain.BaseTimeEntity;
 import com.widyu.global.domain.Status;
 import jakarta.persistence.CascadeType;
@@ -40,6 +41,9 @@ public class Member extends BaseTimeEntity {
 
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SocialAccount> socialAccounts = new ArrayList<>();
+
+    @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<MemberFcmToken> memberFcmTokens = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     private Status status;

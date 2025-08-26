@@ -6,14 +6,18 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.widyu.fcm.api.dto.FcmMessageDto;
 import com.widyu.fcm.api.dto.FcmSendDto;
 import com.widyu.fcm.domain.FcmNotification;
+import com.widyu.fcm.domain.MemberFcmToken;
 import com.widyu.fcm.domain.repository.FcmNotificationRepository;
+import com.widyu.fcm.domain.repository.MemberFcmTokenRepository;
+import com.widyu.global.util.MemberUtil;
+import com.widyu.member.domain.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.*;
-import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
@@ -23,43 +27,73 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class FcmServiceImpl implements FcmService {
 
     @Value("${firebase.config-path}")
     private String firebaseConfigPath;
 
-    private final FcmNotificationRepository notificationRepository;
+    private final FcmNotificationRepository fcmNotificationRepository;
+    private final MemberFcmTokenRepository memberFcmTokenRepository;
+    private final MemberUtil memberUtil;
+    private static final String API_URL = "https://fcm.googleapis.com/v1/projects/widuy-875a5/messages:send";
 
     @Override
+    @Transactional
     public int sendMessageTo(FcmSendDto fcmSendDto) throws IOException {
-        String message = makeMessage(fcmSendDto);
+        Member member = memberUtil.getCurrentMember();
 
-        log.info("[FCM Request] {}", message);
+        List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(member.getId());
 
-        RestTemplate restTemplate = new RestTemplate();
-        restTemplate.getMessageConverters()
-                .add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + getAccessToken());
+        int successCount = 0;
 
-        HttpEntity<String> entity = new HttpEntity<>(message, headers);
+        for (MemberFcmToken tokenEntity : tokens) {
+            String token = tokenEntity.getToken();
+            String message = makeMessage(token, fcmSendDto);
 
-        String API_URL = "https://fcm.googleapis.com/v1/projects/widuy-875a5/messages:send";
-        ResponseEntity<String> response =
-                restTemplate.exchange(API_URL, HttpMethod.POST, entity, String.class);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(getAccessToken());
 
-        log.info("[FCM Response] status: {}, body: {}", response.getStatusCode(), response.getBody());
+            HttpEntity<String> entity = new HttpEntity<>(message, headers);
+            RestTemplate restTemplate = new RestTemplate();
+            restTemplate.getMessageConverters()
+                    .add(0, new org.springframework.http.converter.StringHttpMessageConverter(StandardCharsets.UTF_8));
 
-        notificationRepository.save(FcmNotification.builder()
-                .title(fcmSendDto.title())
-                .body(fcmSendDto.body())
-                .token(fcmSendDto.token())
-                .isRead(false)
-                .build());
+            ResponseEntity<String> response = restTemplate.exchange(API_URL, HttpMethod.POST, entity, String.class);
 
-        return response.getStatusCode() == HttpStatus.OK ? 1 : 0;
+            if (response.getStatusCode() == HttpStatus.OK) {
+                successCount++;
+
+                fcmNotificationRepository.save(FcmNotification.builder()
+                        .title(fcmSendDto.title())
+                        .body(fcmSendDto.body())
+                        .memberFcmToken(tokenEntity)
+                        .isRead(false)
+                        .build());
+            }
+        }
+
+        return successCount;
+    }
+
+    private String makeMessage(String token, FcmSendDto dto) throws JsonProcessingException {
+        ObjectMapper om = new ObjectMapper();
+
+        FcmMessageDto fcmMessageDto = FcmMessageDto.builder()
+                .message(FcmMessageDto.Message.builder()
+                        .token(token)
+                        .notification(FcmMessageDto.Notification.builder()
+                                .title(dto.title())
+                                .body(dto.body())
+                                .image(null)
+                                .build())
+                        .build())
+                .validateOnly(false)
+                .build();
+
+        return om.writeValueAsString(fcmMessageDto);
     }
 
     private String getAccessToken() throws IOException {
@@ -69,23 +103,5 @@ public class FcmServiceImpl implements FcmService {
 
         googleCredentials.refreshIfExpired();
         return googleCredentials.getAccessToken().getTokenValue();
-    }
-
-    private String makeMessage(FcmSendDto fcmSendDto) throws JsonProcessingException {
-        ObjectMapper om = new ObjectMapper();
-
-        FcmMessageDto fcmMessageDto = FcmMessageDto.builder()
-                .message(FcmMessageDto.Message.builder()
-                        .token(fcmSendDto.token())
-                        .notification(FcmMessageDto.Notification.builder()
-                                .title(fcmSendDto.title())
-                                .body(fcmSendDto.body())
-                                .image(null)
-                                .build()
-                        ).build())
-                .validateOnly(false)
-                .build();
-
-        return om.writeValueAsString(fcmMessageDto);
     }
 }

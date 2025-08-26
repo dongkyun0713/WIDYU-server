@@ -27,10 +27,9 @@ public class FcmNotification extends BaseTimeEntity {
 
     private String title;
     private String body;
-    private String token;
     private boolean isRead;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false)
-    private Member member;
+    @JoinColumn(name = "memberFcmToken_id", nullable = false)
+    private MemberFcmToken memberFcmToken;
 }
