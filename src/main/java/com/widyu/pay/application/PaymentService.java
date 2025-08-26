@@ -1,5 +1,7 @@
 package com.widyu.pay.application;
 
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
 import com.widyu.pay.api.dto.mapper.PaymentMapper;
@@ -41,7 +43,7 @@ public class PaymentService {
         PaymentConfirmResponse response = paymentClient.cancelPayment(paymentKey, cancelRequest);
 
         Payment payment = paymentRepository.findByPaymentKey(paymentKey)
-                .orElseThrow(() -> new IllegalArgumentException("결제 내역을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
         payment.cancel(cancelRequest.cancelReason());
 
@@ -53,7 +55,7 @@ public class PaymentService {
         List<Payment> payments = paymentRepository.findByMemberId((currentMember.getId()));
 
         if (payments.isEmpty()) {
-            throw new IllegalArgumentException("해당 유저의 결제 내역을 찾을 수 없습니다.");
+            throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
         }
 
         return payments.stream()
