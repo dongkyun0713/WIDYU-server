@@ -19,12 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class GuardianAuthService {
+public class AuthService {
 
     private final SmsService smsService;
     private final VerificationCodeService verificationCodeService;
     private final TemporaryTokenService temporaryTokenService;
-    private final LocalGuardianAuthService localGuardianAuthService;
+    private final LocalLoginService localLoginService;
 
 
     @Transactional
@@ -39,7 +39,7 @@ public class GuardianAuthService {
 
     @Transactional(readOnly = true)
     public boolean isEmailRegistered(EmailCheckRequest request) {
-        return localGuardianAuthService.isEmailRegistered(request);
+        return localLoginService.isEmailRegistered(request);
     }
 
     // 로컬 보호자 회원가입
@@ -50,7 +50,7 @@ public class GuardianAuthService {
         TemporaryTokenDto dto = temporaryTokenService.parseAndValidate(tempToken);
         TemporaryMember temp = temporaryTokenService.loadTemporaryMemberOrThrow(dto.temporaryMemberId());
 
-        TokenPairResponse tokens = localGuardianAuthService.signupGuardianWithLocal(temp, request.email(), request.password());
+        TokenPairResponse tokens = localLoginService.signupGuardianWithLocal(temp, request.email(), request.password());
 
         temporaryTokenService.deleteTemporaryMember(temp.getId());
         return tokens;
@@ -58,6 +58,6 @@ public class GuardianAuthService {
 
     @Transactional
     public TokenPairResponse localGuardianSignIn(LocalGuardianSignInRequest request) {
-        return localGuardianAuthService.signIn(request);
+        return localLoginService.signIn(request);
     }
 }

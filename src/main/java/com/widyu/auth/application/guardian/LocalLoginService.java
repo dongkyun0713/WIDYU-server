@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class LocalGuardianAuthService {
+public class LocalLoginService {
 
     private final PasswordEncoder passwordEncoder;
     private final MemberRepository memberRepository;
