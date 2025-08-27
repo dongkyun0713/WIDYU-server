@@ -21,7 +21,7 @@ public class GuardianAuthService {
     private final SmsService smsService;
     private final VerificationCodeService verificationCodeService;
     private final TemporaryTokenService temporaryTokenService;
-    private final LocalGuardianService localGuardianService;
+    private final LocalGuardianAuthService localGuardianAuthService;
 
 
     @Transactional
@@ -36,7 +36,7 @@ public class GuardianAuthService {
 
     @Transactional(readOnly = true)
     public boolean isEmailRegistered(EmailCheckRequest request) {
-        return localGuardianService.isEmailRegistered(request);
+        return localGuardianAuthService.isEmailRegistered(request);
     }
 
     // 로컬 보호자 회원가입
@@ -47,7 +47,7 @@ public class GuardianAuthService {
         TemporaryTokenDto dto = temporaryTokenService.parseAndValidate(tempToken);
         TemporaryMember temp = temporaryTokenService.loadTemporaryMemberOrThrow(dto.temporaryMemberId());
 
-        TokenPairResponse tokens = localGuardianService.signupGuardianWithLocal(temp, request.email(), request.password());
+        TokenPairResponse tokens = localGuardianAuthService.signupGuardianWithLocal(temp, request.email(), request.password());
 
         temporaryTokenService.deleteTemporaryMember(temp.getId());
         return tokens;
@@ -55,6 +55,6 @@ public class GuardianAuthService {
 
     @Transactional
     public TokenPairResponse localGuardianSignIn(LocalGuardianSignInRequest request) {
-        return localGuardianService.signIn(request);
+        return localGuardianAuthService.signIn(request);
     }
 }
