@@ -14,11 +14,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class VerificationCodeService {
 
-    private final SmsService smsService;
     private final VerificationCodeRepository verificationCodeRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final TemporaryMemberRepository temporaryMemberRepository;
-
 
     public TemporaryTokenResponse verifyAndIssueTemporaryToken(String phoneNumber, String code) {
         validateVerificationCode(phoneNumber, code);
@@ -31,9 +29,16 @@ public class VerificationCodeService {
     }
 
     private void validateVerificationCode(String phoneNumber, String code) {
-        if (!smsService.verifyCode(phoneNumber, code)) {
+        if (!verifyCode(phoneNumber, code)) {
             throw new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_MISMATCH);
         }
+    }
+
+    private boolean verifyCode(final String phoneNumber, final String inputCode) {
+        return verificationCodeRepository.findById(phoneNumber)
+                .map(verification -> verification.getCode().equals(inputCode))
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_NOT_FOUND, "인증 코드가 존재하지 않습니다."));
     }
 
     private TemporaryMember createTemporaryMember(String phoneNumber) {

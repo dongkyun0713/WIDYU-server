@@ -63,13 +63,6 @@ public class SmsService {
         }
     }
 
-    public boolean verifyCode(final String phoneNumber, final String inputCode) {
-        return verificationCodeRepository.findById(phoneNumber)
-                .map(verification -> verification.getCode().equals(inputCode))
-                .orElseThrow(
-                        () -> new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_NOT_FOUND, "인증 코드가 존재하지 않습니다."));
-    }
-
     private void saveVerificationCode(final String phoneNumber, final String code, final String name) {
         VerificationCode verificationCode = VerificationCode.builder()
                 .phoneNumber(phoneNumber)
