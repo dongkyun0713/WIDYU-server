@@ -1,6 +1,6 @@
 package com.widyu.auth.api;
 
-import com.widyu.auth.application.GuardianAuthService;
+import com.widyu.auth.application.guardian.GuardianAuthService;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
