@@ -17,6 +17,8 @@ public enum ErrorCode {
     INVALID_TEMPORARY_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_4015", "유효하지 않은 임시 토큰입니다."),
     INVALID_EMAIL(HttpStatus.UNAUTHORIZED, "AUTH_4011", "이메일이 올바르지 않습니다."),
     INVALID_PASSWORD(HttpStatus.UNAUTHORIZED, "AUTH_4012", "비밀번호가 올바르지 않습니다."),
+    UNSUPPORTED_OAUTH_PROVIDER(HttpStatus.BAD_REQUEST, "AUTH_4002", "지원하지 않는 소셜 로그인 제공자입니다."),
+    INVALID_OAUTH_STATE(HttpStatus.BAD_REQUEST, "AUTH_4003", "유효하지 않은 OAuth state입니다."),
 
     // 문자 인증
     SMS_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "SMS_4040", "문자 인증 코드가 존재하지 않습니다."),
@@ -24,6 +26,10 @@ public enum ErrorCode {
     SMS_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SMS_5000", "SMS 전송에 실패했습니다."),
     INVALID_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "SMS_4001", "유효하지 않은 전화번호 형식입니다."),
     PHONE_NUMBER_REQUIRED(HttpStatus.BAD_REQUEST, "SMS_4002", "전화번호는 필수입니다."),
+
+    // 네이버
+    NAVER_COMMUNICATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "NAVER_5000", "네이버 통신에 실패하였습니다."),
+    NAVER_TOKEN_IS_BLANK(HttpStatus.BAD_REQUEST, "NAVER_4000", "네이버 토큰이 비어 있습니다."),
 
     // 회원 관련
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4041", "회원을 찾을 수 없습니다."),

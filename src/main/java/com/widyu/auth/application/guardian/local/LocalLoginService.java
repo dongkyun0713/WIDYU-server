@@ -1,4 +1,4 @@
-package com.widyu.auth.application.guardian;
+package com.widyu.auth.application.guardian.local;
 
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;

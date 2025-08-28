@@ -3,6 +3,10 @@ package com.widyu.auth.application.guardian;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.TemporaryTokenService;
 import com.widyu.auth.application.VerificationCodeService;
+import com.widyu.auth.application.guardian.local.LocalLoginService;
+import com.widyu.auth.application.guardian.oauth.OAuthStateService;
+import com.widyu.auth.application.guardian.oauth.SocialLoginService;
+import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.TemporaryTokenDto;
 import com.widyu.auth.dto.request.EmailCheckRequest;
@@ -10,9 +14,14 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.OAuthTokenResponse;
+import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +34,8 @@ public class AuthService {
     private final VerificationCodeService verificationCodeService;
     private final TemporaryTokenService temporaryTokenService;
     private final LocalLoginService localLoginService;
-
+    private final SocialLoginService socialLoginService;
+    private final OAuthStateService oAuthStateService;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -59,5 +69,34 @@ public class AuthService {
     @Transactional
     public TokenPairResponse localGuardianSignIn(LocalGuardianSignInRequest request) {
         return localLoginService.signIn(request);
+    }
+
+    @Transactional
+    public void redirectToSocialLogin(String provider, HttpServletResponse response) throws IOException {
+        OAuthProvider oauthProvider = OAuthProvider.from(provider);
+        socialLoginService.redirectToOAuthProvider(oauthProvider, response);
+    }
+
+    @Transactional
+    public TokenPairResponse processSocialLoginCallback(String provider, String code, String state) {
+        OAuthProvider oauthProvider = OAuthProvider.from(provider);
+
+        // 토큰 획득 (state 검증 포함)
+        OAuthTokenResponse oAuthTokenResponse = socialLoginService.getToken(oauthProvider, code, state);
+
+        // 사용자 정보 조회
+        SocialClientResponse socialClientResponse = socialLoginService.authenticateFromProvider(
+                oauthProvider, oAuthTokenResponse.accessToken());
+
+        // 로그인 처리
+        SocialLoginRequest socialLoginRequest = SocialLoginRequest.of(
+                oauthProvider.getValue(),
+                socialClientResponse.oauthId(),
+                socialClientResponse.email(),
+                socialClientResponse.name(),
+                socialClientResponse.phoneNumber()
+        );
+
+        return socialLoginService.socialLogin(socialLoginRequest);
     }
 }

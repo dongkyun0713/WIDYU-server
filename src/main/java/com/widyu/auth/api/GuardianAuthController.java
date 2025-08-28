@@ -10,12 +10,17 @@ import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
@@ -61,13 +66,34 @@ public class GuardianAuthController implements AuthDocs {
                 .body(authService.localGuardianSignup(httpServletRequest, request));
     }
 
-    @PostMapping("/signin/local/guardian")
-    public ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(@RequestBody @Valid final LocalGuardianSignInRequest request) {
+    @PostMapping("/sign-in/local/guardian")
+    public ApiResponseTemplate<TokenPairResponse> localGuardianSignIn(
+            @RequestBody @Valid final LocalGuardianSignInRequest request) {
         TokenPairResponse response = authService.localGuardianSignIn(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2003")
                 .message("로컬 보호자 로그인 성공")
                 .body(response);
+    }
+
+    @GetMapping("/sign-in/social/guardian")
+    public void socialLogin(
+            @RequestParam String provider,
+            HttpServletResponse response
+    ) throws IOException {
+        authService.redirectToSocialLogin(provider, response);
+    }
+
+    @GetMapping("/callback/{provider}")
+    public ApiResponseTemplate<TokenPairResponse> socialLoginCallback(
+            @PathVariable String provider,
+            @RequestParam String code,
+            @RequestParam String state
+    ) {
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2004")
+                .message("소셜 로그인 성공")
+                .body(authService.processSocialLoginCallback(provider, code, state));
     }
 }
