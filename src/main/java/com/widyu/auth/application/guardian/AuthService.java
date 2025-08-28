@@ -4,7 +4,6 @@ import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.TemporaryTokenService;
 import com.widyu.auth.application.VerificationCodeService;
 import com.widyu.auth.application.guardian.local.LocalLoginService;
-import com.widyu.auth.application.guardian.oauth.OAuthStateService;
 import com.widyu.auth.application.guardian.oauth.SocialLoginService;
 import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.domain.TemporaryMember;
@@ -36,7 +35,6 @@ public class AuthService {
     private final TemporaryTokenService temporaryTokenService;
     private final LocalLoginService localLoginService;
     private final SocialLoginService socialLoginService;
-    private final OAuthStateService oAuthStateService;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -53,7 +51,6 @@ public class AuthService {
         return localLoginService.isEmailRegistered(request);
     }
 
-    // 로컬 보호자 회원가입
     @Transactional
     public TokenPairResponse localGuardianSignup(HttpServletRequest httpServletRequest,
                                                  final LocalGuardianSignupRequest request) {

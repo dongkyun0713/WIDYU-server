@@ -22,6 +22,7 @@ public enum ErrorCode {
 
     // 부모 인증 관련
     INVITE_CODE_DUPLICATED(HttpStatus.BAD_REQUEST, "PARENT_4001", "이미 사용 중인 초대코드입니다."),
+    INVITE_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "PARENT_4040", "초대코드를 찾을 수 없습니다."),
 
 
     // 문자 인증
