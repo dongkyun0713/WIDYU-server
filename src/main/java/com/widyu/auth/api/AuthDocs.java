@@ -5,6 +5,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -319,7 +320,7 @@ public interface AuthDocs {
                     )
             )
     )
-    ApiResponseTemplate<TokenPairResponse> socialLoginCallback(
+    ApiResponseTemplate<SocialLoginResponse> socialLoginCallback(
             @Parameter(
                     name = "provider",
                     description = "소셜 제공자 식별자 (현재 'naver' 지원)",

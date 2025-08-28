@@ -18,8 +18,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(
-        uniqueConstraints = @UniqueConstraint(name = "uk_provider_user", columnNames = {"provider", "providerUserId"})
+@Table(uniqueConstraints = @UniqueConstraint(name = "uk_provider_user",
+        columnNames = {"provider", "oauthId"})
 )
 public class SocialAccount {
     @Id
@@ -57,6 +57,10 @@ public class SocialAccount {
                 .isFirst(true)
                 .member(member)
                 .build();
+    }
+
+    public void markNotFirst() {
+        this.isFirst = false;
     }
 }
 

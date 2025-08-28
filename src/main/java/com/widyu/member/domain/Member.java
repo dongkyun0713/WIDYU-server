@@ -3,6 +3,8 @@ package com.widyu.member.domain;
 import com.widyu.fcm.domain.MemberFcmToken;
 import com.widyu.global.domain.BaseTimeEntity;
 import com.widyu.global.domain.Status;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -66,5 +68,19 @@ public class Member extends BaseTimeEntity {
                 .phoneNumber(phoneNumber)
                 .status(Status.ACTIVE)
                 .build();
+    }
+
+    public void markSocialAsNotFirst(String provider, String oauthId) {
+        this.getSocialAccounts().stream()
+                .filter(sa -> provider.equals(sa.getProvider()) && oauthId.equals(sa.getOauthId()))
+                .findFirst()
+                .ifPresent(SocialAccount::markNotFirst);
+    }
+
+    public SocialAccount getSocialAccount(String provider) {
+        return this.getSocialAccounts().stream()
+                .filter(sa -> provider.equals(sa.getProvider()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_OAUTH_PROVIDER));
     }
 }
