@@ -31,7 +31,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .body(isRegistered);
     }
 
-    @PostMapping("/signup/local")
+    @PostMapping("/sign-up/local")
     public ApiResponseTemplate<TokenPairResponse> signupLocal(
             HttpServletRequest httpServletRequest,
             @RequestBody @Valid final LocalGuardianSignupRequest request
