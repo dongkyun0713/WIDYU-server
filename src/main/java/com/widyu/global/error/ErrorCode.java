@@ -20,6 +20,10 @@ public enum ErrorCode {
     UNSUPPORTED_OAUTH_PROVIDER(HttpStatus.BAD_REQUEST, "AUTH_4002", "지원하지 않는 소셜 로그인 제공자입니다."),
     INVALID_OAUTH_STATE(HttpStatus.BAD_REQUEST, "AUTH_4003", "유효하지 않은 OAuth state입니다."),
 
+    // 부모 인증 관련
+    INVITE_CODE_DUPLICATED(HttpStatus.BAD_REQUEST, "PARENT_4001", "이미 사용 중인 초대코드입니다."),
+
+
     // 문자 인증
     SMS_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "SMS_4040", "문자 인증 코드가 존재하지 않습니다."),
     SMS_VERIFICATION_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "SMS_4000", "문자 인증 코드가 일치하지 않습니다."),

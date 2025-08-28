@@ -7,6 +7,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -15,6 +17,12 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(
+        name = "parent_profile",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_parent_invite_code", columnNames = "invite_code")
+        }
+)
 public class ParentProfile {
 
     @Id
@@ -33,7 +41,7 @@ public class ParentProfile {
     @Column(name = "detail_address")
     private String detailAddress;
 
-    @Column(name = "invite_code", unique = true)
+    @Column(name = "invite_code", nullable = false, unique = true, length = 7)
     private String inviteCode;
 
     @Builder(access = AccessLevel.PRIVATE)
