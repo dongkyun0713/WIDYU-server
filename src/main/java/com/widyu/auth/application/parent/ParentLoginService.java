@@ -1,0 +1,38 @@
+package com.widyu.auth.application.parent;
+
+import com.widyu.auth.dto.request.ParentSignUpRequest;
+import com.widyu.member.domain.Member;
+import com.widyu.member.domain.MemberType;
+import com.widyu.member.domain.ParentProfile;
+import com.widyu.member.repository.MemberRepository;
+import com.widyu.member.repository.ParentProfileRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class ParentLoginService {
+
+    private final MemberRepository memberRepository;
+    private final ParentProfileRepository parentProfileRepository;
+
+    @Transactional
+    public void parentSignUp(ParentSignUpRequest request) {
+        Member member = Member.createMember(
+                MemberType.PARENT,
+                request.name(),
+                request.phoneNumber()
+        );
+        memberRepository.save(member);
+
+        ParentProfile parentProfile = ParentProfile.createParentProfile(
+                member,
+                request.birthDate(),
+                request.address(),
+                request.detailAddress(),
+                request.inviteCode()
+        );
+        parentProfileRepository.save(parentProfile);
+    }
+}
