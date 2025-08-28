@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth/parents")
-public class ParentAuthController{
+public class ParentAuthController implements ParentAuthDocs {
     private final ParentLoginService parentLoginService;
 
     @PostMapping
