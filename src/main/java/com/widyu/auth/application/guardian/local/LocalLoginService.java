@@ -1,4 +1,4 @@
-package com.widyu.auth.application;
+package com.widyu.auth.application.guardian.local;
 
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;
@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class LocalGuardianService {
+public class LocalLoginService {
 
     private final PasswordEncoder passwordEncoder;
     private final MemberRepository memberRepository;
