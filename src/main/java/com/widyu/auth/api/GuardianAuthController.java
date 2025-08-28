@@ -6,6 +6,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -86,7 +87,7 @@ public class GuardianAuthController implements AuthDocs {
     }
 
     @GetMapping("/callback/{provider}")
-    public ApiResponseTemplate<TokenPairResponse> socialLoginCallback(
+    public ApiResponseTemplate<SocialLoginResponse> socialLoginCallback(
             @PathVariable String provider,
             @RequestParam String code,
             @RequestParam String state

@@ -17,6 +17,7 @@ import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.OAuthTokenResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
+import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -78,17 +79,14 @@ public class AuthService {
     }
 
     @Transactional
-    public TokenPairResponse processSocialLoginCallback(String provider, String code, String state) {
+    public SocialLoginResponse processSocialLoginCallback(String provider, String code, String state) {
         OAuthProvider oauthProvider = OAuthProvider.from(provider);
 
-        // 토큰 획득 (state 검증 포함)
         OAuthTokenResponse oAuthTokenResponse = socialLoginService.getToken(oauthProvider, code, state);
 
-        // 사용자 정보 조회
         SocialClientResponse socialClientResponse = socialLoginService.authenticateFromProvider(
                 oauthProvider, oAuthTokenResponse.accessToken());
 
-        // 로그인 처리
         SocialLoginRequest socialLoginRequest = SocialLoginRequest.of(
                 oauthProvider.getValue(),
                 socialClientResponse.oauthId(),

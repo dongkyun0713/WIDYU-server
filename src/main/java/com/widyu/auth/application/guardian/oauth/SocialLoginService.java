@@ -4,6 +4,7 @@ import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.OAuthTokenResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
+import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -52,12 +53,17 @@ public class SocialLoginService {
     }
 
     @Transactional
-    public TokenPairResponse socialLogin(SocialLoginRequest request) {
+    public SocialLoginResponse socialLogin(SocialLoginRequest request) {
         Member member = memberRepository
                 .findByProviderAndOauthId(request.oAuthProvider(), request.oAuthId())
+                .map(m -> {
+                    m.markSocialAsNotFirst(request.oAuthProvider(), request.oAuthId());
+                    return m;
+                })
                 .orElseGet(() -> createMember(request));
 
-        return getLoginResponse(member);
+        return SocialLoginResponse.of(member.getSocialAccount(request.oAuthProvider()).isFirst(),
+                getLoginResponse(member));
     }
 
     private Member createMember(SocialLoginRequest request) {
