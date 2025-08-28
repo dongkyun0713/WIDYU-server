@@ -1,0 +1,101 @@
+package com.widyu.auth.api;
+
+import com.widyu.auth.dto.request.SmsCodeRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.response.TemporaryTokenResponse;
+import com.widyu.global.response.ApiResponseTemplate;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestBody;
+
+@Tag(name = "Sms", description = "문자 인증 API")
+public interface SmsDocs {
+    @Operation(
+            summary = "SMS 인증번호 전송",
+            description = "사용자의 이름과 전화번호를 받아 인증번호를 전송합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "전송 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "SMS_2001",
+                                      "message": "문자가 성공적으로 전송되었습니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Void> sendSmsVerification(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "이름과 전화번호",
+                    content = @Content(
+                            schema = @Schema(implementation = SmsVerificationRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "name": "홍길동",
+                                              "phoneNumber": "01012345678"
+                                            }
+                                            """
+                            )
+                    )
+            ) final SmsVerificationRequest request
+    );
+
+    @Operation(
+            summary = "SMS 인증번호 검증",
+            description = "전화번호와 인증코드를 검증하고, 성공 시 30분 유효의 임시 토큰을 발급합니다."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "검증 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "SMS_2002",
+                                      "message": "SMS 인증이 성공적으로 완료되었습니다.",
+                                      "data": {
+                                        "temporaryToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<TemporaryTokenResponse> verifySmsCode(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "전화번호와 인증코드",
+                    content = @Content(
+                            schema = @Schema(implementation = SmsCodeRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "phoneNumber": "01012345678",
+                                              "code": "123456"
+                                            }
+                                            """
+                            )
+                    )
+            ) final SmsCodeRequest request
+    );
+}

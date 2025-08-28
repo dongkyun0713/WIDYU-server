@@ -31,8 +31,6 @@ public class OAuthStateService {
                 .ttl(oAuthProperties.ttl())
                 .build();
         oAuthStateRepository.save(oAuthState);
-        log.info("OAuth state 생성 및 저장 완료: {}", state);
-
         return state;
     }
 
