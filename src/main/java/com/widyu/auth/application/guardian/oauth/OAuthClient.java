@@ -8,7 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 public interface OAuthClient {
-    void getAuthCode(OAuthProvider provider, HttpServletResponse response) throws IOException;
+    String getAuthCode(OAuthProvider provider, HttpServletResponse response) throws IOException;
 
     /**
      * 소셜 로그인 인증

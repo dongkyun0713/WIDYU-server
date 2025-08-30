@@ -60,11 +60,14 @@ public class GuardianAuthController implements GuardianAuthDocs {
     }
 
     @GetMapping("/sign-in/social")
-    public void signInSocial(
+    public ApiResponseTemplate<String> signInSocial(
             @RequestParam String provider,
             HttpServletResponse response
     ) throws IOException {
-        authService.redirectToSocialLogin(provider, response);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2005")
+                .message("소셜 로그인 페이지로 리다이렉트")
+                .body(authService.redirectToSocialLogin(provider, response));
     }
 
     @GetMapping("/callback/{provider}")
