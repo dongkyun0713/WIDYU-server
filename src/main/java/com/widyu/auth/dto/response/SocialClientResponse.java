@@ -10,14 +10,14 @@ public record SocialClientResponse(
         String phoneNumber
 ) {
     public static SocialClientResponse of(
-            final String email,
             final String oauthId,
+            final String email,
             final String name,
             final String phoneNumber
     ) {
         return SocialClientResponse.builder()
-                .email(email)
                 .oauthId(oauthId)
+                .email(email)
                 .name(name)
                 .phoneNumber(phoneNumber)
                 .build();

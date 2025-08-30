@@ -36,6 +36,10 @@ public enum ErrorCode {
     NAVER_COMMUNICATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "NAVER_5000", "네이버 통신에 실패하였습니다."),
     NAVER_TOKEN_IS_BLANK(HttpStatus.BAD_REQUEST, "NAVER_4000", "네이버 토큰이 비어 있습니다."),
 
+    // 카카오
+    KAKAO_COMMUNICATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "KAKAO_5000", "카카오 통신에 실패하였습니다."),
+    KAKAO_TOKEN_IS_BLANK(HttpStatus.BAD_REQUEST, "KAKAO_4000", "카카오 토큰이 비어 있습니다."),
+
     // 회원 관련
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4041", "회원을 찾을 수 없습니다."),
 
