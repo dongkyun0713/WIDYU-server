@@ -5,4 +5,4 @@ coolsms:
   from-phone-number: ${COOLSMS_PHONE}
   verification-code-length: ${COOLSMS_VERIFICATION_CODE_LENGTH}
   verification-code-ttl: ${COOLSMS_VERIFICATION_CODE_TTL}
-  message-template: "[인증번호 : {code}] 위듀 계정 가입을 위한 인증번호입니다."
+  message-template: "[인증번호 : {code}] 위듀 인증번호입니다."
