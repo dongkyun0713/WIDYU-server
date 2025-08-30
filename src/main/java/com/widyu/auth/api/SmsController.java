@@ -1,6 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.application.guardian.AuthService;
+import com.widyu.auth.dto.request.FindPasswordRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
@@ -35,5 +36,14 @@ public class SmsController implements SmsDocs {
                 .code("SMS_2011")
                 .message("SMS 인증이 성공적으로 완료되었습니다.")
                 .body(res);
+    }
+
+    @PostMapping("/send-if-member-exist")
+    public ApiResponseTemplate<Void> sendSmsVerificationIfMemberExist(@Valid @RequestBody FindPasswordRequest request) {
+        authService.sendSmsVerificationIfMemberExist(request);
+        return ApiResponseTemplate.ok()
+                .code("SMS_2010")
+                .message("문자가 성공적으로 전송되었습니다.")
+                .body(null);
     }
 }

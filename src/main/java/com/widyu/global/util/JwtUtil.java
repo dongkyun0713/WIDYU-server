@@ -68,7 +68,7 @@ public class JwtUtil {
         return buildJwtToken(
                 TokenType.TEMPORARY,
                 temporaryMemberId,
-                Map.of(TOKEN_ROLE_NAME, MemberRole.TEMPORARY),
+                Map.of(TOKEN_ROLE_NAME, MemberRole.TEMPORARY.name()),
                 timeInfo,
                 getTemporaryTokenKey()
         );

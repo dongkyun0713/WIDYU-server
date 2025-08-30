@@ -1,5 +1,7 @@
 package com.widyu.member.domain;
 
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -54,5 +56,12 @@ public class LocalAccount {
                 .email(email)
                 .password(password)
                 .build();
+    }
+
+    public void changePassword(final String newPassword) {
+        if (this.password.equals(newPassword)) {
+            throw new BusinessException(ErrorCode.SAME_PASSWORD);
+        }
+        this.password = newPassword;
     }
 }

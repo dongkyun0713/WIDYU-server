@@ -1,6 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.application.guardian.AuthService;
+import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -87,12 +89,24 @@ public class GuardianAuthController implements GuardianAuthDocs {
     @GetMapping("/member/email")
     public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @RequestBody SmsVerificationRequest request
-            ) {
+    ) {
         MemberInfoResponse response = authService.findMemberByPhoneNumberAndName(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2006")
                 .message("휴대폰 번호로 회원 조회 성공")
                 .body(response);
+    }
+
+    @PatchMapping("/password")
+    public ApiResponseTemplate<Boolean> changePassword(
+            @RequestBody @Valid final ChangePasswordRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        boolean result = authService.changeMemberPassword(request, httpServletRequest);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2007")
+                .message("비밀번호 변경 성공")
+                .body(result);
     }
 }

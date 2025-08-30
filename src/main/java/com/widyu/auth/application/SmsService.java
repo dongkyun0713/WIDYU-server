@@ -39,12 +39,17 @@ public class SmsService {
 
     public void sendVerificationSms(final String toPhoneNumber, final String name) {
         validatePhoneNumber(toPhoneNumber);
-
         String code = generateVerificationCode();
-        saveVerificationCode(toPhoneNumber, code, name);
 
+        saveVerificationCode(toPhoneNumber, code, name);
         String messageText = createMessageText(code);
 
+        sendMessageWithLogging(toPhoneNumber, name, messageText);
+    }
+
+    private void sendMessageWithLogging(final String toPhoneNumber,
+                                        final String name,
+                                        final String messageText) {
         try {
             Message message = createMessage(toPhoneNumber, messageText);
             messageService.send(message);
@@ -62,6 +67,7 @@ public class SmsService {
             throw new BusinessException(ErrorCode.SMS_SEND_FAILED);
         }
     }
+
 
     private void saveVerificationCode(final String phoneNumber, final String code, final String name) {
         VerificationCode verificationCode = VerificationCode.builder()
