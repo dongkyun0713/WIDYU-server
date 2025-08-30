@@ -3,6 +3,7 @@ package com.widyu.auth.application.guardian.local;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -73,5 +74,12 @@ public class LocalLoginService {
         if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
+    }
+
+    public MemberInfoResponse findMemberByPhoneNumber(String phoneNumber) {
+        Member member = memberRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        return MemberInfoResponse.from(member);
     }
 }

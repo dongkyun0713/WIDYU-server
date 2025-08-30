@@ -4,6 +4,8 @@ import com.widyu.auth.application.guardian.AuthService;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -80,5 +82,17 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .code("AUTH_2004")
                 .message("소셜 로그인 성공")
                 .body(authService.processSocialLoginCallback(provider, code, state));
+    }
+
+    @GetMapping("/member/email")
+    public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
+            @RequestBody SmsVerificationRequest request
+            ) {
+        MemberInfoResponse response = authService.findMemberByPhoneNumber(request);
+
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2006")
+                .message("휴대폰 번호로 회원 조회 성공")
+                .body(response);
     }
 }

@@ -14,6 +14,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.OAuthTokenResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -93,5 +94,10 @@ public class AuthService {
         );
 
         return socialLoginService.socialLogin(socialLoginRequest);
+    }
+
+    @Transactional(readOnly = true)
+    public MemberInfoResponse findMemberByPhoneNumber(SmsVerificationRequest request) {
+        return localLoginService.findMemberByPhoneNumber(request.phoneNumber());
     }
 }
