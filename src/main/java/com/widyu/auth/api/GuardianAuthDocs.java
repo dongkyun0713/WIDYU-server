@@ -3,6 +3,9 @@ package com.widyu.auth.api;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.ChangePasswordRequest;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -55,7 +58,7 @@ public interface GuardianAuthDocs {
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "email": "widyu123"
+                                              "email": "user@example.com"
                                             }
                                             """
                             )
@@ -102,7 +105,7 @@ public interface GuardianAuthDocs {
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "email": "widyu123",
+                                              "email": "user@example.com",
                                               "password": "Test@1234",
                                               "name": "홍길동",
                                               "phoneNumber": "01012345678"
@@ -148,7 +151,7 @@ public interface GuardianAuthDocs {
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "email": "widyu123",
+                                              "email": "user@example.com",
                                               "password": "Test@1234"
                                             }
                                             """
@@ -256,5 +259,113 @@ public interface GuardianAuthDocs {
                     examples = @ExampleObject(name = "예시", value = "ZxY123...")
             )
             String state
+    );
+
+    @Operation(
+            summary = "전화번호로 회원 이메일 조회",
+            description = """
+                    이름과 휴대폰 번호를 검증 후, 해당 회원의 이메일 정보를 반환합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "조회 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2006",
+                                      "message": "휴대폰 번호로 회원 조회 성공",
+                                      "data": {
+                                        "name": "홍길동",
+                                        "phoneNumber": "01012345678",
+                                        "email": "user@example.com"
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "이름/전화번호/인증코드(정책에 따라 포함)",
+                    content = @Content(
+                            schema = @Schema(implementation = SmsVerificationRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "name": "홍길동",
+                                              "phoneNumber": "01012345678"
+                                            }
+                                            """
+                            )
+                    )
+            ) final SmsVerificationRequest request
+    );
+
+    @Operation(
+            summary = "비밀번호 변경(임시 토큰 필요)",
+            description = """
+                    SMS 본인확인 후 발급된 임시 토큰(Authorization: Bearer)을 사용하여 비밀번호를 변경합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "비밀번호 변경 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2007",
+                                      "message": "비밀번호 변경 성공",
+                                      "data": true
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(임시 토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 만료",
+                            value = """
+                                    {
+                                      "code": "AUTH_4011",
+                                      "message": "임시 토큰이 만료되었습니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Boolean> changePassword(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "새 비밀번호/확인 비밀번호",
+                    content = @Content(
+                            schema = @Schema(implementation = ChangePasswordRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "password": "NewPass@1234",
+                                              "confirmPassword": "NewPass@1234"
+                                            }
+                                            """
+                            )
+                    )
+            ) final ChangePasswordRequest request,
+            HttpServletRequest httpServletRequest
     );
 }

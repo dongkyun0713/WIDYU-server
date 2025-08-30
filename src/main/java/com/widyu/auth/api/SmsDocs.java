@@ -1,5 +1,6 @@
 package com.widyu.auth.api;
 
+import com.widyu.auth.dto.request.FindPasswordRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
@@ -98,4 +99,67 @@ public interface SmsDocs {
                     )
             ) final SmsCodeRequest request
     );
+
+    @Operation(
+            summary = "비밀번호 찾기용 SMS 인증번호 전송",
+            description = """
+                    비밀번호 재설정 시도 시, 입력받은 이름/이메일/전화번호 조합이 실제 회원과 일치하는 경우에만
+                    인증번호를 발송합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "전송 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "SMS_2003",
+                                      "message": "문자가 성공적으로 전송되었습니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "404",
+            description = "회원 없음",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "실패 응답",
+                            value = """
+                                    {
+                                      "code": "MEMBER_4041",
+                                      "message": "해당 정보와 일치하는 회원을 찾을 수 없습니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Void> sendSmsVerificationIfMemberExist(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "비밀번호 재설정 시 확인할 이름/이메일/전화번호",
+                    content = @Content(
+                            schema = @Schema(implementation = FindPasswordRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "name": "홍길동",
+                                              "email": "user@example.com",
+                                              "phoneNumber": "01012345678"
+                                            }
+                                            """
+                            )
+                    )
+            ) final FindPasswordRequest request
+    );
 }
+
