@@ -86,7 +86,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .body(authService.processSocialLoginCallback(provider, code, state));
     }
 
-    @GetMapping("/member/email")
+    @PostMapping("/email")
     public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @RequestBody SmsVerificationRequest request
     ) {
