@@ -82,6 +82,12 @@ public class JwtTokenProvider {
         }
     }
 
+    public RefreshTokenDto createRefreshTokenDto(Long memberId) {
+        RefreshTokenDto refreshTokenDto = jwtUtil.generateRefreshTokenDto(memberId);
+        saveRefreshTokenToStorage(memberId, refreshTokenDto.tokenValue());
+        return refreshTokenDto;
+    }
+
     private String generateAndSaveRefreshToken(Long memberId) {
         String refreshTokenValue = jwtUtil.generateRefreshToken(memberId);
         saveRefreshTokenToStorage(memberId, refreshTokenValue);

@@ -46,7 +46,7 @@ public class VerificationCodeService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_NOT_FOUND))
                 .getName();
 
-        TemporaryMember temp = TemporaryMember.createTemporaryMember(phoneNumber, name);
+        TemporaryMember temp = TemporaryMember.createTemporaryMember(name, phoneNumber);
         return temporaryMemberRepository.save(temp);
     }
 

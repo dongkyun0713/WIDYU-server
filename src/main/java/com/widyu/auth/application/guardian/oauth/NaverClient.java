@@ -93,11 +93,16 @@ public class NaverClient implements OAuthClient {
                                     response.bodyTo(NaverAuthResponse.class));
                         });
 
+        String phoneNumber = naverAuthResponse.response().phoneNumber();
+        if (phoneNumber != null) {
+            phoneNumber = phoneNumber.replaceAll("-", "");
+        }
+
         return SocialClientResponse.of(
                 naverAuthResponse.response().id(),
                 naverAuthResponse.response().email(),
                 naverAuthResponse.response().name(),
-                naverAuthResponse.response().phoneNumber()
+                phoneNumber
         );
     }
 }

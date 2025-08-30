@@ -3,15 +3,20 @@ package com.widyu.auth.application.guardian.local;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.ChangePasswordRequest;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.domain.LocalAccount;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberType;
 import com.widyu.member.repository.LocalAccountRepository;
 import com.widyu.member.repository.MemberRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,6 +30,7 @@ public class LocalLoginService {
     private final MemberRepository memberRepository;
     private final LocalAccountRepository localAccountRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TemporaryMemberUtil temporaryMemberUtil;
 
     @Transactional
     public TokenPairResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
@@ -73,5 +79,30 @@ public class LocalLoginService {
         if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
+    }
+
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
+        Member member = memberRepository.findByPhoneNumberAndName(request.phoneNumber(), request.name())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        return MemberInfoResponse.from(member);
+    }
+
+    @Transactional
+    public boolean changePassword(ChangePasswordRequest request, HttpServletRequest httpServletRequest) {
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+
+        String phoneNumber = temporaryMember.getPhoneNumber();
+        String name = temporaryMember.getName();
+
+        Member member = memberRepository.findByPhoneNumberAndName(phoneNumber, name)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        String encodedPw = passwordEncoder.encode(request.password());
+        member.getLocalAccount().changePassword(encodedPw);
+
+        temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
+
+        return true;
     }
 }

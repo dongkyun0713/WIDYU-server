@@ -68,7 +68,7 @@ public class JwtUtil {
         return buildJwtToken(
                 TokenType.TEMPORARY,
                 temporaryMemberId,
-                Map.of(TOKEN_ROLE_NAME, MemberRole.TEMPORARY),
+                Map.of(TOKEN_ROLE_NAME, MemberRole.TEMPORARY.name()),
                 timeInfo,
                 getTemporaryTokenKey()
         );
@@ -98,7 +98,6 @@ public class JwtUtil {
 
             return new RefreshTokenDto(
                     Long.parseLong(body.getSubject()),
-                    MemberRole.valueOf(body.get(TOKEN_ROLE_NAME, String.class)),
                     token,
                     jwtProperties.refreshTokenExpirationTime()
             );
@@ -125,6 +124,25 @@ public class JwtUtil {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public RefreshTokenDto generateRefreshTokenDto(Long memberId) {
+        Date issuedAt = new Date();
+        Date expiredAt =
+                new Date(issuedAt.getTime() + jwtProperties.refreshTokenExpirationMilliTime());
+        String tokenValue = buildRefreshToken(memberId, issuedAt, expiredAt);
+        return new RefreshTokenDto(
+                memberId, tokenValue, jwtProperties.refreshTokenExpirationTime());
+    }
+
+    private String buildRefreshToken(Long memberId, Date issuedAt, Date expiredAt) {
+        return Jwts.builder()
+                .setHeader(createTokenHeader(TokenType.REFRESH))
+                .setSubject(memberId.toString())
+                .setIssuedAt(issuedAt)
+                .setExpiration(expiredAt)
+                .signWith(getRefreshTokenKey())
+                .compact();
     }
 
     public static String extractTemporaryTokenFromHeader(HttpServletRequest request) {

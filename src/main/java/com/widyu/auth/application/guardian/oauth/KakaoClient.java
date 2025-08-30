@@ -15,6 +15,7 @@ import com.widyu.global.properties.KakaoProperties;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Objects;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -75,23 +76,57 @@ public class KakaoClient implements OAuthClient {
             throw new BusinessException(ErrorCode.KAKAO_TOKEN_IS_BLANK);
         }
 
-        KakaoAuthResponse kakao =
-                restClient.get()
-                        .uri(KAKAO_USER_ME_URL)
-                        .header(HttpHeaders.AUTHORIZATION, TOKEN_PREFIX + accessToken)
-                        .exchange((req, res) -> {
-                            if (!res.getStatusCode().is2xxSuccessful()) {
-                                log.error("카카오 사용자 조회 실패, 상태 코드: {}", res.getStatusCode());
-                                throw new BusinessException(ErrorCode.KAKAO_COMMUNICATION_ERROR);
-                            }
-                            return Objects.requireNonNull(res.bodyTo(KakaoAuthResponse.class));
-                        });
+        KakaoAuthResponse kakao = restClient.get()
+                .uri(KAKAO_USER_ME_URL)
+                .header(HttpHeaders.AUTHORIZATION, TOKEN_PREFIX + accessToken)
+                .exchange((req, res) -> {
+                    if (!res.getStatusCode().is2xxSuccessful()) {
+                        log.error("카카오 사용자 조회 실패, 상태 코드: {}", res.getStatusCode());
+                        throw new BusinessException(ErrorCode.KAKAO_COMMUNICATION_ERROR);
+                    }
+                    return Objects.requireNonNull(res.bodyTo(KakaoAuthResponse.class));
+                });
+
+        final String phoneNumber = normalizePhone(safe(() -> kakao.kakaoAccount().phoneNumber()));
 
         return SocialClientResponse.of(
-                kakao.id().toString(),
-                kakao.kakaoAccount().email(),
-                kakao.kakaoAccount().profile().nickname(),
-                kakao.kakaoAccount().phoneNumber()
+                String.valueOf(kakao.id()),
+                safe(() -> kakao.kakaoAccount().email()),
+                safe(() -> kakao.kakaoAccount().profile().nickname()),
+                phoneNumber
         );
+    }
+
+    /**
+     * 카카오 전화번호 정규화: - 공백/하이픈/괄호 등 숫자·'+' 이외 문자 제거 - +82로 시작하면 국내형(0으로 치환)으로 변환 - 그 외는 국제번호 표기 유지(+포함) 예) "+82
+     * 10-1234-5678" -> "01012345678" "+1-202-555-0123"  -> "+12025550123"
+     */
+    private String normalizePhone(String raw) {
+        if (raw == null || raw.isBlank())
+            return null;
+
+        String cleaned = raw.replaceAll("[^0-9+]", "");
+        if (cleaned.isBlank())
+            return null;
+
+        if (cleaned.indexOf('+') > 0) {
+            cleaned = cleaned.charAt(0) == '+'
+                    ? "+" + cleaned.substring(1).replace("+", "")
+                    : cleaned.replace("+", "");
+        }
+
+        if (cleaned.startsWith("+82")) {
+            return "0" + cleaned.substring(3);
+        }
+
+        return cleaned;
+    }
+
+    private static <T> T safe(Supplier<T> supplier) {
+        try {
+            return supplier.get();
+        } catch (NullPointerException e) {
+            return null;
+        }
     }
 }
