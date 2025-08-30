@@ -3,6 +3,7 @@ package com.widyu.auth.application.guardian.local;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
@@ -76,8 +77,8 @@ public class LocalLoginService {
         }
     }
 
-    public MemberInfoResponse findMemberByPhoneNumber(String phoneNumber) {
-        Member member = memberRepository.findByPhoneNumber(phoneNumber)
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
+        Member member = memberRepository.findByPhoneNumberAndName(request.phoneNumber(), request.name())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
         return MemberInfoResponse.from(member);

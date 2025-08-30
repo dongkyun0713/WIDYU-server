@@ -105,8 +105,8 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public MemberInfoResponse findMemberByPhoneNumber(SmsVerificationRequest request) {
-        return localLoginService.findMemberByPhoneNumber(request.phoneNumber());
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
+        return localLoginService.findMemberByPhoneNumberAndName(request);
     }
 
     @Transactional(readOnly = true)

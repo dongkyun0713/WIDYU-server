@@ -7,5 +7,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom {
-    Optional<Member> findByPhoneNumber(String phoneNumber);
+    Optional<Member> findByPhoneNumberAndName(String phoneNumber, String name);
 }

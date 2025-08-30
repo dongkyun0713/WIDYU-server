@@ -88,7 +88,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
     public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @RequestBody SmsVerificationRequest request
             ) {
-        MemberInfoResponse response = authService.findMemberByPhoneNumber(request);
+        MemberInfoResponse response = authService.findMemberByPhoneNumberAndName(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2006")
