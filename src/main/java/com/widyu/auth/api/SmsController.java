@@ -23,7 +23,7 @@ public class SmsController implements SmsDocs {
     public ApiResponseTemplate<Void> sendSmsVerification(@Valid @RequestBody SmsVerificationRequest request) {
         authService.sendSmsVerification(request);
         return ApiResponseTemplate.ok()
-                .code("SMS_2001")
+                .code("SMS_2010")
                 .message("문자가 성공적으로 전송되었습니다.")
                 .body(null);
     }
@@ -32,7 +32,7 @@ public class SmsController implements SmsDocs {
     public ApiResponseTemplate<TemporaryTokenResponse> verifySmsCode(@Valid @RequestBody SmsCodeRequest request) {
         TemporaryTokenResponse res = authService.verifySmsCode(request);
         return ApiResponseTemplate.ok()
-                .code("SMS_2002")
+                .code("SMS_2011")
                 .message("SMS 인증이 성공적으로 완료되었습니다.")
                 .body(res);
     }

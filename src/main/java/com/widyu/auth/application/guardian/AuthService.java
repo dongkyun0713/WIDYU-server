@@ -7,10 +7,12 @@ import com.widyu.auth.application.guardian.local.LocalLoginService;
 import com.widyu.auth.application.guardian.oauth.SocialLoginService;
 import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.domain.TemporaryMember;
+import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.dto.TemporaryTokenDto;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
@@ -20,6 +22,10 @@ import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.util.MemberUtil;
+import com.widyu.member.domain.Member;
+import com.widyu.member.domain.MemberRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -36,6 +42,8 @@ public class AuthService {
     private final TemporaryTokenService temporaryTokenService;
     private final LocalLoginService localLoginService;
     private final SocialLoginService socialLoginService;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final MemberUtil memberUtil;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -99,5 +107,17 @@ public class AuthService {
     @Transactional(readOnly = true)
     public MemberInfoResponse findMemberByPhoneNumber(SmsVerificationRequest request) {
         return localLoginService.findMemberByPhoneNumber(request.phoneNumber());
+    }
+
+    @Transactional(readOnly = true)
+    public TokenPairResponse reissueTokenPair(RefreshTokenRequest request) {
+        RefreshTokenDto refreshTokenDto =
+                jwtTokenProvider.retrieveRefreshToken(request.refreshToken());
+        RefreshTokenDto refreshToken =
+                jwtTokenProvider.createRefreshTokenDto(refreshTokenDto.memberId());
+
+        Member member = memberUtil.getMemberByMemberId(refreshToken.memberId());
+
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
     }
 }
