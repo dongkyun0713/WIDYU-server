@@ -34,7 +34,7 @@ public class NaverClient implements OAuthClient {
     private final OAuthStateService oAuthStateService;
 
     @Override
-    public void getAuthCode(final OAuthProvider provider, HttpServletResponse response) throws IOException {
+    public String getAuthCode(final OAuthProvider provider, HttpServletResponse response) throws IOException {
         String state = oAuthStateService.generateAndSaveState();
 
         // URL 구성 수정
@@ -45,7 +45,7 @@ public class NaverClient implements OAuthClient {
                 "&state=" + state;
 
         log.debug("네이버 OAuth 리다이렉트 URL: {}", redirectUri);
-        response.sendRedirect(redirectUri);
+        return redirectUri;
     }
 
     @Override

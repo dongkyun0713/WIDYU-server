@@ -175,13 +175,13 @@ public interface GuardianAuthDocs {
                     )
             )
     )
-    void signInSocial(
+    ApiResponseTemplate<String> signInSocial(
             @Parameter(
                     name = "provider",
                     description = "소셜 제공자 식별자 (현재 'naver' 지원)",
                     in = ParameterIn.QUERY,
                     required = true,
-                    examples = { @ExampleObject(name = "네이버", value = "naver") }
+                    examples = {@ExampleObject(name = "네이버", value = "naver")}
             )
             String provider,
             HttpServletResponse response

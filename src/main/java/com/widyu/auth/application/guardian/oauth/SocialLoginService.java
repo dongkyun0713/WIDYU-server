@@ -30,9 +30,9 @@ public class SocialLoginService {
     private final OAuthStateService oAuthStateService;
 
     @Transactional(readOnly = true)
-    public void redirectToOAuthProvider(final OAuthProvider provider, HttpServletResponse response) throws IOException {
+    public String redirectToOAuthProvider(final OAuthProvider provider, HttpServletResponse response) throws IOException {
         OAuthClient oAuthClient = oAuthClients.get(provider);
-        oAuthClient.getAuthCode(provider, response);
+        return oAuthClient.getAuthCode(provider, response);
     }
 
     @Transactional(readOnly = true)

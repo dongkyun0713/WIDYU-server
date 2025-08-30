@@ -70,9 +70,9 @@ public class AuthService {
     }
 
     @Transactional
-    public void redirectToSocialLogin(String provider, HttpServletResponse response) throws IOException {
+    public String redirectToSocialLogin(String provider, HttpServletResponse response) throws IOException {
         OAuthProvider oauthProvider = OAuthProvider.from(provider);
-        socialLoginService.redirectToOAuthProvider(oauthProvider, response);
+        return socialLoginService.redirectToOAuthProvider(oauthProvider, response);
     }
 
     @Transactional
