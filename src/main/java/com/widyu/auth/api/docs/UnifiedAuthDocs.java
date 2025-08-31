@@ -1,6 +1,5 @@
 package com.widyu.auth.api.docs;
 
-import com.widyu.auth.dto.request.LogoutRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -51,12 +50,12 @@ public interface UnifiedAuthDocs {
                     examples = @ExampleObject(
                             name = "리프레시 토큰 오류",
                             value = """
-                                    {
-                                      "code": "AUTH_4013",
-                                      "message": "리프레시 토큰이 유효하지 않습니다.",
-                                      "data": null
-                                    }
-                                    """
+                        {
+                          "code": "AUTH_4013",
+                          "message": "리프레시 토큰이 유효하지 않습니다.",
+                          "data": null
+                        }
+                        """
                     )
             )
     )
@@ -82,7 +81,8 @@ public interface UnifiedAuthDocs {
     @Operation(
             summary = "로그아웃",
             description = """
-                    **리프레시 토큰을 서버 저장소에서 삭제**하여 재발급을 차단합니다.
+                    현재 인증된 사용자 기준으로 **서버 저장소의 리프레시 토큰을 삭제**합니다.
+                    바디는 필요하지 않으며, `Authorization: Bearer <accessToken>` 헤더가 필요합니다.
                     (선택) 클라이언트는 로컬에 보관 중인 액세스/리프레시 토큰을 함께 제거하세요.
                     """
     )
@@ -105,37 +105,20 @@ public interface UnifiedAuthDocs {
     )
     @ApiResponse(
             responseCode = "401",
-            description = "유효하지 않은 리프레시 토큰",
+            description = "인증 필요(액세스 토큰 누락/만료 등)",
             content = @Content(
                     schema = @Schema(implementation = ApiResponseTemplate.class),
                     examples = @ExampleObject(
-                            name = "리프레시 토큰 오류",
+                            name = "인증 오류",
                             value = """
                                     {
-                                      "code": "AUTH_4013",
-                                      "message": "리프레시 토큰이 유효하지 않습니다.",
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
                                       "data": null
                                     }
                                     """
                     )
             )
     )
-    ApiResponseTemplate<Void> logout(
-            @Valid @RequestBody
-            @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    required = true,
-                    description = "로그아웃 요청(리프레시 토큰)",
-                    content = @Content(
-                            schema = @Schema(implementation = LogoutRequest.class),
-                            examples = @ExampleObject(
-                                    name = "요청 예시",
-                                    value = """
-                                            {
-                                              "refreshToken": "eyJhbGciOiJIUzI1NiIs..."
-                                            }
-                                            """
-                            )
-                    )
-            ) final LogoutRequest request
-    );
+    ApiResponseTemplate<Void> logout();
 }
