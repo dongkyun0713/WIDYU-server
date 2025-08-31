@@ -2,7 +2,6 @@ package com.widyu.auth.api;
 
 import com.widyu.auth.api.docs.UnifiedAuthDocs;
 import com.widyu.auth.application.guardian.AuthService;
-import com.widyu.auth.dto.request.LogoutRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
