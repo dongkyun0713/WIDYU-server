@@ -1,5 +1,6 @@
 package com.widyu.auth.application.guardian;
 
+import com.widyu.auth.application.LogoutService;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.TemporaryTokenService;
 import com.widyu.auth.application.VerificationCodeService;
@@ -14,6 +15,7 @@ import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.FindPasswordRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.LogoutRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -48,6 +50,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberUtil memberUtil;
     private final MemberRepository memberRepository;
+    private final LogoutService logoutService;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -136,5 +139,10 @@ public class AuthService {
     @Transactional
     public boolean changeMemberPassword(ChangePasswordRequest request, HttpServletRequest httpServletRequest) {
         return localLoginService.changePassword(request, httpServletRequest);
+    }
+
+    @Transactional(readOnly = true)
+    public void logout(LogoutRequest request) {
+        logoutService.logout(request.refreshToken());
     }
 }

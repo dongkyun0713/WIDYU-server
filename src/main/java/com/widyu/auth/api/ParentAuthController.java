@@ -1,5 +1,6 @@
 package com.widyu.auth.api;
 
+import com.widyu.auth.api.docs.ParentAuthDocs;
 import com.widyu.auth.application.parent.ParentLoginService;
 import com.widyu.auth.dto.request.ParentSignInRequest;
 import com.widyu.auth.dto.request.ParentSignUpRequest;

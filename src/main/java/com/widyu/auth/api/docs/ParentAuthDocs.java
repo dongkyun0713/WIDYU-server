@@ -1,4 +1,4 @@
-package com.widyu.auth.api;
+package com.widyu.auth.api.docs;
 
 import com.widyu.auth.dto.request.ParentSignInRequest;
 import com.widyu.auth.dto.request.ParentSignUpRequest;
