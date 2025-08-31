@@ -15,7 +15,6 @@ import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.FindPasswordRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
-import com.widyu.auth.dto.request.LogoutRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
@@ -142,7 +141,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public void logout(LogoutRequest request) {
-        logoutService.logout(request.refreshToken());
+    public void logout() {
+        logoutService.logout();
     }
 }

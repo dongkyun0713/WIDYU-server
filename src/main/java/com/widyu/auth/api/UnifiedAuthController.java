@@ -31,8 +31,8 @@ public class UnifiedAuthController implements UnifiedAuthDocs {
     }
 
     @PostMapping("/logout")
-    public ApiResponseTemplate<Void> logout(@Valid @RequestBody LogoutRequest request) {
-        authService.logout(request);
+    public ApiResponseTemplate<Void> logout() {
+        authService.logout();
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2010")
