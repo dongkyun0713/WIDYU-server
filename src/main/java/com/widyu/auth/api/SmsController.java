@@ -1,5 +1,6 @@
 package com.widyu.auth.api;
 
+import com.widyu.auth.api.docs.SmsDocs;
 import com.widyu.auth.application.guardian.AuthService;
 import com.widyu.auth.dto.request.FindPasswordRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;

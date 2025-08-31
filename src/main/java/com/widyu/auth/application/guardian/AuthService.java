@@ -1,5 +1,6 @@
 package com.widyu.auth.application.guardian;
 
+import com.widyu.auth.application.LogoutService;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.TemporaryTokenService;
 import com.widyu.auth.application.VerificationCodeService;
@@ -48,6 +49,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberUtil memberUtil;
     private final MemberRepository memberRepository;
+    private final LogoutService logoutService;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
@@ -136,5 +138,10 @@ public class AuthService {
     @Transactional
     public boolean changeMemberPassword(ChangePasswordRequest request, HttpServletRequest httpServletRequest) {
         return localLoginService.changePassword(request, httpServletRequest);
+    }
+
+    @Transactional(readOnly = true)
+    public void logout() {
+        logoutService.logout();
     }
 }
