@@ -7,6 +7,7 @@ import com.widyu.auth.dto.request.ParentSignUpRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,8 +21,8 @@ public class ParentAuthController implements ParentAuthDocs {
     private final ParentLoginService parentLoginService;
 
     @PostMapping("/sign-up")
-    public ApiResponseTemplate<Void> signUp(@Valid @RequestBody ParentSignUpRequest request) {
-        parentLoginService.parentSignUp(request);
+    public ApiResponseTemplate<Void> signUp(@Valid @RequestBody List<ParentSignUpRequest> request) {
+        parentLoginService.parentSignUpBulk(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2007")
