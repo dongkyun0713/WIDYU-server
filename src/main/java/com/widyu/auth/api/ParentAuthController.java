@@ -1,7 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.api.docs.ParentAuthDocs;
-import com.widyu.auth.application.parent.ParentLoginService;
+import com.widyu.auth.application.parent.ParentAuthService;
 import com.widyu.auth.dto.request.ParentSignInRequest;
 import com.widyu.auth.dto.request.ParentSignUpRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -18,11 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth/parents")
 public class ParentAuthController implements ParentAuthDocs {
-    private final ParentLoginService parentLoginService;
+    private final ParentAuthService parentAuthService;
 
     @PostMapping("/sign-up")
     public ApiResponseTemplate<Void> signUp(@Valid @RequestBody List<ParentSignUpRequest> request) {
-        parentLoginService.parentSignUpBulk(request);
+        parentAuthService.parentSignUpBulk(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2007")
@@ -32,7 +32,7 @@ public class ParentAuthController implements ParentAuthDocs {
 
     @PostMapping("/sign-in")
     public ApiResponseTemplate<TokenPairResponse> signIn(@Valid @RequestBody ParentSignInRequest request) {
-        TokenPairResponse response = parentLoginService.parentSignIn(request);
+        TokenPairResponse response = parentAuthService.parentSignIn(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2008")
