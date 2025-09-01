@@ -24,14 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class ParentLoginService {
-
+public class ParentAuthService {
     private final MemberRepository memberRepository;
     private final ParentProfileRepository parentProfileRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
-    public int parentSignUpBulk(List<ParentSignUpRequest> requests) {
+    public void parentSignUpBulk(List<ParentSignUpRequest> requests) {
         validateRequestsNotEmpty(requests);
         validateDuplicateCodesInRequest(requests);
         validateCodesNotExistInDb(extractInviteCodes(requests));
@@ -41,8 +40,6 @@ public class ParentLoginService {
 
         List<ParentProfile> profiles = buildProfilesFromRequests(requests, members);
         saveAllProfiles(profiles);
-
-        return members.size();
     }
 
     @Transactional
@@ -69,8 +66,8 @@ public class ParentLoginService {
 
         if (!dupInRequest.isEmpty()) {
             throw new BusinessException(
-                    ErrorCode.INVITE_CODE_DUPLICATED,
-                    " : 요청 내 중복 초대코드=" + dupInRequest
+                    ErrorCode.INVITE_CODE_DUPLICATED_IN_REQUEST,
+                    "" + dupInRequest
             );
         }
     }
@@ -84,7 +81,7 @@ public class ParentLoginService {
                     .toList();
             throw new BusinessException(
                     ErrorCode.INVITE_CODE_DUPLICATED,
-                    " : 기존에 존재하는 초대코드=" + dupInDb
+                    "" + dupInDb
             );
         }
     }
