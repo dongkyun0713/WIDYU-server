@@ -6,7 +6,6 @@ import com.widyu.auth.application.TemporaryTokenService;
 import com.widyu.auth.application.VerificationCodeService;
 import com.widyu.auth.application.guardian.local.LocalLoginService;
 import com.widyu.auth.application.guardian.oauth.SocialLoginService;
-import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.dto.TemporaryTokenDto;
@@ -20,8 +19,6 @@ import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
-import com.widyu.auth.dto.response.OAuthTokenResponse;
-import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -31,8 +28,6 @@ import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberRole;
 import com.widyu.member.repository.MemberRepository;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,30 +87,10 @@ public class AuthService {
         return localLoginService.signIn(request);
     }
 
-    @Transactional
-    public String redirectToSocialLogin(String provider, HttpServletResponse response) throws IOException {
-        OAuthProvider oauthProvider = OAuthProvider.from(provider);
-        return socialLoginService.redirectToOAuthProvider(oauthProvider, response);
-    }
 
     @Transactional
-    public SocialLoginResponse processSocialLoginCallback(String provider, String code, String state) {
-        OAuthProvider oauthProvider = OAuthProvider.from(provider);
-
-        OAuthTokenResponse oAuthTokenResponse = socialLoginService.getToken(oauthProvider, code, state);
-
-        SocialClientResponse socialClientResponse = socialLoginService.authenticateFromProvider(
-                oauthProvider, oAuthTokenResponse.accessToken());
-
-        SocialLoginRequest socialLoginRequest = SocialLoginRequest.of(
-                oauthProvider.getValue(),
-                socialClientResponse.oauthId(),
-                socialClientResponse.email(),
-                socialClientResponse.name(),
-                socialClientResponse.phoneNumber()
-        );
-
-        return socialLoginService.socialLogin(socialLoginRequest);
+    public SocialLoginResponse socialLogin(String provider, SocialLoginRequest request) {
+        return socialLoginService.socialLogin(provider, request);
     }
 
     @Transactional(readOnly = true)

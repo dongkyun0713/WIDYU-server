@@ -1,26 +1,74 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.authtest.application.guardian.oauth;
 
+import static com.widyu.global.constant.SecurityConstant.KAKAO_AUTH_URL;
+import static com.widyu.global.constant.SecurityConstant.KAKAO_TOKEN_URL;
 import static com.widyu.global.constant.SecurityConstant.KAKAO_USER_ME_URL;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
-import com.widyu.auth.dto.response.KakaoAuthResponse;
-import com.widyu.auth.dto.response.SocialClientResponse;
+import com.widyu.authtest.domain.OAuthProvider;
+import com.widyu.authtest.dto.response.KakaoAuthResponse;
+import com.widyu.authtest.dto.response.OAuthTokenResponse;
+import com.widyu.authtest.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.properties.KakaoProperties;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 @Slf4j
-@Component("KAKAO")
+@Component("KAKAO_TEST")
 @RequiredArgsConstructor
-public class KakaoClient implements OAuthClient {
+public class KakaoTestClient implements OAuthTestClient {
 
+    private final KakaoProperties kakaoProperties;
     private final RestClient restClient;
+    private final OAuthStateTestService oAuthStateTestService;
+
+    @Override
+    public String getAuthCode(final OAuthProvider provider, HttpServletResponse response) throws IOException {
+        String state = oAuthStateTestService.generateAndSaveState();
+
+        String authorizationUrl =
+                KAKAO_AUTH_URL
+                        + "?response_type=code"
+                        + "&client_id=" + kakaoProperties.clientId()
+                        + "&redirect_uri=" + kakaoProperties.redirectUri()
+                        + "&state=" + state;
+
+        log.debug("카카오 OAuth 인가 URL: {}", authorizationUrl);
+        return authorizationUrl;
+    }
+
+    @Override
+    public OAuthTokenResponse getToken(final String authCode, final String state) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("grant_type", "authorization_code");
+        params.add("code", authCode);
+        params.add("client_id", kakaoProperties.clientId());
+        params.add("redirect_uri", kakaoProperties.redirectUri());
+
+        return restClient.post()
+                .uri(KAKAO_TOKEN_URL)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .body(params)
+                .exchange((req, res) -> {
+                    if (!res.getStatusCode().is2xxSuccessful()) {
+                        log.error("카카오 토큰 조회 실패, 상태 코드: {}", res.getStatusCode());
+                        throw new BusinessException(ErrorCode.KAKAO_COMMUNICATION_ERROR);
+                    }
+                    return Objects.requireNonNull(res.bodyTo(OAuthTokenResponse.class));
+                });
+    }
 
     @Override
     public SocialClientResponse getUserInfo(final String accessToken) {

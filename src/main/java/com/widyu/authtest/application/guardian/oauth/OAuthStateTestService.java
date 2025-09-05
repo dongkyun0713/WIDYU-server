@@ -1,26 +1,25 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.authtest.application.guardian.oauth;
 
-import com.widyu.auth.domain.OAuthState;
-import com.widyu.auth.repository.OAuthStateRepository;
+import com.widyu.authtest.domain.OAuthState;
+import com.widyu.authtest.repository.OAuthStateTestRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.OAuthProperties;
+import java.security.SecureRandom;
+import java.util.Base64;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.security.SecureRandom;
-import java.util.Base64;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OAuthStateService {
+public class OAuthStateTestService {
 
     private final OAuthProperties oAuthProperties;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    private final OAuthStateRepository oAuthStateRepository;
+    private final OAuthStateTestRepository oAuthStateTestRepository;
 
     public String generateAndSaveState() {
         String state = generateRandomState();
@@ -30,7 +29,7 @@ public class OAuthStateService {
                 .state(state)
                 .ttl(oAuthProperties.ttl())
                 .build();
-        oAuthStateRepository.save(oAuthState);
+        oAuthStateTestRepository.save(oAuthState);
         return state;
     }
 
@@ -39,13 +38,13 @@ public class OAuthStateService {
             throw new BusinessException(ErrorCode.INVALID_OAUTH_STATE, ": state is null or empty");
         }
 
-        boolean exists = oAuthStateRepository.existsById(state);
+        boolean exists = oAuthStateTestRepository.existsById(state);
 
         if (!exists) {
             throw new BusinessException(ErrorCode.INVALID_OAUTH_STATE, ": state not found or already consumed");
         }
 
-        oAuthStateRepository.deleteById(state);
+        oAuthStateTestRepository.deleteById(state);
         log.debug("OAuth state 검증 및 소모 완료: {}", state);
     }
 
