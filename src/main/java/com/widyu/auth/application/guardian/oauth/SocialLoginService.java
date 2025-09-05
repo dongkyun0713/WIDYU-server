@@ -2,7 +2,6 @@ package com.widyu.auth.application.guardian.oauth;
 
 import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.dto.request.SocialLoginRequest;
-import com.widyu.auth.dto.response.OAuthTokenResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -14,8 +13,6 @@ import com.widyu.member.domain.MemberRole;
 import com.widyu.member.domain.MemberType;
 import com.widyu.member.domain.SocialAccount;
 import com.widyu.member.repository.MemberRepository;
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,21 +24,7 @@ public class SocialLoginService {
     private final Map<OAuthProvider, OAuthClient> oAuthClients;
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
-    private final OAuthStateService oAuthStateService;
 
-    @Transactional(readOnly = true)
-    public String redirectToOAuthProvider(final OAuthProvider provider, HttpServletResponse response) throws IOException {
-        OAuthClient oAuthClient = oAuthClients.get(provider);
-        return oAuthClient.getAuthCode(provider, response);
-    }
-
-    @Transactional(readOnly = true)
-    public OAuthTokenResponse getToken(final OAuthProvider provider, final String code, final String state) {
-        oAuthStateService.validateAndConsumeState(state);
-
-        OAuthClient oAuthClient = oAuthClients.get(provider);
-        return oAuthClient.getToken(code, state);
-    }
 
     @Transactional(readOnly = true)
     public SocialClientResponse authenticateFromProvider(final OAuthProvider provider, final String token) {
@@ -53,25 +36,29 @@ public class SocialLoginService {
     }
 
     @Transactional
-    public SocialLoginResponse socialLogin(SocialLoginRequest request) {
+    public SocialLoginResponse socialLogin(String providerName, SocialLoginRequest request) {
+        OAuthProvider provider = OAuthProvider.from(providerName);
+        
+        SocialClientResponse socialUserInfo = authenticateFromProvider(provider, request.accessToken());
+        
         Member member = memberRepository
-                .findByProviderAndOauthId(request.oAuthProvider(), request.oAuthId())
+                .findByProviderAndOauthId(provider.getValue(), socialUserInfo.oauthId())
                 .map(m -> {
-                    m.markSocialAsNotFirst(request.oAuthProvider(), request.oAuthId());
+                    m.markSocialAsNotFirst(provider.getValue(), socialUserInfo.oauthId());
                     return m;
                 })
-                .orElseGet(() -> createMember(request));
+                .orElseGet(() -> createMember(provider, socialUserInfo));
 
-        return SocialLoginResponse.of(member.getSocialAccount(request.oAuthProvider()).isFirst(),
+        return SocialLoginResponse.of(member.getSocialAccount(provider.getValue()).isFirst(),
                 getLoginResponse(member));
     }
 
-    private Member createMember(SocialLoginRequest request) {
-        Member member = Member.createMember(MemberType.GUARDIAN, request.name(), request.phoneNumber());
+    private Member createMember(OAuthProvider provider, SocialClientResponse socialUserInfo) {
+        Member member = Member.createMember(MemberType.GUARDIAN, socialUserInfo.name(), socialUserInfo.phoneNumber());
         SocialAccount socialAccount = SocialAccount.createSocialAccount(
-                request.email(),
-                request.oAuthProvider(),
-                request.oAuthId(),
+                socialUserInfo.email(),
+                provider.getValue(),
+                socialUserInfo.oauthId(),
                 member
         );
         member.getSocialAccounts().add(socialAccount);

@@ -5,6 +5,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
+import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -161,40 +162,10 @@ public interface GuardianAuthDocs {
     );
 
     @Operation(
-            summary = "소셜 로그인 시작 (네이버)",
+            summary = "소셜 로그인",
             description = """
-                    provider에 'naver'를 전달하면 네이버 로그인 페이지로 302 리다이렉트합니다.
-                    Swagger UI(iframe) 환경에서는 보안 정책으로 리다이렉트가 실패할 수 있으니, 실제 테스트는 브라우저 주소창에서 호출하세요.
-                    """
-    )
-    @ApiResponse(
-            responseCode = "302",
-            description = "네이버 로그인 페이지로 리다이렉트",
-            content = @Content(
-                    mediaType = "text/html",
-                    examples = @ExampleObject(
-                            name = "리다이렉트 예시",
-                            value = "<html><script>location.replace(\"https://nid.naver.com/oauth2.0/authorize?... \")</script></html>"
-                    )
-            )
-    )
-    ApiResponseTemplate<String> signInSocial(
-            @Parameter(
-                    name = "provider",
-                    description = "소셜 제공자 식별자 (현재 'naver' 지원)",
-                    in = ParameterIn.QUERY,
-                    required = true,
-                    examples = {@ExampleObject(name = "네이버", value = "naver")}
-            )
-            String provider,
-            HttpServletResponse response
-    ) throws IOException;
-
-    @Operation(
-            summary = "소셜 로그인 콜백",
-            description = """
-                    네이버에서 인증 후 전달하는 콜백입니다.
-                    쿼리 파라미터로 전달된 code/state를 검증하고, 서비스 토큰 페어(Access/Refresh)를 발급합니다.
+                    프론트엔드에서 발급받은 소셜 액세스 토큰을 사용하여 로그인합니다.
+                    소셜 토큰으로 사용자 정보를 조회한 후, 서비스 토큰 페어(Access/Refresh)를 발급합니다.
                     """
     )
     @ApiResponse(
@@ -209,8 +180,11 @@ public interface GuardianAuthDocs {
                                       "code": "AUTH_2004",
                                       "message": "소셜 로그인 성공",
                                       "data": {
-                                        "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        "isFirst": false,
+                                        "tokenPair": {
+                                          "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                          "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        }
                                       }
                                     }
                                     """
@@ -219,46 +193,46 @@ public interface GuardianAuthDocs {
     )
     @ApiResponse(
             responseCode = "400",
-            description = "잘못된 요청 (state 누락/불일치 등)",
+            description = "잘못된 요청 (토큰 누락/유효하지 않음 등)",
             content = @Content(
                     schema = @Schema(implementation = ApiResponseTemplate.class),
                     examples = @ExampleObject(
-                            name = "state 오류",
+                            name = "토큰 오류",
                             value = """
                                     {
-                                      "code": "AUTH_4003",
-                                      "message": "유효하지 않은 OAuth state입니다.",
+                                      "code": "AUTH_4001",
+                                      "message": "유효하지 않은 액세스 토큰입니다.",
                                       "data": null
                                     }
                                     """
                     )
             )
     )
-    ApiResponseTemplate<SocialLoginResponse> socialLoginCallback(
+    ApiResponseTemplate<SocialLoginResponse> signInSocial(
             @Parameter(
                     name = "provider",
-                    description = "소셜 제공자 식별자 (현재 'naver' 지원)",
-                    in = ParameterIn.PATH,
+                    description = "소셜 제공자 식별자 (naver, kakao 등)",
+                    in = ParameterIn.QUERY,
                     required = true,
-                    examples = @ExampleObject(name = "네이버", value = "naver")
+                    examples = {@ExampleObject(name = "네이버", value = "naver"), @ExampleObject(name = "카카오", value = "kakao")}
             )
             String provider,
-            @Parameter(
-                    name = "code",
-                    description = "네이버 인가 코드",
-                    in = ParameterIn.QUERY,
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    examples = @ExampleObject(name = "예시", value = "A1B2C3...")
-            )
-            String code,
-            @Parameter(
-                    name = "state",
-                    description = "CSRF 방지용 state (서버에서 생성 후 Redis에 저장된 값과 일치해야 함)",
-                    in = ParameterIn.QUERY,
-                    required = true,
-                    examples = @ExampleObject(name = "예시", value = "ZxY123...")
-            )
-            String state
+                    description = "소셜 액세스 토큰",
+                    content = @Content(
+                            schema = @Schema(implementation = SocialLoginRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "accessToken": "AAAA1234567890abcdef..."
+                                            }
+                                            """
+                            )
+                    )
+            ) final SocialLoginRequest request
     );
 
     @Operation(

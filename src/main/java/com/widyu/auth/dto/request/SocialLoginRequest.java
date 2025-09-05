@@ -1,28 +1,18 @@
 package com.widyu.auth.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 @Builder
 public record SocialLoginRequest(
-        String oAuthProvider,
-        String oAuthId,
-        String email,
-        String name,
-        String phoneNumber
+        @NotBlank(message = "Access token은 필수입니다")
+        String accessToken
 ) {
     public static SocialLoginRequest of(
-            String oAuthProvider,
-            String oAuthId,
-            String email,
-            String name,
-            String phoneNumber
+            String accessToken
     ) {
         return SocialLoginRequest.builder()
-                .oAuthProvider(oAuthProvider)
-                .oAuthId(oAuthId)
-                .email(email)
-                .name(name)
-                .phoneNumber(phoneNumber)
+                .accessToken(accessToken)
                 .build();
     }
 }
