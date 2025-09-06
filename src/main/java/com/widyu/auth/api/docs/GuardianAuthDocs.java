@@ -1,14 +1,16 @@
 package com.widyu.auth.api.docs;
 
+import com.widyu.auth.dto.request.AppleSignUpRequest;
+import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
-import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.response.ApiResponseTemplate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,9 +21,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import java.io.IOException;
 import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "Auth - Guardians", description = "보호자 인증/회원가입 API")
@@ -373,6 +373,117 @@ public interface GuardianAuthDocs {
                             )
                     )
             ) final ChangePasswordRequest request,
+            HttpServletRequest httpServletRequest
+    );
+
+    @Operation(
+            summary = "애플 로그인 회원 전화번호 업데이트",
+            description = """
+                    애플 로그인 사용자가 회원가입 후 전화번호를 업데이트합니다.
+                    JWT 토큰이 필요하며, 현재 로그인된 사용자의 전화번호를 업데이트합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "전화번호 업데이트 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2008",
+                                      "message": "애플 로그인 회원 전화번호 업데이트 성공",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4001",
+                                      "message": "유효하지 않은 액세스 토큰입니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Void> updatePhoneNumberIfAppleSignUp(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "애플 사용자 이메일",
+                    content = @Content(
+                            schema = @Schema(implementation = AppleSignUpRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "email": "user@icloud.com"
+                                            }
+                                            """
+                            )
+                    )
+            ) final AppleSignUpRequest request,
+            HttpServletRequest httpServletRequest
+    );
+
+    @Operation(
+            summary = "자체 회원가입 계정 유무 확인",
+            description = """
+                    SMS 인증 후 발급받은 임시 토큰을 사용하여 사용자 프로필 정보를 조회합니다.
+                    Authorization 헤더(스킴: `Bearer`)로 임시 토큰을 전달해야 합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "프로필 조회 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2009",
+                                      "message": "임시 토큰으로 사용자 프로필 조회 성공",
+                                      "data": {
+                                        "name": "김민지",
+                                        "phoneNumber": "010-1234-5678",
+                                        "email": "abc@abc.com",
+                                        "providers": ["kakao"]
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(임시 토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 만료",
+                            value = """
+                                    {
+                                      "code": "AUTH_4011",
+                                      "message": "임시 토큰이 만료되었습니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
             HttpServletRequest httpServletRequest
     );
 }

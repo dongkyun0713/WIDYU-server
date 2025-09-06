@@ -7,6 +7,7 @@ import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
@@ -14,9 +15,11 @@ import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.domain.LocalAccount;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberType;
+import com.widyu.member.domain.SocialAccount;
 import com.widyu.member.repository.LocalAccountRepository;
 import com.widyu.member.repository.MemberRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -104,5 +107,25 @@ public class LocalLoginService {
         temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
 
         return true;
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfile getUserProfileByTemporaryToken(HttpServletRequest httpServletRequest) {
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+        Member member = memberRepository.findByPhoneNumberAndName(temporaryMember.getPhoneNumber(), temporaryMember.getName())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        String email = member.getSocialAccounts().stream()
+                .map(SocialAccount::getEmail)
+                .filter(e -> e != null && !e.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        List<String> providers = member.getSocialAccounts().stream()
+                .map(SocialAccount::getProvider)
+                .toList();
+
+
+        return UserProfile.of(member.getName(), member.getPhoneNumber(), email, providers);
     }
 }

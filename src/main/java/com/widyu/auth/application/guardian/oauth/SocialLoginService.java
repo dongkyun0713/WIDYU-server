@@ -1,6 +1,8 @@
 package com.widyu.auth.application.guardian.oauth;
 
 import com.widyu.auth.domain.OAuthProvider;
+import com.widyu.auth.domain.TemporaryMember;
+import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -10,11 +12,13 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.util.PhoneNumberUtil;
+import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberRole;
 import com.widyu.member.domain.MemberType;
 import com.widyu.member.domain.SocialAccount;
 import com.widyu.member.repository.MemberRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +34,7 @@ public class SocialLoginService {
     private final Map<OAuthProvider, OAuthClient> oAuthClients;
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TemporaryMemberUtil temporaryMemberUtil;
 
     @Transactional
     public SocialLoginResponse socialLogin(String providerName, SocialLoginRequest request) {
@@ -57,11 +62,21 @@ public class SocialLoginService {
         UserProfile profile = createUserProfile(member);
 
         return SocialLoginResponse.of(
-                isFirstLogin, 
-                tokenPair.accessToken(), 
-                tokenPair.refreshToken(), 
+                isFirstLogin,
+                tokenPair.accessToken(),
+                tokenPair.refreshToken(),
                 profile
         );
+    }
+
+    public void updatePhoneNumberIfAppleSignUp(AppleSignUpRequest request, HttpServletRequest httpServletRequest) {
+        Member member = memberRepository.findBySocialAccounts_EmailAndSocialAccounts_Provider(request.email(),
+                        OAuthProvider.APPLE.getValue())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+        String phoneNumber = temporaryMember.getPhoneNumber();
+
+        member.updatePhoneNumber(phoneNumber);
     }
 
     private String getTokenForProvider(OAuthProvider provider, SocialLoginRequest request) {
@@ -89,14 +104,15 @@ public class SocialLoginService {
         return oAuthClient.getUserInfo(token);
     }
 
-    private Member createMember(OAuthProvider provider, SocialClientResponse socialUserInfo, SocialLoginRequest request) {
+    private Member createMember(OAuthProvider provider, SocialClientResponse socialUserInfo,
+                                SocialLoginRequest request) {
         UserInfo userInfo = extractUserInfo(provider, socialUserInfo, request);
 
         validateRequiredUserInfo(userInfo, provider);
 
         Member member = findExistingMember(userInfo)
                 .orElseGet(() -> {
-                    log.info("신규 멤버 생성: provider={}, phoneNumber={}, email={}", 
+                    log.info("신규 멤버 생성: provider={}, phoneNumber={}, email={}",
                             provider.getValue(), userInfo.phoneNumber(), userInfo.email());
                     return Member.createMember(
                             MemberType.GUARDIAN,
@@ -128,7 +144,7 @@ public class SocialLoginService {
 
     private Optional<Member> findExistingMember(UserInfo userInfo) {
         String normalizedPhone = PhoneNumberUtil.normalize(userInfo.phoneNumber());
-        
+
         if (normalizedPhone != null && !normalizedPhone.isBlank()) {
             Optional<Member> memberByPhone = memberRepository.findByPhoneNumber(normalizedPhone);
             if (memberByPhone.isPresent()) {
@@ -136,7 +152,7 @@ public class SocialLoginService {
                 return memberByPhone;
             }
         }
-        
+
         if (userInfo.email() != null && !userInfo.email().isBlank()) {
             Optional<Member> memberByEmail = memberRepository.findBySocialAccounts_Email(userInfo.email());
             if (memberByEmail.isPresent()) {
@@ -144,11 +160,12 @@ public class SocialLoginService {
                 return memberByEmail;
             }
         }
-        
+
         return Optional.empty();
     }
 
-    private UserInfo extractUserInfo(OAuthProvider provider, SocialClientResponse socialUserInfo, SocialLoginRequest request) {
+    private UserInfo extractUserInfo(OAuthProvider provider, SocialClientResponse socialUserInfo,
+                                     SocialLoginRequest request) {
         if (provider == OAuthProvider.APPLE) {
             return extractAppleUserInfo(socialUserInfo, request);
         }
@@ -186,7 +203,8 @@ public class SocialLoginService {
         }
 
         if (provider != OAuthProvider.APPLE && (userInfo.name() == null || userInfo.name().isBlank())) {
-            log.error("이름 정보가 없음: provider={}", provider.getValue() + ", email=" + userInfo.email() + ", name=" + userInfo.name());
+            log.error("이름 정보가 없음: provider={}",
+                    provider.getValue() + ", email=" + userInfo.email() + ", name=" + userInfo.name());
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
         }
     }
