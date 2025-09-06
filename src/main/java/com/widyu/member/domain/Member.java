@@ -87,4 +87,8 @@ public class Member extends BaseTimeEntity {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_OAUTH_PROVIDER));
     }
+
+    public void updatePhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
 }

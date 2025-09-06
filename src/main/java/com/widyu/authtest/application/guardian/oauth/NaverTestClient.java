@@ -49,6 +49,17 @@ public class NaverTestClient implements OAuthTestClient {
     }
 
     @Override
+    public String generateAuthUrl(OAuthProvider provider) {
+        String state = oAuthStateTestService.generateAndSaveState();
+        
+        return NAVER_AUTH_URL +
+                "?response_type=code" +
+                "&client_id=" + naverProperties.clientId() +
+                "&redirect_uri=" + naverProperties.redirectUri() +
+                "&state=" + state;
+    }
+
+    @Override
     public OAuthTokenResponse getToken(final String authCode, final String state) {
         return restClient.post()
                 .uri(NAVER_TOKEN_URL)

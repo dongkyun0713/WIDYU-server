@@ -50,6 +50,17 @@ public class KakaoTestClient implements OAuthTestClient {
     }
 
     @Override
+    public String generateAuthUrl(OAuthProvider provider) {
+        String state = oAuthStateTestService.generateAndSaveState();
+        
+        return KAKAO_AUTH_URL
+                + "?response_type=code"
+                + "&client_id=" + kakaoProperties.clientId()
+                + "&redirect_uri=" + kakaoProperties.redirectUri()
+                + "&state=" + state;
+    }
+
+    @Override
     public OAuthTokenResponse getToken(final String authCode, final String state) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", "authorization_code");

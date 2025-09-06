@@ -2,6 +2,7 @@ package com.widyu.auth.api;
 
 import com.widyu.auth.api.docs.GuardianAuthDocs;
 import com.widyu.auth.application.guardian.AuthService;
+import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
@@ -11,11 +12,13 @@ import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -94,5 +97,28 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .code("AUTH_2007")
                 .message("비밀번호 변경 성공")
                 .body(result);
+    }
+
+    @PatchMapping("/apple/phone-number")
+    public ApiResponseTemplate<Void> updatePhoneNumberIfAppleSignUp(
+            @RequestBody @Valid final AppleSignUpRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        authService.updatePhoneNumberIfAppleSignUp(request, httpServletRequest);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2008")
+                .message("애플 로그인 회원 전화번호 업데이트 성공")
+                .body(null);
+    }
+
+    @GetMapping("/profile/temporary")
+    public ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
+            HttpServletRequest httpServletRequest
+    ) {
+        UserProfile userProfile = authService.getUserProfileByTemporaryToken(httpServletRequest);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2009")
+                .message("임시 토큰으로 사용자 프로필 조회 성공")
+                .body(userProfile);
     }
 }

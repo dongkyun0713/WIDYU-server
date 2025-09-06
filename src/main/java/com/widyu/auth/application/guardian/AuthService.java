@@ -9,6 +9,7 @@ import com.widyu.auth.application.guardian.oauth.SocialLoginService;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.dto.TemporaryTokenDto;
+import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.FindPasswordRequest;
@@ -22,6 +23,9 @@ import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.auth.dto.response.UserProfile;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
@@ -54,8 +58,7 @@ public class AuthService {
     @Transactional
     public void sendSmsVerificationIfMemberExist(final FindPasswordRequest request) {
         memberRepository.findByPhoneNumberAndNameAndLocalAccount_Email(request.phoneNumber(), request.name(),
-                        request.email())
-                .orElseThrow(() -> new IllegalArgumentException("일치하는 회원이 없습니다."));
+                        request.email()).orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         smsService.sendVerificationSms(request.phoneNumber(), request.name());
     }
 
@@ -87,10 +90,19 @@ public class AuthService {
         return localLoginService.signIn(request);
     }
 
-
     @Transactional
     public SocialLoginResponse socialLogin(String provider, SocialLoginRequest request) {
         return socialLoginService.socialLogin(provider, request);
+    }
+
+    @Transactional
+    public void updatePhoneNumberIfAppleSignUp(AppleSignUpRequest request, HttpServletRequest httpServletRequest) {
+        socialLoginService.updatePhoneNumberIfAppleSignUp(request, httpServletRequest);
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfile getUserProfileByTemporaryToken(HttpServletRequest httpServletRequest) {
+        return localLoginService.getUserProfileByTemporaryToken(httpServletRequest);
     }
 
     @Transactional(readOnly = true)
