@@ -48,3 +48,6 @@ out/
 # Firebase secrets
 src/main/resources/firebase/
 *.json
+
+# claude
+CLAUDE.md
