@@ -164,8 +164,11 @@ public interface GuardianAuthDocs {
     @Operation(
             summary = "소셜 로그인",
             description = """
-                    프론트엔드에서 발급받은 소셜 액세스 토큰을 사용하여 로그인합니다.
+                    프론트엔드에서 발급받은 소셜 액세스 토큰 또는 Apple 인증 정보를 사용하여 로그인합니다.
                     소셜 토큰으로 사용자 정보를 조회한 후, 서비스 토큰 페어(Access/Refresh)를 발급합니다.
+                    
+                    • Kakao/Naver: accessToken 필드 사용
+                    • Apple: authorizationCode 및 profile 필드 사용
                     """
     )
     @ApiResponse(
@@ -211,26 +214,56 @@ public interface GuardianAuthDocs {
     ApiResponseTemplate<SocialLoginResponse> signInSocial(
             @Parameter(
                     name = "provider",
-                    description = "소셜 제공자 식별자 (naver, kakao 등)",
+                    description = "소셜 제공자 식별자 (naver, kakao, apple)",
                     in = ParameterIn.QUERY,
                     required = true,
-                    examples = {@ExampleObject(name = "네이버", value = "naver"), @ExampleObject(name = "카카오", value = "kakao")}
+                    examples = {
+                        @ExampleObject(name = "네이버", value = "naver"), 
+                        @ExampleObject(name = "카카오", value = "kakao"),
+                        @ExampleObject(name = "애플", value = "apple")
+                    }
             )
             String provider,
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "소셜 액세스 토큰",
+                    description = "소셜 로그인 정보 (Kakao/Naver: accessToken, Apple: authorizationCode + profile)",
                     content = @Content(
                             schema = @Schema(implementation = SocialLoginRequest.class),
-                            examples = @ExampleObject(
-                                    name = "요청 예시",
-                                    value = """
-                                            {
-                                              "accessToken": "AAAA1234567890abcdef..."
-                                            }
-                                            """
-                            )
+                            examples = {
+                                @ExampleObject(
+                                        name = "Kakao/Naver 요청",
+                                        value = """
+                                                {
+                                                  "accessToken": "AAAA1234567890abcdef..."
+                                                }
+                                                """
+                                ),
+                                @ExampleObject(
+                                        name = "Apple 요청 (최초 로그인)",
+                                        value = """
+                                                {
+                                                  "authorizationCode": "abc123",
+                                                  "profile": {
+                                                    "email": "user@icloud.com",
+                                                    "name": "홍길동"
+                                                  }
+                                                }
+                                                """
+                                ),
+                                @ExampleObject(
+                                        name = "Apple 요청 (재로그인)",
+                                        value = """
+                                                {
+                                                  "authorizationCode": "abc123",
+                                                  "profile": {
+                                                    "email": null,
+                                                    "name": null
+                                                  }
+                                                }
+                                                """
+                                )
+                            }
                     )
             ) final SocialLoginRequest request
     );

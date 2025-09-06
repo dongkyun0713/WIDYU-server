@@ -16,5 +16,9 @@ public final class SecurityConstant {
     public static final String KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token";
     public static final String KAKAO_USER_ME_URL = "https://kapi.kakao.com/v2/user/me";
 
+    // apple
+    public static final String APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token";
+    public static final String APPLE_ISSUER = "https://appleid.apple.com";
+
     private SecurityConstant() {}
 }

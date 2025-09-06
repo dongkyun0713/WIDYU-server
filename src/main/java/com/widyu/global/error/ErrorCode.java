@@ -20,6 +20,9 @@ public enum ErrorCode {
     UNSUPPORTED_OAUTH_PROVIDER(HttpStatus.BAD_REQUEST, "AUTH_4002", "지원하지 않는 소셜 로그인 제공자입니다."),
     INVALID_OAUTH_STATE(HttpStatus.BAD_REQUEST, "AUTH_4003", "유효하지 않은 OAuth state입니다."),
     SAME_PASSWORD(HttpStatus.BAD_REQUEST, "AUTH_4004", "기존 비밀번호와 동일한 비밀번호입니다."),
+    OAUTH_ACCESS_TOKEN_IS_BLANK(HttpStatus.BAD_REQUEST, "AUTH_4005", "OAuth 액세스 토큰이 비어 있습니다."),
+    SOCIAL_EMAIL_NOT_PROVIDED(HttpStatus.BAD_REQUEST, "AUTH_4006", "소셜 로그인 제공자가 이메일을 제공하지 않습니다."),
+    SOCIAL_NAME_NOT_PROVIDED(HttpStatus.BAD_REQUEST, "AUTH_4007", "소셜 로그인 제공자가 이름을 제공하지 않습니다."),
 
     // 부모 인증 관련
     INVITE_CODE_DUPLICATED(HttpStatus.BAD_REQUEST, "PARENT_4001", "이미 존재하는 초대코드입니다."),
@@ -41,6 +44,15 @@ public enum ErrorCode {
     // 카카오
     KAKAO_COMMUNICATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "KAKAO_5000", "카카오 통신에 실패하였습니다."),
     KAKAO_TOKEN_IS_BLANK(HttpStatus.BAD_REQUEST, "KAKAO_4000", "카카오 토큰이 비어 있습니다."),
+
+    // 애플
+    APPLE_COMMUNICATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5000", "애플 통신에 실패하였습니다."),
+    APPLE_AUTHORIZATION_CODE_IS_BLANK(HttpStatus.BAD_REQUEST, "APPLE_4000", "애플 인증 코드가 비어 있습니다."),
+    APPLE_TOKEN_EXCHANGE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5001", "애플 토큰 교환에 실패하였습니다."),
+    APPLE_TOKEN_RESPONSE_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5002", "애플 토큰 응답이 유효하지 않습니다."),
+    APPLE_ID_TOKEN_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5003", "애플 ID 토큰이 유효하지 않습니다."),
+    APPLE_SIGNATURE_VERIFICATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5004", "애플 ID 토큰 서명 검증에 실패하였습니다."),
+    APPLE_PRIVATE_KEY_PARSING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5005", "애플 비밀 키 파싱에 실패하였습니다."),
 
     // 회원 관련
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4041", "회원을 찾을 수 없습니다."),
