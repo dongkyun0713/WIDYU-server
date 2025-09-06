@@ -184,9 +184,45 @@ public interface GuardianAuthDocs {
                                       "message": "소셜 로그인 성공",
                                       "data": {
                                         "isFirst": false,
-                                        "tokenPair": {
-                                          "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                          "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                        "profile": {
+                                          "name": "김민지",
+                                          "phoneNumber": "010-1234-5678",
+                                          "email": "abc@abc.com",
+                                          "providers": ["kakao"]
+                                        }
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "다른 소셜 계정이 이미 존재하는 경우 (토큰 null, 연동 대상 정보 포함)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "다른 소셜 계정 존재",
+                            value = """
+                                    {
+                                      "code": "AUTH_2004",
+                                      "message": "소셜 로그인 성공",
+                                      "data": {
+                                        "isFirst": false,
+                                        "accessToken": null,
+                                        "refreshToken": null,
+                                        "profile": {
+                                          "name": "김민지",
+                                          "phoneNumber": "010-1234-5678",
+                                          "email": "existing@example.com",
+                                          "providers": ["kakao"]
+                                        },
+                                        "newSocialAccount": {
+                                          "provider": "naver",
+                                          "email": "newuser@naver.com",
+                                          "name": "김민지"
                                         }
                                       }
                                     }
@@ -486,4 +522,5 @@ public interface GuardianAuthDocs {
     ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
             HttpServletRequest httpServletRequest
     );
+
 }

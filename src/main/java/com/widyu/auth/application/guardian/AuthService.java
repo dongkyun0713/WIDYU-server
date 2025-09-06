@@ -24,6 +24,8 @@ import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.auth.dto.response.UserProfile;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
@@ -56,8 +58,7 @@ public class AuthService {
     @Transactional
     public void sendSmsVerificationIfMemberExist(final FindPasswordRequest request) {
         memberRepository.findByPhoneNumberAndNameAndLocalAccount_Email(request.phoneNumber(), request.name(),
-                        request.email())
-                .orElseThrow(() -> new IllegalArgumentException("일치하는 회원이 없습니다."));
+                        request.email()).orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         smsService.sendVerificationSms(request.phoneNumber(), request.name());
     }
 
