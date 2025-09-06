@@ -43,15 +43,4 @@ public class AuthTestService {
 
         return socialLoginTestService.socialLogin(socialLoginRequest);
     }
-
-    public String getNaverAccessToken(String code, String state) {
-        OAuthProvider naverProvider = OAuthProvider.NAVER;
-        OAuthTokenResponse tokenResponse = socialLoginTestService.getToken(naverProvider, code, state);
-        return tokenResponse.accessToken();
-    }
-
-    public String generateNaverAuthUrl() {
-        OAuthProvider naverProvider = OAuthProvider.NAVER;
-        return socialLoginTestService.generateAuthUrl(naverProvider);
-    }
 }

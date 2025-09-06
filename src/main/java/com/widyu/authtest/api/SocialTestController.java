@@ -43,23 +43,4 @@ public class SocialTestController implements SocialTestAuthDocs {
                 .message("소셜 로그인 성공")
                 .body(authTestService.processSocialLoginCallback(provider, code, state));
     }
-
-    @GetMapping("/naver/token")
-    public ApiResponseTemplate<String> getNaverAccessToken(
-            @RequestParam String code,
-            @RequestParam String state
-    ) {
-        return ApiResponseTemplate.ok()
-                .code("AUTH_2006")
-                .message("네이버 액세스 토큰 발급 성공")
-                .body(authTestService.getNaverAccessToken(code, state));
-    }
-
-    @GetMapping("/naver/auth-url")
-    public ApiResponseTemplate<String> getNaverAuthUrl() {
-        return ApiResponseTemplate.ok()
-                .code("AUTH_2007")
-                .message("네이버 인증 URL 생성 성공")
-                .body(authTestService.generateNaverAuthUrl());
-    }
 }
