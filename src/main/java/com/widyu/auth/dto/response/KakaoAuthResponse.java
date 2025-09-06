@@ -9,11 +9,7 @@ public record KakaoAuthResponse(
 ) {
     public record KakaoAccount(
             String email,
-            KakaoProfile profile,
+            String name,
             @JsonProperty("phone_number") String phoneNumber
-    ) {}
-
-    public record KakaoProfile(
-            String nickname
     ) {}
 }

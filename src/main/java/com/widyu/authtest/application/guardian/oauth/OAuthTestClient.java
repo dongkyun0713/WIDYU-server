@@ -11,6 +11,13 @@ public interface OAuthTestClient {
     String getAuthCode(OAuthProvider provider, HttpServletResponse response) throws IOException;
 
     /**
+     * OAuth 인증 URL 생성
+     * @param provider OAuth 제공자
+     * @return OAuth 인증 URL
+     */
+    String generateAuthUrl(OAuthProvider provider);
+
+    /**
      * 소셜 로그인 인증
      * auth code를 통해 소셜 access token과 refresh token을 발급받는다.
      * @param authCode 인증 코드

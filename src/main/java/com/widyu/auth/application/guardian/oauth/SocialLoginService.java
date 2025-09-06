@@ -5,15 +5,19 @@ import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.util.PhoneNumberUtil;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberRole;
 import com.widyu.member.domain.MemberType;
 import com.widyu.member.domain.SocialAccount;
 import com.widyu.member.repository.MemberRepository;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,8 +54,14 @@ public class SocialLoginService {
 
         boolean isFirstLogin = member.getSocialAccount(provider.getValue()).isFirst();
         TokenPairResponse tokenPair = generateTokenPair(member);
+        UserProfile profile = createUserProfile(member);
 
-        return SocialLoginResponse.of(isFirstLogin, tokenPair);
+        return SocialLoginResponse.of(
+                isFirstLogin, 
+                tokenPair.accessToken(), 
+                tokenPair.refreshToken(), 
+                profile
+        );
     }
 
     private String getTokenForProvider(OAuthProvider provider, SocialLoginRequest request) {
@@ -84,11 +94,16 @@ public class SocialLoginService {
 
         validateRequiredUserInfo(userInfo, provider);
 
-        Member member = Member.createMember(
-                MemberType.GUARDIAN,
-                userInfo.name(),
-                userInfo.phoneNumber()
-        );
+        Member member = findExistingMember(userInfo)
+                .orElseGet(() -> {
+                    log.info("신규 멤버 생성: provider={}, phoneNumber={}, email={}", 
+                            provider.getValue(), userInfo.phoneNumber(), userInfo.email());
+                    return Member.createMember(
+                            MemberType.GUARDIAN,
+                            userInfo.name(),
+                            userInfo.phoneNumber()
+                    );
+                });
 
         SocialAccount socialAccount = SocialAccount.createSocialAccount(
                 userInfo.email(),
@@ -100,10 +115,37 @@ public class SocialLoginService {
         member.getSocialAccounts().add(socialAccount);
         memberRepository.save(member);
 
-        log.info("신규 멤버 생성 완료: memberId={}, provider={}, email={}",
-                member.getId(), provider.getValue(), userInfo.email());
+        if (member.getId() != null) {
+            log.info("기존 멤버에 소셜 계정 추가: memberId={}, provider={}, email={}",
+                    member.getId(), provider.getValue(), userInfo.email());
+        } else {
+            log.info("신규 멤버 생성 완료: provider={}, email={}",
+                    provider.getValue(), userInfo.email());
+        }
 
         return member;
+    }
+
+    private Optional<Member> findExistingMember(UserInfo userInfo) {
+        String normalizedPhone = PhoneNumberUtil.normalize(userInfo.phoneNumber());
+        
+        if (normalizedPhone != null && !normalizedPhone.isBlank()) {
+            Optional<Member> memberByPhone = memberRepository.findByPhoneNumber(normalizedPhone);
+            if (memberByPhone.isPresent()) {
+                log.info("전화번호로 기존 멤버 찾음: phoneNumber={}", normalizedPhone);
+                return memberByPhone;
+            }
+        }
+        
+        if (userInfo.email() != null && !userInfo.email().isBlank()) {
+            Optional<Member> memberByEmail = memberRepository.findBySocialAccounts_Email(userInfo.email());
+            if (memberByEmail.isPresent()) {
+                log.info("이메일로 기존 멤버 찾음: email={}", userInfo.email());
+                return memberByEmail;
+            }
+        }
+        
+        return Optional.empty();
     }
 
     private UserInfo extractUserInfo(OAuthProvider provider, SocialClientResponse socialUserInfo, SocialLoginRequest request) {
@@ -111,10 +153,11 @@ public class SocialLoginService {
             return extractAppleUserInfo(socialUserInfo, request);
         }
 
+        String normalizedPhone = PhoneNumberUtil.normalize(socialUserInfo.phoneNumber());
         return UserInfo.of(
                 socialUserInfo.name(),
                 socialUserInfo.email(),
-                socialUserInfo.phoneNumber()
+                normalizedPhone
         );
     }
 
@@ -128,7 +171,8 @@ public class SocialLoginService {
             email = getValueOrDefault(email, request.profile().email());
         }
 
-        return UserInfo.of(name, email, phoneNumber);
+        String normalizedPhone = PhoneNumberUtil.normalize(phoneNumber);
+        return UserInfo.of(name, email, normalizedPhone);
     }
 
     private String getValueOrDefault(String currentValue, String defaultValue) {
@@ -142,13 +186,32 @@ public class SocialLoginService {
         }
 
         if (provider != OAuthProvider.APPLE && (userInfo.name() == null || userInfo.name().isBlank())) {
-            log.error("이름 정보가 없음: provider={}", provider.getValue());
+            log.error("이름 정보가 없음: provider={}", provider.getValue() + ", email=" + userInfo.email() + ", name=" + userInfo.name());
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
         }
     }
 
     private TokenPairResponse generateTokenPair(Member member) {
         return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
+    }
+
+    private UserProfile createUserProfile(Member member) {
+        List<String> providers = member.getSocialAccounts().stream()
+                .map(SocialAccount::getProvider)
+                .toList();
+
+        String email = member.getSocialAccounts().stream()
+                .map(SocialAccount::getEmail)
+                .filter(e -> e != null && !e.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        return UserProfile.of(
+                member.getName(),
+                member.getPhoneNumber(),
+                email,
+                providers
+        );
     }
 
     private record UserInfo(

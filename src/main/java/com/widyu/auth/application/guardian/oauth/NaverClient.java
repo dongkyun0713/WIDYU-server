@@ -7,6 +7,7 @@ import com.widyu.auth.dto.response.NaverAuthResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.util.PhoneNumberUtil;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,10 +39,7 @@ public class NaverClient implements OAuthClient {
                                     response.bodyTo(NaverAuthResponse.class));
                         });
 
-        String phoneNumber = naverAuthResponse.response().phoneNumber();
-        if (phoneNumber != null) {
-            phoneNumber = phoneNumber.replaceAll("-", "");
-        }
+        String phoneNumber = PhoneNumberUtil.normalize(naverAuthResponse.response().phoneNumber());
 
         return SocialClientResponse.of(
                 naverAuthResponse.response().id(),

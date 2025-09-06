@@ -36,6 +36,12 @@ public class SocialLoginTestService {
     }
 
     @Transactional(readOnly = true)
+    public String generateAuthUrl(final OAuthProvider provider) {
+        OAuthTestClient oAuthTestClient = oAuthClients.get(provider);
+        return oAuthTestClient.generateAuthUrl(provider);
+    }
+
+    @Transactional(readOnly = true)
     public OAuthTokenResponse getToken(final OAuthProvider provider, final String code, final String state) {
         oAuthStateTestService.validateAndConsumeState(state);
 

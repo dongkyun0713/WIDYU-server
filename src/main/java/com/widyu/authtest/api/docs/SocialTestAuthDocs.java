@@ -116,4 +116,74 @@ public interface SocialTestAuthDocs {
             )
             String state
     );
+
+    @Operation(
+            summary = "네이버 액세스 토큰 발급",
+            description = """
+                    네이버 인가 코드로 액세스 토큰을 발급받습니다.
+                    테스트 목적으로 사용되며, 발급받은 토큰은 네이버 API 호출에 사용할 수 있습니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "네이버 액세스 토큰 발급 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2006",
+                                      "message": "네이버 액세스 토큰 발급 성공",
+                                      "data": "AAAANGz...네이버_액세스_토큰..."
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<String> getNaverAccessToken(
+            @Parameter(
+                    name = "code",
+                    description = "네이버 인가 코드",
+                    in = ParameterIn.QUERY,
+                    required = true,
+                    examples = @ExampleObject(name = "예시", value = "A1B2C3...")
+            )
+            String code,
+            @Parameter(
+                    name = "state",
+                    description = "CSRF 방지용 state",
+                    in = ParameterIn.QUERY,
+                    required = true,
+                    examples = @ExampleObject(name = "예시", value = "ZxY123...")
+            )
+            String state
+    );
+
+    @Operation(
+            summary = "네이버 인증 URL 생성",
+            description = """
+                    네이버 OAuth 인증 URL을 생성합니다.
+                    이 URL로 접속하여 네이버 로그인을 진행하면 콜백 URL로 code와 state가 전달됩니다.
+                    콜백 없이 직접 인증 URL만 받고 싶을 때 사용하세요.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "네이버 인증 URL 생성 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2007",
+                                      "message": "네이버 인증 URL 생성 성공",
+                                      "data": "https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=CLIENT_ID&redirect_uri=CALLBACK_URL&state=STATE_VALUE"
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<String> getNaverAuthUrl();
 }

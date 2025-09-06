@@ -1,10 +1,16 @@
 package com.widyu.auth.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record SocialLoginResponse(
-        boolean isFirst,
-        TokenPairResponse tokenPair
+        @Schema(description = "최초 가입 여부", example = "true") boolean isFirst,
+        @Schema(description = "액세스 토큰", example = "abc") String accessToken,
+        @Schema(description = "리프레시 토큰", example = "abc") String refreshToken,
+        @Schema(description = "사용자 프로필") UserProfile profile
 ) {
-    public static SocialLoginResponse of(final boolean isFirst, final TokenPairResponse tokenPair) {
-        return new SocialLoginResponse(isFirst, tokenPair);
+    public static SocialLoginResponse of(boolean isFirst, String accessToken, String refreshToken, UserProfile profile) {
+        return new SocialLoginResponse(isFirst, accessToken, refreshToken, profile);
     }
 }

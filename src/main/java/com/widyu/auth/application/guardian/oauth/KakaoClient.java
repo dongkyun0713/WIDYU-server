@@ -7,6 +7,7 @@ import com.widyu.auth.dto.response.KakaoAuthResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.util.PhoneNumberUtil;
 import java.util.Objects;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
@@ -39,40 +40,16 @@ public class KakaoClient implements OAuthClient {
                     return Objects.requireNonNull(res.bodyTo(KakaoAuthResponse.class));
                 });
 
-        final String phoneNumber = normalizePhone(safe(() -> kakao.kakaoAccount().phoneNumber()));
+        String phoneNumber = PhoneNumberUtil.normalize(kakao.kakaoAccount().phoneNumber());
 
         return SocialClientResponse.of(
                 String.valueOf(kakao.id()),
                 safe(() -> kakao.kakaoAccount().email()),
-                safe(() -> kakao.kakaoAccount().profile().nickname()),
+                safe(() -> kakao.kakaoAccount().name()),
                 phoneNumber
         );
     }
 
-    /**
-     * 카카오 전화번호 정규화: - 공백/하이픈/괄호 등 숫자·'+' 이외 문자 제거 - +82로 시작하면 국내형(0으로 치환)으로 변환 - 그 외는 국제번호 표기 유지(+포함) 예) "+82
-     * 10-1234-5678" -> "01012345678" "+1-202-555-0123"  -> "+12025550123"
-     */
-    private String normalizePhone(String raw) {
-        if (raw == null || raw.isBlank())
-            return null;
-
-        String cleaned = raw.replaceAll("[^0-9+]", "");
-        if (cleaned.isBlank())
-            return null;
-
-        if (cleaned.indexOf('+') > 0) {
-            cleaned = cleaned.charAt(0) == '+'
-                    ? "+" + cleaned.substring(1).replace("+", "")
-                    : cleaned.replace("+", "");
-        }
-
-        if (cleaned.startsWith("+82")) {
-            return "0" + cleaned.substring(3);
-        }
-
-        return cleaned;
-    }
 
     private static <T> T safe(Supplier<T> supplier) {
         try {
