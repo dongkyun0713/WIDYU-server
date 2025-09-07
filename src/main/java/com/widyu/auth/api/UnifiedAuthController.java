@@ -1,7 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.api.docs.UnifiedAuthDocs;
-import com.widyu.auth.application.guardian.AuthService;
+import com.widyu.auth.application.guardian.GuardianAuthService;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -17,11 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class UnifiedAuthController implements UnifiedAuthDocs {
 
-    private final AuthService authService;
+    private final GuardianAuthService guardianAuthService;
 
     @PostMapping("/reissue")
     public ApiResponseTemplate<TokenPairResponse> reissueTokenPair(@Valid @RequestBody RefreshTokenRequest request) {
-        TokenPairResponse response = authService.reissueTokenPair(request);
+        TokenPairResponse response = guardianAuthService.reissueTokenPair(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2009")
@@ -31,7 +31,7 @@ public class UnifiedAuthController implements UnifiedAuthDocs {
 
     @PostMapping("/logout")
     public ApiResponseTemplate<Void> logout() {
-        authService.logout();
+        guardianAuthService.logout();
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2010")
