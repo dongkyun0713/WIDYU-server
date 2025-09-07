@@ -7,6 +7,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -86,15 +87,26 @@ public interface GuardianAuthDocs {
                                       "code": "AUTH_2002",
                                       "message": "로컬 보호자 회원가입이 성공적으로 완료되었습니다.",
                                       "data": {
+                                        "isFirst": true,
                                         "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                        "profile": {
+                                          "name": "홍길동",
+                                          "phoneNumber": "010-1234-5678",
+                                          "email": "user@example.com",
+                                          "providers": ["LOCAL"]
+                                        },
+                                        "accountInfo": {
+                                          "email": "user@example.com",
+                                          "accountType": "LOCAL"
+                                        }
                                       }
                                     }
                                     """
                     )
             )
     )
-    ApiResponseTemplate<TokenPairResponse> signupLocal(
+    ApiResponseTemplate<LocalSignupResponse> signupLocal(
             HttpServletRequest httpServletRequest,
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(

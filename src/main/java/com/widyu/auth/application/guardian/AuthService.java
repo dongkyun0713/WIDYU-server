@@ -19,6 +19,7 @@ import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
@@ -73,16 +74,16 @@ public class AuthService {
     }
 
     @Transactional
-    public TokenPairResponse localGuardianSignup(HttpServletRequest httpServletRequest,
-                                                 final LocalGuardianSignupRequest request) {
+    public LocalSignupResponse localGuardianSignup(HttpServletRequest httpServletRequest,
+                                                   final LocalGuardianSignupRequest request) {
         String tempToken = temporaryTokenService.extractFrom(httpServletRequest);
         TemporaryTokenDto dto = temporaryTokenService.parseAndValidate(tempToken);
         TemporaryMember temp = temporaryTokenService.loadTemporaryMemberOrThrow(dto.temporaryMemberId());
 
-        TokenPairResponse tokens = localLoginService.signupGuardianWithLocal(temp, request.email(), request.password());
+        LocalSignupResponse response = localLoginService.signupGuardianWithLocal(temp, request.email(), request.password());
 
         temporaryTokenService.deleteTemporaryMember(temp.getId());
-        return tokens;
+        return response;
     }
 
     @Transactional

@@ -9,6 +9,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -43,7 +44,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
     }
 
     @PostMapping("/sign-up/local")
-    public ApiResponseTemplate<TokenPairResponse> signupLocal(
+    public ApiResponseTemplate<LocalSignupResponse> signupLocal(
             HttpServletRequest httpServletRequest,
             @RequestBody @Valid final LocalGuardianSignupRequest request
     ) {
