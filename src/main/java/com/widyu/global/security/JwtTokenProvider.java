@@ -27,8 +27,8 @@ public class JwtTokenProvider {
     private final JwtUtil jwtUtil;
     private final RefreshTokenRepository refreshTokenRepository;
 
-    public TokenPairResponse generateTokenPair(Long memberId, MemberRole memberRole) {
-        String accessToken = generateAccessToken(memberId, memberRole);
+    public TokenPairResponse generateTokenPair(Long memberId, MemberRole memberRole, String loginType) {
+        String accessToken = generateAccessToken(memberId, memberRole, loginType);
         String refreshToken = generateAndSaveRefreshToken(memberId);
 
         return TokenPairResponse.of(accessToken, refreshToken);
@@ -39,12 +39,12 @@ public class JwtTokenProvider {
         return TemporaryTokenResponse.from(temporaryToken);
     }
 
-    public String generateAccessToken(Long memberId, MemberRole memberRole) {
-        return jwtUtil.generateAccessToken(memberId, memberRole);
+    public String generateAccessToken(Long memberId, MemberRole memberRole, String loginType) {
+        return jwtUtil.generateAccessToken(memberId, memberRole, loginType);
     }
 
-    public AccessTokenDto generateAccessTokenDto(Long memberId, MemberRole memberRole) {
-        return jwtUtil.generateAccessTokenDto(memberId, memberRole);
+    public AccessTokenDto generateAccessTokenDto(Long memberId, MemberRole memberRole, String loginType) {
+        return jwtUtil.generateAccessTokenDto(memberId, memberRole, loginType);
     }
 
     public AccessTokenDto retrieveAccessToken(String accessTokenValue) {
@@ -131,7 +131,8 @@ public class JwtTokenProvider {
         MemberRole memberRole = MemberRole.valueOf(
                 expiredException.getClaims().get(TOKEN_ROLE_NAME, String.class)
         );
+        String loginType = expiredException.getClaims().get("loginType", String.class);
 
-        return generateAccessTokenDto(memberId, memberRole);
+        return generateAccessTokenDto(memberId, memberRole, loginType);
     }
 }

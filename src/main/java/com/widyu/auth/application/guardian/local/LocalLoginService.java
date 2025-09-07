@@ -65,7 +65,7 @@ public class LocalLoginService {
         localAccountRepository.save(local);
 
         // 토큰 생성
-        TokenPairResponse tokenPair = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+        TokenPairResponse tokenPair = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
         
         // 사용자 프로필 생성
         SignUpUserInfo profile = SignUpUserInfo.of(member.getName(), member.getPhoneNumber(), email);
@@ -84,7 +84,7 @@ public class LocalLoginService {
         validatePassword(request.password(), localAccount.getPassword());
 
         Member member = localAccount.getMember();
-        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
     }
 
     private LocalAccount findLocalAccountByEmail(String email) {

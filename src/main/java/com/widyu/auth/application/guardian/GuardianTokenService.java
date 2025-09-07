@@ -33,6 +33,12 @@ public class GuardianTokenService {
         
         Member member = memberUtil.getMemberByMemberId(newRefreshToken.memberId());
 
-        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
+        // 토큰 재발급이므로 기존 loginType을 유지하기 위해 회원의 계정 타입 확인
+        String loginType = member.getLocalAccount() != null ? "local" :
+                          member.getSocialAccounts().stream()
+                                  .findFirst()
+                                  .map(account -> account.getProvider())
+                                  .orElse("unknown");
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, loginType);
     }
 }

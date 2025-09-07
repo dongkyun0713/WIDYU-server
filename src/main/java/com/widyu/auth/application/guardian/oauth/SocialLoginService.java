@@ -107,8 +107,8 @@ public class SocialLoginService {
         log.info("소셜 계정 연동 완료: memberId={}, provider={}, email={}",
                 member.getId(), provider.getValue(), request.email());
 
-        // 토큰 생성 후 반환
-        return generateTokenPair(member);
+        // 토큰 생성 후 반환 (새로 추가된 소셜 계정 정보로 loginType 설정)
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, provider.getValue());
     }
 
     private SocialLoginResponse handleExistingMemberLogin(Member member, OAuthProvider provider, String oauthId) {
@@ -228,7 +228,12 @@ public class SocialLoginService {
     }
 
     private TokenPairResponse generateTokenPair(Member member) {
-        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
+        // 소셜 로그인이므로 첫 번째 소셜 계정의 provider를 loginType으로 사용
+        String loginType = member.getSocialAccounts().stream()
+                .findFirst()
+                .map(account -> account.getProvider())
+                .orElse("unknown");
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, loginType);
     }
 
     private UserProfile createUserProfile(Member member) {
