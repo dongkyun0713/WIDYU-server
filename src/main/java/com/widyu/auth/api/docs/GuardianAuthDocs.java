@@ -6,7 +6,9 @@ import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -86,15 +88,26 @@ public interface GuardianAuthDocs {
                                       "code": "AUTH_2002",
                                       "message": "로컬 보호자 회원가입이 성공적으로 완료되었습니다.",
                                       "data": {
+                                        "isFirst": true,
                                         "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                        "profile": {
+                                          "name": "홍길동",
+                                          "phoneNumber": "010-1234-5678",
+                                          "email": "user@example.com",
+                                          "providers": ["LOCAL"]
+                                        },
+                                        "accountInfo": {
+                                          "email": "user@example.com",
+                                          "accountType": "LOCAL"
+                                        }
                                       }
                                     }
                                     """
                     )
             )
     )
-    ApiResponseTemplate<TokenPairResponse> signupLocal(
+    ApiResponseTemplate<LocalSignupResponse> signupLocal(
             HttpServletRequest httpServletRequest,
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -187,7 +200,7 @@ public interface GuardianAuthDocs {
                                         "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                                         "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                                         "profile": {
-                                          "name": "김민지",
+                                          "name": "홍길동",
                                           "phoneNumber": "010-1234-5678",
                                           "email": "abc@abc.com",
                                           "providers": ["kakao"]
@@ -214,7 +227,7 @@ public interface GuardianAuthDocs {
                                         "accessToken": null,
                                         "refreshToken": null,
                                         "profile": {
-                                          "name": "김민지",
+                                          "name": "홍길동",
                                           "phoneNumber": "010-1234-5678",
                                           "email": "existing@example.com",
                                           "providers": ["kakao"]
@@ -222,7 +235,7 @@ public interface GuardianAuthDocs {
                                         "newSocialAccount": {
                                           "provider": "naver",
                                           "email": "newuser@naver.com",
-                                          "name": "김민지"
+                                          "name": "홍길동"
                                         }
                                       }
                                     }
@@ -305,9 +318,9 @@ public interface GuardianAuthDocs {
     );
 
     @Operation(
-            summary = "전화번호로 회원 이메일 조회",
+            summary = "전화번호로 회원 정보 조회",
             description = """
-                    이름과 휴대폰 번호를 검증 후, 해당 회원의 이메일 정보를 반환합니다.
+                    이름과 휴대폰 번호를 검증 후, 해당 회원 정보를 반환합니다.
                     """
     )
     @ApiResponse(
@@ -492,7 +505,7 @@ public interface GuardianAuthDocs {
                                       "code": "AUTH_2009",
                                       "message": "임시 토큰으로 사용자 프로필 조회 성공",
                                       "data": {
-                                        "name": "김민지",
+                                        "name": "홍길동",
                                         "phoneNumber": "010-1234-5678",
                                         "email": "abc@abc.com",
                                         "providers": ["kakao"]
@@ -521,6 +534,102 @@ public interface GuardianAuthDocs {
     )
     ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
             HttpServletRequest httpServletRequest
+    );
+
+    @Operation(
+            summary = "소셜 계정 연동",
+            description = """
+                    현재 인증된 사용자에게 새로운 소셜 계정을 연동하고 토큰을 발급합니다.
+                    JWT 토큰이 필요하며, 소셜 로그인 시 다른 계정이 있어서 연동하기 버튼을 눌렀을 때 사용됩니다.
+                    이미 연동된 제공자나 다른 사용자가 사용 중인 소셜 계정은 연동할 수 없습니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "소셜 계정 연동 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2010",
+                                      "message": "소셜 계정 연동 성공",
+                                      "data": {
+                                        "accessToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "400",
+            description = "잘못된 요청 (이미 연동된 제공자, 중복 소셜 계정 등)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = {
+                            @ExampleObject(
+                                    name = "이미 연동된 제공자",
+                                    value = """
+                                            {
+                                              "code": "AUTH_4010",
+                                              "message": "이미 연동된 소셜 로그인 제공자입니다.",
+                                              "data": null
+                                            }
+                                            """
+                            ),
+                            @ExampleObject(
+                                    name = "다른 사용자가 사용 중인 소셜 계정",
+                                    value = """
+                                            {
+                                              "code": "AUTH_4008",
+                                              "message": "이미 연동된 소셜 계정입니다.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    }
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<TokenPairResponse> integrateSocialAccount(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "연동할 새로운 소셜 계정 정보 (소셜 로그인에서 받은 정보)",
+                    content = @Content(
+                            schema = @Schema(implementation = SocialIntegrationRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "provider": "naver",
+                                              "email": "user@naver.com",
+                                              "name": "홍길동",
+                                              "oauthId": "1234567890"
+                                            }
+                                            """
+                            )
+                    )
+            ) final SocialIntegrationRequest request
     );
 
 }

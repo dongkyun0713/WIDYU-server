@@ -133,6 +133,7 @@ public class ParentAuthService {
     }
 
     private TokenPairResponse generateTokenPairForMember(Member member) {
-        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+        // 부모는 초대코드로 로그인하므로 "parent"를 loginType으로 사용
+        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "parent");
     }
 }

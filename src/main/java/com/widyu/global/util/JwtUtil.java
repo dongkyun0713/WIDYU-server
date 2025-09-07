@@ -30,26 +30,27 @@ public class JwtUtil {
     private final JwtProperties jwtProperties;
 
     private static final String TOKEN_TYPE_KEY_NAME = "type";
+    private static final String LOGIN_TYPE_KEY_NAME = "loginType";
     private static final String HEADER_TYP = "typ";
     private static final String HEADER_ALG = "alg";
     private static final String HEADER_REG_DATE = "regDate";
     private static final String JWT_TYPE = "JWT";
     private static final String HS256_ALG = "HS256";
 
-    public String generateAccessToken(Long memberId, MemberRole memberRole) {
+    public String generateAccessToken(Long memberId, MemberRole memberRole, String loginType) {
         TokenTimeInfo timeInfo = createTokenTimeInfo(jwtProperties.accessTokenExpirationMilliTime());
         return buildJwtToken(
                 TokenType.ACCESS,
                 memberId.toString(),
-                Map.of(TOKEN_ROLE_NAME, memberRole.name()),
+                Map.of(TOKEN_ROLE_NAME, memberRole.name(), LOGIN_TYPE_KEY_NAME, loginType),
                 timeInfo,
                 getAccessTokenKey()
         );
     }
 
-    public AccessTokenDto generateAccessTokenDto(Long memberId, MemberRole memberRole) {
-        String tokenValue = generateAccessToken(memberId, memberRole);
-        return AccessTokenDto.of(memberId, memberRole, tokenValue);
+    public AccessTokenDto generateAccessTokenDto(Long memberId, MemberRole memberRole, String loginType) {
+        String tokenValue = generateAccessToken(memberId, memberRole, loginType);
+        return AccessTokenDto.of(memberId, memberRole, loginType, tokenValue);
     }
 
     public String generateRefreshToken(Long memberId) {
@@ -82,6 +83,7 @@ public class JwtUtil {
             return new AccessTokenDto(
                     Long.parseLong(body.getSubject()),
                     MemberRole.valueOf(body.get(TOKEN_ROLE_NAME, String.class)),
+                    body.get(LOGIN_TYPE_KEY_NAME, String.class),
                     token
             );
         } catch (ExpiredJwtException e) {

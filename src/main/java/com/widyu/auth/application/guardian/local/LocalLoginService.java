@@ -1,11 +1,13 @@
 package com.widyu.auth.application.guardian.local;
 
 import com.widyu.auth.domain.TemporaryMember;
+import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
-import com.widyu.auth.dto.request.ChangePasswordRequest;
+import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
+import com.widyu.auth.dto.response.SignUpUserInfo;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.error.BusinessException;
@@ -36,27 +38,39 @@ public class LocalLoginService {
     private final TemporaryMemberUtil temporaryMemberUtil;
 
     @Transactional
-    public TokenPairResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
+    public LocalSignupResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
         if (localAccountRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.ALREADY_REGISTERED_EMAIL);
         }
 
-        Member member = Member.createMember(
-                MemberType.GUARDIAN,
-                temp.getName(),
-                temp.getPhoneNumber()
-        );
+        // 전화번호와 이름으로 기존 멤버 찾기
+        Member member = memberRepository.findByPhoneNumberAndName(temp.getPhoneNumber(), temp.getName())
+                .orElseGet(() -> {
+                    // 기존 멤버가 없으면 새로 생성
+                    Member newMember = Member.createMember(
+                            MemberType.GUARDIAN,
+                            temp.getName(),
+                            temp.getPhoneNumber()
+                    );
+                    return memberRepository.save(newMember);
+                });
 
+        // 로컬 계정 생성 및 멤버와 연결
         LocalAccount local = LocalAccount.createLocalAccount(
                 member,
                 email,
                 passwordEncoder.encode(rawPassword)
         );
 
-        memberRepository.save(member);
         localAccountRepository.save(local);
 
-        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+        // 토큰 생성
+        TokenPairResponse tokenPair = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
+        
+        // 사용자 프로필 생성
+        SignUpUserInfo profile = SignUpUserInfo.of(member.getName(), member.getPhoneNumber(), email);
+
+        return LocalSignupResponse.ofTokenPair(tokenPair, profile);
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +84,7 @@ public class LocalLoginService {
         validatePassword(request.password(), localAccount.getPassword());
 
         Member member = localAccount.getMember();
-        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole());
+        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
     }
 
     private LocalAccount findLocalAccountByEmail(String email) {

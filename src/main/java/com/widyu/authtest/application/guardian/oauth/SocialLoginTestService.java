@@ -87,6 +87,11 @@ public class SocialLoginTestService {
     }
 
     private TokenPairResponse getLoginResponse(Member member) {
-        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
+        // 테스트용 소셜 로그인이므로 첫 번째 소셜 계정의 provider를 loginType으로 사용
+        String loginType = member.getSocialAccounts().stream()
+                .findFirst()
+                .map(account -> account.getProvider())
+                .orElse("test");
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, loginType);
     }
 }
