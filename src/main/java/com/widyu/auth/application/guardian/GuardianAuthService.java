@@ -1,13 +1,10 @@
 package com.widyu.auth.application.guardian;
 
 import com.widyu.auth.application.LogoutService;
-import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.TemporaryTokenService;
-import com.widyu.auth.application.VerificationCodeService;
 import com.widyu.auth.application.guardian.local.LocalLoginService;
 import com.widyu.auth.application.guardian.oauth.SocialLoginService;
 import com.widyu.auth.domain.TemporaryMember;
-import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.dto.TemporaryTokenDto;
 import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
@@ -25,13 +22,6 @@ import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.auth.dto.response.UserProfile;
-import com.widyu.global.error.BusinessException;
-import com.widyu.global.error.ErrorCode;
-import com.widyu.global.security.JwtTokenProvider;
-import com.widyu.global.util.MemberUtil;
-import com.widyu.member.domain.Member;
-import com.widyu.member.domain.MemberRole;
-import com.widyu.member.repository.MemberRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,33 +29,28 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+public class GuardianAuthService {
 
-    private final SmsService smsService;
-    private final VerificationCodeService verificationCodeService;
+    private final GuardianSmsService guardianSmsService;
+    private final GuardianTokenService guardianTokenService;
     private final TemporaryTokenService temporaryTokenService;
     private final LocalLoginService localLoginService;
     private final SocialLoginService socialLoginService;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final MemberUtil memberUtil;
-    private final MemberRepository memberRepository;
     private final LogoutService logoutService;
 
     @Transactional
     public void sendSmsVerification(final SmsVerificationRequest request) {
-        smsService.sendVerificationSms(request.phoneNumber(), request.name());
+        guardianSmsService.sendVerificationSms(request);
     }
 
     @Transactional
     public void sendSmsVerificationIfMemberExist(final FindPasswordRequest request) {
-        memberRepository.findByPhoneNumberAndNameAndLocalAccount_Email(request.phoneNumber(), request.name(),
-                        request.email()).orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-        smsService.sendVerificationSms(request.phoneNumber(), request.name());
+        guardianSmsService.sendVerificationSmsForPasswordReset(request);
     }
 
     @Transactional
     public TemporaryTokenResponse verifySmsCode(final SmsCodeRequest request) {
-        return verificationCodeService.verifyAndIssueTemporaryToken(request.phoneNumber(), request.code());
+        return guardianSmsService.verifyCodeAndIssueToken(request);
     }
 
     @Transactional(readOnly = true)
@@ -113,14 +98,7 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public TokenPairResponse reissueTokenPair(RefreshTokenRequest request) {
-        RefreshTokenDto refreshTokenDto =
-                jwtTokenProvider.retrieveRefreshToken(request.refreshToken());
-        RefreshTokenDto refreshToken =
-                jwtTokenProvider.createRefreshTokenDto(refreshTokenDto.memberId());
-
-        Member member = memberUtil.getMemberByMemberId(refreshToken.memberId());
-
-        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER);
+        return guardianTokenService.reissueTokenPair(request);
     }
 
     @Transactional

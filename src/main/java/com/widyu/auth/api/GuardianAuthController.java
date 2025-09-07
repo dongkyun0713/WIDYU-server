@@ -1,7 +1,7 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.api.docs.GuardianAuthDocs;
-import com.widyu.auth.application.guardian.AuthService;
+import com.widyu.auth.application.guardian.GuardianAuthService;
 import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
@@ -32,11 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth/guardians")
 public class GuardianAuthController implements GuardianAuthDocs {
-    private final AuthService authService;
+    private final GuardianAuthService guardianAuthService;
 
     @PostMapping("/email/check")
     public ApiResponseTemplate<Boolean> isEmailRegistered(@RequestBody @Valid final EmailCheckRequest request) {
-        boolean isRegistered = authService.isEmailRegistered(request);
+        boolean isRegistered = guardianAuthService.isEmailRegistered(request);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2001")
                 .message("이메일 등록 여부 확인 완료")
@@ -51,14 +51,14 @@ public class GuardianAuthController implements GuardianAuthDocs {
         return ApiResponseTemplate.ok()
                 .code("AUTH_2002")
                 .message("로컬 보호자 회원가입이 성공적으로 완료되었습니다.")
-                .body(authService.localGuardianSignup(httpServletRequest, request));
+                .body(guardianAuthService.localGuardianSignup(httpServletRequest, request));
     }
 
     @PostMapping("/sign-in/local")
     public ApiResponseTemplate<TokenPairResponse> signInLocal(
             @RequestBody @Valid final LocalGuardianSignInRequest request
     ) {
-        TokenPairResponse response = authService.localGuardianSignIn(request);
+        TokenPairResponse response = guardianAuthService.localGuardianSignIn(request);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2003")
                 .message("로컬 보호자 로그인 성공")
@@ -73,14 +73,14 @@ public class GuardianAuthController implements GuardianAuthDocs {
         return ApiResponseTemplate.ok()
                 .code("AUTH_2004")
                 .message("소셜 로그인 성공")
-                .body(authService.socialLogin(provider, request));
+                .body(guardianAuthService.socialLogin(provider, request));
     }
 
     @PostMapping("/email")
     public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @RequestBody SmsVerificationRequest request
     ) {
-        MemberInfoResponse response = authService.findMemberByPhoneNumberAndName(request);
+        MemberInfoResponse response = guardianAuthService.findMemberByPhoneNumberAndName(request);
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2006")
@@ -93,7 +93,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
             @RequestBody @Valid final ChangePasswordRequest request,
             HttpServletRequest httpServletRequest
     ) {
-        boolean result = authService.changeMemberPassword(request, httpServletRequest);
+        boolean result = guardianAuthService.changeMemberPassword(request, httpServletRequest);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2007")
                 .message("비밀번호 변경 성공")
@@ -105,7 +105,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
             @RequestBody @Valid final AppleSignUpRequest request,
             HttpServletRequest httpServletRequest
     ) {
-        authService.updatePhoneNumberIfAppleSignUp(request, httpServletRequest);
+        guardianAuthService.updatePhoneNumberIfAppleSignUp(request, httpServletRequest);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2008")
                 .message("애플 로그인 회원 전화번호 업데이트 성공")
@@ -116,7 +116,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
     public ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
             HttpServletRequest httpServletRequest
     ) {
-        UserProfile userProfile = authService.getUserProfileByTemporaryToken(httpServletRequest);
+        UserProfile userProfile = guardianAuthService.getUserProfileByTemporaryToken(httpServletRequest);
         return ApiResponseTemplate.ok()
                 .code("AUTH_2009")
                 .message("임시 토큰으로 사용자 프로필 조회 성공")
