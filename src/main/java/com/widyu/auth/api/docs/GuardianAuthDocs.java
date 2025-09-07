@@ -317,9 +317,9 @@ public interface GuardianAuthDocs {
     );
 
     @Operation(
-            summary = "전화번호로 회원 이메일 조회",
+            summary = "전화번호로 회원 정보 조회",
             description = """
-                    이름과 휴대폰 번호를 검증 후, 해당 회원의 이메일 정보를 반환합니다.
+                    이름과 휴대폰 번호를 검증 후, 해당 회원 정보를 반환합니다.
                     """
     )
     @ApiResponse(
