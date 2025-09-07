@@ -1,17 +1,21 @@
-package com.widyu.infrastructure.external.oauth.apple;
+package com.widyu.auth.application.guardian.oauth.strategy.apple;
 
 import static com.widyu.global.constant.SecurityConstant.APPLE_TOKEN_URL;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
+import com.widyu.auth.application.guardian.oauth.strategy.UserInfo;
+import com.widyu.auth.domain.OAuthProvider;
 import com.widyu.auth.dto.request.AppleTokenRequest;
+import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.AppleIdTokenPayload;
 import com.widyu.auth.dto.response.AppleTokenResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.AppleProperties;
-import com.widyu.infrastructure.external.oauth.naver.OAuthClient;
+import com.widyu.global.util.PhoneNumberUtil;
 import java.util.Base64;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -22,9 +26,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Slf4j
-@Component("APPLE")
+@Component
 @RequiredArgsConstructor
-public class AppleClient implements OAuthClient {
+public class AppleLoginStrategy implements SocialLoginStrategy {
 
     private final AppleProperties appleProperties;
     private final AppleJwtUtils appleJwtUtils;
@@ -32,16 +36,23 @@ public class AppleClient implements OAuthClient {
     private final ObjectMapper objectMapper;
 
     @Override
-    public SocialClientResponse getUserInfo(final String authorizationCode) {
-        if (authorizationCode == null || authorizationCode.isBlank()) {
+    public OAuthProvider getSupportedProvider() {
+        return OAuthProvider.APPLE;
+    }
+
+    @Override
+    public void validateLoginRequest(SocialLoginRequest request) {
+        if (request.authorizationCode() == null || request.authorizationCode().isBlank()) {
+            log.error("애플 인증 코드가 누락되었습니다");
             throw new BusinessException(ErrorCode.APPLE_AUTHORIZATION_CODE_IS_BLANK);
         }
+    }
 
+    @Override
+    public SocialClientResponse getUserInfo(SocialLoginRequest request) {
         try {
             String clientSecret = appleJwtUtils.generateClientSecret();
-
-            AppleTokenResponse tokenResponse = exchangeCodeForTokens(authorizationCode, clientSecret);
-
+            AppleTokenResponse tokenResponse = exchangeCodeForTokens(request.authorizationCode(), clientSecret);
             AppleIdTokenPayload idTokenPayload = parseIdToken(tokenResponse.idToken());
 
             return SocialClientResponse.of(
@@ -51,9 +62,40 @@ public class AppleClient implements OAuthClient {
                     null
             );
         } catch (Exception e) {
-            log.error("Apple authentication failed: {}", e.getMessage(), e);
+            log.error("애플 사용자 정보 조회 실패: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.APPLE_COMMUNICATION_ERROR);
         }
+    }
+
+    @Override
+    public UserInfo processUserInfo(SocialClientResponse socialResponse, SocialLoginRequest request) {
+        String name = socialResponse.name();
+        String email = socialResponse.email();
+        String phoneNumber = socialResponse.phoneNumber();
+
+        if (request.profile() != null) {
+            name = getValueOrDefault(name, request.profile().name());
+            email = getValueOrDefault(email, request.profile().email());
+        }
+
+        String normalizedPhone = PhoneNumberUtil.normalize(phoneNumber);
+        return UserInfo.of(name, email, normalizedPhone);
+    }
+
+    @Override
+    public void validateUserInfo(UserInfo userInfo) {
+        validateEmail(userInfo);
+    }
+
+    private void validateEmail(UserInfo userInfo) {
+        if (!userInfo.hasEmail()) {
+            log.error("애플 이메일 정보가 누락되었습니다");
+            throw new BusinessException(ErrorCode.SOCIAL_EMAIL_NOT_PROVIDED);
+        }
+    }
+
+    private String getValueOrDefault(String currentValue, String defaultValue) {
+        return (currentValue != null && !currentValue.isBlank()) ? currentValue : defaultValue;
     }
 
     private AppleTokenResponse exchangeCodeForTokens(String authorizationCode, String clientSecret) {
@@ -70,7 +112,7 @@ public class AppleClient implements OAuthClient {
                 .body(convertToFormData(tokenRequest))
                 .exchange((req, res) -> {
                     if (!res.getStatusCode().is2xxSuccessful()) {
-                        log.error("Apple token exchange failed, status: {}", res.getStatusCode());
+                        log.error("애플 토큰 교환 실패, 상태 코드: {}", res.getStatusCode());
                         throw new BusinessException(ErrorCode.APPLE_COMMUNICATION_ERROR);
                     }
                     return Objects.requireNonNull(res.bodyTo(AppleTokenResponse.class));
@@ -87,7 +129,7 @@ public class AppleClient implements OAuthClient {
             String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
             return objectMapper.readValue(payload, AppleIdTokenPayload.class);
         } catch (JsonProcessingException e) {
-            log.error("Failed to parse Apple ID token: {}", e.getMessage(), e);
+            log.error("애플 ID 토큰 파싱 실패: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.APPLE_COMMUNICATION_ERROR);
         }
     }

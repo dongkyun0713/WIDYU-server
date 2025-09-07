@@ -32,7 +32,6 @@ public enum ErrorCode {
     INVITE_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "PARENT_4040", "초대코드를 찾을 수 없습니다."),
     INVITE_CODE_DUPLICATED_IN_REQUEST(HttpStatus.BAD_REQUEST, "PARENT_4002", "요청 내 중복된 초대코드가 있습니다."),
 
-
     // 문자 인증
     SMS_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "SMS_4040", "문자 인증 코드가 존재하지 않습니다."),
     SMS_VERIFICATION_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "SMS_4000", "문자 인증 코드가 일치하지 않습니다."),
