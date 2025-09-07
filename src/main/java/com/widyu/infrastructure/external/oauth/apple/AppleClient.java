@@ -1,4 +1,4 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.infrastructure.external.oauth.apple;
 
 import static com.widyu.global.constant.SecurityConstant.APPLE_TOKEN_URL;
 
@@ -11,6 +11,7 @@ import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.AppleProperties;
+import com.widyu.infrastructure.external.oauth.naver.OAuthClient;
 import java.util.Base64;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;

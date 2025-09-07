@@ -1,6 +1,6 @@
-package com.widyu.global.config;
+package com.widyu.infrastructure.config;
 
-import com.widyu.auth.application.guardian.oauth.OAuthClient;
+import com.widyu.infrastructure.external.oauth.naver.OAuthClient;
 import com.widyu.auth.domain.OAuthProvider;
 import java.util.Map;
 import java.util.stream.Collectors;

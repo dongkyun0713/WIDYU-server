@@ -1,4 +1,4 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.infrastructure.external.oauth.apple;
 
 import static com.widyu.global.constant.SecurityConstant.APPLE_ISSUER;
 

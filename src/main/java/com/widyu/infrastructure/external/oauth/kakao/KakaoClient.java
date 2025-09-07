@@ -1,4 +1,4 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.infrastructure.external.oauth.kakao;
 
 import static com.widyu.global.constant.SecurityConstant.KAKAO_USER_ME_URL;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
@@ -8,6 +8,7 @@ import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.PhoneNumberUtil;
+import com.widyu.infrastructure.external.oauth.naver.OAuthClient;
 import java.util.Objects;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;

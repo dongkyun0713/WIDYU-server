@@ -9,7 +9,7 @@ import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponses;
-import com.widyu.pay.config.PaymentClient;
+import com.widyu.infrastructure.external.pay.PaymentClient;
 import com.widyu.pay.domain.Payment;
 import com.widyu.pay.domain.repository.PaymentRepository;
 import java.util.List;

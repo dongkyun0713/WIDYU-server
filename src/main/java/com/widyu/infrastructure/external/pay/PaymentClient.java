@@ -1,8 +1,9 @@
-package com.widyu.pay.config;
+package com.widyu.infrastructure.external.pay;
 
 import com.widyu.pay.api.dto.request.CancelRequest;
 import com.widyu.pay.api.dto.request.PaymentConfirmRequest;
 import com.widyu.pay.api.dto.response.PaymentConfirmResponse;
+import com.widyu.pay.config.PaymentFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;

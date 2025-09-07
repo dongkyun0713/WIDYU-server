@@ -1,6 +1,7 @@
 package com.widyu.auth.application.guardian.oauth;
 
 import com.widyu.auth.domain.OAuthProvider;
+import com.widyu.infrastructure.external.oauth.naver.OAuthClient;
 import com.widyu.auth.domain.TemporaryMember;
 import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;

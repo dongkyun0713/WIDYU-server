@@ -1,4 +1,4 @@
-package com.widyu.auth.application.guardian.oauth;
+package com.widyu.infrastructure.external.oauth.naver;
 
 
 import com.widyu.auth.dto.response.SocialClientResponse;
