@@ -8,6 +8,7 @@ import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
@@ -121,5 +122,16 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .code("AUTH_2009")
                 .message("임시 토큰으로 사용자 프로필 조회 성공")
                 .body(userProfile);
+    }
+
+    @PostMapping("/social/integration")
+    public ApiResponseTemplate<TokenPairResponse> integrateSocialAccount(
+            @RequestBody @Valid final SocialIntegrationRequest request
+    ) {
+        TokenPairResponse tokenPair = guardianAuthService.integrateSocialAccount(request);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2010")
+                .message("소셜 계정 연동 성공")
+                .body(tokenPair);
     }
 }

@@ -15,6 +15,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
+import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
@@ -104,6 +105,11 @@ public class GuardianAuthService {
     @Transactional
     public boolean changeMemberPassword(ChangePasswordRequest request, HttpServletRequest httpServletRequest) {
         return localLoginService.changePassword(request, httpServletRequest);
+    }
+
+    @Transactional
+    public TokenPairResponse integrateSocialAccount(SocialIntegrationRequest request) {
+        return socialLoginService.integrateSocialAccount(request);
     }
 
     @Transactional(readOnly = true)
