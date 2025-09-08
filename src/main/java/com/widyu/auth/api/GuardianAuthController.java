@@ -10,6 +10,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.CurrentMemberResponse;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -133,5 +134,14 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .code("AUTH_2010")
                 .message("소셜 계정 연동 성공")
                 .body(tokenPair);
+    }
+
+    @GetMapping("/me")
+    public ApiResponseTemplate<CurrentMemberResponse> getCurrentMemberInfo() {
+        CurrentMemberResponse memberInfo = guardianAuthService.getCurrentMemberInfo();
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2011")
+                .message("현재 회원 정보 조회 성공")
+                .body(memberInfo);
     }
 }

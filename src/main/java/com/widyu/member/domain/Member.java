@@ -49,6 +49,9 @@ public class Member extends BaseTimeEntity {
     private List<SocialAccount> socialAccounts = new ArrayList<>();
 
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ParentProfile> parentProfiles = new ArrayList<>();
+
+    @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MemberFcmToken> memberFcmTokens = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)

@@ -8,6 +8,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.CurrentMemberResponse;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -631,5 +632,54 @@ public interface GuardianAuthDocs {
                     )
             ) final SocialIntegrationRequest request
     );
+
+    @Operation(
+            summary = "현재 회원 정보 조회",
+            description = """
+                    액세스 토큰을 사용하여 현재 로그인된 회원의 정보를 조회합니다.
+                    JWT 토큰이 필요하며, 회원의 기본 정보와 연동된 계정, 부모 보유 여부를 반환합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "회원 정보 조회 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2011",
+                                      "message": "현재 회원 정보 조회 성공",
+                                      "data": {
+                                        "name": "ghdrlfehd",
+                                        "phone": "01012341234",
+                                        "email": "abc@abc.com",
+                                        "providers": ["kakao"],
+                                        "hasParents": true
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<CurrentMemberResponse> getCurrentMemberInfo();
 
 }
