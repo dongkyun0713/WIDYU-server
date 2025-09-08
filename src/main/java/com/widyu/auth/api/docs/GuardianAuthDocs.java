@@ -272,9 +272,9 @@ public interface GuardianAuthDocs {
                     in = ParameterIn.QUERY,
                     required = true,
                     examples = {
-                        @ExampleObject(name = "네이버", value = "naver"), 
-                        @ExampleObject(name = "카카오", value = "kakao"),
-                        @ExampleObject(name = "애플", value = "apple")
+                            @ExampleObject(name = "네이버", value = "naver"),
+                            @ExampleObject(name = "카카오", value = "kakao"),
+                            @ExampleObject(name = "애플", value = "apple")
                     }
             )
             String provider,
@@ -285,43 +285,43 @@ public interface GuardianAuthDocs {
                     content = @Content(
                             schema = @Schema(implementation = SocialLoginRequest.class),
                             examples = {
-                                @ExampleObject(
-                                        name = "Kakao 요청",
-                                        value = """
-                                                {
-                                                  "accessToken": "AAAA1234567890abcdef..."
-                                                }
-                                                """
-                                ),
-                                @ExampleObject(
-                                        name = "Naver 요청",
-                                        value = """
-                                                {
-                                                  "accessToken": "AAAA1234567890abcdef...",
-                                                  "refreshToken": "BBBB0987654321fedcba..."
-                                                }
-                                                """
-                                ),
-                                @ExampleObject(
-                                        name = "Apple 요청 (최초 로그인)",
-                                        value = """
-                                                {
-                                                  "authorizationCode": "abc123",
-                                                  "profile": {
-                                                    "email": "user@icloud.com",
-                                                    "name": "홍길동"
-                                                  }
-                                                }
-                                                """
-                                ),
-                                @ExampleObject(
-                                        name = "Apple 요청 (재로그인)",
-                                        value = """
-                                                {
-                                                  "authorizationCode": "def456"
-                                                }
-                                                """
-                                )
+                                    @ExampleObject(
+                                            name = "Kakao 요청",
+                                            value = """
+                                                    {
+                                                      "accessToken": "AAAA1234567890abcdef..."
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "Naver 요청",
+                                            value = """
+                                                    {
+                                                      "accessToken": "AAAA1234567890abcdef...",
+                                                      "refreshToken": "BBBB0987654321fedcba..."
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "Apple 요청 (최초 로그인)",
+                                            value = """
+                                                    {
+                                                      "authorizationCode": "abc123",
+                                                      "profile": {
+                                                        "email": "user@icloud.com",
+                                                        "name": "홍길동"
+                                                      }
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "Apple 요청 (재로그인)",
+                                            value = """
+                                                    {
+                                                      "authorizationCode": "def456"
+                                                    }
+                                                    """
+                                    )
                             }
                     )
             ) final SocialLoginRequest request
@@ -631,9 +631,10 @@ public interface GuardianAuthDocs {
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "provider": "naver",
-                                              "email": "user@naver.com",
                                               "name": "홍길동",
+                                              "phoneNumber": "01012345678",
+                                              "email": "user@naver.com",
+                                              "provider": "naver",
                                               "oauthId": "1234567890"
                                             }
                                             """
