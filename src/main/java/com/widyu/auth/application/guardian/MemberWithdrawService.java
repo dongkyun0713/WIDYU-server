@@ -59,7 +59,18 @@ public class MemberWithdrawService {
                     log.warn("카카오 계정 탈퇴 실패하지만 진행 계속: oauthId={}, error={}", 
                             socialAccount.getOauthId(), e.getMessage());
                 }
-            } else if (accessToken != null && !accessToken.isBlank()) {
+            } 
+            // 애플의 경우 저장된 리프레시 토큰 사용
+            else if ("apple".equals(provider) && socialAccount.getRefreshToken() != null && !socialAccount.getRefreshToken().isBlank()) {
+                try {
+                    withdrawSocialAccount(provider, socialAccount.getRefreshToken(), socialAccount.getOauthId());
+                } catch (Exception e) {
+                    log.warn("애플 계정 탈퇴 실패하지만 진행 계속: oauthId={}, error={}", 
+                            socialAccount.getOauthId(), e.getMessage());
+                }
+            }
+            // 다른 제공자들은 액세스 토큰 필요
+            else if (accessToken != null && !accessToken.isBlank()) {
                 try {
                     withdrawSocialAccount(provider, accessToken, socialAccount.getOauthId());
                 } catch (Exception e) {

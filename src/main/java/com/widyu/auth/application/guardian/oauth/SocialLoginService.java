@@ -166,14 +166,18 @@ public class SocialLoginService {
             return Member.createMember(MemberType.GUARDIAN, userInfo.name(), userInfo.phoneNumber());
         });
 
-        addSocialAccountToMember(member, provider, socialResponse.oauthId(), userInfo.email());
+        addSocialAccountToMember(member, provider, socialResponse.oauthId(), userInfo.email(), socialResponse.refreshToken());
         logMemberCreationOrUpdate(member, provider, userInfo.email());
 
         return member;
     }
 
     private void addSocialAccountToMember(Member member, OAuthProvider provider, String oauthId, String email) {
-        SocialAccount socialAccount = SocialAccount.createSocialAccount(email, provider.getValue(), oauthId, member);
+        addSocialAccountToMember(member, provider, oauthId, email, null);
+    }
+
+    private void addSocialAccountToMember(Member member, OAuthProvider provider, String oauthId, String email, String refreshToken) {
+        SocialAccount socialAccount = SocialAccount.createSocialAccount(email, provider.getValue(), oauthId, refreshToken, member);
         member.getSocialAccounts().add(socialAccount);
     }
 

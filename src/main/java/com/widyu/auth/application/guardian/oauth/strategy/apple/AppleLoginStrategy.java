@@ -59,7 +59,8 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
                     idTokenPayload.subject(),
                     idTokenPayload.email(),
                     null,
-                    null
+                    null,
+                    tokenResponse.refreshToken()
             );
         } catch (Exception e) {
             log.error("애플 사용자 정보 조회 실패: {}", e.getMessage(), e);
@@ -135,16 +136,21 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
     }
 
     @Override
-    public void withdrawSocialAccount(String accessToken, String oauthId) {
+    public void withdrawSocialAccount(String refreshToken, String oauthId) {
         try {
-            log.info("애플 계정 탈퇴 요청 시작: oauthId={}", oauthId);
+            log.info("애플 계정 탈퇴 요청 시작 (리프레시 토큰 사용): oauthId={}", oauthId);
+            
+            if (refreshToken == null || refreshToken.isBlank()) {
+                log.warn("애플 계정 탈퇴를 위한 리프레시 토큰이 없습니다: oauthId={}", oauthId);
+                throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
+            }
             
             String clientSecret = appleJwtUtils.generateClientSecret();
             String formData = String.format(
                     "client_id=%s&client_secret=%s&token=%s&token_type_hint=refresh_token",
                     appleProperties.clientId(),
                     clientSecret,
-                    accessToken
+                    refreshToken
             );
             
             restClient.post()
@@ -156,7 +162,7 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
                             log.error("애플 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
                             throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
                         }
-                        log.info("애플 계정 탈퇴 성공: oauthId={}", oauthId);
+                        log.info("애플 계정 탈퇴 성공 (리프레시 토큰 사용): oauthId={}", oauthId);
                         return null;
                     });
         } catch (Exception e) {

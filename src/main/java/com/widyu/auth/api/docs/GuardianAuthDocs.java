@@ -688,7 +688,8 @@ public interface GuardianAuthDocs {
             description = """
                     현재 로그인된 사용자의 계정을 탈퇴처리합니다. 연동된 모든 소셜 계정도 함께 탈퇴됩니다.
                     카카오의 경우 앱 어드민 키를 사용하므로 액세스 토큰이 불필요합니다.
-                    네이버와 애플의 경우 사용자의 액세스 토큰이 필요합니다.
+                    애플의 경우 로그인 시 저장된 리프레시 토큰을 자동으로 사용합니다.
+                    네이버의 경우 사용자의 액세스 토큰이 필요합니다.
                     """
     )
     @ApiResponse(
@@ -729,7 +730,7 @@ public interface GuardianAuthDocs {
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "탈퇴 사유 및 소셜 계정 액세스 토큰 (카카오는 불필요)",
+                    description = "탈퇴 사유 및 소셜 계정 액세스 토큰 (카카오, 애플은 불필요)",
                     content = @Content(
                             schema = @Schema(implementation = MemberWithdrawRequest.class),
                             examples = @ExampleObject(
@@ -738,8 +739,7 @@ public interface GuardianAuthDocs {
                                             {
                                               "reason": "서비스 불만족",
                                               "socialAccessTokens": {
-                                                "naver": "naver_access_token_here",
-                                                "apple": "apple_access_token_here"
+                                                "naver": "naver_access_token_here"
                                               }
                                             }
                                             """
