@@ -6,6 +6,7 @@ import lombok.Builder;
 public record SocialLoginRequest(
         String accessToken,
         String authorizationCode,
+        String refreshToken,
         AppleProfile profile
 ) {
     public record AppleProfile(

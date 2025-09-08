@@ -49,7 +49,10 @@ public class SocialLoginService {
         strategy.validateLoginRequest(request);
 
         // 2. 소셜 제공자에서 사용자 정보 획득
-        SocialClientResponse socialResponse = strategy.getUserInfo(request);
+        SocialClientResponse originalResponse = strategy.getUserInfo(request);
+
+        // 2.5. 프론트에서 전달받은 리프레시 토큰 설정 (네이버 등에서 사용)
+        final SocialClientResponse socialResponse = strategy.enrichWithRefreshToken(originalResponse, request);
 
         // 3. 사용자 정보 후처리
         UserInfo userInfo = strategy.processUserInfo(socialResponse, request);
