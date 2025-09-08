@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -63,5 +64,9 @@ public class LocalAccount {
             throw new BusinessException(ErrorCode.SAME_PASSWORD);
         }
         this.password = newPassword;
+    }
+
+    public void maskEmail() {
+        this.email = "deleted_user_" + UUID.randomUUID().toString().substring(0, 8) + "@widyu.com";
     }
 }

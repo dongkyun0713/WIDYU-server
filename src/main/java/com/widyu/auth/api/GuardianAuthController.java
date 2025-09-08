@@ -7,9 +7,11 @@ import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.CurrentMemberResponse;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -20,6 +22,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -133,5 +136,25 @@ public class GuardianAuthController implements GuardianAuthDocs {
                 .code("AUTH_2010")
                 .message("소셜 계정 연동 성공")
                 .body(tokenPair);
+    }
+
+    @GetMapping("/me")
+    public ApiResponseTemplate<CurrentMemberResponse> getCurrentMemberInfo() {
+        CurrentMemberResponse memberInfo = guardianAuthService.getCurrentMemberInfo();
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2011")
+                .message("현재 회원 정보 조회 성공")
+                .body(memberInfo);
+    }
+
+    @DeleteMapping("/withdraw")
+    public ApiResponseTemplate<Void> withdrawMember(
+            @RequestBody @Valid final MemberWithdrawRequest request
+    ) {
+        guardianAuthService.withdrawMember(request);
+        return ApiResponseTemplate.ok()
+                .code("AUTH_2012")
+                .message("회원 탈퇴가 성공적으로 완료되었습니다")
+                .body(null);
     }
 }

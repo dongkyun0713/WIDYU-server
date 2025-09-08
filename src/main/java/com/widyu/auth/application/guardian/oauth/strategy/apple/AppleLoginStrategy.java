@@ -59,7 +59,8 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
                     idTokenPayload.subject(),
                     idTokenPayload.email(),
                     null,
-                    null
+                    null,
+                    tokenResponse.refreshToken()
             );
         } catch (Exception e) {
             log.error("애플 사용자 정보 조회 실패: {}", e.getMessage(), e);
@@ -131,6 +132,42 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
         } catch (JsonProcessingException e) {
             log.error("애플 ID 토큰 파싱 실패: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.APPLE_COMMUNICATION_ERROR);
+        }
+    }
+
+    @Override
+    public void withdrawSocialAccount(String refreshToken, String oauthId) {
+        try {
+            log.info("애플 계정 탈퇴 요청 시작 (리프레시 토큰 사용): oauthId={}", oauthId);
+            
+            if (refreshToken == null || refreshToken.isBlank()) {
+                log.warn("애플 계정 탈퇴를 위한 리프레시 토큰이 없습니다: oauthId={}", oauthId);
+                throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
+            }
+            
+            String clientSecret = appleJwtUtils.generateClientSecret();
+            String formData = String.format(
+                    "client_id=%s&client_secret=%s&token=%s&token_type_hint=refresh_token",
+                    appleProperties.clientId(),
+                    clientSecret,
+                    refreshToken
+            );
+            
+            restClient.post()
+                    .uri(APPLE_TOKEN_URL.replace("/token", "/revoke"))
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                    .body(formData)
+                    .exchange((req, res) -> {
+                        if (!res.getStatusCode().is2xxSuccessful()) {
+                            log.error("애플 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
+                            throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
+                        }
+                        log.info("애플 계정 탈퇴 성공 (리프레시 토큰 사용): oauthId={}", oauthId);
+                        return null;
+                    });
+        } catch (Exception e) {
+            log.error("애플 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
         }
     }
 

@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -32,6 +33,9 @@ public class SocialAccount {
 
     private String oauthId;
 
+    @Column(name = "refresh_token", length = 1000)
+    private String refreshToken;
+
     @Column(name = "is_first")
     private boolean isFirst;
 
@@ -40,20 +44,27 @@ public class SocialAccount {
     private Member member;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private SocialAccount(String email, String provider, String oauthId, boolean isFirst, Member member) {
+    private SocialAccount(String email, String provider, String oauthId, String refreshToken, boolean isFirst, Member member) {
         this.email = email;
         this.provider = provider;
         this.oauthId = oauthId;
+        this.refreshToken = refreshToken;
         this.isFirst = isFirst;
         this.member = member;
     }
 
     public static SocialAccount createSocialAccount(String email, String provider, String oauthId,
                                                     Member member) {
+        return createSocialAccount(email, provider, oauthId, null, member);
+    }
+
+    public static SocialAccount createSocialAccount(String email, String provider, String oauthId,
+                                                    String refreshToken, Member member) {
         return SocialAccount.builder()
                 .email(email)
                 .provider(provider)
                 .oauthId(oauthId)
+                .refreshToken(refreshToken)
                 .isFirst(true)
                 .member(member)
                 .build();
@@ -61,6 +72,19 @@ public class SocialAccount {
 
     public void markNotFirst() {
         this.isFirst = false;
+    }
+
+    public void maskEmail() {
+        this.email = "deleted_user_" + UUID.randomUUID().toString().substring(0, 8) + "@widyu.com";
+    }
+
+    public void maskOauthId() {
+        this.oauthId = "deleted_" + UUID.randomUUID().toString();
+    }
+
+    public void maskPersonalInfo() {
+        maskEmail();
+        maskOauthId();
     }
 }
 

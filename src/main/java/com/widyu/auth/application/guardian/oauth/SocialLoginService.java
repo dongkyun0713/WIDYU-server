@@ -16,7 +16,6 @@ import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
-import com.widyu.global.util.MemberUtil;
 import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberRole;
@@ -29,19 +28,16 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class SocialLoginService {
 
     private final SocialLoginStrategyFactory strategyFactory;
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final TemporaryMemberUtil temporaryMemberUtil;
-    private final MemberUtil memberUtil;
 
     public SocialLoginResponse socialLogin(String providerName, SocialLoginRequest request) {
         log.info("소셜 로그인 시도: provider={}", providerName);
@@ -53,7 +49,10 @@ public class SocialLoginService {
         strategy.validateLoginRequest(request);
 
         // 2. 소셜 제공자에서 사용자 정보 획득
-        SocialClientResponse socialResponse = strategy.getUserInfo(request);
+        SocialClientResponse originalResponse = strategy.getUserInfo(request);
+
+        // 2.5. 프론트에서 전달받은 리프레시 토큰 설정 (네이버 등에서 사용)
+        final SocialClientResponse socialResponse = strategy.enrichWithRefreshToken(originalResponse, request);
 
         // 3. 사용자 정보 후처리
         UserInfo userInfo = strategy.processUserInfo(socialResponse, request);
@@ -118,7 +117,7 @@ public class SocialLoginService {
         member.markSocialAsNotFirst(provider.getValue(), oauthId);
         boolean isFirstLogin = member.getSocialAccount(provider.getValue()).isFirst();
 
-        return createSuccessfulLoginResponse(member, isFirstLogin);
+        return createSuccessfulLoginResponse(member, isFirstLogin, provider.getValue());
     }
 
     private SocialLoginResponse handleNewSocialAccount(OAuthProvider provider,
@@ -132,9 +131,10 @@ public class SocialLoginService {
         }
 
         Member member = createOrUpdateMember(provider, socialResponse, userInfo, existingMember);
+        memberRepository.save(member);
         boolean isFirstLogin = member.getSocialAccount(provider.getValue()).isFirst();
 
-        return createSuccessfulLoginResponse(member, isFirstLogin);
+        return createSuccessfulLoginResponse(member, isFirstLogin, provider.getValue());
     }
 
     private boolean hasOtherSocialAccounts(Member member) {
@@ -169,14 +169,18 @@ public class SocialLoginService {
             return Member.createMember(MemberType.GUARDIAN, userInfo.name(), userInfo.phoneNumber());
         });
 
-        addSocialAccountToMember(member, provider, socialResponse.oauthId(), userInfo.email());
+        addSocialAccountToMember(member, provider, socialResponse.oauthId(), userInfo.email(), socialResponse.refreshToken());
         logMemberCreationOrUpdate(member, provider, userInfo.email());
 
         return member;
     }
 
     private void addSocialAccountToMember(Member member, OAuthProvider provider, String oauthId, String email) {
-        SocialAccount socialAccount = SocialAccount.createSocialAccount(email, provider.getValue(), oauthId, member);
+        addSocialAccountToMember(member, provider, oauthId, email, null);
+    }
+
+    private void addSocialAccountToMember(Member member, OAuthProvider provider, String oauthId, String email, String refreshToken) {
+        SocialAccount socialAccount = SocialAccount.createSocialAccount(email, provider.getValue(), oauthId, refreshToken, member);
         member.getSocialAccounts().add(socialAccount);
     }
 
@@ -219,21 +223,17 @@ public class SocialLoginService {
         return Optional.empty();
     }
 
-    private SocialLoginResponse createSuccessfulLoginResponse(Member member, boolean isFirstLogin) {
-        TokenPairResponse tokenPair = generateTokenPair(member);
+    private SocialLoginResponse createSuccessfulLoginResponse(Member member, boolean isFirstLogin, String currentProvider) {
+        TokenPairResponse tokenPair = generateTokenPair(member, currentProvider);
         UserProfile profile = createUserProfile(member);
 
-        log.info("소셜 로그인 성공: memberId={}, 최초로그인={}", member.getId(), isFirstLogin);
+        log.info("소셜 로그인 성공: memberId={}, 최초로그인={}, provider={}", 
+                member.getId(), isFirstLogin, currentProvider);
         return SocialLoginResponse.of(isFirstLogin, tokenPair.accessToken(), tokenPair.refreshToken(), profile);
     }
 
-    private TokenPairResponse generateTokenPair(Member member) {
-        // 소셜 로그인이므로 첫 번째 소셜 계정의 provider를 loginType으로 사용
-        String loginType = member.getSocialAccounts().stream()
-                .findFirst()
-                .map(account -> account.getProvider())
-                .orElse("unknown");
-        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, loginType);
+    private TokenPairResponse generateTokenPair(Member member, String currentProvider) {
+        return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, currentProvider);
     }
 
     private UserProfile createUserProfile(Member member) {

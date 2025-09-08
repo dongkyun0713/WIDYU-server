@@ -5,9 +5,11 @@ import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
+import com.widyu.auth.dto.response.CurrentMemberResponse;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
@@ -180,8 +182,11 @@ public interface GuardianAuthDocs {
                     프론트엔드에서 발급받은 소셜 액세스 토큰 또는 Apple 인증 정보를 사용하여 로그인합니다.
                     소셜 토큰으로 사용자 정보를 조회한 후, 서비스 토큰 페어(Access/Refresh)를 발급합니다.
                     
-                    • Kakao/Naver: accessToken 필드 사용
+                    • Kakao: accessToken 필드 사용
+                    • Naver: accessToken 및 refreshToken 필드 사용 (회원 탈퇴 시 자동 사용)
                     • Apple: authorizationCode 및 profile 필드 사용
+                      - profile은 최초 로그인 시에만 Apple에서 제공 (이메일, 이름 포함)
+                      - 재로그인 시에는 profile 없이 authorizationCode만 전달
                     """
     )
     @ApiResponse(
@@ -276,15 +281,24 @@ public interface GuardianAuthDocs {
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "소셜 로그인 정보 (Kakao/Naver: accessToken, Apple: authorizationCode + profile)",
+                    description = "소셜 로그인 정보 (Kakao: accessToken, Naver: accessToken + refreshToken, Apple: authorizationCode + profile)",
                     content = @Content(
                             schema = @Schema(implementation = SocialLoginRequest.class),
                             examples = {
                                 @ExampleObject(
-                                        name = "Kakao/Naver 요청",
+                                        name = "Kakao 요청",
                                         value = """
                                                 {
                                                   "accessToken": "AAAA1234567890abcdef..."
+                                                }
+                                                """
+                                ),
+                                @ExampleObject(
+                                        name = "Naver 요청",
+                                        value = """
+                                                {
+                                                  "accessToken": "AAAA1234567890abcdef...",
+                                                  "refreshToken": "BBBB0987654321fedcba..."
                                                 }
                                                 """
                                 ),
@@ -304,11 +318,7 @@ public interface GuardianAuthDocs {
                                         name = "Apple 요청 (재로그인)",
                                         value = """
                                                 {
-                                                  "authorizationCode": "abc123",
-                                                  "profile": {
-                                                    "email": null,
-                                                    "name": null
-                                                  }
+                                                  "authorizationCode": "def456"
                                                 }
                                                 """
                                 )
@@ -630,6 +640,116 @@ public interface GuardianAuthDocs {
                             )
                     )
             ) final SocialIntegrationRequest request
+    );
+
+    @Operation(
+            summary = "현재 회원 정보 조회",
+            description = """
+                    액세스 토큰을 사용하여 현재 로그인된 회원의 정보를 조회합니다.
+                    JWT 토큰이 필요하며, 회원의 기본 정보와 연동된 계정, 부모 보유 여부를 반환합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "회원 정보 조회 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2011",
+                                      "message": "현재 회원 정보 조회 성공",
+                                      "data": {
+                                        "name": "ghdrlfehd",
+                                        "phone": "01012341234",
+                                        "email": "abc@abc.com",
+                                        "providers": ["kakao"],
+                                        "hasParents": true
+                                      }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<CurrentMemberResponse> getCurrentMemberInfo();
+
+    @Operation(
+            summary = "회원 탈퇴",
+            description = """
+                    현재 로그인된 사용자의 계정을 탈퇴처리합니다. 연동된 모든 소셜 계정도 함께 탈퇴됩니다.
+                    카카오의 경우 앱 어드민 키를 사용하므로 액세스 토큰이 불필요합니다.
+                    애플, 네이버의 경우 로그인 시 저장된 리프레시 토큰을 자동으로 사용합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "탈퇴 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2012",
+                                      "message": "회원 탈퇴가 성공적으로 완료되었습니다",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Void> withdrawMember(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "탈퇴 사유 (모든 소셜 계정은 저장된 토큰으로 자동 탈퇴)",
+                    content = @Content(
+                            schema = @Schema(implementation = MemberWithdrawRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "reason": "서비스 불만족"
+                                            }
+                                            """
+                            )
+                    )
+            ) final MemberWithdrawRequest request
     );
 
 }

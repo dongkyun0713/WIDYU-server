@@ -1,6 +1,7 @@
 package com.widyu.auth.application.guardian.oauth.strategy.naver;
 
 import static com.widyu.global.constant.SecurityConstant.NAVER_USER_ME_URL;
+import static com.widyu.global.constant.SecurityConstant.NAVER_WITHDRAW_URL;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
@@ -58,7 +59,8 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
                     naverAuthResponse.response().id(),
                     naverAuthResponse.response().email(),
                     naverAuthResponse.response().name(),
-                    phoneNumber
+                    phoneNumber,
+                    null  // 네이버는 getUserInfo API로 리프레시 토큰을 받을 수 없음
             );
         } catch (Exception e) {
             log.error("네이버 사용자 정보 조회 실패: {}", e.getMessage(), e);
@@ -94,6 +96,36 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
         if (!userInfo.hasName()) {
             log.error("네이버 이름 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
+        }
+    }
+
+    @Override
+    public void withdrawSocialAccount(String refreshToken, String oauthId) {
+        try {
+            log.info("네이버 계정 탈퇴 요청 시작 (리프레시 토큰 사용): oauthId={}", oauthId);
+            
+            if (refreshToken == null || refreshToken.isBlank()) {
+                log.warn("네이버 계정 탈퇴를 위한 리프레시 토큰이 없습니다: oauthId={}", oauthId);
+                throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
+            }
+            
+            restClient.delete()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(NAVER_WITHDRAW_URL)
+                            .queryParam("grant_type", "delete")
+                            .queryParam("refresh_token", refreshToken)
+                            .build())
+                    .exchange((req, res) -> {
+                        if (!res.getStatusCode().is2xxSuccessful()) {
+                            log.error("네이버 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
+                            throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
+                        }
+                        log.info("네이버 계정 탈퇴 성공 (리프레시 토큰 사용): oauthId={}", oauthId);
+                        return null;
+                    });
+        } catch (Exception e) {
+            log.error("네이버 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
         }
     }
 }
