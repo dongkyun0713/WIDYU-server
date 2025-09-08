@@ -10,11 +10,14 @@ public final class SecurityConstant {
     public static final String NAVER_AUTH_URL = "https://nid.naver.com/oauth2.0/authorize";
     public static final String NAVER_TOKEN_URL = "https://nid.naver.com/oauth2.0/token";
     public static final String NAVER_USER_ME_URL = "https://openapi.naver.com/v1/nid/me";
+    public static final String NAVER_WITHDRAW_URL = "https://nid.naver.com/oauth2.0/token";
 
     // kakao
     public static final String KAKAO_AUTH_URL = "https://kauth.kakao.com/oauth/authorize";
     public static final String KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token";
     public static final String KAKAO_USER_ME_URL = "https://kapi.kakao.com/v2/user/me";
+    public static final String KAKAO_WITHDRAW_URL = "https://kapi.kakao.com/v1/user/unlink";
+    public static final String KAKAO_ADMIN_WITHDRAW_URL = "https://kapi.kakao.com/v1/user/unlink";
 
     // apple
     public static final String APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token";

@@ -134,6 +134,37 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
         }
     }
 
+    @Override
+    public void withdrawSocialAccount(String accessToken, String oauthId) {
+        try {
+            log.info("애플 계정 탈퇴 요청 시작: oauthId={}", oauthId);
+            
+            String clientSecret = appleJwtUtils.generateClientSecret();
+            String formData = String.format(
+                    "client_id=%s&client_secret=%s&token=%s&token_type_hint=refresh_token",
+                    appleProperties.clientId(),
+                    clientSecret,
+                    accessToken
+            );
+            
+            restClient.post()
+                    .uri(APPLE_TOKEN_URL.replace("/token", "/revoke"))
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                    .body(formData)
+                    .exchange((req, res) -> {
+                        if (!res.getStatusCode().is2xxSuccessful()) {
+                            log.error("애플 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
+                            throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
+                        }
+                        log.info("애플 계정 탈퇴 성공: oauthId={}", oauthId);
+                        return null;
+                    });
+        } catch (Exception e) {
+            log.error("애플 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
+        }
+    }
+
     private String convertToFormData(AppleTokenRequest request) {
         return String.format(
                 "client_id=%s&client_secret=%s&code=%s&grant_type=%s&redirect_uri=%s",

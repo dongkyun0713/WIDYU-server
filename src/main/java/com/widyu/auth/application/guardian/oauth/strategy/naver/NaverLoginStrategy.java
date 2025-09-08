@@ -1,6 +1,7 @@
 package com.widyu.auth.application.guardian.oauth.strategy.naver;
 
 import static com.widyu.global.constant.SecurityConstant.NAVER_USER_ME_URL;
+import static com.widyu.global.constant.SecurityConstant.NAVER_WITHDRAW_URL;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
@@ -94,6 +95,31 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
         if (!userInfo.hasName()) {
             log.error("네이버 이름 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
+        }
+    }
+
+    @Override
+    public void withdrawSocialAccount(String accessToken, String oauthId) {
+        try {
+            log.info("네이버 계정 탈퇴 요청 시작: oauthId={}", oauthId);
+            
+            restClient.delete()
+                    .uri(uriBuilder -> uriBuilder
+                            .path(NAVER_WITHDRAW_URL)
+                            .queryParam("grant_type", "delete")
+                            .queryParam("access_token", accessToken)
+                            .build())
+                    .exchange((req, res) -> {
+                        if (!res.getStatusCode().is2xxSuccessful()) {
+                            log.error("네이버 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
+                            throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
+                        }
+                        log.info("네이버 계정 탈퇴 성공: oauthId={}", oauthId);
+                        return null;
+                    });
+        } catch (Exception e) {
+            log.error("네이버 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
         }
     }
 }

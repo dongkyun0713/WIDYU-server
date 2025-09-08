@@ -14,6 +14,7 @@ import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.request.RefreshTokenRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
+import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
@@ -44,6 +45,7 @@ public class GuardianAuthService {
     private final TemporaryTokenService temporaryTokenService;
     private final LocalLoginService localLoginService;
     private final SocialLoginService socialLoginService;
+    private final MemberWithdrawService memberWithdrawService;
     private final LogoutService logoutService;
     private final MemberUtil memberUtil;
 
@@ -169,5 +171,10 @@ public class GuardianAuthService {
     @Transactional(readOnly = true)
     public void logout() {
         logoutService.logout();
+    }
+
+    @Transactional
+    public void withdrawMember(MemberWithdrawRequest request) {
+        memberWithdrawService.withdrawMember(request);
     }
 }

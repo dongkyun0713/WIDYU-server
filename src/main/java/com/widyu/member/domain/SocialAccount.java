@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -61,6 +62,19 @@ public class SocialAccount {
 
     public void markNotFirst() {
         this.isFirst = false;
+    }
+
+    public void maskEmail() {
+        this.email = "deleted_user_" + UUID.randomUUID().toString().substring(0, 8) + "@widyu.com";
+    }
+
+    public void maskOauthId() {
+        this.oauthId = "deleted_" + UUID.randomUUID().toString();
+    }
+
+    public void maskPersonalInfo() {
+        maskEmail();
+        maskOauthId();
     }
 }
 

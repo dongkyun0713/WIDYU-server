@@ -30,4 +30,9 @@ public interface SocialLoginStrategy {
      * 사용자 정보 검증 (제공자별 필수 필드가 다름)
      */
     void validateUserInfo(UserInfo userInfo);
+    
+    /**
+     * 소셜 계정 탈퇴 (제공자별 구현)
+     */
+    void withdrawSocialAccount(String accessToken, String oauthId);
 }

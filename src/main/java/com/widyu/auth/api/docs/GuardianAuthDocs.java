@@ -5,6 +5,7 @@ import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.request.SocialIntegrationRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
@@ -681,5 +682,70 @@ public interface GuardianAuthDocs {
             )
     )
     ApiResponseTemplate<CurrentMemberResponse> getCurrentMemberInfo();
+
+    @Operation(
+            summary = "회원 탈퇴",
+            description = """
+                    현재 로그인된 사용자의 계정을 탈퇴처리합니다. 연동된 모든 소셜 계정도 함께 탈퇴됩니다.
+                    카카오의 경우 앱 어드민 키를 사용하므로 액세스 토큰이 불필요합니다.
+                    네이버와 애플의 경우 사용자의 액세스 토큰이 필요합니다.
+                    """
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "탈퇴 성공",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "성공 응답",
+                            value = """
+                                    {
+                                      "code": "AUTH_2012",
+                                      "message": "회원 탈퇴가 성공적으로 완료되었습니다",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "401",
+            description = "인증 실패(토큰 만료/없음/권한 오류)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            name = "토큰 오류",
+                            value = """
+                                    {
+                                      "code": "AUTH_4010",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """
+                    )
+            )
+    )
+    ApiResponseTemplate<Void> withdrawMember(
+            @Valid @RequestBody
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "탈퇴 사유 및 소셜 계정 액세스 토큰 (카카오는 불필요)",
+                    content = @Content(
+                            schema = @Schema(implementation = MemberWithdrawRequest.class),
+                            examples = @ExampleObject(
+                                    name = "요청 예시",
+                                    value = """
+                                            {
+                                              "reason": "서비스 불만족",
+                                              "socialAccessTokens": {
+                                                "naver": "naver_access_token_here",
+                                                "apple": "apple_access_token_here"
+                                              }
+                                            }
+                                            """
+                            )
+                    )
+            ) final MemberWithdrawRequest request
+    );
 
 }
