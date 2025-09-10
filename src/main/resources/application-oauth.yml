@@ -1,0 +1,18 @@
+oauth:
+  state:
+    length: ${OAUTH_STATE_LENGTH:20}
+    ttl: ${OAUTH_STATE_TTL:300}
+  naver:
+    client-id: ${OAUTH_NAVER_CLIENT_ID}
+    client-secret: ${OAUTH_NAVER_CLIENT_SECRET}
+    redirect-uri: ${OAUTH_NAVER_REDIRECT_URI}
+  kakao:
+    client-id: ${OAUTH_KAKAO_CLIENT_ID}
+    redirect-uri: ${OAUTH_KAKAO_REDIRECT_URI}
+    admin-key: ${OAUTH_KAKAO_ADMIN_KEY}
+  apple:
+    client-id: ${OAUTH_APPLE_CLIENT_ID}
+    team-id: ${OAUTH_APPLE_TEAM_ID}
+    key-id: ${OAUTH_APPLE_KEY_ID}
+    private-key: ${OAUTH_APPLE_PRIVATE_KEY}
+    redirect-uri: ${OAUTH_APPLE_REDIRECT_URI}
