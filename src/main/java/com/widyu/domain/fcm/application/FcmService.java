@@ -14,7 +14,7 @@ import com.widyu.domain.fcm.domain.repository.MemberFcmTokenRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

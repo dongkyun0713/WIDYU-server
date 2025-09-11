@@ -1,6 +1,6 @@
 package com.widyu.domain.fcm.domain;
 
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;

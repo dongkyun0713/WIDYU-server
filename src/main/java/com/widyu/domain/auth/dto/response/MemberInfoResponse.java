@@ -1,6 +1,6 @@
 package com.widyu.domain.auth.dto.response;
 
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import lombok.Builder;
 
 @Builder

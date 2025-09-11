@@ -1,6 +1,6 @@
 package com.widyu.domain.pay.api.dto.mapper;
 
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import com.widyu.domain.pay.api.dto.response.PaymentConfirmResponse;
 import com.widyu.domain.pay.domain.Payment;
 import com.widyu.domain.pay.domain.PaymentCard;

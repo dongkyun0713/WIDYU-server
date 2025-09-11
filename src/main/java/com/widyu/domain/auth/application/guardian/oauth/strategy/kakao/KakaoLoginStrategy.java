@@ -6,7 +6,7 @@ import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
 import com.widyu.domain.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.domain.auth.application.guardian.oauth.strategy.UserInfo;
-import com.widyu.domain.auth.domain.OAuthProvider;
+import com.widyu.domain.auth.entity.OAuthProvider;
 import com.widyu.domain.auth.dto.request.SocialLoginRequest;
 import com.widyu.domain.auth.dto.response.KakaoAuthResponse;
 import com.widyu.domain.auth.dto.response.SocialClientResponse;

@@ -1,4 +1,4 @@
-package com.widyu.domain.member.domain;
+package com.widyu.domain.member.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

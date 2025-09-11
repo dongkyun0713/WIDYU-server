@@ -1,6 +1,6 @@
 package com.widyu.domain.auth.application.guardian.oauth.strategy;
 
-import com.widyu.domain.auth.domain.OAuthProvider;
+import com.widyu.domain.auth.entity.OAuthProvider;
 import com.widyu.domain.auth.dto.request.SocialLoginRequest;
 import com.widyu.domain.auth.dto.response.SocialClientResponse;
 

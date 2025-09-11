@@ -1,6 +1,6 @@
 package com.widyu.domain.auth.application.guardian.local;
 
-import com.widyu.domain.auth.domain.TemporaryMember;
+import com.widyu.domain.auth.entity.TemporaryMember;
 import com.widyu.domain.auth.dto.request.ChangePasswordRequest;
 import com.widyu.domain.auth.dto.request.EmailCheckRequest;
 import com.widyu.domain.auth.dto.request.LocalGuardianSignInRequest;
@@ -14,10 +14,10 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.util.TemporaryMemberUtil;
-import com.widyu.domain.member.domain.LocalAccount;
-import com.widyu.domain.member.domain.Member;
-import com.widyu.domain.member.domain.MemberType;
-import com.widyu.domain.member.domain.SocialAccount;
+import com.widyu.domain.member.entity.LocalAccount;
+import com.widyu.domain.member.entity.Member;
+import com.widyu.domain.member.entity.MemberType;
+import com.widyu.domain.member.entity.SocialAccount;
 import com.widyu.domain.member.repository.LocalAccountRepository;
 import com.widyu.domain.member.repository.MemberRepository;
 import jakarta.servlet.http.HttpServletRequest;

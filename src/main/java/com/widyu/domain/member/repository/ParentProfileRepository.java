@@ -1,6 +1,6 @@
 package com.widyu.domain.member.repository;
 
-import com.widyu.domain.member.domain.ParentProfile;
+import com.widyu.domain.member.entity.ParentProfile;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;

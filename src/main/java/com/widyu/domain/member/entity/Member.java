@@ -1,4 +1,4 @@
-package com.widyu.domain.member.domain;
+package com.widyu.domain.member.entity;
 
 import com.widyu.domain.fcm.domain.MemberFcmToken;
 import com.widyu.global.domain.BaseTimeEntity;

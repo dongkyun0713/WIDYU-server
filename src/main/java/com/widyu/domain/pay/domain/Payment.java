@@ -1,6 +1,6 @@
 package com.widyu.domain.pay.domain;
 
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import jakarta.persistence.*;
 import lombok.*;
 

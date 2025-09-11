@@ -1,6 +1,6 @@
 package com.widyu.domain.auth.application;
 
-import com.widyu.domain.auth.domain.VerificationCode;
+import com.widyu.domain.auth.entity.VerificationCode;
 import com.widyu.domain.auth.repository.VerificationCodeRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;

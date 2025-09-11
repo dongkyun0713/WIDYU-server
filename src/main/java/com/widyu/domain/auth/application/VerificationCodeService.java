@@ -1,6 +1,6 @@
 package com.widyu.domain.auth.application;
 
-import com.widyu.domain.auth.domain.TemporaryMember;
+import com.widyu.domain.auth.entity.TemporaryMember;
 import com.widyu.domain.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.domain.auth.repository.TemporaryMemberRepository;
 import com.widyu.domain.auth.repository.VerificationCodeRepository;

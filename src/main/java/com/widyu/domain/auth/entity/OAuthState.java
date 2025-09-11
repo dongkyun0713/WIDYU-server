@@ -1,4 +1,4 @@
-package com.widyu.domain.auth.domain;
+package com.widyu.domain.auth.entity;
 
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -8,22 +8,18 @@ import org.springframework.data.redis.core.RedisHash;
 import org.springframework.data.redis.core.TimeToLive;
 
 @Getter
-@EqualsAndHashCode(of = "memberId")
-@RedisHash(value = "refreshToken")
-public class RefreshToken {
-
+@EqualsAndHashCode(of = "state")
+@RedisHash(value = "oauthState")
+public class OAuthState {
     @Id
-    private Long memberId;
-
-    private final String token;
+    private final String state;
 
     @TimeToLive
     private final long ttl;
 
     @Builder
-    public RefreshToken(final Long memberId, final String token, final long ttl) {
-        this.memberId = memberId;
-        this.token = token;
+    public OAuthState(final String state, final long ttl) {
+        this.state = state;
         this.ttl = ttl;
     }
 }

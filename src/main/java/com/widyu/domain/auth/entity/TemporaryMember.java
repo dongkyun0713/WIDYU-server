@@ -1,4 +1,4 @@
-package com.widyu.domain.auth.domain;
+package com.widyu.domain.auth.entity;
 
 import java.util.UUID;
 import lombok.AccessLevel;

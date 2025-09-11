@@ -1,6 +1,6 @@
 package com.widyu.domain.member.repository;
 
-import com.widyu.domain.member.domain.LocalAccount;
+import com.widyu.domain.member.entity.LocalAccount;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

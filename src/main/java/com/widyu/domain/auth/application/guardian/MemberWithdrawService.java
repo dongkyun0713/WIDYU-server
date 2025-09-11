@@ -2,13 +2,13 @@ package com.widyu.domain.auth.application.guardian;
 
 import com.widyu.domain.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.domain.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
-import com.widyu.domain.auth.domain.OAuthProvider;
+import com.widyu.domain.auth.entity.OAuthProvider;
 import com.widyu.domain.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.domain.member.domain.Member;
-import com.widyu.domain.member.domain.SocialAccount;
+import com.widyu.domain.member.entity.Member;
+import com.widyu.domain.member.entity.SocialAccount;
 import com.widyu.domain.member.repository.MemberRepository;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;

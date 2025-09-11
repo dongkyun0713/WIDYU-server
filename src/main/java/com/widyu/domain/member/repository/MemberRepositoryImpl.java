@@ -4,7 +4,7 @@ import static com.widyu.member.domain.QMember.member;
 import static com.widyu.member.domain.QSocialAccount.socialAccount;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;

@@ -3,7 +3,7 @@ package com.widyu.domain.pay.application;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import com.widyu.domain.pay.api.dto.mapper.PaymentMapper;
 import com.widyu.domain.pay.api.dto.request.CancelRequest;
 import com.widyu.domain.pay.api.dto.request.PaymentConfirmRequest;

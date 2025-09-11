@@ -3,7 +3,7 @@ package com.widyu.domain.fcm.application;
 import com.widyu.domain.fcm.domain.MemberFcmToken;
 import com.widyu.domain.fcm.domain.repository.MemberFcmTokenRepository;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;

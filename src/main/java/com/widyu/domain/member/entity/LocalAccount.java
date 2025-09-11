@@ -1,4 +1,4 @@
-package com.widyu.domain.member.domain;
+package com.widyu.domain.member.entity;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
