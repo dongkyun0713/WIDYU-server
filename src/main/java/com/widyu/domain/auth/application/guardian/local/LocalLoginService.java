@@ -1,0 +1,145 @@
+package com.widyu.domain.auth.application.guardian.local;
+
+import com.widyu.domain.auth.domain.TemporaryMember;
+import com.widyu.domain.auth.dto.request.ChangePasswordRequest;
+import com.widyu.domain.auth.dto.request.EmailCheckRequest;
+import com.widyu.domain.auth.dto.request.LocalGuardianSignInRequest;
+import com.widyu.domain.auth.dto.request.SmsVerificationRequest;
+import com.widyu.domain.auth.dto.response.LocalSignupResponse;
+import com.widyu.domain.auth.dto.response.MemberInfoResponse;
+import com.widyu.domain.auth.dto.response.SignUpUserInfo;
+import com.widyu.domain.auth.dto.response.TokenPairResponse;
+import com.widyu.domain.auth.dto.response.UserProfile;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.util.TemporaryMemberUtil;
+import com.widyu.domain.member.domain.LocalAccount;
+import com.widyu.domain.member.domain.Member;
+import com.widyu.domain.member.domain.MemberType;
+import com.widyu.domain.member.domain.SocialAccount;
+import com.widyu.domain.member.repository.LocalAccountRepository;
+import com.widyu.domain.member.repository.MemberRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class LocalLoginService {
+
+    private final PasswordEncoder passwordEncoder;
+    private final MemberRepository memberRepository;
+    private final LocalAccountRepository localAccountRepository;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final TemporaryMemberUtil temporaryMemberUtil;
+
+    @Transactional
+    public LocalSignupResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
+        if (localAccountRepository.existsByEmail(email)) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_EMAIL);
+        }
+
+        // 전화번호와 이름으로 기존 멤버 찾기
+        Member member = memberRepository.findByPhoneNumberAndName(temp.getPhoneNumber(), temp.getName())
+                .orElseGet(() -> {
+                    // 기존 멤버가 없으면 새로 생성
+                    Member newMember = Member.createMember(
+                            MemberType.GUARDIAN,
+                            temp.getName(),
+                            temp.getPhoneNumber()
+                    );
+                    return memberRepository.save(newMember);
+                });
+
+        // 로컬 계정 생성 및 멤버와 연결
+        LocalAccount local = LocalAccount.createLocalAccount(
+                member,
+                email,
+                passwordEncoder.encode(rawPassword)
+        );
+
+        localAccountRepository.save(local);
+
+        // 토큰 생성
+        TokenPairResponse tokenPair = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
+        
+        // 사용자 프로필 생성
+        SignUpUserInfo profile = SignUpUserInfo.of(member.getName(), member.getPhoneNumber(), email);
+
+        return LocalSignupResponse.ofTokenPair(tokenPair, profile);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isEmailRegistered(EmailCheckRequest request) {
+        return !localAccountRepository.existsByEmail(request.email());
+    }
+
+    @Transactional(readOnly = true)
+    public TokenPairResponse signIn(LocalGuardianSignInRequest request) {
+        LocalAccount localAccount = findLocalAccountByEmail(request.email());
+        validatePassword(request.password(), localAccount.getPassword());
+
+        Member member = localAccount.getMember();
+        return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
+    }
+
+    private LocalAccount findLocalAccountByEmail(String email) {
+        return localAccountRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_EMAIL));
+    }
+
+    private void validatePassword(String rawPassword, String encodedPassword) {
+        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+    }
+
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
+        Member member = memberRepository.findByPhoneNumberAndName(request.phoneNumber(), request.name())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        return MemberInfoResponse.from(member);
+    }
+
+    @Transactional
+    public boolean changePassword(ChangePasswordRequest request, HttpServletRequest httpServletRequest) {
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+
+        String phoneNumber = temporaryMember.getPhoneNumber();
+        String name = temporaryMember.getName();
+
+        Member member = memberRepository.findByPhoneNumberAndName(phoneNumber, name)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        String encodedPw = passwordEncoder.encode(request.password());
+        member.getLocalAccount().changePassword(encodedPw);
+
+        temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
+
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfile getUserProfileByTemporaryToken(HttpServletRequest httpServletRequest) {
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+        Member member = memberRepository.findByPhoneNumberAndName(temporaryMember.getPhoneNumber(), temporaryMember.getName())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+
+        String email = member.getSocialAccounts().stream()
+                .map(SocialAccount::getEmail)
+                .filter(e -> e != null && !e.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        List<String> providers = member.getSocialAccounts().stream()
+                .map(SocialAccount::getProvider)
+                .toList();
+
+
+        return UserProfile.of(member.getName(), member.getPhoneNumber(), email, providers);
+    }
+}
