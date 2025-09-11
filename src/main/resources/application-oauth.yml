@@ -16,3 +16,8 @@ oauth:
     key-id: ${OAUTH_APPLE_KEY_ID}
     private-key: ${OAUTH_APPLE_PRIVATE_KEY}
     redirect-uri: ${OAUTH_APPLE_REDIRECT_URI}
+
+  callback:
+    package-name: ${OAUTH_ANDROID_PACKAGE:com.gbable.care}
+    schemes:
+      apple: ${OAUTH_ANDROID_SCHEME_APPLE:signinwithapple}
