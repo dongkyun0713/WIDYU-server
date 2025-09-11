@@ -7,7 +7,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
-@EnableFeignClients(basePackages = "com.widyu.pay.config")
+@EnableFeignClients(basePackages = "com.widyu.domain.pay.config")
 public class WidyuApplication {
 
     public static void main(String[] args) {

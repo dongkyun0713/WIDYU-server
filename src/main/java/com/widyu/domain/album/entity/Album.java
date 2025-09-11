@@ -105,4 +105,119 @@ public class Album extends BaseTimeEntity {
                 .viewCount(viewCount)
                 .build();
     }
+
+    public void updateContent(String content) {
+        this.content = content;
+    }
+
+    public void incrementLikeCount() {
+        this.likeCount++;
+    }
+
+    public void decrementLikeCount() {
+        if (this.likeCount > 0) {
+            this.likeCount--;
+        }
+    }
+
+    public void incrementCommentCount() {
+        this.commentCount++;
+    }
+
+    public void decrementCommentCount() {
+        if (this.commentCount > 0) {
+            this.commentCount--;
+        }
+    }
+
+    public void incrementViewCount() {
+        this.viewCount++;
+    }
+
+    public void delete() {
+        this.status = Status.DELETED;
+    }
+
+    public boolean isDeleted() {
+        return this.status == Status.DELETED;
+    }
+
+    public boolean hasMedia() {
+        return !mediaUrls.isEmpty();
+    }
+
+    public String getFirstMediaUrl() {
+        return mediaUrls.isEmpty() ? null : mediaUrls.get(0);
+    }
+
+    public boolean hasMultipleMedia() {
+        return mediaUrls.size() > 1;
+    }
+
+    public void addMediaUrl(String mediaUrl) {
+        this.mediaUrls.add(mediaUrl);
+    }
+
+    public void updateMediaUrls(List<String> mediaUrls) {
+        this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>();
+    }
+
+    public List<String> getPhotoUrls() {
+        return mediaUrls.stream()
+                .filter(this::isPhotoUrl)
+                .toList();
+    }
+
+    public List<String> getVideoUrls() {
+        return mediaUrls.stream()
+                .filter(this::isVideoUrl)
+                .toList();
+    }
+
+    public int getPhotoCount() {
+        return (int) mediaUrls.stream().filter(this::isPhotoUrl).count();
+    }
+
+    public int getVideoCount() {
+        return (int) mediaUrls.stream().filter(this::isVideoUrl).count();
+    }
+
+    public int getMediaCount() {
+        return mediaUrls.size();
+    }
+
+    public MediaType getPrimaryMediaType() {
+        if (mediaUrls.isEmpty()) {
+            return null;
+        }
+
+        // 동영상이 하나라도 있으면 VIDEO, 아니면 PHOTO
+        boolean hasVideo = mediaUrls.stream().anyMatch(this::isVideoUrl);
+        return hasVideo ? MediaType.VIDEO : MediaType.PHOTO;
+    }
+    
+    public boolean hasMixedMedia() {
+        boolean hasPhoto = mediaUrls.stream().anyMatch(this::isPhotoUrl);
+        boolean hasVideo = mediaUrls.stream().anyMatch(this::isVideoUrl);
+        return hasPhoto && hasVideo;
+    }
+
+    private boolean isPhotoUrl(String url) {
+        if (url == null) return false;
+        String extension = getFileExtension(url).toLowerCase();
+        return extension.matches("jpg|jpeg|png|gif|webp|bmp|svg");
+    }
+
+    private boolean isVideoUrl(String url) {
+        if (url == null) return false;
+        String extension = getFileExtension(url).toLowerCase();
+        return extension.matches("mp4|mov|avi|mkv|webm|flv|wmv");
+    }
+
+    private String getFileExtension(String url) {
+        if (url == null || !url.contains(".")) {
+            return "";
+        }
+        return url.substring(url.lastIndexOf(".") + 1);
+    }
 }
