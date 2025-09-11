@@ -1,6 +1,6 @@
 package com.widyu.authtest.dto.response;
 
-import com.widyu.member.domain.Member;
+import com.widyu.domain.member.entity.Member;
 import lombok.Builder;
 
 @Builder

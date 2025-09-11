@@ -3,12 +3,12 @@ package com.widyu.global.util;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_ROLE_NAME;
 
-import com.widyu.auth.domain.TokenType;
-import com.widyu.auth.dto.AccessTokenDto;
-import com.widyu.auth.dto.RefreshTokenDto;
-import com.widyu.auth.dto.TemporaryTokenDto;
+import com.widyu.domain.auth.entity.TokenType;
+import com.widyu.domain.auth.dto.AccessTokenDto;
+import com.widyu.domain.auth.dto.RefreshTokenDto;
+import com.widyu.domain.auth.dto.TemporaryTokenDto;
 import com.widyu.global.properties.JwtProperties;
-import com.widyu.member.domain.MemberRole;
+import com.widyu.domain.member.entity.MemberRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jws;

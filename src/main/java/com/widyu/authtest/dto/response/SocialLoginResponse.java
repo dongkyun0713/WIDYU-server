@@ -1,6 +1,6 @@
 package com.widyu.authtest.dto.response;
 
-import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.domain.auth.dto.response.TokenPairResponse;
 
 public record SocialLoginResponse(
         boolean isFirst,

@@ -1,6 +1,6 @@
 package com.widyu.global.security;
 
-import com.widyu.member.domain.MemberRole;
+import com.widyu.domain.member.entity.MemberRole;
 import java.util.Collection;
 import java.util.Collections;
 import lombok.AllArgsConstructor;

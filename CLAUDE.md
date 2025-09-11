@@ -18,13 +18,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture Overview
 
 ### Package Structure
-The project follows a layered architecture organized by domain:
+The project follows a domain-driven design architecture organized by bounded contexts:
 
-- `com.widyu.auth` - Authentication and authorization (main implementation)
+- `com.widyu.domain.auth` - Authentication and authorization with OAuth2 providers
+- `com.widyu.domain.member` - Member/user domain logic and profiles
+- `com.widyu.domain.album` - Album/photo sharing functionality with media management
+- `com.widyu.domain.pay` - Payment processing and transaction management
+- `com.widyu.domain.fcm` - Firebase Cloud Messaging for push notifications
 - `com.widyu.authtest` - OAuth testing utilities for development
-- `com.widyu.member` - Member/user domain logic
-- `com.widyu.pay` - Payment processing
-- `com.widyu.fcm` - Firebase Cloud Messaging
 - `com.widyu.global` - Shared utilities, error handling, and configurations
 
 ### Layer Organization
@@ -49,11 +50,13 @@ Each domain follows this structure:
 - **Coolsms SDK** for SMS messaging
 
 ### Authentication System
-The authentication system supports multiple login methods:
-- **Local authentication** with email/password
-- **Social login** with OAuth2 providers (Naver, Kakao, Apple)
-- **Dual user types**: Parents and Guardians with different flows
-- **JWT-based** access/refresh token pairs
+The authentication system supports multiple login methods with dual user types:
+- **Local authentication** with email/password for Guardians
+- **Social login** with OAuth2 providers (Naver, Kakao, Apple) for Guardians
+- **Invite code authentication** for Parents (code + phone number)
+- **Dual user types**: Parents and Guardians with distinct authentication flows
+- **JWT-based** access/refresh token pairs with automatic account linking
+- **Apple iOS/Android callback** handling with intent URL generation
 
 ### Response Format
 All API responses follow a standardized format using `ApiResponseTemplate`:
@@ -80,25 +83,49 @@ All API responses follow a standardized format using `ApiResponseTemplate`:
 - Separate test configurations and H2 database for testing
 - Controllers implement documentation interfaces for Swagger generation
 
+### Album Domain
+The album domain handles photo/video sharing with sophisticated features:
+- **Multi-media posts** with photos (≤10) and videos (≤3) per album
+- **Feed views**: Latest posts with infinite scroll, monthly grouping, calendar view
+- **Interactive features**: Likes, comments with replies, view tracking
+- **Smart notifications**: Unviewed content alerts for parents
+- **Media management**: File uploads, thumbnails, duration tracking for videos
+
 ### Social Login Flow
 1. **URL Generation**: Generate OAuth provider authorization URLs
-2. **Callback Handling**: Process authorization codes and exchange for tokens
+2. **Callback Handling**: Process authorization codes and exchange for tokens (Apple uses intent URLs for Android)
 3. **Token Management**: Issue internal JWT tokens after successful OAuth
-4. **Profile Integration**: Merge social profile data with internal user accounts
+4. **Profile Integration**: Merge social profile data with internal user accounts (automatic linking by phone/name)
 
 ## Important Notes
 
+### User Type Differences
+- **Guardians**: Can use local/social login, create albums, manage family profiles
+- **Parents**: Use invite codes from guardians, view-only access to albums
+- **Account Linking**: Same phone number + name automatically links local and social accounts
+
+### Album Features (Based on AlbumDocs.md)
+- **Feed Tab (ALBM1)**: Latest posts with infinite scroll
+- **Album Tab (ALBM2)**: Monthly grouping of posts  
+- **Calendar Tab (ALBM3)**: Date-based post viewing with calendar interface
+- **Notifications (NEWS1)**: Smart alerts based on parent viewing patterns
+- **Content Upload**: Multi-step process with photo/video editing capabilities
+
 ### OAuth Development
 - Use `authtest` package controllers for OAuth testing and token generation
-- Social login responses include user profile data with provider information
+- Apple authentication includes iOS/Android callback handling with intent URL generation
 - State parameters are managed via Redis for CSRF protection
+- Enhanced logging in AppleLoginStrategy for debugging token exchange issues
 
-### Database
+### Database Design
 - Uses QueryDSL for complex queries
-- JPA entities follow domain-driven design principles
-- Separate repositories for different bounded contexts
+- Domain-driven design with bounded contexts
+- **Album entities**: Album, AlbumMedia, AlbumComment, AlbumLike, AlbumView with proper relationships
+- **Soft deletion** pattern with Status enum
+- **Invite code sharing**: Parents can share same invite codes (duplicate codes allowed)
 
 ### Security
 - JWT tokens have configurable expiration times
 - Refresh token rotation supported
 - Role-based access control with MemberRole enum
+- Parent authentication uses invite code + phone number verification
