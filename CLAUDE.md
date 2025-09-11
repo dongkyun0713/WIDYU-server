@@ -67,7 +67,7 @@ All API responses follow a standardized format using `ApiResponseTemplate`:
 
 ### Configuration Management
 - **Profile-based configuration**: Available profiles are `local`, `dev`, and `test`
-- **Modular config files**: separate YAML files for different concerns (datasource, security, fcm, pay, redis, coolsms, etc.)
+- **Modular config files**: separate YAML files for different concerns (datasource, security, fcm, pay, redis, coolsms, oauth, imp, etc.)
 - **Environment-specific** settings with sensible defaults
 
 ### Error Handling
