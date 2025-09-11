@@ -48,7 +48,7 @@ public class ParentAuthService {
 
     @Transactional
     public TokenPairResponse parentSignIn(ParentSignInRequest request) {
-        ParentProfile parentProfile = findByInviteCodeOrThrow(request.inviteCode());
+        ParentProfile parentProfile = findByInviteCodeAndPhoneNumber(request.inviteCode(), request.phoneNumber());
         return generateTokenPairForMember(parentProfile.getMember());
     }
 
@@ -132,8 +132,8 @@ public class ParentAuthService {
         parentProfileRepository.saveAll(profiles);
     }
 
-    private ParentProfile findByInviteCodeOrThrow(String inviteCode) {
-        return parentProfileRepository.findByInviteCode(inviteCode)
+    private ParentProfile findByInviteCodeAndPhoneNumber(String inviteCode, String phoneNumber) {
+        return parentProfileRepository.findByInviteCodeAndMemberPhoneNumber(inviteCode, phoneNumber)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND, inviteCode));
     }
 

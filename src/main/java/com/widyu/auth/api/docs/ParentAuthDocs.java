@@ -114,9 +114,9 @@ public interface ParentAuthDocs {
     );
 
     @Operation(
-            summary = "학부모 로그인(초대코드)",
+            summary = "학부모 로그인(초대코드 + 전화번호)",
             description = """
-                    **초대코드(숫자 7자리)**로 로그인하여 Access/Refresh 토큰 페어를 발급합니다.
+                    **초대코드(숫자 7자리)**와 **전화번호(숫자 10~11자리)**로 로그인하여 Access/Refresh 토큰 페어를 발급합니다.
                     이메일/비밀번호 입력은 사용하지 않습니다.
                     """
     )
@@ -161,14 +161,15 @@ public interface ParentAuthDocs {
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "학부모 로그인 정보(초대코드)",
+                    description = "학부모 로그인 정보(초대코드 + 전화번호)",
                     content = @Content(
                             schema = @Schema(implementation = ParentSignInRequest.class),
                             examples = @ExampleObject(
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "inviteCode": "1234567"
+                                              "inviteCode": "1234567",
+                                              "phoneNumber": "01012345678"
                                             }
                                             """
                             )

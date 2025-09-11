@@ -26,7 +26,7 @@ public class ParentAuthController implements ParentAuthDocs {
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2007")
-                .message("로컬 학부모 회원가입이 성공적으로 완료되었습니다.")
+                .message("로컬 부모님 회원가입이 성공적으로 완료되었습니다.")
                 .body(null);
     }
 
@@ -36,7 +36,7 @@ public class ParentAuthController implements ParentAuthDocs {
 
         return ApiResponseTemplate.ok()
                 .code("AUTH_2008")
-                .message("로컬 학부모 로그인 성공")
+                .message("로컬 부모님 로그인 성공")
                 .body(response);
     }
 }
