@@ -6,6 +6,7 @@ import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.util.MemberUtil;
 import com.widyu.member.domain.Member;
 import com.widyu.member.domain.MemberType;
 import com.widyu.member.domain.ParentProfile;
@@ -28,9 +29,12 @@ public class ParentAuthService {
     private final MemberRepository memberRepository;
     private final ParentProfileRepository parentProfileRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final MemberUtil memberUtil;
 
     @Transactional
     public void parentSignUpBulk(List<ParentSignUpRequest> requests) {
+        Member guardian = memberUtil.getCurrentMember();
+
         validateRequestsNotEmpty(requests);
         validateDuplicateCodesInRequest(requests);
         validateCodesNotExistInDb(extractInviteCodes(requests));
@@ -38,7 +42,7 @@ public class ParentAuthService {
         List<Member> members = buildMembersFromRequests(requests);
         saveAllMembers(members);
 
-        List<ParentProfile> profiles = buildProfilesFromRequests(requests, members);
+        List<ParentProfile> profiles = buildProfilesFromRequests(requests, members, guardian);
         saveAllProfiles(profiles);
     }
 
@@ -106,13 +110,14 @@ public class ParentAuthService {
         memberRepository.saveAll(members);
     }
 
-    private List<ParentProfile> buildProfilesFromRequests(List<ParentSignUpRequest> requests, List<Member> members) {
+    private List<ParentProfile> buildProfilesFromRequests(List<ParentSignUpRequest> requests, List<Member> members, Member guardian) {
         List<ParentProfile> profiles = new ArrayList<>(requests.size());
         for (int i = 0; i < requests.size(); i++) {
             ParentSignUpRequest req = requests.get(i);
             Member member = members.get(i);
             ParentProfile profile = ParentProfile.createParentProfile(
                     member,
+                    guardian,
                     req.birthDate(),
                     req.address(),
                     req.detailAddress(),

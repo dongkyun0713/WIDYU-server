@@ -16,7 +16,6 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -49,8 +48,11 @@ public class Member extends BaseTimeEntity {
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SocialAccount> socialAccounts = new ArrayList<>();
 
-    @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ParentProfile> parentProfiles = new ArrayList<>();
+    @OneToOne(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
+    private ParentProfile parentProfile;
+
+    @OneToMany(mappedBy = "guardian", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ParentProfile> guardianParentProfiles = new ArrayList<>();
 
     @OneToMany(mappedBy = "member", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MemberFcmToken> memberFcmTokens = new ArrayList<>();
@@ -104,12 +106,10 @@ public class Member extends BaseTimeEntity {
         this.name = "탈퇴회원";
         this.phoneNumber = null;
         
-        // 로컬 계정 이메일 마스킹
         if (this.localAccount != null) {
             this.localAccount.maskEmail();
         }
         
-        // 모든 소셜 계정 개인정보 마스킹 (이메일, oauthId)
         this.socialAccounts.forEach(SocialAccount::maskPersonalInfo);
     }
 }

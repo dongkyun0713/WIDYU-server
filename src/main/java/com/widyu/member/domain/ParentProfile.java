@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -30,9 +31,13 @@ public class ParentProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "guardian_id", nullable = false)
+    private Member guardian;
 
     @Column(name = "birth_date")
     private String birthDate;
@@ -46,18 +51,20 @@ public class ParentProfile {
     private String inviteCode;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private ParentProfile(Member member, String birthDate, String address, String detailAddress, String inviteCode) {
+    private ParentProfile(Member member, Member guardian, String birthDate, String address, String detailAddress, String inviteCode) {
         this.member = member;
+        this.guardian = guardian;
         this.birthDate = birthDate;
         this.address = address;
         this.detailAddress = detailAddress;
         this.inviteCode = inviteCode;
     }
 
-    public static ParentProfile createParentProfile(final Member member, final String birthDate, final String address,
+    public static ParentProfile createParentProfile(final Member member, final Member guardian, final String birthDate, final String address,
                                                     final String detailAddress, final String inviteCode) {
         return ParentProfile.builder()
                 .member(member)
+                .guardian(guardian)
                 .birthDate(birthDate)
                 .address(address)
                 .detailAddress(detailAddress)

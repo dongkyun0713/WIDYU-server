@@ -18,6 +18,6 @@ oauth:
     redirect-uri: ${OAUTH_APPLE_REDIRECT_URI}
 
   callback:
-    package-name: ${OAUTH_ANDROID_PACKAGE:com.gbable.care}
+    package-name: ${OAUTH_ANDROID_PACKAGE}
     schemes:
-      apple: ${OAUTH_ANDROID_SCHEME_APPLE:signinwithapple}
+      apple: ${OAUTH_ANDROID_SCHEME_APPLE}

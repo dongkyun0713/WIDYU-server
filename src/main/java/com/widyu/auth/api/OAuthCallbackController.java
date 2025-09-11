@@ -7,6 +7,7 @@ import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,11 +18,27 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth/callback")
 public class OAuthCallbackController {
-    
+
     private final OAuthCallbackService oAuthCallbackService;
-    
+
     @GetMapping("/apple")
-    public ApiResponseTemplate<String> appleCallback(
+    public ApiResponseTemplate<String> appleCallbackGet(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String id_token,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) throws IOException {
+
+        String response = oAuthCallbackService.generateAppleCallbackIntentUrl(code, id_token, error);
+
+        return ApiResponseTemplate.ok()
+                .code("CALLBACK_2001")
+                .message("애플 OAuth 콜백 성공")
+                .body(response);
+    }
+
+    @PostMapping("/apple")
+    public ApiResponseTemplate<String> appleCallbackPost(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String id_token,
             @RequestParam(required = false) String state,

@@ -164,8 +164,8 @@ public class GuardianAuthService {
     }
 
     private boolean hasParentProfiles(Member member) {
-        return member.getParentProfiles() != null &&
-                !member.getParentProfiles().isEmpty();
+        return member.getGuardianParentProfiles() != null &&
+                !member.getGuardianParentProfiles().isEmpty();
     }
 
     @Transactional(readOnly = true)

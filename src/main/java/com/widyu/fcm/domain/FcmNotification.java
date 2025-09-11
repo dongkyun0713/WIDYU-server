@@ -1,7 +1,6 @@
 package com.widyu.fcm.domain;
 
 import com.widyu.global.domain.BaseTimeEntity;
-import com.widyu.member.domain.Member;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
