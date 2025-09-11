@@ -1,8 +1,8 @@
 package com.widyu.auth.api;
 
 import com.widyu.auth.application.callback.OAuthCallbackService;
-import com.widyu.global.response.ApiResponseTemplate;
 import io.swagger.v3.oas.annotations.Hidden;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,34 +22,27 @@ public class OAuthCallbackController {
     private final OAuthCallbackService oAuthCallbackService;
 
     @GetMapping("/apple")
-    public ApiResponseTemplate<String> appleCallbackGet(
+    public void appleCallbackGet(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String id_token,
             @RequestParam(required = false) String state,
-            @RequestParam(required = false) String error
+            @RequestParam(required = false) String error,
+            HttpServletResponse httpServletResponse
     ) throws IOException {
 
-        String response = oAuthCallbackService.generateAppleCallbackIntentUrl(code, id_token, error);
+        oAuthCallbackService.generateAppleCallbackIntentUrl(code, id_token, error, httpServletResponse);
 
-        return ApiResponseTemplate.ok()
-                .code("CALLBACK_2001")
-                .message("애플 OAuth 콜백 성공")
-                .body(response);
     }
 
     @PostMapping("/apple")
-    public ApiResponseTemplate<String> appleCallbackPost(
+    public void appleCallbackPost(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String id_token,
             @RequestParam(required = false) String state,
-            @RequestParam(required = false) String error
+            @RequestParam(required = false) String error,
+            HttpServletResponse httpServletResponse
     ) throws IOException {
 
-        String response = oAuthCallbackService.generateAppleCallbackIntentUrl(code, id_token, error);
-
-        return ApiResponseTemplate.ok()
-                .code("CALLBACK_2001")
-                .message("애플 OAuth 콜백 성공")
-                .body(response);
+        oAuthCallbackService.generateAppleCallbackIntentUrl(code, id_token, error, httpServletResponse);
     }
 }

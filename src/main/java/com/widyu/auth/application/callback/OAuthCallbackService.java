@@ -1,6 +1,8 @@
 package com.widyu.auth.application.callback;
 
 import com.widyu.global.properties.CallbackProperties;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +15,7 @@ public class OAuthCallbackService {
 
     private final CallbackProperties callbackProperties;
 
-    public String generateAppleCallbackIntentUrl(String code, String idToken, String error) {
+    public void generateAppleCallbackIntentUrl(String code, String idToken, String error, HttpServletResponse httpServletResponse) throws IOException {
         String queryParams = buildQueryParams(code, idToken, error);
         String intentUrl = String.format("intent://callback?%s#Intent;package=%s;scheme=%s;end",
                 queryParams,
@@ -21,7 +23,7 @@ public class OAuthCallbackService {
                 callbackProperties.schemes().apple());
 
         logCallbackResult(error);
-        return intentUrl;
+        httpServletResponse.sendRedirect(intentUrl);
     }
 
     private String buildQueryParams(String code, String idToken, String error) {
