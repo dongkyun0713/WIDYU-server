@@ -1,11 +1,11 @@
 package com.widyu.global.util;
 
-import com.widyu.auth.dto.TemporaryTokenDto;
-import com.widyu.auth.domain.TemporaryMember;
-import com.widyu.auth.repository.TemporaryMemberRepository;
+import com.widyu.domain.auth.dto.TemporaryTokenDto;
+import com.widyu.domain.auth.entity.TemporaryMember;
+import com.widyu.domain.auth.repository.TemporaryMemberRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
-import com.widyu.member.domain.MemberRole;
+import com.widyu.domain.member.entity.MemberRole;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;

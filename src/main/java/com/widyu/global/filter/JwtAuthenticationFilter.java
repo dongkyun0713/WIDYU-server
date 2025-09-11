@@ -2,10 +2,10 @@ package com.widyu.global.filter;
 
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
-import com.widyu.auth.dto.AccessTokenDto;
+import com.widyu.domain.auth.dto.AccessTokenDto;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
-import com.widyu.member.domain.MemberRole;
+import com.widyu.domain.member.entity.MemberRole;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

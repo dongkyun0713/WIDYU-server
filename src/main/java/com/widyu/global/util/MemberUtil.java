@@ -2,8 +2,8 @@ package com.widyu.global.util;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
-import com.widyu.member.domain.Member;
-import com.widyu.member.repository.MemberRepository;
+import com.widyu.domain.member.entity.Member;
+import com.widyu.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
