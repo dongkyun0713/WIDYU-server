@@ -7,8 +7,6 @@ import jakarta.validation.constraints.Size;
 public record LocalGuardianSignupRequest(
 
         @NotBlank(message = "이메일은 필수입니다")
-        @Size(min = 6, max = 12, message = "이메일은 6~12자 사이여야 합니다")
-        @Pattern(regexp = "^[a-zA-Z0-9]+$", message = "이메일은 영문과 숫자만 사용 가능합니다")
         String email,
 
         @NotBlank(message = "비밀번호는 필수입니다")
