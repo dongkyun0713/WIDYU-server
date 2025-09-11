@@ -106,12 +106,10 @@ public class Member extends BaseTimeEntity {
         this.name = "탈퇴회원";
         this.phoneNumber = null;
         
-        // 로컬 계정 이메일 마스킹
         if (this.localAccount != null) {
             this.localAccount.maskEmail();
         }
         
-        // 모든 소셜 계정 개인정보 마스킹 (이메일, oauthId)
         this.socialAccounts.forEach(SocialAccount::maskPersonalInfo);
     }
 }
