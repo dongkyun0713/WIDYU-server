@@ -1,8 +1,7 @@
 package com.widyu.domain.member.repository;
 
-import static com.widyu.member.domain.QMember.member;
-import static com.widyu.member.domain.QSocialAccount.socialAccount;
-
+import static com.widyu.domain.member.entity.QMember.member;
+import static com.widyu.domain.member.entity.QSocialAccount.socialAccount;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.domain.member.entity.Member;
 import java.util.Optional;

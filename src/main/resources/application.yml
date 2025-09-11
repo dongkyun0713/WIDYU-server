@@ -5,6 +5,7 @@ spring:
     group:
       local: "local, datasource, fcm, pay"
       dev: "dev, datasource, fcm, pay"
+      test: "test, fcm, pay"
 
     include:
       - security
