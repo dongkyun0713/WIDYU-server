@@ -13,12 +13,7 @@ import com.widyu.member.domain.ParentProfile;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.ParentProfileRepository;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,8 +31,6 @@ public class ParentAuthService {
         Member guardian = memberUtil.getCurrentMember();
 
         validateRequestsNotEmpty(requests);
-        validateDuplicateCodesInRequest(requests);
-        validateCodesNotExistInDb(extractInviteCodes(requests));
 
         List<Member> members = buildMembersFromRequests(requests);
         saveAllMembers(members);
@@ -58,43 +51,6 @@ public class ParentAuthService {
         }
     }
 
-    private void validateDuplicateCodesInRequest(List<ParentSignUpRequest> requests) {
-        Map<String, Long> counts = requests.stream()
-                .map(ParentSignUpRequest::inviteCode)
-                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        List<String> dupInRequest = counts.entrySet().stream()
-                .filter(e -> e.getValue() > 1)
-                .map(Map.Entry::getKey)
-                .toList();
-
-        if (!dupInRequest.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.INVITE_CODE_DUPLICATED_IN_REQUEST,
-                    "" + dupInRequest
-            );
-        }
-    }
-
-    private void validateCodesNotExistInDb(Set<String> inviteCodes) {
-        List<ParentProfile> existing = parentProfileRepository.findAllByInviteCodeIn(inviteCodes);
-        if (!existing.isEmpty()) {
-            List<String> dupInDb = existing.stream()
-                    .map(ParentProfile::getInviteCode)
-                    .distinct()
-                    .toList();
-            throw new BusinessException(
-                    ErrorCode.INVITE_CODE_DUPLICATED,
-                    "" + dupInDb
-            );
-        }
-    }
-
-    private Set<String> extractInviteCodes(List<ParentSignUpRequest> requests) {
-        return requests.stream()
-                .map(ParentSignUpRequest::inviteCode)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
 
     private List<Member> buildMembersFromRequests(List<ParentSignUpRequest> requests) {
         return requests.stream()

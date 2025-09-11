@@ -19,11 +19,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 public interface ParentAuthDocs {
 
     @Operation(
-            summary = "학부모 회원가입(배치) - 초대코드",
+            summary = "학부모 회원가입 - 초대코드",
             description = """
                     보호자가 발급한 **초대코드(숫자 7자리)**로 학부모 계정을 **여러 명 한 번에** 생성합니다.
                     각 항목은 이름/생년월일(YYYYMMDD)/전화번호/주소/상세주소(선택)/초대코드를 포함합니다.
-                    요청 리스트 내 중복 초대코드 또는 DB에 이미 존재하는 초대코드는 거절됩니다.
                     """
     )
     @ApiResponse(
@@ -45,34 +44,15 @@ public interface ParentAuthDocs {
     )
     @ApiResponse(
             responseCode = "400",
-            description = "요청 내 중복 초대코드 혹은 잘못된 요청",
-            content = @Content(
-                    schema = @Schema(implementation = ApiResponseTemplate.class),
-                    examples = {
-                            @ExampleObject(
-                                    name = "요청 내 중복 초대코드",
-                                    value = """
-                                            {
-                                              "code": "REQ_4000",
-                                              "message": "잘못된 요청입니다. : 요청 내 중복 초대코드=[\\"1234567\\"]",
-                                              "data": null
-                                            }
-                                            """
-                            )
-                    }
-            )
-    )
-    @ApiResponse(
-            responseCode = "400",
-            description = "DB에 이미 존재하는 초대코드",
+            description = "잘못된 요청",
             content = @Content(
                     schema = @Schema(implementation = ApiResponseTemplate.class),
                     examples = @ExampleObject(
-                            name = "DB 중복 초대코드",
+                            name = "빈 요청 리스트",
                             value = """
                                     {
                                       "code": "REQ_4000",
-                                      "message": "잘못된 요청입니다. : 기존에 존재하는 초대코드=[\\"7654321\\"]",
+                                      "message": "잘못된 요청입니다. : 요청 리스트가 비어 있습니다.",
                                       "data": null
                                     }
                                     """
