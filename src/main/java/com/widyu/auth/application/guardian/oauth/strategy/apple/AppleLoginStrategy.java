@@ -54,6 +54,7 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
             String clientSecret = appleJwtUtils.generateClientSecret();
             AppleTokenResponse tokenResponse = exchangeCodeForTokens(request.authorizationCode(), clientSecret);
             AppleIdTokenPayload idTokenPayload = parseIdToken(tokenResponse.idToken());
+            log.info("애플 사용자 정보 조회 성공: oauthId={}", idTokenPayload.subject());
 
             return SocialClientResponse.of(
                     idTokenPayload.subject(),
@@ -139,12 +140,12 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
     public void withdrawSocialAccount(String refreshToken, String oauthId) {
         try {
             log.info("애플 계정 탈퇴 요청 시작 (리프레시 토큰 사용): oauthId={}", oauthId);
-            
+
             if (refreshToken == null || refreshToken.isBlank()) {
                 log.warn("애플 계정 탈퇴를 위한 리프레시 토큰이 없습니다: oauthId={}", oauthId);
                 throw new BusinessException(ErrorCode.APPLE_WITHDRAW_ERROR);
             }
-            
+
             String clientSecret = appleJwtUtils.generateClientSecret();
             String formData = String.format(
                     "client_id=%s&client_secret=%s&token=%s&token_type_hint=refresh_token",
@@ -152,7 +153,7 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
                     clientSecret,
                     refreshToken
             );
-            
+
             restClient.post()
                     .uri(APPLE_TOKEN_URL.replace("/token", "/revoke"))
                     .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
