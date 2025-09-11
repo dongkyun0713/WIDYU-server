@@ -101,6 +101,10 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
     }
 
     private AppleTokenResponse exchangeCodeForTokens(String authorizationCode, String clientSecret) {
+        log.info("애플 토큰 교환 시작: clientId={}, redirectUri={}, codeLength={}", 
+                appleProperties.clientId(), appleProperties.redirectUri(), 
+                authorizationCode != null ? authorizationCode.length() : 0);
+        
         AppleTokenRequest tokenRequest = AppleTokenRequest.of(
                 appleProperties.clientId(),
                 clientSecret,
@@ -108,16 +112,40 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
                 appleProperties.redirectUri()
         );
 
+        String formData = convertToFormData(tokenRequest);
+        log.debug("애플 토큰 요청 데이터: {}", formData);
+
         return restClient.post()
                 .uri(APPLE_TOKEN_URL)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-                .body(convertToFormData(tokenRequest))
+                .body(formData)
                 .exchange((req, res) -> {
+                    log.info("애플 토큰 응답: 상태코드={}, 헤더={}", 
+                            res.getStatusCode(), res.getHeaders());
+                    
                     if (!res.getStatusCode().is2xxSuccessful()) {
-                        log.error("애플 토큰 교환 실패, 상태 코드: {}", res.getStatusCode());
+                        String responseBody = "";
+                        try {
+                            responseBody = new String(res.getBody().readAllBytes());
+                            log.error("애플 토큰 교환 실패 - 상태코드: {}, 응답본문: {}", 
+                                    res.getStatusCode(), responseBody);
+                        } catch (Exception e) {
+                            log.error("애플 토큰 교환 실패 - 상태코드: {}, 응답본문 읽기 실패: {}", 
+                                    res.getStatusCode(), e.getMessage());
+                        }
                         throw new BusinessException(ErrorCode.APPLE_COMMUNICATION_ERROR);
                     }
-                    return Objects.requireNonNull(res.bodyTo(AppleTokenResponse.class));
+                    
+                    try {
+                        AppleTokenResponse response = Objects.requireNonNull(res.bodyTo(AppleTokenResponse.class));
+                        log.info("애플 토큰 교환 성공: accessToken={}, idTokenLength={}", 
+                                response.accessToken() != null ? "존재" : "없음",
+                                response.idToken() != null ? response.idToken().length() : 0);
+                        return response;
+                    } catch (Exception e) {
+                        log.error("애플 토큰 응답 파싱 실패: {}", e.getMessage(), e);
+                        throw new BusinessException(ErrorCode.APPLE_TOKEN_RESPONSE_INVALID);
+                    }
                 });
     }
 
