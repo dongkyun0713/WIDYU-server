@@ -100,10 +100,6 @@ jobs:
             nginx/ \
             ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/nginx/
 
-          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
-            .well-known/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/.well-known/
-
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             scripts/ \
             ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/scripts/
@@ -111,6 +107,10 @@ jobs:
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             admin/dist/ \
             ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/admin/dist/
+
+          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
+            .well-known/ \
+            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/admin/dist/.well-known/
 
           # rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
           #   monitoring/ \
