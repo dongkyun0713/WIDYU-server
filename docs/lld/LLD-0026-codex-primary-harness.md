@@ -14,7 +14,7 @@ Codex가 설계부터 구현·검증·리뷰까지 수행할 수 있도록 Claud
 
 ## 2. 범위
 
-루트/backend/admin 지침, 공통 스킬 5개, .codex/config.toml, 검증 및 Codex 훅 어댑터, 하네스 회귀 테스트·CI, 운영 가이드가 대상이다. 파일 수는 많지만 지침 이동과 실행 경로 연결이 하나의 목적이므로 함께 검토한다. 애플리케이션 동작, 개인 설정, 세션 기록, 배포 설정은 변경하지 않는다.
+루트/backend/admin AGENTS.md 추가, 공통 스킬 5개 보강, .codex/config.toml, 검증 및 Codex 훅 어댑터, 하네스 회귀 테스트·CI, 운영 가이드가 대상이다. 파일 수는 많지만 지침과 실행 경로 연결이 하나의 목적이므로 함께 검토한다. 기존 루트/backend/admin CLAUDE.md의 내용은 보존한다. 애플리케이션 동작, 개인 설정, 세션 기록, 배포 설정은 변경하지 않는다.
 
 ## 3. 인터페이스 / API
 
@@ -42,8 +42,8 @@ DB 변경 없음. Git의 NUL 구분 경로 목록을 사용한다. Codex 브랜�
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] 루트/backend/admin AGENTS.md만으로 공통·영역별 규칙을 읽을 수 있고 Claude 진입점은 이를 참조한다.
-- [x] 기존 스킬의 Claude 구현 전제·강제 LLD 중단·중복 승인·미커밋 diff 누락을 해소한다.
+- [x] Codex는 루트/backend/admin AGENTS.md에서 공통·영역별 규칙을 읽고, 기존 CLAUDE.md 상세 내용은 삭제·축약 없이 유지한다.
+- [x] 기존 스킬의 LLD·ERD 확인, 구현·테스트 규칙, 리뷰 체크리스트를 보존하면서 Codex 기본 구현과 정확한 diff 범위를 지원한다.
 - [x] staged/unstaged/untracked, 공백 경로, 삭제, rename, 명시 base의 커밋된 변경을 감지한다.
 - [x] domain 변경은 API 테스트까지 선택하고 문서만 변경하면 Gradle을 실행하지 않는다.
 - [x] 잘못된 ref, 규칙 위반, 테스트 명령 실패가 비영으로 반환된다.
@@ -55,7 +55,7 @@ DB 변경 없음. Git의 NUL 구분 경로 목록을 사용한다. Codex 브랜�
 
 ## 8. 영향 범위 / 마이그레이션
 
-새 Codex 세션에서 프로젝트 설정을 로드하고 /hooks에서 새 훅을 검토·신뢰한다. 세션 최초 apply_patch에서 현재 작업을 확인하고 필요하면 안내된 `.codex/state` ack를 생성한다. 기존 Figma MCP 환경변수 이름은 그대로 유지한다. Claude의 공유 설정과 스크립트는 호환 경로로 유지한다. 애플리케이션/DB 배포는 없다.
+새 Codex 세션에서 프로젝트 설정을 로드하고 /hooks에서 새 훅을 검토·신뢰한다. 세션 최초 apply_patch에서 현재 작업을 확인하고 필요하면 안내된 `.codex/state` ack를 생성한다. 기존 Figma MCP 환경변수 이름은 그대로 유지한다. Claude의 CLAUDE.md, 공유 설정과 스크립트는 그대로 유지한다. 애플리케이션/DB 배포는 없다.
 
 ## 9. 미결정 사항 (Open Questions)
 

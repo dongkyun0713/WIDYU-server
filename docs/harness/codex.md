@@ -12,10 +12,10 @@ Codex가 기본 구현 에이전트다. 기존 ADR → LLD → 테스트 시나�
 | [.agents/skills](../../.agents/skills) | issue / implement / review / commit / pr의 원본 |
 | [.codex/config.toml](../../.codex/config.toml) | Codex 훅과 Figma MCP 연결 |
 | [scripts/harness](../../scripts/harness) | 공통 검사와 Codex/Claude 어댑터 |
-| CLAUDE.md, backend/CLAUDE.md, admin/CLAUDE.md | 같은 디렉터리 AGENTS.md를 import하는 Claude 호환 진입점 |
+| CLAUDE.md, backend/CLAUDE.md, admin/CLAUDE.md | 기존 상세 내용을 보존한 Claude 전용 지침 |
 | .claude/settings.json | 기존 Claude 전용 권한·훅 설정 |
 
-AGENTS.md는 루트에서 현재 작업 디렉터리까지 계층적으로 발견된다. 루트 세션이 backend/admin으로 작업 범위를 넓히면 해당 AGENTS.md를 직접 읽도록 루트에도 명시했다. 기본 문서 한도 32 KiB 안에서 유지하며 CLAUDE.md fallback이나 전역 설정 변경은 필요 없다. [공식 지침 탐색 문서](https://developers.openai.com/codex/guides/agents-md/)
+AGENTS.md는 루트에서 현재 작업 디렉터리까지 계층적으로 발견된다. 루트 세션이 backend/admin으로 작업 범위를 넓히면 해당 AGENTS.md를 직접 읽도록 루트에도 명시했다. 기존 CLAUDE.md는 Codex fallback으로 등록하지 않고 Claude가 계속 직접 사용한다. 기본 Codex 문서 한도 32 KiB 안에서 AGENTS.md 계층을 유지한다. 공통 도메인 규칙을 변경할 때는 해당 CLAUDE.md와 AGENTS.md를 함께 검토한다. [공식 지침 탐색 문서](https://developers.openai.com/codex/guides/agents-md/)
 
 ## 시작하기
 
@@ -71,18 +71,19 @@ python3 scripts/harness/test-pre-edit-branch-guard.py
 | 기존 항목 | 처리 |
 | --- | --- |
 | settings.json의 deny/ask와 PreToolUse/PostToolUse/Stop | Claude 전용 설정 유지. 공통 명령 가드·Java 검사 재사용 |
+| 루트/backend/admin CLAUDE.md | 기존 프로젝트·도메인·테스트·압축 지침을 삭제하거나 축약하지 않고 유지 |
 | settings.local.json의 개인 allow, MCP 활성 목록 | 개인 설정 유지, 공유 config에 일괄 복사하지 않음 |
 | skills 심링크 | 공통 원본 .agents/skills 유지. Claude가 필요하면 install-hooks.sh 실행 |
 | RESUME.md·checkpoint ref | 과거 Claude 세션용. 새 Codex 작업의 근거로 자동 주입하지 않음 |
 | audit/·state/·stdin-samples/·suggestions/ | Claude 로그·테스트 입력·검수 산출물로 유지. 개인 데이터 원문을 공유 문서로 옮기지 않음 |
 | .codex-review-off | 기존 Claude Stop의 중첩 Codex 리뷰 비활성 표시. 새 Codex 검사와 무관 |
 | issue | 기존 작업 확인 후 최신 develop 기준 별도 worktree 지원, 원본 GitHub 저장소 명시 |
-| implement | Claude 대체 수단에서 기본 구현 절차로 전환, LLD 작성 기준·예외와 정합성 확보 |
-| review | 작성 에이전트와 무관한 검수, staged/untracked/커밋 범위 및 조건부 도메인 기준 |
+| implement | 기존 LLD·ERD 확인, 구현·테스트 규칙을 유지하고 Codex 기본 구현·검증 절차를 추가 |
+| review | 기존 체크리스트와 보고 형식을 유지하고 작성 에이전트 중립성, staged/untracked/커밋 범위를 추가 |
 | commit | 요청 범위에서 실행, 하네스 변경 파일 포함, 기존 staged 사용자 변경 보존 |
 | pr | LLD 또는 N/A 사유, 실제 diff·검증 증거, fork head/base 및 기존 PR 갱신 |
 
-Claude를 다시 사용할 때는 `bash scripts/harness/install-hooks.sh`로 스킬 링크를 준비한다. Claude Stop은 기존 정적 검사·컴파일·선택적 Codex 리뷰를 수행하며 전체 모듈 테스트 완료를 보장하지 않는다. Codex 기본 경로에서는 이 Stop 스크립트나 codex-review.sh를 자동 호출하지 않는다. 개인 Codex 재개 기록은 gitignore된 `.codex/RESUME.md`를 사용할 수 있다.
+Claude는 기존 CLAUDE.md 상세 지침을 그대로 읽는다. 필요하면 `bash scripts/harness/install-hooks.sh`로 스킬 링크를 준비한다. Claude Stop은 기존 정적 검사·컴파일·선택적 Codex 리뷰를 수행하며 전체 모듈 테스트 완료를 보장하지 않는다. Codex 기본 경로에서는 이 Stop 스크립트나 codex-review.sh를 자동 호출하지 않는다. 개인 Codex 재개 기록은 gitignore된 `.codex/RESUME.md`를 사용할 수 있다.
 
 ## 참고한 문서와 공개 사례
 
