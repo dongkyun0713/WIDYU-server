@@ -81,3 +81,8 @@ ai-test.http
 websocket-test.html
 **/src/test/resources/video/test_300mb.mp4
 DEV_TEST_ACCOUNTS.md
+
+# Codex: 팀 설정만 공유, 개인 작업 재개 기록·런타임 산출물 제외
+.codex/*
+!.codex/config.toml
+__pycache__/

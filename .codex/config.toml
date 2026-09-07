@@ -1,0 +1,25 @@
+# 공통 설정. 모델·권한·신뢰는 개인 Codex 설정에서 선택한다.
+# 새 세션의 /hooks에서 훅 정의를 검토·신뢰한다. docs/harness/codex.md 참조.
+[features]
+hooks = true
+
+[[hooks.PreToolUse]]
+matcher = "^(Bash|apply_patch)$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/scripts/harness/codex-hooks.py"'
+timeout = 30
+statusMessage = "WIDYU 명령·브랜치 확인"
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/scripts/harness/codex-hooks.py"'
+timeout = 60
+statusMessage = "WIDYU Java 정적 검사"
+
+[mcp_servers.figma]
+url = "https://figma-mcp.widyu.store/mcp"
+env_http_headers = { Authorization = "FIGMA_MCP_AUTHORIZATION", "X-Figma-Token" = "FIGMA_PAT" }

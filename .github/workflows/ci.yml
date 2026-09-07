@@ -11,6 +11,36 @@ on:
       - refactor/*
 
 jobs:
+  harness:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Harness regression tests
+        run: |
+          python3 -m unittest discover -s scripts/harness -p 'test_*.py'
+          python3 scripts/harness/test-pre-bash-guard.py
+          python3 scripts/harness/test-pre-edit-branch-guard.py
+      - name: Java rules for changed lines
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            harness_base="$(git merge-base "$PR_BASE_SHA" HEAD)"
+          elif [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            harness_base="$BEFORE_SHA"
+          else
+            harness_base="$(git merge-base origin/develop HEAD)"
+          fi
+          bash scripts/harness/verify.sh --static-only --base "$harness_base"
+
   build-and-test:
     runs-on: ubuntu-latest
 
@@ -42,9 +72,9 @@ jobs:
       - name: Grant execute permission for Gradlew
         run: chmod +x gradlew
 
-      # 4️⃣ 빌드 & 테스트 (API 모듈만)
-      - name: Build & Run Tests (API module only)
-        run: ./gradlew :backend:widyu-api:clean :backend:widyu-api:test --no-daemon
+      # 도메인과 API 소비자를 함께 검증한다.
+      - name: Build & Run Tests (domain and API)
+        run: ./gradlew :backend:widyu-api:clean :backend:widyu-domain:test :backend:widyu-api:test --no-daemon
 
       # 5️⃣ 테스트 결과 아티팩트 업로드 (항상 실행)
       - name: Upload Test Report
@@ -52,7 +82,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: backend/widyu-api/build/reports/tests/test
+          path: |
+            backend/widyu-api/build/reports/tests/test
+            backend/widyu-domain/build/reports/tests/test
 
   build-admin:
     runs-on: ubuntu-latest

@@ -1,60 +1,70 @@
-# Repository Guidelines
+# WIDYU 작업 지침
 
-## Project Overview
+WIDYU는 시니어와 보호자가 사진·영상을 공유하는 플랫폼이다. 포인트 결제, 실시간 위치, 건강 목표를 포함한다. Java 21 / Spring Boot 3.3.5 / MySQL / Redis를 사용한다. Codex를 기본 구현 에이전트로 사용한다.
 
-WIDYU는 시니어(부모)와 보호자(자녀·가족)가 사진·영상을 공유하는 Spring Boot 플랫폼.
-포인트 기반 프리미엄 콘텐츠, WebSocket 실시간 위치 추적, 건강 목표 관리 포함.
+## 지침 지도
 
-## 하네스 엔지니어링 워크플로
+- 공통 규칙의 원본은 이 파일이다. `CLAUDE.md`는 Claude 호환 진입점이다.
+- **backend 수정 전 [backend/AGENTS.md](backend/AGENTS.md)**, **admin 수정 전 [admin/AGENTS.md](admin/AGENTS.md)**를 읽는다. 루트에서 시작한 세션이 하위 지침을 모두 자동 로드한다고 가정하지 않는다.
+- 관련 [ADR](docs/adr/README.md), [LLD](docs/lld/README.md), [ERD](docs/erd/ERD-0001-initial-domain.md)를 필요한 범위만 읽는다.
+- 하네스 설정·검증·Claude 호환 동작은 [운영 가이드](docs/harness/codex.md)를 읽는다.
+- 사용자 요청이 저장소 지침·스킬보다 우선한다. 적용 경로의 더 구체적인 지침을 따른다.
 
-이 프로젝트는 하네스 엔지니어링 방식으로 개발한다.
-공통 상세 규칙은 `CLAUDE.md`와 `backend/CLAUDE.md`를 기준으로 삼고, 이 문서는 Codex가 따라야 할 추가 워크플로만 정리한다.
+## 작업 흐름
 
-```
-Team Discussion → ADR → LLD → Test Scenario → Code Generation → Human Review → PR/CI/Deploy
-```
+`Team Discussion → ADR → LLD → Test Scenario → Implementation → Review → PR/CI/Deploy`
 
-- 기술적 선택은 ADR(`docs/adr/`)에 남긴다. 선택한 방법 + 대안 + 트레이드오프 + 후속 리스크 포함.
-- ADR이 방향을 정하면 LLD(`docs/lld/`)에서 구현 단위를 설계한다.
-- LLD의 인수조건이 테스트 시나리오가 된다. 이 시나리오 기준으로 코드를 생성한다.
-- LLD는 PR 본문의 오라클이다. LLD에 없는 내용은 PR 본문에 쓰지 않는다.
+1. `git status --short --branch`, 현재 diff, 관련 이슈·설계를 확인한다. 기존 사용자 변경을 보존한다.
+2. 새 개발 작업은 [issue 스킬](.agents/skills/issue/SKILL.md)로 관련 이슈와 작업 브랜치를 준비한다. 이미 해당 이슈의 브랜치에서 이어가는 작업은 재생성하지 않는다. main/master/develop에서 직접 수정하지 않는다. 다른 작업의 미커밋 변경이 있으면 별도 worktree를 사용한다.
+3. 변경 범위와 검증 가능한 완료 조건을 정하고 [implement 스킬](.agents/skills/implement/SKILL.md)을 따른다. ADR/LLD 필요 여부는 각각의 README 기준을 따른다. 필요한 문서는 직접 초안을 작성한다. 작은 변경에는 LLD N/A 사유를 남길 수 있다.
+4. 합의된 범위 안의 구현·테스트·수정은 계속 진행한다. 미결정 항목 중 정책·API 계약처럼 사용자 결정이 필요한 것만 질문하고 독립 작업은 진행한다.
+5. `bash scripts/harness/verify.sh`로 검사하고 [review 스킬](.agents/skills/review/SKILL.md)로 인수조건을 검수한다. 이미 실행한 동일 범위의 검증은 불필요하게 반복하지 않는다.
+6. 커밋 요청이 포함되면 [commit 스킬](.agents/skills/commit/SKILL.md), PR 생성·갱신 요청이면 [pr 스킬](.agents/skills/pr/SKILL.md)을 적용한다. 이미 받은 권한을 다시 묻지 않는다. 머지·배포는 별도 요청 범위에 따른다.
 
-## Multi-Module Structure
+## 구조와 명령
 
-- `widyu-api`: 컨트롤러, 서비스, 리포지토리, 설정 (`com.widyu.WidyuApiApplication`)
-- `widyu-domain`: JPA 엔티티, QueryDSL Q-클래스 (bootJar 비활성)
+- `backend/widyu-domain`: JPA/Redis 엔티티와 QueryDSL Q 클래스, 라이브러리 JAR.
+- `backend/widyu-api`: Controller / Service / Facade / Repository / 설정, 진입점 `com.widyu.WidyuApiApplication`.
+- `admin`: 별도 React + TypeScript SPA.
+- 도메인 패키지는 `controller/docs`, `application`, `repository`, `dto/request`, `dto/response`, `validator`로 나눈다.
 
-핵심 규칙: 엔티티 → `widyu-domain`, 리포지토리/서비스/컨트롤러 → `widyu-api`
+저장소 루트에서 실행한다.
 
-## Build & Test Commands
+| 목적 | 명령 |
+| --- | --- |
+| 변경 범위 검증 | `bash scripts/harness/verify.sh` |
+| 브랜치 전체 검증 | `bash scripts/harness/verify.sh --base "$(git merge-base origin/develop HEAD)"` |
+| 정적 검사만 | `bash scripts/harness/verify.sh --static-only` |
+| API 테스트 | `./gradlew :backend:widyu-api:test` |
+| Domain + API 테스트 | `bash scripts/harness/run-module-tests.sh domain` |
+| 단일 테스트 | `./gradlew :backend:widyu-api:test --tests 'com.widyu.<패키지>.<테스트클래스>'` |
+| Q 클래스 재생성 | `./gradlew compileJava` (엔티티 변경 시 필수) |
+| 로컬 실행 | `./gradlew :backend:widyu-api:bootRun --args='--spring.profiles.active=local'` |
+| 전체 빌드 | `./gradlew build` |
+| 하네스 회귀 검사 | `python3 -m unittest discover -s scripts/harness -p 'test_*.py'` |
 
-- `./gradlew :backend:widyu-api:test`: API 모듈 테스트
-- `./gradlew :backend:widyu-domain:test`: 도메인 모듈 테스트
-- `./gradlew compileJava`: QueryDSL Q-클래스 재생성 (엔티티 변경 후 필수)
-- `./gradlew bootRun --args='--spring.profiles.active=local'`: 로컬 실행
+## 코드 규칙
 
-## Coding Conventions
+정적 검사기는 일부 패턴만 감지하므로 통과를 규칙 충족의 증명으로 보지 않는다.
 
-- 삼항 연산자 금지 — if/else 또는 early return
-- Service/Facade에서 `new XxxResponse(` 직접 생성 금지 → `from()`/`of()` 팩토리 사용
-- Controller에서 Repository 직접 import 금지
-- `@Async` 메서드에 `@Transactional` 필요
-- Facade 패턴: 여러 서비스 조합 시 사용
+- 삼항 연산자 금지. if/else 또는 early return을 사용한다.
+- Service/Facade에서 DTO를 직접 new 하지 않고 from()/of() 팩토리를 사용한다.
+- Controller에서 Repository를 직접 import하지 않는다.
+- 엔티티는 widyu-domain, Repository/Service/Controller는 widyu-api에 둔다.
+- @Async 메서드에 @Transactional을 선언한다. 프록시·파일 수명 관련 상세 규칙은 backend 지침을 따른다.
+- 여러 서비스를 조합하면 Facade, 도메인 간 알림은 이벤트를 사용한다.
 
-## Testing
+## Code Review Rules
 
-JUnit 5 + Mockito (`@ExtendWith(MockitoExtension.class)`), H2 in-memory.
-BDDMockito(`given/willReturn`), AAA(given/when/then) 패턴.
-테스트 메서드명은 한글 언더스코어(예: `앨범_생성_시_FCM_전송`).
-상태 검증을 우선한다. 외부 호출, 이벤트 발행, 삭제 같은 side effect는 `verify`로 검증할 수 있다.
+- LLD 인수조건과 실제 변경 동작을 비교한다. 재현 조건·영향·파일/라인을 제시하고 취향성 제안을 결함으로 보고하지 않는다.
+- 인증·가족 접근, 결제·포인트는 권한과 멱등성/동시성, 비동기·외부 호출은 트랜잭션 경계와 실패 후 상태를 확인한다.
+- 상태 검증을 우선하고 외부 호출·이벤트·삭제 같은 부수효과에는 verify를 허용한다.
+- 수정한 코드의 검수와 사람의 승인·배포 승인을 구분한다.
 
-## Agent-Specific Instructions
+## 완료와 작업 재개
 
-Codex 워크플로 스킬은 `.agents/skills`에 있다.
-새 작업 시작 → issue 스킬, 코드 완료 → commit 스킬, 머지 준비 → pr 스킬.
-Co-author 트레일러: `Co-Authored-By: Codex <codex@openai.com>`.
+완료 시 무엇이 바뀌었는지, 실행한 검증과 결과, 미실행 이유·남은 문제를 보고한다. 테스트 실패나 도구 오류를 통과로 바꾸지 않는다. 컨텍스트 정리 시 이슈·브랜치/worktree, ADR/LLD, 결정 근거, 변경 파일, 검증 결과, 남은 작업을 보존한다. 긴 작업의 재개 기록이 필요하면 이슈/LLD를 갱신하고 개인 메모는 `.codex/RESUME.md`에 둔다. 재개 시 현재 diff와 적용 영역 AGENTS.md를 확인한다.
 
-## Security
+## 보안
 
-시크릿 커밋 금지.
-환경변수: `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `FCM_CREDENTIALS_PATH`.
+시크릿을 읽어 출력하거나 커밋하지 않는다. `.env*`, 운영/secret 설정, Firebase 자격증명, pem/p8 파일을 보호한다. `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `FCM_CREDENTIALS_PATH` 및 MCP 토큰은 환경변수로 전달한다. 문서·훅·gitignore는 OS 접근 제어를 대체하지 않는다. 사용자 작업을 되돌리는 reset/clean/stash나 강제 push로 문제를 해결하지 않는다.

@@ -1,71 +1,32 @@
 ---
 name: review
-description: Claude Code가 작성한 코드를 LLD 기준으로 검수한다. 사용자가 "검수해줘", "리뷰해줘", "Claude 결과물 확인해줘" 등을 요청할 때 사용.
+description: WIDYU-server의 작업 트리·커밋·PR 변경을 LLD 인수조건과 도메인 규칙으로 검수한다. 작성 도구와 무관하게 리뷰 요청 또는 구현 후 자체 검수에 사용한다.
 ---
 
 # review
 
-Claude Code가 작성한 코드 변경을 LLD + 코딩 규칙 기준으로 검수한다.
-문제가 있으면 구체적인 파일·라인과 함께 보고한다. 없으면 PR 진행을 승인한다.
+코드의 작성자가 아니라 변경 동작과 근거를 기준으로 검수한다. 리뷰만 요청받으면 파일을 수정하지 않는다. 구현 작업의 자체 검수라면 발견한 결함을 구현 단계에서 수정한다.
 
 ## 절차
 
-1. `git diff HEAD~1..HEAD` 또는 `git diff develop...HEAD`로 변경 diff를 읽는다.
-2. 변경 파일에서 관련 LLD를 추론한다. `docs/lld/`에서 해당 LLD를 읽는다.
-3. `bash scripts/harness/validate-java-rules.sh <변경된 .java 파일>` 을 실행한다.
-4. 아래 검수 체크리스트를 하나씩 확인한다.
-5. 결과를 보고한다.
+1. `git status --short --branch`로 검수 범위를 정한다.
+   - 미커밋: `git diff HEAD`와 `git ls-files --others --exclude-standard`의 신규 파일 내용을 함께 확인한다. staged도 포함한다.
+   - 브랜치/PR: 요청한 base와 HEAD의 merge-base를 구해 `git diff <merge-base> HEAD`를 확인한다. 작업 트리 변경은 별도로 구분한다.
+   - 특정 커밋: `git show <commit>`을 확인한다. 임의로 마지막 커밋만 검수하지 않는다.
+2. 루트 및 해당 영역 AGENTS.md, 관련 LLD/ADR을 읽는다. LLD가 없으면 docs/lld/README.md의 예외 기준을 적용하고 N/A 이유를 명시한다. 필요한 설계가 누락되면 결함으로 보고한다.
+3. 인수조건마다 구현·테스트·실행 결과를 대응한다. `verify.sh`의 기존 결과를 확인하거나 해당 범위로 실행한다. 커밋된 변경은 반드시 `--base <merge-base>`를 전달한다.
+4. 아래 항목 중 실제 변경과 관련된 것만 검수한다. 결과와 재현 가능한 문제를 보고한다.
 
-## 검수 체크리스트
+## 검수 기준
 
-### 1. LLD 인수조건 충족
-- LLD `## 7. 인수조건` 항목을 하나씩 읽고 코드에서 대응하는 구현이 있는지 확인한다.
-- 미구현 항목이 있으면 목록으로 보고한다.
+- 공통 규칙: DTO 팩토리, Controller/Repository 경계, 모듈 배치, 삼항 금지, @Async/@Transactional. 정적 검사기가 놓치는 배치·애노테이션 순서도 확인한다.
+- 인증·가족 접근: 호출자 권한, 대상 시니어와 가족 관계, 토큰 종류·만료, REST/WebSocket 경로의 인가 동등성.
+- 결제·포인트·상태 전이: 중복 요청/동시성, 외부 PG와 DB 트랜잭션 경계, 실패 보상, 잔액 불변식.
+- 이벤트·비동기·외부 호출: 프록시 self-invocation, 커밋 전후 발행, 실패 시 상태, 임시 파일 수명과 정리.
+- 테스트: 인수조건에 대응하는 상태 검증. Mockito 단위 테스트에는 MockitoExtension + BDDMockito를 적용하고 통합 테스트에 무조건 요구하지 않는다. 외부 호출·이벤트·삭제의 verify는 허용한다.
+- 엔티티/API 변경: ERD, ENUM 마이그레이션, controller/docs의 Swagger 동기화.
+- admin/스크립트/설정 변경: 해당 영역의 실행 결과·입출력·오류 전파·호환성. Java 규칙을 다른 언어에 적용하지 않는다.
 
-### 2. 코딩 규칙 (validate-java-rules.sh 결과 포함)
-- [ ] 삼항 연산자(`? :`) 없음
-- [ ] Service/Facade에서 `new XxxResponse(` 직접 생성 없음 — `from()`/`of()` 사용 여부
-- [ ] Controller에서 Repository 직접 import 없음
-- [ ] `widyu-api`에 `@Entity` 없음
-- [ ] `widyu-domain`에 Repository 없음
-- [ ] `@Async` 메서드에 `@Transactional` 없는 경우 경고
+## 보고
 
-### 3. 모듈 배치
-- [ ] 신규 엔티티는 `widyu-domain`에 위치
-- [ ] 신규 Repository/Service/Controller는 `widyu-api`에 위치
-
-### 4. 테스트
-- [ ] LLD 인수조건 항목에 대응하는 테스트 메서드가 존재하는가
-- [ ] 테스트가 `@ExtendWith(MockitoExtension.class)` + BDDMockito 패턴인가
-- [ ] 테스트 메서드명이 한글 언더스코어 형식인가
-
-### 5. 엔티티 변경 (해당 시)
-- [ ] `docs/erd/`의 ERD 문서가 변경 사항을 반영하고 있는가
-- [ ] MySQL ENUM 변경이 있으면 PR 본문 비고에 ALTER TABLE 명시 여부
-
-### 6. Swagger (해당 시)
-- [ ] 신규/변경 API에 `controller/docs/`의 `*Docs` 인터페이스가 업데이트됐는가
-
-## 보고 형식
-
-```
-## Codex Review 결과
-
-### ✅ 통과 항목
-- (항목 목록)
-
-### ❌ 문제 항목
-- [파일경로:라인] 문제 설명
-  → 수정 방향
-
-### ⚠️ 경고 (PR 블로커 아님)
-- (항목 목록)
-
-### 판정
-APPROVE / REQUEST_CHANGES
-```
-
-## 하지 말 것
-
-- 코드를 직접 수정하기 (review는 보고만 한다, 수정은 implement 또는 Claude가 담당).
-- LLD가 없는 경우 코딩 규칙과 모듈 배치만 확인하고 LLD 항목은 건너뛴다.
+결함을 먼저 `[우선순위] 파일:라인 — 재현 조건, 영향, 수정 방향`으로 보고한다. 이어서 인수조건 충족 여부, 검증 결과, 미실행/미해결 내용을 적는다. 결함이 없으면 발견된 결함이 없다고 쓰되 확인하지 못한 범위를 함께 밝힌다. 판정은 `APPROVE` 또는 `REQUEST_CHANGES`이며, 자체 검수 판정은 사람의 PR/배포 승인을 의미하지 않는다. 취향성 개선은 선택 제안으로 분리한다.

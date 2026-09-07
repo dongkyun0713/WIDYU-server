@@ -9,7 +9,9 @@ WIDYU-server 작업을 시작하기 전에 GitHub Issue를 생성하고, 필요�
 
 ## 핵심 원칙
 
-- 새 작업을 시작하기 전 `develop`으로 이동한 뒤 fork(`dongkyun0713/WIDYU-server`)를 원본(`GB-able/WIDYU-server`) `develop`과 동기화하고 `git pull origin develop`로 로컬 `develop`을 최신화한다.
+- 현재 브랜치·변경·worktree를 먼저 확인한다. 새 작업은 최신 develop 기준으로 만들고, 기존 작업을 이어가는 경우 해당 이슈·브랜치를 재사용한다.
+- 원본 이슈 저장소는 `GB-able/WIDYU-server`, 작업 fork는 `dongkyun0713/WIDYU-server`다. gh 명령에는 `--repo GB-able/WIDYU-server`를 명시한다.
+- 미커밋 변경이 있거나 다른 작업의 브랜치라면 해당 작업을 stash/reset/switch로 옮기지 않고 새 worktree를 만든다.
 - 이슈 생성 전 LLD가 있으면 LLD 링크를 본문에 포함한다.
 - 이슈 제목과 본문은 한글 존댓말로 작성한다.
 - 작업 범위가 크면 분리안을 제안한다.
@@ -20,17 +22,17 @@ WIDYU-server 작업을 시작하기 전에 GitHub Issue를 생성하고, 필요�
 
 ## 절차
 
-1. 새 작업 브랜치를 만들기 전에 `develop`으로 이동하고 fork와 로컬 `develop`을 최신화한다.
-   - `git switch develop`
+1. `git status --short --branch`, `git worktree list`, remote를 확인한다. 새 작업이면 아래 순서로 기준 ref를 최신화한다. 충돌/분기 발생 시 강제 동기화하지 않는다.
    - `gh repo sync dongkyun0713/WIDYU-server --source GB-able/WIDYU-server --branch develop`
-   - `git pull origin develop`
-2. `gh issue list --state open --limit 30 --json number,title,labels`로 중복 확인.
+   - `git fetch origin develop`
+   - 깨끗한 develop에서 작업할 때만 `git pull --ff-only origin develop`. 새 worktree는 `origin/develop`에서 직접 만들 수 있다.
+2. `gh issue list --repo GB-able/WIDYU-server --state open --limit 30 --json number,title,labels`로 중복 확인.
 3. 관련 LLD가 `docs/lld/`에 있으면 이슈 본문에 링크를 건다.
 4. 아래 템플릿으로 본문 작성.
-5. `gh label list --limit 50`로 사용 가능한 label을 확인한다.
-6. `gh issue create --title "<title>" --body-file <tmpfile> --assignee dongkyun0713 --label "<label>"`.
-7. `gh issue view <N> --json assignees,labels`로 assignee와 label 반영을 확인한다.
-8. 필요하면 최신화된 `develop`에서 `git switch -c feature/<issue-number>`로 브랜치를 만든다.
+5. `gh label list --repo GB-able/WIDYU-server --limit 50`로 사용 가능한 label을 확인한다.
+6. `gh issue create --repo GB-able/WIDYU-server --title "<title>" --body-file <tmpfile> --assignee dongkyun0713 --label "<label>"`.
+7. `gh issue view <N> --repo GB-able/WIDYU-server --json assignees,labels`로 assignee와 label 반영을 확인한다.
+8. 바로 작업하면 `git worktree add -b feature/<issue-number> <새-작업경로> origin/develop`로 별도 작업 폴더를 만든다. 현재 폴더가 깨끗하고 전환해도 되는 경우 `git switch -c feature/<issue-number> origin/develop`도 가능하다. 생성 후 `git branch --unset-upstream feature/<issue-number>`로 새 브랜치의 upstream 추적을 해제해 실수로 develop에 push하지 않게 한다.
 9. 이슈 번호, URL, 브랜치명 보고.
 
 ### Label 선택 기준
