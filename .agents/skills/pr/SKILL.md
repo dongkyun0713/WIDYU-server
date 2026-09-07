@@ -38,9 +38,12 @@ PR 설계 설명은 LLD를 오라클로 삼는다. diff와 실행한 검증 결�
 1. `git status --short --branch`, `git log --oneline -5` 확인.
 2. 관련 이슈 `gh issue view <N> --repo GB-able/WIDYU-server` 읽기.
 3. 관련 LLD를 읽는다. 없으면 작성 기준에 따른 N/A 사유를 기록한다.
-4. 최신 base와의 merge-base 기준 diff로 범위를 파악한다. PR 생성에 필요한 head 게시가 요청 범위에 포함되면 `git push -u origin HEAD`로 게시한다.
+4. 최신 base와의 merge-base 기준 diff로 범위를 파악한다. PR 생성에 필요한 head 게시가 요청 범위에 포함되면 다음 순서로 작업 fork에 게시한다.
+   - `git remote -v`에서 `dongkyun0713/WIDYU-server`를 가리키는 remote를 찾고, `git remote get-url --push <fork-remote>`로 push URL도 같은 저장소인지 확인한다.
+   - 해당 remote가 없으면 기존 remote를 덮어쓰지 말고 `git remote add fork https://github.com/dongkyun0713/WIDYU-server.git`로 추가한다.
+   - 확인한 `<fork-remote>`에 `git push -u <fork-remote> HEAD`를 실행한다. 원본 저장소를 가리키는 remote에는 작업 브랜치를 push하지 않는다.
 5. 아래 템플릿으로 본문 작성. 본문은 존댓말 종결형(`합니다`, `습니다`, `확인했습니다`)을 사용한다.
-6. 먼저 동일 head의 PR을 조회해 기존 PR이면 갱신한다. 신규면 `gh pr create --repo GB-able/WIDYU-server --base develop --head dongkyun0713:<branch> --title "<title>" --body-file <tmpfile> --assignee dongkyun0713`.
+6. 먼저 `dongkyun0713:<branch>`와 동일한 head의 PR을 조회해 기존 PR이면 갱신한다. 신규면 `gh pr create --repo GB-able/WIDYU-server --base develop --head dongkyun0713:<branch> --title "<title>" --body-file <tmpfile> --assignee dongkyun0713`로 생성한다. 4단계에서 확인한 push 저장소와 `--head` 저장소는 항상 같아야 한다.
 7. `gh label list --repo GB-able/WIDYU-server --limit 50`로 사용 가능한 label을 확인한다.
 8. 변경 성격에 맞는 label이 있으면 `gh pr edit <PR> --repo GB-able/WIDYU-server --add-label "<label>"`로 추가한다.
 9. `gh pr view <PR> --repo GB-able/WIDYU-server --json assignees,labels`로 assignee와 label 반영을 확인한다.
