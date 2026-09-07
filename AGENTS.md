@@ -8,6 +8,7 @@ WIDYU는 시니어와 보호자가 사진·영상을 공유하는 플랫폼이�
 - **backend 수정 전 [backend/AGENTS.md](backend/AGENTS.md)**, **admin 수정 전 [admin/AGENTS.md](admin/AGENTS.md)**를 읽는다. 루트에서 시작한 세션이 하위 지침을 모두 자동 로드한다고 가정하지 않는다.
 - 관련 [ADR](docs/adr/README.md), [LLD](docs/lld/README.md), [ERD](docs/erd/ERD-0001-initial-domain.md)를 필요한 범위만 읽는다.
 - 하네스 설정·검증·Claude 호환 동작은 [운영 가이드](docs/harness/codex.md)를 읽는다.
+- 이슈·PR·설계·운영 문서를 작성하거나 다듬을 때는 [write 스킬](.agents/skills/write/SKILL.md)을 적용한다.
 - 사용자 요청이 저장소 지침·스킬보다 우선한다. 적용 경로의 더 구체적인 지침을 따른다.
 
 ## 작업 흐름
@@ -42,6 +43,10 @@ WIDYU는 시니어와 보호자가 사진·영상을 공유하는 플랫폼이�
 | 로컬 실행 | `./gradlew :backend:widyu-api:bootRun --args='--spring.profiles.active=local'` |
 | 전체 빌드 | `./gradlew build` |
 | 하네스 회귀 검사 | `python3 -m unittest discover -s scripts/harness -p 'test_*.py'` |
+| Codex 훅 로드·신뢰 진단 | `python3 scripts/harness/doctor.py` |
+| 실제 CLI 훅 통합 검사 | `python3 scripts/harness/smoke_codex_client.py` (로컬 응답 서버 사용) |
+
+소스·문서 수정은 대상 worktree에서 `apply_patch`로 수행한다. 셸 직접 편집과 인라인 인터프리터는 Codex 가드가 차단한다. 임시 문안은 저장소 밖 임시 경로에 리다이렉션으로 작성할 수 있다. 기존 검사 스크립트·Gradle/npm 실행은 허용한다. 다른 worktree를 만들었다면 그 작업 디렉터리로 Codex 세션을 전환한 뒤 수정한다.
 
 ## 코드 규칙
 

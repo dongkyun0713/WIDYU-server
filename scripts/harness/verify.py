@@ -58,6 +58,18 @@ def test_modules(root, modules):
                *[f":backend:widyu-{m}:test" for m in modules], "--console=plain"])
 
 
+def harness_changed(paths):
+    return any(p.startswith(("scripts/harness/", ".agents/skills/")) or
+               p in (".codex/config.toml", ".github/workflows/ci.yml") or
+               Path(p).name == "AGENTS.md" for p in paths)
+
+
+def test_harness(root):
+    run(root, [sys.executable, "-m", "unittest", "discover", "-s", "scripts/harness", "-p", "test_*.py"])
+    run(root, [sys.executable, "scripts/harness/test-pre-bash-guard.py"])
+    run(root, [sys.executable, "scripts/harness/test-pre-edit-branch-guard.py"])
+
+
 def main(argv=None, root=ROOT):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="HEAD")
@@ -84,6 +96,8 @@ def main(argv=None, root=ROOT):
         if args.static_only:
             print("[HARNESS] 정적 검사 완료 (컴파일·테스트·의미 검수 미포함)")
             return 0
+        if harness_changed(paths):
+            test_harness(root)
         if modules:
             run(root, [str(root / "gradlew"), "compileJava", "--console=plain"])
         test_modules(root, modules)

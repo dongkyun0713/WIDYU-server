@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Codex protocol adapter; never launches an LLM."""
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -9,6 +10,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+_spec = importlib.util.spec_from_file_location("shell_edit_policy", Path(__file__).with_name("shell_edit_policy.py"))
+shell_policy = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(shell_policy)
 
 
 def block(reason):
@@ -19,6 +23,34 @@ def ack_path(root, session_id, branch):
     key = hashlib.sha256(f"{session_id}\0{branch}".encode()).hexdigest()[:16]
     slug = re.sub(r"[^A-Za-z0-9._-]", "-", branch)
     return root / ".codex/state" / f"branch-ack-{slug}-{key}.txt"
+
+
+def check_patch_paths(command, cwd, root):
+    """Check every patch destination before consulting a branch acknowledgement."""
+    lines = command.strip().splitlines()
+    if not lines or lines[0] != "*** Begin Patch" or lines[-1] != "*** End Patch":
+        return block("patch 형식을 확인할 수 없습니다. apply_patch 형식으로 수정하세요.")
+    for line in lines:
+        for prefix in ("*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "):
+            if not line.startswith(prefix):
+                continue
+            value = line[len(prefix):]
+            if not value:
+                return block("patch 대상 경로가 비어 있습니다.")
+            target = (cwd / value).resolve()
+            if not target.is_relative_to(root) or target == root:
+                return block("현재 worktree 밖의 patch는 차단합니다. 대상 worktree에서 세션을 시작하세요: " + value)
+            # Use the nearest existing parent: new files/directories have no Git metadata yet.
+            parent = target.parent
+            while not parent.exists():
+                parent = parent.parent
+            result = subprocess.run(["git", "-C", str(parent), "rev-parse", "--show-toplevel"],
+                                    capture_output=True, text=True)
+            if result.returncode or Path(result.stdout.strip()).resolve() != root:
+                return block("다른 저장소/worktree의 patch 대상입니다: " + value)
+            if ".git" in target.relative_to(root).parts:
+                return block("Git 메타데이터는 patch로 수정할 수 없습니다.")
+    return {}
 
 
 def check_edit_branch(payload, root):
@@ -61,6 +93,13 @@ def handle(payload, root=ROOT):
         return block("하네스 입력은 JSON 객체여야 합니다.")
     event = payload.get("hook_event_name")
     if event == "PreToolUse":
+        root = root.resolve()
+        cwd_value = payload.get("cwd", str(root))
+        if not isinstance(cwd_value, str) or not Path(cwd_value).is_absolute():
+            return block("세션 cwd는 절대 경로여야 합니다.")
+        cwd = Path(cwd_value).resolve()
+        if not cwd.is_relative_to(root):
+            return block("세션 cwd와 훅의 worktree가 다릅니다. 대상 worktree에서 세션을 시작하세요.")
         tool = payload.get("tool_name")
         if tool not in ("Bash", "apply_patch"):
             return {}
@@ -73,7 +112,19 @@ def handle(payload, root=ROOT):
                 input=json.dumps(payload), text=True, capture_output=True, cwd=root)
             if result.returncode:
                 return block(result.stderr.strip() or "명령 가드 실행 실패")
+            branch = subprocess.run(["git", "-C", str(root), "branch", "--show-current"],
+                                    capture_output=True, text=True).stdout.strip()
+            session_id = payload.get("session_id")
+            ack = None
+            if isinstance(session_id, str) and session_id and branch not in ("", "main", "master", "develop"):
+                ack = ack_path(root, session_id, branch)
+            reason = shell_policy.check(tool_input["command"], cwd, root, ack)
+            if reason:
+                return block(reason)
         else:
+            result = check_patch_paths(tool_input["command"], cwd, root)
+            if result:
+                return result
             return check_edit_branch(payload, root)
         return {}
     if event == "Stop":
@@ -95,7 +146,7 @@ def handle(payload, root=ROOT):
 def main():
     try:
         result = handle(json.load(sys.stdin))
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, RuntimeError) as error:
         result = block(f"하네스 실행 실패: {error}")
     print(json.dumps(result, ensure_ascii=False))
 

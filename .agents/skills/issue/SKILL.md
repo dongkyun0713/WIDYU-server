@@ -14,6 +14,7 @@ WIDYU-server 작업을 시작하기 전에 GitHub Issue를 생성하고, 필요�
 - 미커밋 변경이 있거나 다른 작업의 브랜치라면 해당 작업을 stash/reset/switch로 옮기지 않고 새 worktree를 만든다.
 - 이슈 생성 전 LLD가 있으면 LLD 링크를 본문에 포함한다.
 - 이슈 제목과 본문은 한글 존댓말로 작성한다.
+- 문안은 [write 스킬](../write/SKILL.md)을 적용해 문제 상황과 완료 조건이 드러나도록 작성한다.
 - 작업 범위가 크면 분리안을 제안한다.
 - 미결정 사항은 `확인 필요`로 남긴다.
 - 브랜치는 사용자 요청 시 또는 바로 작업할 때만 만든다.
@@ -33,7 +34,8 @@ WIDYU-server 작업을 시작하기 전에 GitHub Issue를 생성하고, 필요�
 6. `gh issue create --repo GB-able/WIDYU-server --title "<title>" --body-file <tmpfile> --assignee dongkyun0713 --label "<label>"`.
 7. `gh issue view <N> --repo GB-able/WIDYU-server --json assignees,labels`로 assignee와 label 반영을 확인한다.
 8. 바로 작업하면 `git worktree add -b feature/<issue-number> <새-작업경로> origin/develop`로 별도 작업 폴더를 만든다. 현재 폴더가 깨끗하고 전환해도 되는 경우 `git switch -c feature/<issue-number> origin/develop`도 가능하다. 생성 후 `git branch --unset-upstream feature/<issue-number>`로 새 브랜치의 upstream 추적을 해제해 실수로 develop에 push하지 않게 한다.
-9. 이슈 번호, URL, 브랜치명 보고.
+9. 새 worktree를 만들었다면 Codex 세션의 작업 디렉터리도 그 경로인지 확인한다. 기존 세션에서 다른 worktree를 절대 경로로 편집하지 않는다. 클라이언트의 worktree 전환 또는 해당 경로의 새 세션을 사용한다.
+10. 이슈 번호, URL, 브랜치명 보고.
 
 ### Label 선택 기준
 

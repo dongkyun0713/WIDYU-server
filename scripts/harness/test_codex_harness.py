@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 SESSION_A = "6dc2af4e-1bf0-42e2-a238-000000000001"
@@ -23,6 +24,7 @@ def load(name, filename):
 
 verify = load("verify", "verify.py")
 hooks = load("hooks", "codex-hooks.py")
+doctor = load("doctor", "doctor.py")
 
 
 class HarnessTest(unittest.TestCase):
@@ -34,7 +36,7 @@ class HarnessTest(unittest.TestCase):
         target = self.root / "scripts/harness"
         target.mkdir(parents=True)
         for name in ("verify.py", "verify.sh", "validate-java-rules.sh",
-                     "pre-bash-guard.sh", "codex-hooks.py", "run-module-tests.sh"):
+                     "pre-bash-guard.sh", "codex-hooks.py", "shell_edit_policy.py", "run-module-tests.sh"):
             shutil.copy(HERE / name, target / name)
         self.git("init", "-q", "-b", "feature/549")
         self.git("config", "user.email", "test@example.invalid")
@@ -119,10 +121,36 @@ class HarnessTest(unittest.TestCase):
         self.assertEqual((self.root / "commands.log").read_text(), ":backend:widyu-api:test --console=plain\n")
 
     def test_docs_skip_application_commands(self):
-        self.write("admin/AGENTS.md")
+        self.write("admin/README.md")
         self.write("backend/widyu-api/README.md")
         self.assertEqual(self.check(), 0)
         self.assertFalse((self.root / "commands.log").exists())
+
+    def test_harness_changes_run_regressions_and_propagate_failure(self):
+        self.write("scripts/harness/new_policy.py")
+        with mock.patch.object(verify, "test_harness") as regression:
+            self.assertEqual(self.check(), 0)
+            regression.assert_called_once_with(self.root)
+        with mock.patch.object(verify, "test_harness", side_effect=subprocess.CalledProcessError(4, "regression")):
+            self.assertEqual(self.check(), 4)
+
+    def test_harness_change_selection_and_nonrecursive_static_check(self):
+        for path in ("scripts/harness/removed.py", ".agents/skills/write/SKILL.md",
+                     "backend/AGENTS.md", ".codex/config.toml", ".github/workflows/ci.yml"):
+            self.assertTrue(verify.harness_changed([path]), path)
+        self.write("scripts/harness/new_policy.py")
+        with mock.patch.object(verify, "test_harness") as regression:
+            self.assertEqual(self.check("--static-only"), 0)
+            self.assertEqual(self.check("--tests-only"), 0)
+            regression.assert_not_called()
+
+    def test_harness_runner_executes_all_suites(self):
+        with mock.patch.object(verify, "run") as run:
+            verify.test_harness(self.root)
+        commands = [c.args[1] for c in run.call_args_list]
+        self.assertIn("unittest", commands[0])
+        self.assertEqual(commands[1][-1], "scripts/harness/test-pre-bash-guard.py")
+        self.assertEqual(commands[2][-1], "scripts/harness/test-pre-edit-branch-guard.py")
 
     def test_shared_build_and_admin_selection(self):
         self.assertEqual(verify.affected(["gradle/libs.versions.toml"]), (["domain", "api"], False))
@@ -176,6 +204,112 @@ class HarnessTest(unittest.TestCase):
         payload = {"hook_event_name": "PreToolUse", "tool_name": "apply_patch",
                    "tool_input": {"command": "*** Begin Patch\n*** End Patch"}}
         self.assertEqual(hooks.handle(payload, self.root)["decision"], "block")
+
+    def acknowledge(self):
+        ack = hooks.ack_path(self.root, SESSION_A, "feature/549")
+        ack.parent.mkdir(parents=True, exist_ok=True)
+        ack.write_text("continue\n")
+        return ack
+
+    def test_patch_rejects_cross_worktree_and_move_escape(self):
+        other = Path(self.tmp.name) / "other"
+        self.git("worktree", "add", "-qb", "develop", str(other))
+        self.acknowledge()
+        for operation in ("Add File", "Update File", "Delete File", "Move to"):
+            patch = f"*** Begin Patch\n*** {operation}: {other}/file.txt\n*** End Patch"
+            self.assertEqual(self.pre(command=patch)["decision"], "block", operation)
+
+    def test_patch_rejects_symlink_and_nested_repository(self):
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        (self.root / "link").symlink_to(outside, target_is_directory=True)
+        nested = self.root / "nested"
+        nested.mkdir()
+        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        self.acknowledge()
+        for path in ("link/new.txt", "nested/new.txt", "../outside/new.txt", ".git/config"):
+            patch = f"*** Begin Patch\n*** Add File: {path}\n+text\n*** End Patch"
+            self.assertEqual(self.pre(command=patch)["decision"], "block", path)
+
+    def test_patch_allows_subdirectory_and_new_paths(self):
+        (self.root / "backend").mkdir()
+        self.acknowledge()
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "apply_patch",
+                   "cwd": str(self.root / "backend"), "session_id": SESSION_A,
+                   "tool_input": {"command": "*** Begin Patch\n*** Add File: new dir/file.txt\n+text\n*** End Patch"}}
+        self.assertEqual(hooks.handle(payload, self.root), {})
+
+    def test_bash_source_writes_are_blocked_even_after_ack(self):
+        self.acknowledge()
+        for command in ("printf x > source.txt", "echo x >> source.txt", "cat <<'EOF' > source.txt\nx\nEOF",
+                        "sed -i '' s/old/new/ source.txt", "tee source.txt", "cp a b", "mv a b",
+                        "git apply patch.diff", "python3 -c 'open(\"source.txt\", \"w\").write(\"x\")'",
+                        "python3 - <<'PY'\nfrom pathlib import Path\nPath('source.txt').write_text('x')\nPY"):
+            self.assertEqual(self.pre("Bash", command)["decision"], "block", command)
+
+    def test_protected_bash_write_blocked_but_read_and_build_allowed(self):
+        self.git("switch", "-qc", "develop")
+        self.assertEqual(self.pre("Bash", "printf x > source.txt")["decision"], "block")
+        for command in ("git status --short", "rg 'write' scripts", "./gradlew test",
+                        "python3 -m unittest discover", "git log -1 2>&1", "echo x > /dev/null"):
+            self.assertEqual(self.pre("Bash", command), {}, command)
+
+    def test_bash_ack_and_temporary_output_are_allowed(self):
+        import shlex
+        ack = hooks.ack_path(self.root, SESSION_A, "feature/549")
+        command = f"mkdir -p {shlex.quote(str(ack.parent))} && printf '%s\\n' continue > {shlex.quote(str(ack))}"
+        self.assertEqual(self.pre("Bash", command), {})
+        self.assertEqual(self.pre("Bash", f"printf text > {shlex.quote(str(Path(self.tmp.name) / 'body.md'))}"), {})
+        self.assertEqual(self.pre("Bash", "printf text > /tmp/widyu-harness-test-body.md"), {})
+        self.assertEqual(self.pre("Bash", "printf x > .codex/config.toml")["decision"], "block")
+
+    def test_bash_changed_directory_and_quoted_message(self):
+        import shlex
+        (self.root / "backend").mkdir()
+        command = f"cd {shlex.quote(str(self.root / 'backend'))} && printf x > source.txt"
+        self.assertEqual(self.pre("Bash", command)["decision"], "block")
+        self.assertEqual(self.pre("Bash", "git commit -m '설명\ntee source.txt\npython3 -c example'"), {})
+
+    def test_bash_quoted_operators_and_heredoc_examples(self):
+        for command in ("rg '>' scripts", "git commit -m 'example <<EOF'", "cat <<'EOF'\ntee source.txt\nEOF\ngit status",
+                        "cat <<< 'text'", "git status # example <<EOF\ngit log -1"):
+            self.assertEqual(self.pre("Bash", command), {}, command)
+        for command in ("echo '<<EOF'\nprintf x > source.txt", "cat <<'EOF'\ndata\nEOF\nprintf x > source.txt",
+                        "bash -lc 'printf x > source.txt'", "python3 -c'print(1)'", "sed -i.bak s/a/b/ source.txt"):
+            self.assertEqual(self.pre("Bash", command)["decision"], "block", command)
+
+    def test_bash_temp_symlink_does_not_allow_repository_write(self):
+        import shlex
+        link = Path(self.tmp.name) / "output"
+        link.symlink_to(self.root / "source.txt")
+        self.assertEqual(self.pre("Bash", f"printf x > {shlex.quote(str(link))}")["decision"], "block")
+
+    def test_doctor_reports_missing_untrusted_disabled_and_ready(self):
+        hooks_list = [{"sourcePath": str(self.root / ".codex/config.toml"), "eventName": event,
+                       "enabled": True, "trustStatus": "trusted", "matcher": "^(Bash|apply_patch)$"}
+                      for event in ("preToolUse", "stop")]
+        def diagnose(items):
+            with contextlib.redirect_stdout(io.StringIO()):
+                return doctor.readiness({"data": [{"hooks": items, "errors": []}]}, self.root)
+        self.assertEqual(diagnose([]), 1)
+        self.assertEqual(diagnose(hooks_list), 0)
+        hooks_list[0]["trustStatus"] = "untrusted"
+        self.assertEqual(diagnose(hooks_list), 1)
+        hooks_list[0]["trustStatus"] = "trusted"
+        hooks_list[0]["enabled"] = False
+        self.assertEqual(diagnose(hooks_list), 1)
+        hooks_list[0]["enabled"] = True
+        hooks_list[0]["matcher"] = "^apply_patch$"
+        self.assertEqual(diagnose(hooks_list), 1)
+
+    def test_doctor_linked_worktree_uses_primary_source(self):
+        other = Path(self.tmp.name) / "linked"
+        self.git("worktree", "add", "-qb", "feature/550", str(other))
+        hooks_list = [{"sourcePath": str(self.root / ".codex/config.toml"), "eventName": event,
+                       "enabled": True, "trustStatus": "trusted", "matcher": "^(Bash|apply_patch)$"}
+                      for event in ("preToolUse", "stop")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(doctor.readiness({"data": [{"hooks": hooks_list}]}, other), 0)
 
     def test_bash_guard_reuses_existing_policy(self):
         self.assertEqual(self.pre("Bash", "git status --short"), {})
