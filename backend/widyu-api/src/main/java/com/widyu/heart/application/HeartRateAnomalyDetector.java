@@ -9,6 +9,7 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.AiProperties;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
+import io.micrometer.core.annotation.Timed;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class HeartRateAnomalyDetector {
      * 측정값을 시각 오름차순으로 AI에 순차 전달한다. 배치(15개)와 단건(1개) 경로가 함께 사용한다.
      * 배치 크기 검증은 요청 DTO의 {@code @Size}가 담당한다.
      */
+    @Timed("heart.ai.detection")
     public DetectionResult detect(Long memberId, List<HeartRateMeasurement> measurements, String context) {
         if (measurements.isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "심박수 데이터가 비어 있습니다.");

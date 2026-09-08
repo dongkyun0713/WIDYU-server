@@ -5,6 +5,7 @@ import com.widyu.heart.application.HeartRateService;
 import com.widyu.heart.dto.request.HeartRateSendRequest;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
+import io.micrometer.core.annotation.Timed;
 import jakarta.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class HeartRateWebSocketController {
      * ACK는 /user/queue/heart-rate/result 로 전송자에게 수신
      */
     @MessageMapping("/heart-rate/send")
+    @Timed(value = "heart.websocket.processing", extraTags = {"path", "batch"})
     public void sendHeartRates(
             @Valid @Payload HeartRateSendRequest request,
             @AuthenticationPrincipal PrincipalDetails principal,
@@ -52,6 +54,7 @@ public class HeartRateWebSocketController {
      * 브로드캐스트와 ACK 경로는 배치 전송과 동일하다 (LLD-0023)
      */
     @MessageMapping("/heart-rate/send-single")
+    @Timed(value = "heart.websocket.processing", extraTags = {"path", "single"})
     public void sendHeartRate(
             @Valid @Payload HeartRateSingleRequest request,
             @AuthenticationPrincipal PrincipalDetails principal,

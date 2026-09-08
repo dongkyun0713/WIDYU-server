@@ -4,6 +4,7 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
+import io.micrometer.core.annotation.Timed;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.repository.FamilyMembershipRepository;
@@ -26,6 +27,7 @@ public class HeartRateEmergencyNotificationService {
     private final SeniorProfileRepository seniorProfileRepository;
 
     @EventListener
+    @Timed("heart.emergency.notification")
     public void handleHeartRateEmergency(HeartRateEmergencyEvent event) {
         Member seniorMember = memberRepository.findById(event.memberId()).orElse(null);
         if (seniorMember == null) {
