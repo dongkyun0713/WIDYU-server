@@ -10,6 +10,9 @@ import com.widyu.global.properties.AiProperties;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
 import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -41,6 +44,7 @@ public class HeartRateAnomalyDetector {
     private final RestTemplate aiRestTemplate;
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     /**
      * 측정값을 시각 오름차순으로 AI에 순차 전달한다. 배치(15개)와 단건(1개) 경로가 함께 사용한다.
@@ -166,6 +170,8 @@ public class HeartRateAnomalyDetector {
             String context
     ) {
         String url = aiProperties.server().url() + "/api/hr";
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "success";
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -174,12 +180,28 @@ public class HeartRateAnomalyDetector {
             String result = aiRestTemplate.postForObject(url, request, String.class);
             return parseResponse(result);
         } catch (RestClientException e) {
+            outcome = classifyAiRequestFailure(e);
             log.error("AI 서버 호출 실패: url={}, error={}", url, e.getMessage(), e);
             throw new BusinessException(
                     ErrorCode.INTERNAL_SERVER_ERROR,
                     "AI 서버와의 통신에 실패했습니다. 잠시 후 다시 시도해주세요."
             );
+        } finally {
+            sample.stop(Timer.builder("heart.ai.request")
+                    .tag("outcome", outcome)
+                    .register(meterRegistry));
         }
+    }
+
+    private String classifyAiRequestFailure(RestClientException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof SocketTimeoutException) {
+                return "timeout";
+            }
+            cause = cause.getCause();
+        }
+        return "error";
     }
 
     private AiHeartRateResponse parseResponse(String jsonResponse) {
