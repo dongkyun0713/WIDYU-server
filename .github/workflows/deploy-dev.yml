@@ -1,4 +1,4 @@
-name: Deploy to AWS EC2 using Docker Compose
+name: Deploy development server using Docker Compose
 
 on:
   push:
@@ -12,7 +12,9 @@ concurrency:
 env:
   DOCKER_IMAGE_NAME: ${{ secrets.DEV_DOCKER_IMAGE_NAME }}
   EC2_HOST: ${{ secrets.EC2_HOST }}
-  EC2_SSH_USER: ec2-user
+  EC2_SSH_USER: ${{ secrets.DEV_EC2_SSH_USER || 'ubuntu' }}
+  DEPLOY_PATH: ${{ secrets.DEV_DEPLOY_PATH || '/home/ubuntu/widyu' }}
+  ENV_FILE_PATH: ${{ secrets.DEV_ENV_FILE_PATH || '/home/ubuntu/.env' }}
   PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
 jobs:
@@ -39,6 +41,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -54,11 +59,12 @@ jobs:
           tags: |
             ${{ env.DOCKER_IMAGE_NAME }}:latest
             ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:cache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:cache,mode=max
 
-  deploy-to-ec2:
-    name: Deploy to AWS EC2
+  deploy-to-dev-server:
+    name: Deploy to development server
     needs: build-and-push-docker
     runs-on: ubuntu-latest
 
@@ -86,33 +92,33 @@ jobs:
 
           ssh -i private_key.pem -o StrictHostKeyChecking=no \
             ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }} \
-            "mkdir -p /home/ec2-user/widyu/nginx /home/ec2-user/widyu/admin/dist"
-            # "mkdir -p /home/ec2-user/widyu/nginx /home/ec2-user/widyu/monitoring"
+            "mkdir -p '${{ env.DEPLOY_PATH }}/nginx' '${{ env.DEPLOY_PATH }}/admin/dist'"
+            # "mkdir -p '${{ env.DEPLOY_PATH }}/monitoring'"
 
           rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             docker-compose.yml docker-compose.dev.yml \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/
+            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_PATH }}/
 
           # --inplace: nginx.conf가 단일 파일 바인드 마운트라, 파일 교체 시 inode가 바뀌면
           # 컨테이너가 옛 파일을 계속 참조해 `nginx -s reload`가 반영되지 않는다.
           # in-place로 덮어써 inode를 유지하면 reload가 정상 반영된다.
           rsync -avz --inplace -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             nginx/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/nginx/
+            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_PATH }}/nginx/
 
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             scripts/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/scripts/
+            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_PATH }}/scripts/
 
           rsync -av --delete .well-known/ admin/dist/.well-known/
 
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
             admin/dist/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/admin/dist/
+            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_PATH }}/admin/dist/
 
           # rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
           #   monitoring/ \
-          #   ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/monitoring/
+          #   ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:${{ env.DEPLOY_PATH }}/monitoring/
   
           rm -f private_key.pem
 
@@ -125,10 +131,10 @@ jobs:
           script: |
             set -e
 
-            cd /home/ec2-user/widyu
+            cd ${{ env.DEPLOY_PATH }}
 
             # .env 파일 복사 및 Docker 이미지 정보 추가
-            cp /home/ec2-user/.env .env
+            cp ${{ env.ENV_FILE_PATH }} .env
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
@@ -137,7 +143,7 @@ jobs:
 
             echo "🚀 Deploying widyu-api (monitoring containers stay running)..."
             docker rm -f widyu-api-dev 2>/dev/null || true
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps --force-recreate widyu-api
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build --no-deps --force-recreate widyu-api
 
             echo "🔄 Reloading nginx config..."
             docker exec widyu-nginx-dev nginx -s reload

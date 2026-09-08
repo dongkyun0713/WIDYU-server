@@ -40,8 +40,8 @@ services:
       # JVM Options (개발 환경) - Dockerfile ENV JAVA_OPTS 기본값을 완전히 대체
       JAVA_OPTS: >
         -XX:+UseContainerSupport
-        -Xms512m
-        -Xmx1024m
+        -Xms256m
+        -Xmx512m
         -XX:+UseG1GC
         -XX:MaxGCPauseMillis=200
         -Dfile.encoding=UTF-8
