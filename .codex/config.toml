@@ -19,7 +19,3 @@ type = "command"
 command = 'python3 "$(git rev-parse --show-toplevel)/scripts/harness/codex-hooks.py"'
 timeout = 60
 statusMessage = "WIDYU Java 정적 검사"
-
-[mcp_servers.figma]
-url = "https://figma-mcp.widyu.store/mcp"
-env_http_headers = { Authorization = "FIGMA_MCP_AUTHORIZATION", "X-Figma-Token" = "FIGMA_PAT" }
