@@ -18,8 +18,6 @@ import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
-import com.widyu.heart.dto.request.HeartRateMeasurement;
-import com.widyu.heart.dto.request.HeartRateSendRequest;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartGraphPageResponse;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
@@ -61,16 +59,22 @@ class HeartRateServiceTest {
     @DisplayName("심박수 처리 대상 회원이 없으면 MEMBER_NOT_FOUND 예외를 던지고 분석/저장을 하지 않는다")
     void 심박수_처리_대상_회원이_없으면_예외가_발생한다() {
         // given
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(
+                78,
+                LocalDateTime.of(2026, 9, 8, 10, 0),
+                "서울시",
+                "UNKNOWN"
+        );
         given(memberRepository.findById(1L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> heartRateService.processHeartRates(1L, request()))
+        assertThatThrownBy(() -> heartRateService.processHeartRate(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MEMBER_NOT_FOUND)
                 .hasMessageContaining("회원을 찾을 수 없습니다.");
         then(heartRateAnomalyDetector).should(never()).detect(anyLong(), any(), any());
         then(heartRatePersistenceService).should(never())
-                .saveAnalysis(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
+                .saveMeasurement(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
     }
 
     @Test
@@ -544,183 +548,6 @@ class HeartRateServiceTest {
                 .isInstanceOf(BusinessException.class);
         then(heartRatePersistenceService).should(never())
                 .saveMeasurement(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
-    }
-
-    // TEST-012: 심박 수집 배치 멱등성 검증
-
-    @Test
-    @DisplayName("동일 배치(배치 시작 시각 일치)를 재전송하면 저장 없이 기존 상태를 반환한다")
-    void 동일_배치_재전송시_중복_저장_없이_기존상태를_반환한다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 10, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest duplicateRequest = HeartRateSendRequest.of(measurements, "서울시");
-
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        HeartRateResult existingResult = HeartRateResult.of(memberId, HeartRateStatus.NORMAL, 75, batchStart.plusSeconds(14));
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(true);
-        given(heartRateResultRepository.findByMemberId(memberId)).willReturn(Optional.of(existingResult));
-
-        // when
-        HeartRateStatusResponse response = heartRateService.processHeartRates(memberId, duplicateRequest);
-
-        // then
-        assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.NORMAL);
-        assertThat(response.heartRate()).isEqualTo(75);
-        then(heartRateAnomalyDetector).should(never()).detect(anyLong(), any(), any());
-        then(heartRateEventRepository).should(never()).saveAll(any());
-        then(heartRateEmergencyRepository).should(never()).save(any());
-        then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
-    }
-
-    @Test
-    @DisplayName("신규 배치는 배치 시작 시각이 없으면 정상 처리하고 Event와 Result를 저장한다")
-    void 신규_배치는_정상_처리하고_Event와_Result를_저장한다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 11, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest newRequest = HeartRateSendRequest.of(measurements, "서울시");
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(false);
-        given(heartRateAnomalyDetector.detect(memberId, measurements, "UNKNOWN"))
-                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false));
-        HeartRateResult savedResult = HeartRateResult.of(memberId, HeartRateStatus.NORMAL, 84, batchStart.plusSeconds(14));
-        given(heartRatePersistenceService.saveAnalysis(memberId, newRequest, HeartRateStatus.NORMAL, false))
-                .willReturn(savedResult);
-
-        // when
-        HeartRateStatusResponse response = heartRateService.processHeartRates(memberId, newRequest);
-
-        // then
-        assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.NORMAL);
-        assertThat(response.heartRate()).isEqualTo(84);
-        then(heartRateAnomalyDetector).should().detect(memberId, measurements, "UNKNOWN");
-        then(heartRatePersistenceService).should()
-                .saveAnalysis(memberId, newRequest, HeartRateStatus.NORMAL, false);
-        then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
-    }
-
-    @Test
-    @DisplayName("신규 긴급 배치를 저장하면 심박 긴급 이벤트를 발행한다")
-    void 신규_긴급_배치를_저장하면_심박_긴급_이벤트를_발행한다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 11, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(160, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest request = HeartRateSendRequest.of(measurements, "서울시");
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        HeartRateResult savedResult = HeartRateResult.of(
-                memberId, HeartRateStatus.EMERGENCY, 160, batchStart.plusSeconds(14));
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(false);
-        given(heartRateAnomalyDetector.detect(memberId, measurements, "UNKNOWN"))
-                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true));
-        given(heartRatePersistenceService.saveAnalysis(memberId, request, HeartRateStatus.EMERGENCY, true))
-                .willReturn(savedResult);
-
-        // when
-        heartRateService.processHeartRates(memberId, request);
-
-        // then
-        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId));
-    }
-
-    @Test
-    @DisplayName("신규 주의 배치를 저장해도 보호자 알림을 요청하지 않는다")
-    void 신규_주의_배치를_저장해도_보호자_알림을_요청하지_않는다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 11, 30, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(110, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest request = HeartRateSendRequest.of(measurements, "서울시");
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        HeartRateResult savedResult = HeartRateResult.of(
-                memberId, HeartRateStatus.CAUTION, 110, batchStart.plusSeconds(14));
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(false);
-        given(heartRateAnomalyDetector.detect(memberId, measurements, "UNKNOWN"))
-                .willReturn(new DetectionResult(HeartRateStatus.CAUTION, false));
-        given(heartRatePersistenceService.saveAnalysis(memberId, request, HeartRateStatus.CAUTION, false))
-                .willReturn(savedResult);
-
-        // when
-        heartRateService.processHeartRates(memberId, request);
-
-        // then
-        then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
-    }
-
-    @Test
-    @DisplayName("AI 판정이 실패하면 원본 심박 기록을 저장하지 않는다")
-    void AI_판정이_실패하면_원본_심박기록을_저장하지_않는다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 13, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest newRequest = HeartRateSendRequest.of(measurements, "서울시");
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(false);
-        given(heartRateAnomalyDetector.detect(memberId, measurements, "UNKNOWN"))
-                .willThrow(new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "AI 서버와의 통신에 실패했습니다."));
-
-        // when & then
-        assertThatThrownBy(() -> heartRateService.processHeartRates(memberId, newRequest))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR);
-        then(heartRatePersistenceService).should(never())
-                .saveAnalysis(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
-    }
-
-    @Test
-    @DisplayName("신규 이상 배치는 Emergency를 저장하지만 중복 배치에서는 Emergency를 저장하지 않는다")
-    void 중복_이상_배치에서_Emergency를_저장하지_않는다() {
-        // given
-        Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 12, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest duplicateRequest = HeartRateSendRequest.of(measurements, "서울시");
-        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        HeartRateResult existingResult = HeartRateResult.of(memberId, HeartRateStatus.ANOMALY, 84, batchStart.plusSeconds(14));
-
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
-        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)).willReturn(true);
-        given(heartRateResultRepository.findByMemberId(memberId)).willReturn(Optional.of(existingResult));
-
-        // when
-        HeartRateStatusResponse response = heartRateService.processHeartRates(memberId, duplicateRequest);
-
-        // then
-        assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.ANOMALY);
-        then(heartRateEmergencyRepository).should(never()).save(any());
-    }
-
-    private HeartRateSendRequest request() {
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, LocalDateTime.now().plusSeconds(i)))
-                .toList();
-        return HeartRateSendRequest.of(measurements, "서울시");
     }
 
     private HeartRateEvent heartRateEvent(Integer heartRate, LocalDateTime measuredAt, HeartRateStatus status) {
