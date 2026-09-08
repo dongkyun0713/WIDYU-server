@@ -6,9 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.time.LocalDateTime;
 
-/**
- * 측정값 1건을 즉시 전송하는 요청. 배치와 달리 수신 즉시 판정·저장하므로 조회 지연이 없다(ADR-0017).
- */
+/** 측정값 1건을 즉시 전송하는 요청(ADR-0017). */
 public record HeartRateSingleRequest(
         // AI가 0과 300을 400으로 거부하므로 같은 범위로 맞춘다.
         @NotNull(message = "심박수는 필수입니다.")
@@ -40,7 +38,7 @@ public record HeartRateSingleRequest(
     }
 
     /**
-     * AI에 전달할 활동 상태. 배치 경로와 동일하게 항상 {@code UNKNOWN}이다.
+     * AI에 전달할 활동 상태. 현재는 항상 {@code UNKNOWN}이다.
      * AI가 {@code context=REST}(L1 경로)에서 위급을 판정하지 못해 고정 임계값 경로로 고정한다(#477).
      */
     public String normalizedContext() {
