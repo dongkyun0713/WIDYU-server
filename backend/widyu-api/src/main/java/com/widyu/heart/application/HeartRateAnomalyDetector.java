@@ -171,14 +171,17 @@ public class HeartRateAnomalyDetector {
     ) {
         String url = aiProperties.server().url() + "/api/hr";
         Timer.Sample sample = Timer.start(meterRegistry);
-        String outcome = "success";
+        String outcome = "error";
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             AiHeartRateRequest body = AiHeartRateRequest.of(memberId, measurement, context);
             HttpEntity<AiHeartRateRequest> request = new HttpEntity<>(body, headers);
             String result = aiRestTemplate.postForObject(url, request, String.class);
-            return parseResponse(result);
+            AiHeartRateResponse response = parseResponse(result);
+            parseStatus(response);
+            outcome = "success";
+            return response;
         } catch (RestClientException e) {
             outcome = classifyAiRequestFailure(e);
             log.error("AI 서버 호출 실패: url={}, error={}", url, e.getMessage(), e);

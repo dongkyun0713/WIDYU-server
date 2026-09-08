@@ -9,10 +9,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.util.concurrent.ThreadPoolExecutor;
+
 @Configuration
 public class MetricsConfig {
 
     private static final String WEBSOCKET_INBOUND_EXECUTOR_NAME = "websocket.inbound";
+    private static final int WEBSOCKET_INBOUND_MAX_POOL_SIZE = 16;
+    private static final int WEBSOCKET_INBOUND_QUEUE_CAPACITY = 1_000;
 
     @Bean
     public TimedAspect timedAspect(MeterRegistry meterRegistry) {
@@ -22,13 +26,14 @@ public class MetricsConfig {
     @Bean
     public ThreadPoolTaskExecutor websocketInboundExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        int corePoolSize = Runtime.getRuntime().availableProcessors() * 2;
+        int corePoolSize = Math.min(Runtime.getRuntime().availableProcessors() * 2, WEBSOCKET_INBOUND_MAX_POOL_SIZE);
         executor.setCorePoolSize(corePoolSize);
-        executor.setMaxPoolSize(Integer.MAX_VALUE);
-        executor.setQueueCapacity(Integer.MAX_VALUE);
+        executor.setMaxPoolSize(WEBSOCKET_INBOUND_MAX_POOL_SIZE);
+        executor.setQueueCapacity(WEBSOCKET_INBOUND_QUEUE_CAPACITY);
         executor.setKeepAliveSeconds(60);
         executor.setAllowCoreThreadTimeOut(true);
         executor.setThreadNamePrefix("clientInboundChannel-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         return executor;
     }
 

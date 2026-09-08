@@ -24,7 +24,6 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
-import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,8 +58,8 @@ public class FcmService {
     private final FamilyMembershipRepository familyMembershipRepository;
     private final SeniorProfileRepository seniorProfileRepository;
     private final MemberUtil memberUtil;
-    @Value("${firebase.messaging-url:https://fcm.googleapis.com/v1/projects/widyu-d384f/messages:send}")
-    private String messagingUrl;
+    private final FcmMessagingUrl messagingUrl;
+    private final FcmSendMetrics fcmSendMetrics;
 
     private String makeMessage(String token, FcmSendDto dto) throws JsonProcessingException {
         ObjectMapper om = new ObjectMapper();
@@ -145,8 +144,11 @@ public class FcmService {
     }
 
     @Transactional
-    @Timed("fcm.send")
     public void sendMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
+        fcmSendMetrics.record(() -> sendMessage(memberId, fcmSendDto));
+    }
+
+    private void sendMessage(Long memberId, FcmSendDto fcmSendDto) {
         try {
             // 알림 설정 확인
             if (!notificationSettingService.isNotificationEnabled(memberId, fcmSendDto.fcmCategory())) {
@@ -170,7 +172,7 @@ public class FcmService {
                         .add(0, new StringHttpMessageConverter(
                                 StandardCharsets.UTF_8));
 
-                ResponseEntity<String> response = restTemplate.exchange(messagingUrl, HttpMethod.POST, entity, String.class);
+                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
 
                 if (response.getStatusCode() == HttpStatus.OK) {
                     fcmNotificationRepository.save(FcmNotification.builder()
@@ -201,7 +203,7 @@ public class FcmService {
                 HttpEntity<String> entity = new HttpEntity<>(message, headers);
                 RestTemplate restTemplate = new RestTemplate();
                 restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
-                ResponseEntity<String> response = restTemplate.exchange(messagingUrl, HttpMethod.POST, entity, String.class);
+                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
                 if (response.getStatusCode() == HttpStatus.OK) sent++;
             }
         } catch (IOException e) {

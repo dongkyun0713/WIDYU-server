@@ -182,6 +182,12 @@ class HeartRateAnomalyDetectorTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR)
                 .hasMessageContaining("올바르지 않은 응답");
+        assertThat(meterRegistry.find("heart.ai.request")
+                .tag("outcome", "error")
+                .timer())
+                .isNotNull()
+                .extracting(timer -> timer.count())
+                .isEqualTo(1L);
     }
 
     @Test
