@@ -10,7 +10,7 @@ Codex가 기본 구현 에이전트다. 기존 ADR → LLD → 테스트 시나�
 | [backend/AGENTS.md](../../backend/AGENTS.md) | 기존 도메인 지도·불변식·테스트 규칙 |
 | [admin/AGENTS.md](../../admin/AGENTS.md) | React 대시보드 실행·검증 |
 | [.agents/skills](../../.agents/skills) | issue / implement / review / commit / pr / write의 원본 |
-| [.codex/config.toml](../../.codex/config.toml) | Codex 훅과 Figma MCP 연결 |
+| [.codex/config.toml](../../.codex/config.toml) | Codex 훅 설정 |
 | [scripts/harness](../../scripts/harness) | 공통 검사와 Codex/Claude 어댑터 |
 | CLAUDE.md, backend/CLAUDE.md, admin/CLAUDE.md | 기존 상세 내용을 보존한 Claude 전용 지침 |
 | .claude/settings.json | 기존 Claude 전용 권한·훅 설정 |
@@ -23,8 +23,6 @@ AGENTS.md는 루트에서 현재 작업 디렉터리까지 계층적으로 발�
 2. 프로젝트를 신뢰한 환경에서 `.codex/config.toml`이 로드된다. CLI의 `/hooks`에서 두 훅 정의를 읽고 신뢰한다. 변경된 훅은 다시 검토해야 한다. 자동 신뢰 우회 옵션은 사용하지 않는다.
 3. CLI `/skills`에서 저장소 스킬을 확인한다. `$implement`, `$review`, `$issue`, `$commit`, `$pr`로 명시하거나 자연어로 요청한다. `.agents/skills`는 자동 탐색되므로 Codex용 설치/심링크는 필요 없다. [공식 스킬 문서](https://developers.openai.com/codex/skills/)
 4. 백엔드는 Java 21, Python 3, Git, Bash와 테스트에 필요한 Redis를 준비한다. admin은 lockfile에 맞춰 `npm ci` 후 검증한다. Docker 실행은 기존 `scripts/docker/{dev,prod}-up.sh`, 종료는 `{dev,prod}-down.sh`, 로그는 `scripts/docker/logs.sh {dev|prod} [service]`를 사용하며 배포 요청 범위에서 실행한다.
-5. Figma 작업 시 `FIGMA_MCP_AUTHORIZATION`, `FIGMA_PAT`를 Codex 프로세스에 환경변수로 전달한다. 기존 프로젝트 로컬 Figma 주소와 변수 이름을 보존했다. 자격증명은 저장소에 넣지 않는다.
-
 설치된 CLI `0.153.4`에서 `codex features list`의 hooks 지원을 확인했다. 모델·추론 강도·sandbox·승인 정책은 개인/조직 설정을 따른다. 프로젝트 설정으로 전역 권한이나 모델을 강제하지 않는다. 기존 Claude 권한 문자열을 Codex 설정 키로 복사하지 않는다. [공식 설정 참조](https://developers.openai.com/codex/config-reference/)
 
 ### 연결된 worktree의 훅 원본
