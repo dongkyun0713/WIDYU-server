@@ -39,7 +39,10 @@ PR 설계 설명은 LLD를 오라클로 삼는다. diff와 실행한 검증 결�
 1. `git status --short --branch`, `git log --oneline -5` 확인.
 2. 관련 이슈 `gh issue view <N> --repo GB-able/WIDYU-server` 읽기.
 3. 관련 LLD를 읽는다. 없으면 작성 기준에 따른 N/A 사유를 기록한다.
-4. 최신 base와의 merge-base 기준 diff로 범위를 파악한다. PR 생성에 필요한 head 게시가 요청 범위에 포함되면 다음 순서로 작업 fork에 게시한다.
+4. 최신 base와의 merge-base 기준으로 범위를 파악하고, PR 생성에 필요한 head 게시가 요청 범위에 포함되면 작업 fork에 게시한다.
+   - `git remote -v`에서 `GB-able/WIDYU-server`를 가리키는 원본 remote를 찾는다.
+   - `git fetch <upstream-remote> develop`로 base를 갱신하고 `git merge-base <upstream-remote>/develop HEAD` 기준 diff를 확인한다.
+   - 원본 remote가 없거나 fetch가 실패하면 오래된 로컬 ref로 대신하지 말고 실패 사실을 보고한다.
    - `git remote -v`에서 `dongkyun0713/WIDYU-server`를 가리키는 remote를 찾고, `git remote get-url --push <fork-remote>`로 push URL도 같은 저장소인지 확인한다.
    - 해당 remote가 없으면 기존 remote를 덮어쓰지 말고 `git remote add fork https://github.com/dongkyun0713/WIDYU-server.git`로 추가한다.
    - 확인한 `<fork-remote>`에 `git push -u <fork-remote> HEAD`를 실행한다. 원본 저장소를 가리키는 remote에는 작업 브랜치를 push하지 않는다.

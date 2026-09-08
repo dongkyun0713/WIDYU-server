@@ -30,8 +30,10 @@ def main():
         (root / ".codex").mkdir()
         # This isolated fixture has no project MCP servers or application credentials.
         config = (ROOT / ".codex/config.toml").read_text().split("[mcp_servers.", 1)[0]
-        config = config.replace("command = '", "command = 'printf hook >> .codex/smoke-trace; ")
-        (root / ".codex/config.toml").write_text(config)
+        instrumented_config = config.replace("command = '", "command = 'printf hook >> .codex/smoke-trace; ")
+        if instrumented_config == config:
+            raise RuntimeError("Codex hook command를 smoke trace용으로 계측하지 못했습니다")
+        (root / ".codex/config.toml").write_text(instrumented_config)
         subprocess.run(["git", "init", "-q", "-b", "develop", str(root)], check=True)
         subprocess.run(["git", "-C", str(root), "-c", "user.name=Harness", "-c", "user.email=harness@example.invalid",
                         "commit", "--allow-empty", "-qm", "fixture"], check=True)
