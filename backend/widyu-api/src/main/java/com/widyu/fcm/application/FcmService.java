@@ -27,7 +27,8 @@ import com.widyu.member.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
@@ -50,6 +51,7 @@ public class FcmService {
     @Value("${firebase.config-path}")
     private String firebaseConfigPath;
 
+    private final ResourceLoader resourceLoader;
     private final FcmNotificationRepository fcmNotificationRepository;
     private final MemberFcmTokenRepository memberFcmTokenRepository;
     private final NotificationSettingService notificationSettingService;
@@ -80,8 +82,9 @@ public class FcmService {
     }
 
     private String getAccessToken() throws IOException {
+        Resource firebaseConfig = resourceLoader.getResource(firebaseConfigPath);
         GoogleCredentials googleCredentials = GoogleCredentials
-                .fromStream(new ClassPathResource(firebaseConfigPath).getInputStream())
+                .fromStream(firebaseConfig.getInputStream())
                 .createScoped(List.of("https://www.googleapis.com/auth/firebase.messaging"));
 
         googleCredentials.refreshIfExpired();
