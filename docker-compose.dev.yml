@@ -14,8 +14,6 @@ services:
       MYSQL_USER: ${MYSQL_USERNAME}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
-    ports:
-      - "${HOST_MYSQL_PORT}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -47,8 +45,6 @@ services:
         -Dfile.encoding=UTF-8
         -Duser.timezone=Asia/Seoul
         -Djava.security.egd=file:/dev/./urandom
-    ports:
-      - "8080:8080"
     depends_on:
       - mysql
       - redis
