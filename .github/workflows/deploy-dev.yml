@@ -139,10 +139,11 @@ jobs:
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
-            set +e
-            docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42'
-            CERTIFICATE_STATUS=$?
-            set -e
+            if docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42'; then
+              CERTIFICATE_STATUS=0
+            else
+              CERTIFICATE_STATUS=$?
+            fi
 
             if [ "$CERTIFICATE_STATUS" -eq 42 ]; then
               echo "🔐 Starting Nginx with the HTTP-only certificate bootstrap configuration..."
