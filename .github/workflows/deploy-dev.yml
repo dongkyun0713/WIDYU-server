@@ -21,6 +21,7 @@ env:
   ORACLE_DEPLOY_PATH: ${{ secrets.ORACLE_DEPLOY_PATH || '/home/ubuntu/widyu' }}
   ORACLE_ENV_FILE_PATH: ${{ secrets.ORACLE_ENV_FILE_PATH || '/home/ubuntu/.env' }}
   ORACLE_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
+  ORACLE_CERTBOT_EMAIL: ${{ secrets.ORACLE_CERTBOT_EMAIL }}
 
 jobs:
   build-and-push-docker:
@@ -139,10 +140,11 @@ jobs:
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
-            set +e
-            docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42'
-            CERTIFICATE_STATUS=$?
-            set -e
+            if docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42'; then
+              CERTIFICATE_STATUS=0
+            else
+              CERTIFICATE_STATUS=$?
+            fi
 
             if [ "$CERTIFICATE_STATUS" -eq 42 ]; then
               echo "🔐 Starting Nginx with the HTTP-only certificate bootstrap configuration..."
@@ -183,6 +185,17 @@ jobs:
 
             echo "🔄 Reloading nginx config..."
             docker exec widyu-nginx-dev nginx -s reload
+
+            if [ "$CERTIFICATE_STATUS" -eq 42 ]; then
+              if [ -z "${{ env.ORACLE_CERTBOT_EMAIL }}" ]; then
+                echo "ORACLE_CERTBOT_EMAIL secret is required for the first HTTPS certificate issuance." >&2
+                exit 1
+              fi
+
+              echo "🔐 Issuing the first HTTPS certificate..."
+              COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml \
+                ./scripts/ssl/certbot-init.sh dev.widyu.store "${{ env.ORACLE_CERTBOT_EMAIL }}"
+            fi
 
             # echo "🔧 Ensuring monitoring stack is running..."
             # docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
