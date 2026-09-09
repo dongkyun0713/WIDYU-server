@@ -141,14 +141,8 @@ jobs:
             echo "🐳 Pulling Docker image..."
             docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
-            echo "🔍 Checking restored MySQL is running..."
-            if ! docker inspect -f '{{.State.Running}}' widyu-mysql-dev 2>/dev/null | grep -qx true; then
-              echo "widyu-mysql-dev is not running. Restore the MySQL backup on Oracle before deploying." >&2
-              exit 1
-            fi
-
-            echo "🔧 Ensuring Redis, AI, and Nginx are running..."
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build --no-deps redis widyu-ai nginx
+            echo "🔧 Ensuring MySQL, Redis, AI, and Nginx are running..."
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps mysql redis widyu-ai nginx
 
             echo "🚀 Deploying widyu-api (monitoring containers stay running)..."
             docker rm -f widyu-api-dev 2>/dev/null || true
