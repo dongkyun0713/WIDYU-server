@@ -1,7 +1,7 @@
 # Multi-stage build for Spring Boot multi-module project
 
 # Stage 1: Build stage
-FROM gradle:8.5-jdk21 AS builder
+FROM --platform=$BUILDPLATFORM gradle:8.5-jdk21 AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN ./gradlew dependencies --no-daemon || return 0
 RUN ./gradlew :backend:widyu-api:bootJar --no-daemon -x test
 
 # Stage 2: Runtime stage
-FROM amazoncorretto:21-alpine
+FROM --platform=$TARGETPLATFORM amazoncorretto:21-alpine
 
 WORKDIR /app
 

@@ -33,6 +33,13 @@ echo ""
 echo "✅ 인증서 발급 완료!"
 echo ""
 echo "📝 다음 단계:"
-echo "1. nginx/nginx.conf에서 'yourdomain.com'을 '$DOMAIN'으로 변경"
-echo "2. nginx 재시작: docker compose restart nginx"
-echo "3. HTTPS 테스트: https://$DOMAIN/actuator/health"
+
+if [ -f nginx/nginx.https.conf ]; then
+    cp nginx/nginx.https.conf nginx/nginx.conf
+    docker compose restart nginx
+    echo "1. HTTPS Nginx 설정으로 전환했습니다."
+else
+    echo "1. nginx/nginx.conf에서 도메인이 '$DOMAIN'인지 확인하세요."
+fi
+
+echo "2. HTTPS 테스트: https://$DOMAIN/actuator/health"

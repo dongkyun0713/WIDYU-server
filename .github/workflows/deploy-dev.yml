@@ -1,40 +1,39 @@
-name: Deploy to AWS EC2 using Docker Compose
+name: Deploy development server using Docker Compose
 
 on:
   push:
     branches:
       - develop
+  schedule:
+    - cron: "0 3 * * *"
 
 concurrency:
   group: deploy-dev
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   DOCKER_IMAGE_NAME: ${{ secrets.DEV_DOCKER_IMAGE_NAME }}
-  EC2_HOST: ${{ secrets.EC2_HOST }}
-  EC2_SSH_USER: ec2-user
-  PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+  ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+  ORACLE_SSH_USER: ${{ secrets.ORACLE_SSH_USER || 'ubuntu' }}
+  ORACLE_DEPLOY_PATH: ${{ secrets.ORACLE_DEPLOY_PATH || '/home/ubuntu/widyu' }}
+  ORACLE_ENV_FILE_PATH: ${{ secrets.ORACLE_ENV_FILE_PATH || '/home/ubuntu/.env' }}
+  ORACLE_PRIVATE_KEY: ${{ secrets.ORACLE_SSH_PRIVATE_KEY }}
 
 jobs:
   build-and-push-docker:
     name: Build & Push Docker Image
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Grant execute permission for Gradlew
-        run: chmod +x gradlew
-
-      - name: Build widyu-api module only
-        run: ./gradlew :backend:widyu-api:clean :backend:widyu-api:bootJar --no-daemon
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -54,12 +53,14 @@ jobs:
           tags: |
             ${{ env.DOCKER_IMAGE_NAME }}:latest
             ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:cache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:cache,mode=max
 
-  deploy-to-ec2:
-    name: Deploy to AWS EC2
+  deploy-to-dev-server:
+    name: Deploy to development server
     needs: build-and-push-docker
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -79,68 +80,121 @@ jobs:
           npm ci
           npm run build
 
-      - name: Sync compose files to EC2
+      - name: Sync compose files to Oracle server
+        env:
+          ORACLE_SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
         run: |
-          printf "%s" "${{ env.PRIVATE_KEY }}" > private_key.pem
+          DEPLOY_KNOWN_HOSTS_FILE="$PWD/.ssh-deploy/known_hosts"
+          mkdir -p "$(dirname "$DEPLOY_KNOWN_HOSTS_FILE")"
+          printf "%s" "$ORACLE_PRIVATE_KEY" > private_key.pem
+          printf "%s\n" "$ORACLE_SSH_KNOWN_HOSTS" > "$DEPLOY_KNOWN_HOSTS_FILE"
           chmod 600 private_key.pem
+          chmod 600 "$DEPLOY_KNOWN_HOSTS_FILE"
+          trap 'rm -f private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"' EXIT
 
-          ssh -i private_key.pem -o StrictHostKeyChecking=no \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }} \
-            "mkdir -p /home/ec2-user/widyu/nginx /home/ec2-user/widyu/admin/dist"
-            # "mkdir -p /home/ec2-user/widyu/nginx /home/ec2-user/widyu/monitoring"
+          ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS_FILE" \
+            "$ORACLE_SSH_USER@$ORACLE_HOST" \
+            "mkdir -p -- '$ORACLE_DEPLOY_PATH/nginx' '$ORACLE_DEPLOY_PATH/admin/dist'"
 
-          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
+          rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
             docker-compose.yml docker-compose.dev.yml \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/"
 
           # --inplace: nginx.conf가 단일 파일 바인드 마운트라, 파일 교체 시 inode가 바뀌면
           # 컨테이너가 옛 파일을 계속 참조해 `nginx -s reload`가 반영되지 않는다.
           # in-place로 덮어써 inode를 유지하면 reload가 정상 반영된다.
-          rsync -avz --inplace -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
+          rsync -avz --inplace -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
             nginx/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/nginx/
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/nginx/"
 
-          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
+          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
             scripts/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/scripts/
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/scripts/"
 
           rsync -av --delete .well-known/ admin/dist/.well-known/
 
-          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
+          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
             admin/dist/ \
-            ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/admin/dist/
-
-          # rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=no" \
-          #   monitoring/ \
-          #   ${{ env.EC2_SSH_USER }}@${{ env.EC2_HOST }}:/home/ec2-user/widyu/monitoring/
-  
-          rm -f private_key.pem
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/admin/dist/"
 
       - name: Deploy with Docker Compose
         uses: appleboy/ssh-action@v1.2.4
         with:
-          host: ${{ env.EC2_HOST }}
-          username: ${{ env.EC2_SSH_USER }}
-          key: ${{ env.PRIVATE_KEY }}
+          host: ${{ env.ORACLE_HOST }}
+          username: ${{ env.ORACLE_SSH_USER }}
+          key: ${{ env.ORACLE_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.ORACLE_SSH_HOST_FINGERPRINT }}
           script: |
             set -e
 
-            cd /home/ec2-user/widyu
+            cd ${{ env.ORACLE_DEPLOY_PATH }}
 
             # .env 파일 복사 및 Docker 이미지 정보 추가
-            cp /home/ec2-user/.env .env
+            cp ${{ env.ORACLE_ENV_FILE_PATH }} .env
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
+
+            set +e
+            docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42'
+            CERTIFICATE_STATUS=$?
+            set -e
+
+            if [ "$CERTIFICATE_STATUS" -eq 42 ]; then
+              echo "🔐 Starting Nginx with the HTTP-only certificate bootstrap configuration..."
+              cp nginx/nginx.conf nginx/nginx.https.conf
+              cp nginx/nginx.bootstrap.conf nginx/nginx.conf
+            elif [ "$CERTIFICATE_STATUS" -ne 0 ]; then
+              echo "Failed to check the HTTPS certificate state." >&2
+              exit "$CERTIFICATE_STATUS"
+            fi
 
             echo "🐳 Pulling Docker image..."
             docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
-            echo "🚀 Deploying widyu-api (monitoring containers stay running)..."
-            docker rm -f widyu-api-dev 2>/dev/null || true
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps --force-recreate widyu-api
+            echo "🔧 Ensuring MySQL, Redis, and AI are running..."
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps mysql redis widyu-ai
+
+            PREVIOUS_IMAGE=""
+            if docker inspect widyu-api-dev >/dev/null 2>&1; then
+              PREVIOUS_IMAGE=$(docker inspect -f '{{.Config.Image}}' widyu-api-dev)
+            fi
+
+            echo "🚀 Deploying and checking widyu-api..."
+            if ! docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps --force-recreate widyu-api; then
+              if [ -n "$PREVIOUS_IMAGE" ]; then
+                PREVIOUS_TAG="${PREVIOUS_IMAGE##*:}"
+                if [ "$PREVIOUS_TAG" != "$PREVIOUS_IMAGE" ]; then
+                  echo "↩️ Restoring the previous widyu-api image..."
+                  sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$PREVIOUS_TAG/" .env
+                  docker pull "$PREVIOUS_IMAGE"
+                  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps --force-recreate widyu-api
+                fi
+              fi
+              exit 1
+            fi
+
+            echo "🔧 Ensuring Nginx is running..."
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps nginx
 
             echo "🔄 Reloading nginx config..."
             docker exec widyu-nginx-dev nginx -s reload
 
             # echo "🔧 Ensuring monitoring stack is running..."
             # docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
+
+  renew-development-certificate:
+    name: Renew development TLS certificate
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Renew certificate on Oracle server
+        uses: appleboy/ssh-action@v1.2.4
+        with:
+          host: ${{ env.ORACLE_HOST }}
+          username: ${{ env.ORACLE_SSH_USER }}
+          key: ${{ env.ORACLE_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.ORACLE_SSH_HOST_FINGERPRINT }}
+          script: |
+            set -e
+            cd ${{ env.ORACLE_DEPLOY_PATH }}
+            ./scripts/ssl/certbot-renew.sh
