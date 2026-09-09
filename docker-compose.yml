@@ -217,9 +217,9 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
-      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:-http://localhost:3000}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?DISCORD_WEBHOOK_URL is required}
+      - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

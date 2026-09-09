@@ -7,6 +7,7 @@ contactPoints:
       - uid: widyu-development-discord
         type: discord
         settings:
-          url: $__env{DISCORD_WEBHOOK_URL}
           title: "{{ .CommonLabels.alertname }}"
-          message: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.grafana_url }}"
+          message: "{{ .CommonAnnotations.summary }}\ntraceId: {{ .CommonAnnotations.trace_id }}\n{{ .CommonAnnotations.grafana_url }}"
+        secure_settings:
+          url: $DISCORD_WEBHOOK_URL

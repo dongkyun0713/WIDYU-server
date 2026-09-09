@@ -112,6 +112,10 @@ jobs:
             scripts/ \
             "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/scripts/"
 
+          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
+            monitoring/ \
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/monitoring/"
+
           rsync -av --delete .well-known/ admin/dist/.well-known/
 
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \

@@ -16,4 +16,12 @@ ssh -L 3000:127.0.0.1:3000 <ssh-user>@<oracle-host>
 
 응답의 `X-Trace-Id` 또는 JSON `traceId`를 복사해 로그 본문에서 검색한다.
 
-Oracle `/home/ubuntu/.env`에는 강한 `GRAFANA_ADMIN_PASSWORD`를 지정한다. Discord 오류 알림을 쓰려면 `DISCORD_WEBHOOK_URL`과 Grafana 접근 주소인 `GRAFANA_EXTERNAL_URL`도 지정한다. webhook URL은 Git과 GitHub Actions Secret에 저장하지 않는다.
+Oracle `/home/ubuntu/.env`에는 다음 값을 모두 지정한다. 값이 없으면 배포가 실패하므로 기본 비밀번호나 localhost 링크로 실행되지 않는다.
+
+```dotenv
+GRAFANA_ADMIN_PASSWORD=<strong-password>
+DISCORD_WEBHOOK_URL=<discord-webhook-url>
+GRAFANA_EXTERNAL_URL=https://dev.widyu.store
+```
+
+webhook URL은 Git과 GitHub Actions Secret에 저장하지 않는다. Grafana는 개인 계정을 만들어 사용하고 계정을 공유하지 않는다. 팀 이탈 시 즉시 계정을 삭제하며, 관리자 비밀번호와 Discord webhook은 분기마다 또는 유출이 의심되면 즉시 교체한다. Loki 로그 보존 기간은 7일이다.

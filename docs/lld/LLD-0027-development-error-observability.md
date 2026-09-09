@@ -23,7 +23,7 @@
 
 ## 3. 인터페이스 / API
 
-모든 HTTP 응답은 `X-Trace-Id` 헤더를 포함한다. 오류 응답에는 기존 필드를 유지하고 `traceId`를 추가한다.
+모든 HTTP 응답은 `X-Trace-Id` 헤더와 `traceId` JSON 필드를 포함한다. 요청 헤더의 traceId는 영문·숫자·점·밑줄·하이픈만 허용하며 최대 64자다. 유효하지 않거나 없으면 서버가 UUID를 생성한다.
 
 ## 4. 데이터 모델
 
@@ -38,13 +38,13 @@ DB 변경 없음.
 
 ## 6. 예외 / 에러 처리
 
-Discord webhook이 없으면 알림 규칙을 만들지 않으며 API 요청에는 영향을 주지 않는다.
+개발 배포에는 `GRAFANA_ADMIN_PASSWORD`, `DISCORD_WEBHOOK_URL`, `GRAFANA_EXTERNAL_URL`이 필수다. 하나라도 없으면 모니터링 설정이 불완전한 상태로 실행되는 대신 배포를 실패시킨다.
 
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [ ] 5xx 응답과 ERROR 로그가 같은 traceId를 가진다.
 - [ ] Grafana에서 개발 API ERROR 로그를 조회할 수 있다.
-- [ ] Discord 오류 알림은 traceId와 Grafana 링크만 전달한다.
+- [ ] Discord 오류 알림은 traceId와 Grafana 대시보드 링크만 전달한다.
 - [ ] 관측 도구 포트는 외부 인터페이스에 게시되지 않는다.
 - [ ] `./gradlew :backend:widyu-api:test`가 통과한다.
 
