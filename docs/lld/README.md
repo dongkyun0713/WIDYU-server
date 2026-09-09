@@ -49,6 +49,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0027](LLD-0027-development-error-observability.md) | 개발 서버 오류 관측 | Approved | #566 |
 | LLD-0001 | WebSocket 실시간 위치 추적 | Approved | - |
 | LLD-0002 | FCM 푸시 알림 발송 구조 | Approved | - |
 | LLD-0003 | 포인트·결제 플로우 | Approved | - |

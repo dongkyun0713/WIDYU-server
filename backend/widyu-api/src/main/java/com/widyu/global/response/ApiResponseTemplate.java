@@ -3,6 +3,7 @@ package com.widyu.global.response;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.slf4j.MDC;
 
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -11,6 +12,7 @@ public class ApiResponseTemplate<T> {
     private final String code;
     private final String message;
     private final T data;
+    private final String traceId;
 
     public static BodyBuilder ok() {
         return new DefaultBodyBuilder();
@@ -48,12 +50,12 @@ public class ApiResponseTemplate<T> {
 
         @Override
         public <T> ApiResponseTemplate<T> body(final T data) {
-            return new ApiResponseTemplate<>(this.code, this.message, data);
+            return new ApiResponseTemplate<>(this.code, this.message, data, MDC.get("traceId"));
         }
 
         @Override
         public <T> ApiResponseTemplate<T> build() {
-            return new ApiResponseTemplate<>(this.code, this.message, null);
+            return new ApiResponseTemplate<>(this.code, this.message, null, MDC.get("traceId"));
         }
     }
 }

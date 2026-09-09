@@ -1,0 +1,60 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: widyu-development-errors
+    folder: WIDYU Development
+    interval: 1m
+    rules:
+      - uid: widyu-development-api-error
+        title: DEV API ERROR
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "개발 API ERROR 로그가 발생했습니다."
+          grafana_url: "$__env{GRAFANA_EXTERNAL_URL}/d/widyu-development-errors"
+        labels:
+          environment: dev
+          service: widyu-api-dev
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: '{service="widyu-api-dev", environment="dev"} |= "ERROR"'
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: count
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query

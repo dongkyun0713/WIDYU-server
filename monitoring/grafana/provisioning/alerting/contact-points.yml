@@ -1,0 +1,12 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: widyu-development-discord
+    receivers:
+      - uid: widyu-development-discord
+        type: discord
+        settings:
+          url: $__env{DISCORD_WEBHOOK_URL}
+          title: "{{ .CommonLabels.alertname }}"
+          message: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.grafana_url }}"
