@@ -138,6 +138,12 @@ jobs:
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
+            if ! docker compose --profile manual run --rm --entrypoint sh certbot -c 'test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem'; then
+              echo "🔐 Starting Nginx with the HTTP-only certificate bootstrap configuration..."
+              cp nginx/nginx.conf nginx/nginx.https.conf
+              cp nginx/nginx.bootstrap.conf nginx/nginx.conf
+            fi
+
             echo "🐳 Pulling Docker image..."
             docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
