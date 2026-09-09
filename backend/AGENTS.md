@@ -1,7 +1,14 @@
-# backend/CLAUDE.md
+# backend/AGENTS.md
 
-백엔드 도메인 지도·불변식·주의사항입니다. 공통 규칙·아키텍처 패턴은 루트 [CLAUDE.md](../CLAUDE.md)를 참조하세요.
+백엔드 도메인 지도·불변식·주의사항입니다. 공통 규칙·아키텍처 패턴은 루트 [AGENTS.md](../AGENTS.md)를 참조하세요.
 상세 설계·의사결정은 [docs/lld](../docs/lld)·[docs/adr](../docs/adr)에 있으니 해당 도메인 작업 전 먼저 읽으세요.
+
+## 아키텍처 패턴
+
+- 여러 서비스 조합은 Facade, OAuth 제공자별 처리는 Strategy + Factory를 사용한다.
+- 가족 접근은 @ValidateFamilyAccess AOP 또는 명시적 권한 검사 경로를 해당 ADR/LLD에 맞춰 적용한다(ADR-0002·0020).
+- 도메인 간 알림은 이벤트, 복잡한 조건 쿼리는 QueryDSL을 사용한다.
+- WebSocket STOMP 인증·구독 인가를 확인하고 SimpMessagingTemplate으로 전송한다. 위치 데이터는 Redis에 저장한다.
 
 ## Core Domain Modules
 
@@ -84,7 +91,7 @@
 - **`@Async` 비동기**:
   - `@Async` 메서드는 **별도 빈**에 배치 (self-invocation 프록시 우회 방지)
   - `MultipartFile`은 요청 종료 후 삭제되므로 `File`로 변환해 async 스레드에 전달
-  - 새 스레드는 호출자 트랜잭션을 전파받지 못하므로, DB 작업이 있는 `@Async` 메서드에는 `@Transactional`을 직접 선언한다 (훅이 누락 시 경고)
+  - 새 스레드는 호출자 트랜잭션을 전파받지 못하므로, DB 작업이 있는 `@Async` 메서드에는 `@Transactional`을 직접 선언한다 (정적 검사에서 누락 시 실패)
   - 임시 파일은 `finally`에서 삭제
 - **MySQL ENUM**: `ddl-auto: update`는 기존 ENUM 컬럼에 새 값을 추가하지 않음 → 수동 실행 필요:
   `ALTER TABLE <table> MODIFY COLUMN <col> ENUM('A','B','NEW') NOT NULL`
@@ -94,10 +101,14 @@
 **프레임워크**: JUnit 5 + Mockito (`@ExtendWith(MockitoExtension.class)`), H2 in-memory (`application-test.yml`).
 
 1. **DAMP > DRY** — `@BeforeEach`로 상태 공유 금지. 반복 객체 생성은 Fixture 클래스로 분리해 각 테스트를 독립적으로 유지한다.
-2. **결과를 검증한다** — `verify(...)` 같은 구현 호출이 아니라 상태 변화를 검증 (`assertEquals(Status.PASS, applicant.getStatus())`).
+2. **결과를 검증한다** — 상태 변화를 우선 검증한다. 외부 호출, 이벤트 발행, 삭제 같은 부수효과는 `verify(...)`로 검증할 수 있다.
 3. **AAA 패턴** — `// given / when / then` 주석으로 구분한다.
 4. **명세에 비즈니스 행위를 담는다** — 메서드명은 한글 언더스코어(`관리자_정보로_가입한다`), `@DisplayName`은 `<행위>하면 <결과>한다/반환한다/예외가 발생한다` 형식. "성공·실패·테스트" 접미사 금지.
 5. **BDDMockito** — `given(...).willReturn(...)` 사용 (`when/thenReturn` 금지).
 6. **예외 테스트** — `assertThatThrownBy(() -> ...).isInstanceOf(BusinessException.class)`.
 
 **테스트 구분**: Unit(도메인 모델·비즈니스 로직) / Integration(주요 흐름·DB 등 외부 의존성) / E2E(사용자 흐름 전체).
+
+## 검증 환경
+
+Java 21이 필요하다. H2 테스트 외에 실제 Redis를 사용하는 통합 테스트도 있으므로 로컬 Redis가 필요할 수 있다(CI는 Redis 서비스를 제공한다). Domain 변경은 API 소비자 테스트도 수행한다. 엔티티 변경 시 compileJava 및 ERD 갱신, MySQL ENUM 변경 시 LLD에 ALTER TABLE 명령을 기록한다.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# install-hooks.sh — Codex 용 .agents/skills 를 Claude Code 가 찾도록 심링크를 건다.
+# install-hooks.sh — 선택적 Claude 호환 설치. Codex는 .agents/skills를 직접 탐색한다.
+# Codex 훅은 .codex/config.toml + /hooks 신뢰로 적용한다(docs/harness/codex.md).
 #
 # 사용: bash scripts/harness/install-hooks.sh
 #

@@ -154,18 +154,13 @@ public class WalkService {
                             "먼저 걷기 목표를 설정해주세요.");
                 });
 
-        // 이미 목표를 달성한 경우 재연동 불가
-        if (walk.isGoalAchieved()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "이미 목표를 달성했습니다. 당일에는 재연동이 불가능합니다.");
-        }
-
         walk.updateActualSteps(request.steps());
 
-        // 목표 달성 시 자동으로 포인트 지급
+        // 목표 달성 시 포인트 지급 (하루 1회만, 목표 초과 후 재연동해도 중복 지급하지 않음)
         boolean achieved = walk.isGoalAchieved();
-        if (achieved && currentMember.getSeniorProfile() != null) {
+        if (achieved && !walk.isRewarded() && currentMember.getSeniorProfile() != null) {
             currentMember.getSeniorProfile().addPoints((long) walk.getPointRewarded());
+            walk.markRewarded();
             log.info("걸음 목표 달성 - 포인트 자동 지급: memberId={}, points={}",
                     currentMember.getId(), walk.getPointRewarded());
         }

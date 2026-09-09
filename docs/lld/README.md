@@ -71,3 +71,4 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 | LLD-0021 | 앨범 Presigned Multipart 직접 업로드 | Approved | #450 |
 | LLD-0024 | 목표 홈 주간 통계 조회 파이프라인 최적화 | Approved | #489, #491, #492 |
 | LLD-0025 | 임시 토큰 인증 API의 액세스 토큰 필터 분리 | Approved | #522 |
+| [LLD-0026](LLD-0026-codex-primary-harness.md) | Codex 기본 하네스 전환 | Review | #549 |

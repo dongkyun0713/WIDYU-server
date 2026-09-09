@@ -48,6 +48,9 @@ public class Walk extends BaseTimeEntity {
     @Column(name = "actual_steps", nullable = false)
     private Integer actualSteps = 0;
 
+    @Column(name = "rewarded", nullable = false)
+    private boolean rewarded = false;
+
     @Builder(access = AccessLevel.PRIVATE)
     private Walk(Member member, LocalDate walkDate, Integer goalSteps, Integer actualSteps) {
         this.member = member;
@@ -80,6 +83,10 @@ public class Walk extends BaseTimeEntity {
 
     public boolean isGoalAchieved() {
         return this.actualSteps >= this.goalSteps;
+    }
+
+    public void markRewarded() {
+        this.rewarded = true;
     }
 
     public Integer getPointRewarded() {

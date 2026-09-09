@@ -7,10 +7,10 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import com.widyu.heart.HeartRateEmergency;
+import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
-import com.widyu.heart.dto.request.HeartRateMeasurement;
-import com.widyu.heart.dto.request.HeartRateSendRequest;
+import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.heart.repository.HeartRateResultRepository;
@@ -18,7 +18,6 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,17 +40,17 @@ class HeartRatePersistenceServiceTest {
     private HeartRatePersistenceService heartRatePersistenceService;
 
     @Test
-    @DisplayName("정상 판정을 저장하면 Result와 Event만 저장한다")
-    void 정상_판정을_저장하면_Result와_Event만_저장한다() {
+    @DisplayName("정상 단건 판정을 저장하면 Result와 Event만 저장한다")
+    void 정상_단건_판정을_저장하면_Result와_Event만_저장한다() {
         // given
         Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 14, 0, 0);
-        HeartRateSendRequest request = request(batchStart);
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(78, measuredAt, "서울시", "UNKNOWN");
         Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
         given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
 
         // when
-        HeartRateResult result = heartRatePersistenceService.saveAnalysis(
+        HeartRateResult result = heartRatePersistenceService.saveMeasurement(
                 memberId,
                 request,
                 HeartRateStatus.NORMAL,
@@ -61,29 +60,26 @@ class HeartRatePersistenceServiceTest {
         // then
         assertThat(result.getMemberId()).isEqualTo(memberId);
         assertThat(result.getStatus()).isEqualTo(HeartRateStatus.NORMAL);
-        assertThat(result.getHeartRate()).isEqualTo(84);
-        assertThat(result.getMeasuredAt()).isEqualTo(batchStart.plusSeconds(14));
+        assertThat(result.getHeartRate()).isEqualTo(78);
+        assertThat(result.getMeasuredAt()).isEqualTo(measuredAt);
         then(heartRateResultRepository).should().save(any(HeartRateResult.class));
-        then(heartRateEventRepository).should().saveAll(any());
+        then(heartRateEventRepository).should().save(any(HeartRateEvent.class));
         then(heartRateEmergencyRepository).should(never()).save(any());
     }
 
     @Test
-    @DisplayName("긴급 판정을 저장하면 peak 심박수로 Emergency를 저장한다")
-    void 긴급_판정을_저장하면_peak_심박수로_Emergency를_저장한다() {
+    @DisplayName("긴급 단건 판정을 저장하면 해당 심박수로 Emergency를 저장한다")
+    void 긴급_단건_판정을_저장하면_해당_심박수로_Emergency를_저장한다() {
         // given
         Long memberId = 1L;
-        LocalDateTime batchStart = LocalDateTime.of(2026, 1, 1, 15, 0, 0);
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        HeartRateSendRequest request = HeartRateSendRequest.of(measurements, "서울시");
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(180, measuredAt, "서울시", "UNKNOWN");
         Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
         given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
         ArgumentCaptor<HeartRateEmergency> emergencyCaptor = ArgumentCaptor.forClass(HeartRateEmergency.class);
 
         // when
-        HeartRateResult result = heartRatePersistenceService.saveAnalysis(
+        heartRatePersistenceService.saveMeasurement(
                 memberId,
                 request,
                 HeartRateStatus.EMERGENCY,
@@ -91,18 +87,10 @@ class HeartRatePersistenceServiceTest {
         );
 
         // then
-        assertThat(result.getStatus()).isEqualTo(HeartRateStatus.EMERGENCY);
         then(heartRateEmergencyRepository).should().save(emergencyCaptor.capture());
         HeartRateEmergency emergency = emergencyCaptor.getValue();
-        assertThat(emergency.getHeartRate()).isEqualTo(84);
-        assertThat(emergency.getMeasuredAt()).isEqualTo(batchStart.plusSeconds(14));
+        assertThat(emergency.getHeartRate()).isEqualTo(180);
+        assertThat(emergency.getMeasuredAt()).isEqualTo(measuredAt);
         assertThat(emergency.getLocation()).isEqualTo("서울시");
-    }
-
-    private HeartRateSendRequest request(LocalDateTime batchStart) {
-        List<HeartRateMeasurement> measurements = java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
-        return HeartRateSendRequest.of(measurements, "서울시");
     }
 }

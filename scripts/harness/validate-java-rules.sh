@@ -1,5 +1,5 @@
 #!/bin/bash
-# WIDYU 코드 규칙 검사 (CLAUDE.md 기반)
+# WIDYU 코드 규칙 검사 (AGENTS.md 기반)
 # 사용법: bash scripts/harness/validate-java-rules.sh <java-file-path>
 #
 # 라인 단위 규칙(1·2·6)은 HEAD 대비 추가된 라인만 검사한다. 파일 전체를 보면
@@ -9,6 +9,12 @@
 
 FILE="$1"
 if [[ ! -f "$FILE" ]]; then exit 0; fi
+
+DIFF_BASE="${HARNESS_DIFF_BASE:-HEAD}"
+if ! git rev-parse --verify "$DIFF_BASE^{commit}" >/dev/null 2>&1; then
+    echo "[HARNESS] 유효하지 않은 검사 기준: $DIFF_BASE" >&2
+    exit 1
+fi
 
 BASENAME=$(basename "$FILE")
 ERRORS=0
@@ -24,7 +30,7 @@ TOUCHED_FILE=$(mktemp -t harness-touched.XXXXXX)
 trap 'rm -f "$ADDED_FILE" "$TOUCHED_FILE"' EXIT
 
 if [[ "${HARNESS_FULL_FILE:-0}" != "1" ]]; then
-    HUNKS=$(git diff HEAD -U0 -- "$FILE" 2>/dev/null | grep '^@@' || true)
+    HUNKS=$(git diff "$DIFF_BASE" -U0 -- "$FILE" 2>/dev/null | grep '^@@' || true)
     printf '%s\n' "$HUNKS" \
         | awk '/^@@/ {
                  match($0, /\+[0-9]+(,[0-9]+)?/)
@@ -38,7 +44,7 @@ if [[ "${HARNESS_FULL_FILE:-0}" != "1" ]]; then
     # 무관한 수정을 막지 않게 하려던 목적 자체가 무너진다.
     {
         cat "$ADDED_FILE"
-        git diff HEAD -U0 -- "$FILE" 2>/dev/null \
+        git diff "$DIFF_BASE" -U0 -- "$FILE" 2>/dev/null \
             | awk '/^@@/ {
                      match($0, /\+[0-9]+(,[0-9]+)?/)
                      spec = substr($0, RSTART + 1, RLENGTH - 1)

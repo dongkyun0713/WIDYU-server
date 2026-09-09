@@ -71,3 +71,4 @@ ADR 커버리지는 100%를 목표로 하지 않는다. 대신 다음 영역은 
 | [ADR-0019](ADR-0019-goal-home-query-pipeline.md) | 목표 홈 주간 통계 기간 벌크 조회 | Accepted | 2026-08-20 |
 | [ADR-0020](ADR-0020-family-access-dual-path.md) | 가족 접근 인가 이중 경로를 인정하고 정적 검증으로 강제 | Accepted | 2026-08-20 |
 | [ADR-0021](ADR-0021-branch-guard-pretooluse.md) | 이슈·브랜치 없는 코드 수정을 PreToolUse 훅으로 차단 | Accepted | 2026-08-25 |
+| [ADR-0022](ADR-0022-codex-primary-harness.md) | Codex 주 구현 에이전트와 공통 하네스 | Accepted | 2026-09-07 |

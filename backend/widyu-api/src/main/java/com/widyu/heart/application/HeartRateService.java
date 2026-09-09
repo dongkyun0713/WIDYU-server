@@ -7,8 +7,6 @@ import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
 import com.widyu.heart.HeartRateEmergency;
 import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
-import com.widyu.heart.dto.request.HeartRateMeasurement;
-import com.widyu.heart.dto.request.HeartRateSendRequest;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.EmergencyEventResponse;
 import com.widyu.heart.dto.response.EmergencyHistoryResponse;
@@ -59,46 +57,7 @@ public class HeartRateService {
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final MemberRepository memberRepository;
 
-    public HeartRateStatusResponse processHeartRates(Long memberId, HeartRateSendRequest request) {
-        validateMemberExists(memberId);
-
-        LocalDateTime batchStart = request.heartRates().stream()
-                .map(HeartRateMeasurement::measuredAt)
-                .min(Comparator.naturalOrder())
-                .orElseThrow();
-
-        if (heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, batchStart)) {
-            return getHeartRateStatus(memberId);
-        }
-
-        DetectionResult detection = heartRateAnomalyDetector.detect(
-                memberId,
-                request.heartRates(),
-                request.normalizedContext()
-        );
-
-        HeartRateResult result = heartRatePersistenceService.saveAnalysis(
-                memberId,
-                request,
-                detection.status(),
-                detection.emergency()
-        );
-
-        if (detection.emergency()) {
-            eventPublisher.publishEvent(new HeartRateEmergencyEvent(memberId));
-        }
-
-        // 심박 수치·측정 시각은 개인 건강정보이므로 남기지 않는다. 배치 상세는 HeartRateAnomalyDetector의 DEBUG 로그를 본다.
-        // rawContext는 앱이 context를 실제로 보내는지 확인하기 위한 값이다 (미전송이면 null·공백, LLD-0019)
-        log.info("심박수 분석 완료: memberId={}, status={}, rawContext=[{}]",
-                memberId, detection.status(), request.context());
-
-        return HeartRateStatusResponse.from(result);
-    }
-
-    /**
-     * 측정값 1건을 즉시 판정·저장한다. 배치와 달리 수신 시점에 최신값이 갱신되므로 조회 지연이 없다(LLD-0023).
-     */
+    /** 측정값 1건을 수신 즉시 판정·저장한다(LLD-0023). */
     public HeartRateStatusResponse processHeartRate(Long memberId, HeartRateSingleRequest request) {
         validateMemberExists(memberId);
 
@@ -108,7 +67,7 @@ public class HeartRateService {
 
         DetectionResult detection = heartRateAnomalyDetector.detect(
                 memberId,
-                List.of(request.toMeasurement()),
+                request.toMeasurement(),
                 request.normalizedContext()
         );
 

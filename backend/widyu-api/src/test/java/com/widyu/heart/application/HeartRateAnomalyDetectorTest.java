@@ -20,9 +20,6 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.SocketTimeoutException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,29 +40,15 @@ class HeartRateAnomalyDetectorTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @Test
-    @DisplayName("심박수 데이터가 비어 있으면 BAD_REQUEST 예외를 던진다")
-    void 심박수_데이터가_비어있으면_예외가_발생한다() {
+    @DisplayName("측정값 한 건을 AI에 한 번 요청해 판정한다")
+    void 측정값_한건을_AI에_한번_요청해_판정한다() {
         // given
-        HeartRateAnomalyDetector detector = detector();
-
-        // when & then
-        assertThatThrownBy(() -> detector.detect(1L, List.of(), "REST"))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_REQUEST)
-                .hasMessageContaining("심박수 데이터가 비어 있습니다.");
-    }
-
-    @Test
-    @DisplayName("측정값이 한 건이어도 AI를 호출해 판정한다")
-    void 측정값이_한건이어도_AI를_호출해_판정한다() {
-        // given
-        // 단건 전송 경로는 15개 제약 없이 같은 detect()를 사용한다 (LLD-0023)
         HeartRateAnomalyDetector detector = detector();
         given(aiRestTemplate.postForObject(eq("http://ai-server/api/hr"), any(), eq(String.class)))
                 .willReturn("{\"alert\":true,\"level\":\"EMERGENCY\"}");
 
         // when
-        DetectionResult result = detector.detect(1L, measurements().subList(0, 1), "UNKNOWN");
+        DetectionResult result = detector.detect(1L, measurement(), "UNKNOWN");
 
         // then
         assertThat(result.status()).isEqualTo(HeartRateStatus.EMERGENCY);
@@ -83,7 +66,7 @@ class HeartRateAnomalyDetectorTest {
                 .willThrow(new RestClientException("connection refused"));
 
         // when & then
-        assertThatThrownBy(() -> detector.detect(1L, measurements(), "REST"))
+        assertThatThrownBy(() -> detector.detect(1L, measurement(), "REST"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR)
                 .hasMessageContaining("AI 서버와의 통신에 실패했습니다.");
@@ -102,7 +85,7 @@ class HeartRateAnomalyDetectorTest {
                 .willThrow(timeout);
 
         // when & then
-        assertThatThrownBy(() -> detector.detect(1L, measurements(), "REST"))
+        assertThatThrownBy(() -> detector.detect(1L, measurement(), "REST"))
                 .isInstanceOf(BusinessException.class);
         assertThat(meterRegistry.find("heart.ai.request")
                 .tag("outcome", "timeout")
@@ -113,56 +96,30 @@ class HeartRateAnomalyDetectorTest {
     }
 
     @Test
-    @DisplayName("측정값을 시간순 JSON으로 전송하면 가장 높은 상태와 긴급 여부를 반환한다")
-    void 측정값을_시간순_JSON으로_전송하면_가장높은_상태를_반환한다() {
+    @DisplayName("측정값을 AI 계약의 JSON으로 전송한다")
+    void 측정값을_AI_계약의_JSON으로_전송한다() {
         // given
         HeartRateAnomalyDetector detector = detector();
-        AtomicInteger callCount = new AtomicInteger();
         given(aiRestTemplate.postForObject(eq("http://ai-server/api/hr"), any(), eq(String.class)))
-                .willAnswer(invocation -> {
-                    int call = callCount.incrementAndGet();
-                    if (call == 5) {
-                        return "{\"alert\":false,\"level\":\"CAUTION\"}";
-                    }
-                    if (call == 10) {
-                        return """
-                                {
-                                  "alert": true,
-                                  "layer": "L0",
-                                  "level": "EMERGENCY",
-                                  "reason": "tachycardia",
-                                  "bpm": 160.0,
-                                  "context": "ACTIVE",
-                                  "timestamp": 1785034809.0,
-                                  "held_seconds": 30.0,
-                                  "baseline_source": "PRIOR",
-                                  "sample_count": 10
-                                }
-                                """;
-                    }
-                    return "{\"alert\":false,\"level\":\"NORMAL\"}";
-                });
-        List<HeartRateMeasurement> reversed = measurements().stream()
-                .sorted(Comparator.comparing(HeartRateMeasurement::measuredAt).reversed())
-                .toList();
+                .willReturn("{\"alert\":false,\"level\":\"NORMAL\"}");
 
         // when
-        DetectionResult result = detector.detect(1023L, reversed, "ACTIVE");
+        DetectionResult result = detector.detect(1023L, measurement(), "ACTIVE");
 
         // then
-        assertThat(result.status()).isEqualTo(HeartRateStatus.EMERGENCY);
-        assertThat(result.emergency()).isTrue();
+        assertThat(result.status()).isEqualTo(HeartRateStatus.NORMAL);
+        assertThat(result.emergency()).isFalse();
 
         @SuppressWarnings("rawtypes")
         ArgumentCaptor<HttpEntity> requestCaptor = ArgumentCaptor.forClass(HttpEntity.class);
-        then(aiRestTemplate).should(times(15))
+        then(aiRestTemplate).should(times(1))
                 .postForObject(eq("http://ai-server/api/hr"), requestCaptor.capture(), eq(String.class));
 
-        JsonNode firstRequest = objectMapper.valueToTree(requestCaptor.getAllValues().getFirst().getBody());
-        assertThat(firstRequest.get("user_id").asText()).isEqualTo("1023");
-        assertThat(firstRequest.get("bpm").asInt()).isEqualTo(70);
-        assertThat(firstRequest.get("context").asText()).isEqualTo("ACTIVE");
-        assertThat(firstRequest.get("timestamp").asDouble()).isEqualTo(
+        JsonNode request = objectMapper.valueToTree(requestCaptor.getValue().getBody());
+        assertThat(request.get("user_id").asText()).isEqualTo("1023");
+        assertThat(request.get("bpm").asInt()).isEqualTo(70);
+        assertThat(request.get("context").asText()).isEqualTo("ACTIVE");
+        assertThat(request.get("timestamp").asDouble()).isEqualTo(
                 LocalDateTime.of(2026, 7, 26, 12, 0)
                         .atZone(ZoneId.of("Asia/Seoul"))
                         .toEpochSecond()
@@ -178,7 +135,7 @@ class HeartRateAnomalyDetectorTest {
                 .willReturn("{\"alert\":false,\"level\":\"UNKNOWN\"}");
 
         // when & then
-        assertThatThrownBy(() -> detector.detect(1L, measurements(), "UNKNOWN"))
+        assertThatThrownBy(() -> detector.detect(1L, measurement(), "UNKNOWN"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR)
                 .hasMessageContaining("올바르지 않은 응답");
@@ -199,7 +156,7 @@ class HeartRateAnomalyDetectorTest {
                 .willReturn("{\"alert\":true,\"level\":\"CAUTION\"}");
 
         // when
-        DetectionResult result = detector.detect(1L, measurements(), "REST");
+        DetectionResult result = detector.detect(1L, measurement(), "REST");
 
         // then
         assertThat(result.status()).isEqualTo(HeartRateStatus.CAUTION);
@@ -211,10 +168,7 @@ class HeartRateAnomalyDetectorTest {
         return new HeartRateAnomalyDetector(aiRestTemplate, properties, objectMapper, meterRegistry);
     }
 
-    private List<HeartRateMeasurement> measurements() {
-        LocalDateTime batchStart = LocalDateTime.of(2026, 7, 26, 12, 0);
-        return java.util.stream.IntStream.range(0, 15)
-                .mapToObj(i -> new HeartRateMeasurement(70 + i, batchStart.plusSeconds(i)))
-                .toList();
+    private HeartRateMeasurement measurement() {
+        return new HeartRateMeasurement(70, LocalDateTime.of(2026, 7, 26, 12, 0));
     }
 }
