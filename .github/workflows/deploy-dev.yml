@@ -118,13 +118,18 @@ jobs:
             "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/admin/dist/"
 
       - name: Deploy with Docker Compose
-        uses: appleboy/ssh-action@v1.2.4
-        with:
-          host: ${{ env.ORACLE_HOST }}
-          username: ${{ env.ORACLE_SSH_USER }}
-          key: ${{ env.ORACLE_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.ORACLE_SSH_HOST_FINGERPRINT }}
-          script: |
+        env:
+          ORACLE_SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        run: |
+          DEPLOY_KNOWN_HOSTS_FILE="$PWD/.ssh-deploy/known_hosts"
+          mkdir -p "$(dirname "$DEPLOY_KNOWN_HOSTS_FILE")"
+          printf "%s" "$ORACLE_PRIVATE_KEY" > private_key.pem
+          printf "%s\n" "$ORACLE_SSH_KNOWN_HOSTS" > "$DEPLOY_KNOWN_HOSTS_FILE"
+          chmod 600 private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"
+          trap 'rm -f private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"' EXIT
+
+          ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS_FILE" \
+            "$ORACLE_SSH_USER@$ORACLE_HOST" 'bash -se' <<'REMOTE_SCRIPT'
             set -e
 
             cd ${{ env.ORACLE_DEPLOY_PATH }}
@@ -181,6 +186,7 @@ jobs:
 
             # echo "🔧 Ensuring monitoring stack is running..."
             # docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
+          REMOTE_SCRIPT
 
   renew-development-certificate:
     name: Renew development TLS certificate
@@ -188,13 +194,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Renew certificate on Oracle server
-        uses: appleboy/ssh-action@v1.2.4
-        with:
-          host: ${{ env.ORACLE_HOST }}
-          username: ${{ env.ORACLE_SSH_USER }}
-          key: ${{ env.ORACLE_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.ORACLE_SSH_HOST_FINGERPRINT }}
-          script: |
+        env:
+          ORACLE_SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+        run: |
+          DEPLOY_KNOWN_HOSTS_FILE="$PWD/.ssh-renew/known_hosts"
+          mkdir -p "$(dirname "$DEPLOY_KNOWN_HOSTS_FILE")"
+          printf "%s" "$ORACLE_PRIVATE_KEY" > private_key.pem
+          printf "%s\n" "$ORACLE_SSH_KNOWN_HOSTS" > "$DEPLOY_KNOWN_HOSTS_FILE"
+          chmod 600 private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"
+          trap 'rm -f private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"' EXIT
+
+          ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS_FILE" \
+            "$ORACLE_SSH_USER@$ORACLE_HOST" 'bash -se' <<'REMOTE_SCRIPT'
             set -e
             cd ${{ env.ORACLE_DEPLOY_PATH }}
             ./scripts/ssl/certbot-renew.sh
+          REMOTE_SCRIPT
