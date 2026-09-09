@@ -58,7 +58,8 @@ public class FcmService {
     private final FamilyMembershipRepository familyMembershipRepository;
     private final SeniorProfileRepository seniorProfileRepository;
     private final MemberUtil memberUtil;
-    private static final String API_URL = "https://fcm.googleapis.com/v1/projects/widyu-d384f/messages:send";
+    private final FcmMessagingUrl messagingUrl;
+    private final FcmSendMetrics fcmSendMetrics;
 
     private String makeMessage(String token, FcmSendDto dto) throws JsonProcessingException {
         ObjectMapper om = new ObjectMapper();
@@ -144,6 +145,10 @@ public class FcmService {
 
     @Transactional
     public void sendMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
+        fcmSendMetrics.record(() -> sendMessage(memberId, fcmSendDto));
+    }
+
+    private void sendMessage(Long memberId, FcmSendDto fcmSendDto) {
         try {
             // 알림 설정 확인
             if (!notificationSettingService.isNotificationEnabled(memberId, fcmSendDto.fcmCategory())) {
@@ -167,7 +172,7 @@ public class FcmService {
                         .add(0, new StringHttpMessageConverter(
                                 StandardCharsets.UTF_8));
 
-                ResponseEntity<String> response = restTemplate.exchange(API_URL, HttpMethod.POST, entity, String.class);
+                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
 
                 if (response.getStatusCode() == HttpStatus.OK) {
                     fcmNotificationRepository.save(FcmNotification.builder()
@@ -198,7 +203,7 @@ public class FcmService {
                 HttpEntity<String> entity = new HttpEntity<>(message, headers);
                 RestTemplate restTemplate = new RestTemplate();
                 restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
-                ResponseEntity<String> response = restTemplate.exchange(API_URL, HttpMethod.POST, entity, String.class);
+                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
                 if (response.getStatusCode() == HttpStatus.OK) sent++;
             }
         } catch (IOException e) {

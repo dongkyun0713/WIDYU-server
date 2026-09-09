@@ -9,6 +9,10 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.AiProperties;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
@@ -29,8 +33,10 @@ public class HeartRateAnomalyDetector {
     private final RestTemplate aiRestTemplate;
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     /** 측정값 1건을 AI에 전달하고 판정 결과를 반환한다. */
+    @Timed("heart.ai.detection")
     public DetectionResult detect(Long memberId, HeartRateMeasurement measurement, String context) {
         long startedAt = System.nanoTime();
         AiHeartRateResponse response = requestAnalysis(memberId, measurement, context);
@@ -79,20 +85,41 @@ public class HeartRateAnomalyDetector {
             String context
     ) {
         String url = aiProperties.server().url() + "/api/hr";
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "error";
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             AiHeartRateRequest body = AiHeartRateRequest.of(memberId, measurement, context);
             HttpEntity<AiHeartRateRequest> request = new HttpEntity<>(body, headers);
             String result = aiRestTemplate.postForObject(url, request, String.class);
-            return parseResponse(result);
+            AiHeartRateResponse response = parseResponse(result);
+            parseStatus(response);
+            outcome = "success";
+            return response;
         } catch (RestClientException e) {
+            outcome = classifyAiRequestFailure(e);
             log.error("AI 서버 호출 실패: url={}, error={}", url, e.getMessage(), e);
             throw new BusinessException(
                     ErrorCode.INTERNAL_SERVER_ERROR,
                     "AI 서버와의 통신에 실패했습니다. 잠시 후 다시 시도해주세요."
             );
+        } finally {
+            sample.stop(Timer.builder("heart.ai.request")
+                    .tag("outcome", outcome)
+                    .register(meterRegistry));
         }
+    }
+
+    private String classifyAiRequestFailure(RestClientException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof SocketTimeoutException) {
+                return "timeout";
+            }
+            cause = cause.getCause();
+        }
+        return "error";
     }
 
     private AiHeartRateResponse parseResponse(String jsonResponse) {

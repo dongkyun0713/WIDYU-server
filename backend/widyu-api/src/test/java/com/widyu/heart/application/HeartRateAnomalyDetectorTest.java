@@ -16,6 +16,8 @@ import com.widyu.global.properties.AiProperties;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.net.SocketTimeoutException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import org.junit.jupiter.api.DisplayName;
@@ -26,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +37,7 @@ class HeartRateAnomalyDetectorTest {
 
     @Mock private RestTemplate aiRestTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @Test
     @DisplayName("측정값 한 건을 AI에 한 번 요청해 판정한다")
@@ -66,6 +70,29 @@ class HeartRateAnomalyDetectorTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR)
                 .hasMessageContaining("AI 서버와의 통신에 실패했습니다.");
+    }
+
+    @Test
+    @DisplayName("AI 서버 timeout이 발생하면 timeout 메트릭을 기록한다")
+    void AI_서버_timeout이_발생하면_timeout_메트릭을_기록한다() {
+        // given
+        HeartRateAnomalyDetector detector = detector();
+        ResourceAccessException timeout = new ResourceAccessException(
+                "Read timed out",
+                new SocketTimeoutException("Read timed out")
+        );
+        given(aiRestTemplate.postForObject(eq("http://ai-server/api/hr"), any(), eq(String.class)))
+                .willThrow(timeout);
+
+        // when & then
+        assertThatThrownBy(() -> detector.detect(1L, measurement(), "REST"))
+                .isInstanceOf(BusinessException.class);
+        assertThat(meterRegistry.find("heart.ai.request")
+                .tag("outcome", "timeout")
+                .timer())
+                .isNotNull()
+                .extracting(timer -> timer.count())
+                .isEqualTo(1L);
     }
 
     @Test
@@ -112,6 +139,12 @@ class HeartRateAnomalyDetectorTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INTERNAL_SERVER_ERROR)
                 .hasMessageContaining("올바르지 않은 응답");
+        assertThat(meterRegistry.find("heart.ai.request")
+                .tag("outcome", "error")
+                .timer())
+                .isNotNull()
+                .extracting(timer -> timer.count())
+                .isEqualTo(1L);
     }
 
     @Test
@@ -132,7 +165,7 @@ class HeartRateAnomalyDetectorTest {
 
     private HeartRateAnomalyDetector detector() {
         AiProperties properties = new AiProperties(new AiProperties.Server("http://ai-server"));
-        return new HeartRateAnomalyDetector(aiRestTemplate, properties, objectMapper);
+        return new HeartRateAnomalyDetector(aiRestTemplate, properties, objectMapper, meterRegistry);
     }
 
     private HeartRateMeasurement measurement() {

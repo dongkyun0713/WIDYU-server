@@ -4,6 +4,7 @@ import com.widyu.global.security.PrincipalDetails;
 import com.widyu.heart.application.HeartRateService;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
+import io.micrometer.core.annotation.Timed;
 import jakarta.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class HeartRateWebSocketController {
      * 분석 결과는 보호자 토픽과 발신 세션 ACK로 전달한다 (LLD-0023)
      */
     @MessageMapping("/heart-rate/send-single")
+    @Timed(value = "heart.websocket.processing", extraTags = {"path", "single"})
     public void sendHeartRate(
             @Valid @Payload HeartRateSingleRequest request,
             @AuthenticationPrincipal PrincipalDetails principal,

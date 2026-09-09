@@ -11,3 +11,11 @@ management:
   metrics:
     tags:
       application: ${spring.application.name:widyu-api}
+    distribution:
+      percentiles:
+        heart.websocket.processing: 0.95,0.99
+        heart.ai.detection: 0.95,0.99
+        heart.ai.request: 0.95,0.99
+        heart.persistence: 0.95,0.99
+        heart.emergency.notification: 0.95,0.99
+        fcm.send: 0.95,0.99

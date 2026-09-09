@@ -7,6 +7,7 @@ import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
+import io.micrometer.core.annotation.Timed;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.heart.repository.HeartRateResultRepository;
@@ -27,6 +28,7 @@ public class HeartRatePersistenceService {
 
     /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). */
     @Transactional
+    @Timed(value = "heart.persistence", extraTags = {"path", "single"})
     public HeartRateResult saveMeasurement(
             Long memberId,
             HeartRateSingleRequest request,

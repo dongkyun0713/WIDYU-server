@@ -5,3 +5,4 @@ spring:
 
 firebase:
   config-path: ${FIREBASE_CONFIG_PATH}
+  messaging-url: ${FIREBASE_MESSAGING_URL:https://fcm.googleapis.com/v1/projects/widyu-d384f/messages:send}
