@@ -21,7 +21,7 @@ Oracle `/home/ubuntu/.env`에는 다음 값을 모두 지정한다. 값이 없�
 ```dotenv
 GRAFANA_ADMIN_PASSWORD=<strong-password>
 DISCORD_WEBHOOK_URL=<discord-webhook-url>
-GRAFANA_EXTERNAL_URL=https://dev.widyu.store
+GRAFANA_EXTERNAL_URL=http://localhost:3000
 ```
 
-webhook URL은 Git과 GitHub Actions Secret에 저장하지 않는다. Grafana는 개인 계정을 만들어 사용하고 계정을 공유하지 않는다. 팀 이탈 시 즉시 계정을 삭제하며, 관리자 비밀번호와 Discord webhook은 분기마다 또는 유출이 의심되면 즉시 교체한다. Loki 로그 보존 기간은 7일이다.
+Discord 알림 링크는 Grafana SSH 터널을 연 브라우저에서 접근하므로 `GRAFANA_EXTERNAL_URL`에 `http://localhost:3000`을 넣는다. Grafana를 별도 HTTPS 도메인으로 공개한 경우에만 그 도메인을 사용한다. webhook URL은 Git과 GitHub Actions Secret에 저장하지 않는다. Grafana는 개인 계정을 만들어 사용하고 계정을 공유하지 않는다. 팀 이탈 시 즉시 계정을 삭제하며, 관리자 비밀번호와 Discord webhook은 분기마다 또는 유출이 의심되면 즉시 교체한다. Loki 로그 보존 기간은 7일이다.
