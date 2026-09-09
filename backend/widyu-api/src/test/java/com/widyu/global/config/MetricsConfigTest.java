@@ -42,8 +42,8 @@ class MetricsConfigTest {
         ThreadPoolExecutor threadPoolExecutor = executor.getThreadPoolExecutor();
 
         // then
-        assertThat(threadPoolExecutor.getMaximumPoolSize()).isLessThan(Integer.MAX_VALUE);
-        assertThat(threadPoolExecutor.getQueue().remainingCapacity()).isGreaterThan(0);
+        assertThat(threadPoolExecutor.getMaximumPoolSize()).isEqualTo(16);
+        assertThat(threadPoolExecutor.getQueue().remainingCapacity()).isEqualTo(1_000);
         assertThat(threadPoolExecutor.getRejectedExecutionHandler())
                 .isInstanceOf(ThreadPoolExecutor.CallerRunsPolicy.class);
 
