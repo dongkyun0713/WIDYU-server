@@ -57,7 +57,7 @@ services:
       S3_BASE_URL: ${S3_BASE_URL}
 
       # FCM (공통)
-      FIREBASE_CONFIG_PATH: ${FIREBASE_CONFIG_PATH}
+      FIREBASE_CONFIG_PATH: ${FIREBASE_CONFIG_PATH:-file:/run/secrets/firebase-service-account.json}
 
       # SMS (공통)
       COOLSMS_API_KEY: ${COOLSMS_API_KEY}
@@ -95,6 +95,9 @@ services:
 
     volumes:
       - app_logs:/app/logs
+    secrets:
+      - source: firebase-service-account
+        target: firebase-service-account.json
     networks:
       - widyu-network
     # healthcheck:
@@ -264,6 +267,11 @@ volumes:
   nginx_logs:
   certbot_webroot:
   certbot_certs:
+
   prometheus_data:
   grafana_data:
   loki_data:
+
+secrets:
+  firebase-service-account:
+    file: ${FIREBASE_CREDENTIALS_FILE}
