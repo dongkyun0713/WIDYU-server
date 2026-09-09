@@ -48,6 +48,7 @@ src/main/resources/firebase/
 *.json
 !admin/*.json
 !.well-known/assetlinks.json
+!monitoring/grafana/provisioning/dashboards/json/*.json
 
 # claude
 # settings.json 은 Project 스코프(팀 공유 권한·훅)라 추적한다.
