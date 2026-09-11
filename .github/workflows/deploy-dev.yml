@@ -184,6 +184,9 @@ jobs:
               exit 1
             fi
 
+            echo "🔧 Ensuring monitoring stack is running..."
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
+
             echo "🔧 Ensuring Nginx is running..."
             docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps nginx
 
@@ -200,9 +203,6 @@ jobs:
               COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml \
                 ./scripts/ssl/certbot-init.sh dev.widyu.store "${{ env.ORACLE_CERTBOT_EMAIL }}"
             fi
-
-            echo "🔧 Ensuring monitoring stack is running..."
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
           REMOTE_SCRIPT
 
   renew-development-certificate:

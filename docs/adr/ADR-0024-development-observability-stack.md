@@ -12,7 +12,7 @@
 
 ## 결정 (Decision)
 
-Promtail이 개발 컨테이너 로그를 Loki로 수집하고 Grafana에서 조회한다. 요청 traceId를 응답 헤더·응답 본문·로그에 함께 기록하며, Grafana Alerting은 Discord에 오류 요약, traceId, 대시보드 링크를 보낸다. 관측 도구 포트는 loopback 바인딩을 유지한다. Grafana와 Discord 설정값은 개발 배포의 필수 환경변수로 둔다.
+Promtail이 개발 컨테이너 로그를 Loki로 수집하고 Grafana에서 조회한다. 요청 traceId를 응답 헤더·응답 본문·로그에 함께 기록하며, Grafana Alerting은 Discord에 오류 요약, traceId, 대시보드 링크를 보낸다. 관측 도구 포트는 loopback 바인딩을 유지하고 Grafana만 Nginx의 인증된 HTTPS 경로로 프록시한다. Grafana와 Discord 설정값은 개발 배포의 필수 환경변수로 둔다.
 
 ## 고려한 대안 (Considered Options)
 

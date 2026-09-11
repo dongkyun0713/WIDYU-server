@@ -155,6 +155,7 @@ services:
       - widyu-network
     depends_on:
       - widyu-api
+      - grafana
     # healthcheck:
     #   test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/actuator/health"]
     #   interval: 30s
@@ -218,8 +219,13 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:?DISCORD_WEBHOOK_URL is required}
       - GRAFANA_EXTERNAL_URL=${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}
+      - GF_SERVER_ROOT_URL=${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
