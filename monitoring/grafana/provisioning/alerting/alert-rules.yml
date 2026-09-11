@@ -14,8 +14,8 @@ groups:
         for: 0s
         annotations:
           summary: "개발 API ERROR 로그가 발생했습니다."
-          trace_id: "{{ $$labels.traceId }}"
-          grafana_url: "$GRAFANA_EXTERNAL_URL/d/widyu-development-errors?var-traceId={{ $$labels.traceId }}"
+          trace_id: "{{ $labels.traceId }}"
+          grafana_url: "$GRAFANA_EXTERNAL_URL/d/widyu-development-errors?var-traceId={{ $labels.traceId }}"
         labels:
           environment: dev
           service: widyu-api-dev
