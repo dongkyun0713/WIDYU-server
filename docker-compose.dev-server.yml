@@ -1,0 +1,11 @@
+services:
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?DISCORD_WEBHOOK_URL is required}
+      GRAFANA_EXTERNAL_URL: ${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}
+      GF_SERVER_ROOT_URL: ${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - ./monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro

@@ -53,6 +53,7 @@ ADR 커버리지는 100%를 목표로 하지 않는다. 대신 다음 영역은 
 
 | 번호 | 제목 | 상태 | 날짜 |
 | --- | --- | --- | --- |
+| [ADR-0024](ADR-0024-development-observability-stack.md) | 개발 서버 오류 관측에 Grafana Loki 사용 | Accepted | 2026-09-09 |
 | [ADR-0001](ADR-0001-multi-module-structure.md) | widyu-api + widyu-domain 멀티모듈 구조 채택 | Accepted | 2025-08-01 |
 | [ADR-0002](ADR-0002-auth-jwt-family-access.md) | 인증/인가 전략 — JWT + @ValidateFamilyAccess AOP | Accepted | 2026-07-05 |
 | [ADR-0003](ADR-0003-db-entity-design.md) | DB/엔티티 설계 기준 (PK, Enum, FK, soft delete) | Accepted | 2026-07-05 |

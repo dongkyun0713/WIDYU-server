@@ -2,6 +2,7 @@ package com.widyu.global.error;
 
 import com.widyu.global.log.BusinessExceptionLogEntry;
 import com.widyu.global.log.ExceptionLogEntry;
+import com.widyu.global.response.ApiErrorDebugInfo;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -37,6 +39,9 @@ public class GlobalExceptionHandler {
     private static final String BUSINESS_LOG_MARKER = "BUSINESS-EXCEPTION-LOG";
     private static final String SYSTEM_LOG_MARKER = "EXCEPTION-LOG";
 
+    @Value("${observability.error-response.include-debug-details:false}")
+    private boolean includeDebugDetails;
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponseTemplate<Void>> handleBusinessException(
             final BusinessException ex,
@@ -49,7 +54,7 @@ public class GlobalExceptionHandler {
 
         final HttpStatus status = getHttpStatusOrDefault(errorCode);
 
-        return toResponse(status, errorCode.getCode(), detail);
+        return toResponse(status, errorCode.getCode(), detail, runtimeDebugInfo(ex, request, status));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -202,7 +207,8 @@ public class GlobalExceptionHandler {
         return toResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ErrorCode.INTERNAL_SERVER_ERROR.getCode(),
-                ErrorCode.INTERNAL_SERVER_ERROR.getMessage()
+                ErrorCode.INTERNAL_SERVER_ERROR.getMessage(),
+                runtimeDebugInfo(ex, request, HttpStatus.INTERNAL_SERVER_ERROR)
         );
     }
 
@@ -211,12 +217,33 @@ public class GlobalExceptionHandler {
             final String code,
             final String message
     ) {
+        return toResponse(status, code, message, null);
+    }
+
+    private ResponseEntity<ApiResponseTemplate<Void>> toResponse(
+            final HttpStatus status,
+            final String code,
+            final String message,
+            final ApiErrorDebugInfo debugInfo
+    ) {
         final ApiResponseTemplate<Void> body = ApiResponseTemplate.<Void>error()
                 .code(code)
                 .message(message)
+                .debug(debugInfo)
                 .build(); // data = null
 
         return ResponseEntity.status(status).body(body);
+    }
+
+    private ApiErrorDebugInfo runtimeDebugInfo(
+            final Exception exception,
+            final HttpServletRequest request,
+            final HttpStatus status
+    ) {
+        if (!includeDebugDetails || !status.is5xxServerError()) {
+            return null;
+        }
+        return ApiErrorDebugInfo.of(exception, request.getRequestURI());
     }
 
     private static HttpStatus getHttpStatusOrDefault(final ErrorCode errorCode) {

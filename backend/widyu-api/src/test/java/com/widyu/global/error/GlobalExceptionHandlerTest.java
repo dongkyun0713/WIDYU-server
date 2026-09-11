@@ -22,6 +22,8 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -174,6 +176,24 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody().getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode());
+    }
+
+    @Test
+    @DisplayName("개발 환경의 500 응답은 예외 유형과 요청 경로를 포함한다")
+    void 개발_환경의_500_응답은_예외_유형과_요청_경로를_포함한다() {
+        // given
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        ReflectionTestUtils.setField(handler, "includeDebugDetails", true);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/test");
+
+        // when
+        ResponseEntity<ApiResponseTemplate<Void>> response =
+                handler.handleException(new IllegalStateException("sensitive detail"), request);
+
+        // then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody().getDebug().exceptionType()).isEqualTo("IllegalStateException");
+        assertThat(response.getBody().getDebug().requestUri()).isEqualTo("/api/test");
     }
 
     @RestController
