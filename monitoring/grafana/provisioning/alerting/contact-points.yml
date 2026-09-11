@@ -9,4 +9,9 @@ contactPoints:
         settings:
           url: $DISCORD_WEBHOOK_URL
           title: "{{ .CommonLabels.alertname }}"
-          message: "{{ .CommonAnnotations.summary }}\ntraceId: {{ .CommonAnnotations.trace_id }}\n{{ .CommonAnnotations.grafana_url }}"
+          message: |
+            {{ .CommonAnnotations.summary }}
+            {{ range .Alerts.Firing }}
+            traceId: {{ .Labels.traceId }}
+            {{ .Annotations.grafana_url }}
+            {{ end }}

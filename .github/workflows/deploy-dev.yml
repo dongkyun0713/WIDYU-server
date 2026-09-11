@@ -185,7 +185,7 @@ jobs:
             fi
 
             echo "🔧 Ensuring monitoring stack is running..."
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d prometheus grafana loki promtail node-exporter
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --force-recreate prometheus grafana loki promtail node-exporter
 
             echo "🔧 Ensuring Nginx is running..."
             docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps nginx
