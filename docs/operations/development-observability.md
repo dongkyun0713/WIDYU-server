@@ -14,6 +14,8 @@
 
 응답의 `X-Trace-Id` 또는 JSON `traceId`를 복사해 로그 본문에서 검색한다.
 
+개발 서버의 5xx 응답에는 프론트 진단용 `debug.exceptionType`, `debug.requestUri`가 포함된다. 예외 메시지와 스택 트레이스는 응답에 노출하지 않으므로 `traceId`로 Grafana 로그를 연다.
+
 Oracle `/home/ubuntu/.env`에는 다음 값을 모두 지정한다. 값이 없으면 배포가 실패하므로 기본 비밀번호나 localhost 링크로 실행되지 않는다.
 
 ```dotenv

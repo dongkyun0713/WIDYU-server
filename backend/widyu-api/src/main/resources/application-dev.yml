@@ -20,3 +20,6 @@ logging:
     org.hibernate.SQL: "off"
     org.hibernate.type: "off"
     org.hibernate.orm.jdbc.bind: "off"
+observability:
+  error-response:
+    include-debug-details: true

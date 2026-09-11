@@ -23,7 +23,7 @@
 
 ## 3. 인터페이스 / API
 
-모든 HTTP 응답은 `X-Trace-Id` 헤더와 `traceId` JSON 필드를 포함한다. 요청 헤더의 traceId는 영문·숫자·점·밑줄·하이픈만 허용하며 최대 64자다. 유효하지 않거나 없으면 서버가 UUID를 생성한다.
+모든 HTTP 응답은 `X-Trace-Id` 헤더와 `traceId` JSON 필드를 포함한다. 요청 헤더의 traceId는 영문·숫자·점·밑줄·하이픈만 허용하며 최대 64자다. 유효하지 않거나 없으면 서버가 UUID를 생성한다. `dev`와 `local` 프로필의 5xx 응답은 `debug.exceptionType`, `debug.requestUri`를 추가한다. 예외 메시지와 스택 트레이스는 응답에 포함하지 않는다.
 
 ## 4. 데이터 모델
 
@@ -43,6 +43,7 @@ DB 변경 없음.
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [ ] 5xx 응답과 ERROR 로그가 같은 traceId를 가진다.
+- [ ] 개발 환경 500 응답은 예외 유형과 요청 경로를 포함한다.
 - [ ] Grafana에서 개발 API ERROR 로그를 조회할 수 있다.
 - [ ] Discord 오류 알림은 traceId와 Grafana 대시보드 링크만 전달한다.
 - [ ] 로컬 개발 환경의 API ERROR 로그는 Discord로 전송되지 않는다.
