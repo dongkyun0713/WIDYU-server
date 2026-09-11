@@ -36,7 +36,7 @@ Codex CLI 0.153.4는 연결된 worktree의 **훅 정의를 원본 checkout에서
 | 경로 | 동작 |
 | --- | --- |
 | Codex PreToolUse / Bash | 기존 위험 명령 검사 후 직접 파일 쓰기·인라인 스크립트를 차단하고 apply_patch로 안내 |
-| Codex PreToolUse / apply_patch | 실제 대상 경로의 worktree 확인 → 보호 브랜치 차단 → 세션×브랜치 ack 확인 |
+| Codex PreToolUse / apply_patch | worktree 경계 확인 → Git 무시 비추적 파일만 있으면 허용 → 나머지는 보호 브랜치·세션×브랜치 ack 확인 |
 | Codex Stop | 작업 트리 Java 정적 검사. 실패하면 후속 수정 요청 1회, 재진입에서는 미해결 경고. LLM 호출·컴파일·테스트 없음 |
 | verify.sh | 정적 검사 → 하네스 변경 시 회귀 테스트 → backend compileJava·영향 모듈 테스트 → admin lint/build |
 | review 스킬 | LLD 인수조건·권한·트랜잭션·실패 동작 검수 |
@@ -46,7 +46,9 @@ Codex의 Bash/exec_command는 훅에서 `Bash`, apply_patch는 `apply_patch`로 
 
 작업 브랜치의 첫 apply_patch에서는 훅이 한 번 멈춘다. 새 작업이면 issue 스킬로 새 이슈와 브랜치/worktree를 만든다. 현재 사용자 요청이 그 브랜치의 기존 이슈를 이어가는 것이 확인되면 훅이 안내한 명령으로 `.codex/state/branch-ack-*.txt`를 만든다. ack는 전체 session ID와 전체 브랜치 이름의 해시를 포함하므로 다른 세션이나 `feature/foo`/`feature-foo`처럼 이름이 비슷한 브랜치와 공유되지 않는다. 보호 브랜치는 ack로도 통과할 수 없다. 같은 세션·브랜치에서 나중에 별개의 새 요청이 시작되는 경우 훅은 의미 변화를 자동 판별하지 못하므로 issue 스킬의 새 작업 확인 절차가 계속 필요하다.
 
-Add/Update/Delete/Move 경로를 세션 cwd 기준으로 해석한다. `..`, 절대 경로, 심볼릭 링크를 정규화한 대상이 현재 worktree 밖이거나 중첩 저장소이면 차단한다. 별도 worktree의 정상적인 작업도 해당 작업 디렉터리의 세션에서 시작한다.
+Git에서 무시하는 비추적 파일만 포함된 patch는 위 브랜치·세션 확인을 생략한다 (#570). `git check-ignore`의 기본 인덱스 검사를 사용하므로 강제로 추적한 파일은 제외 대상이 아니다. 이동 원본·목적지와 심볼릭 링크의 표기 경로·실제 경로를 모두 검사한다. 무시하지 않는 파일이 하나라도 섞이면 기존 브랜치 검사를 적용하고, Git 판정 오류는 차단한다. 이 예외는 Codex 브랜치 확인에만 적용하며 시크릿·명령 보호를 해제하지 않는다.
+
+Add/Update/Delete/Move 경로를 세션 cwd 기준으로 해석한다. `..`, 절대 경로, 심볼릭 링크를 정규화한 대상이 현재 worktree 밖이거나 중첩 저장소이면 ignore 판정보다 먼저 차단한다. 별도 worktree의 정상적인 작업도 해당 작업 디렉터리의 세션에서 시작한다.
 
 셸 리다이렉션은 `/dev/null`, 저장소 밖 시스템 임시 디렉터리의 명시적 경로, 현재 세션·브랜치의 정확한 ack 경로만 허용한다. `tee`, `sed -i`, `cp/mv/rm/touch`, `git apply` 같은 직접 편집은 patch로 바꾼다. `python -c`, interpreter heredoc 등 인라인 실행은 읽기 전용 코드여도 쓰기 대상을 확정할 수 없어 차단한다. 반복 검증은 저장소 스크립트로 두고, 조회는 `rg`, `cat`, `git diff` 등을 사용한다. 임의 스크립트·빌드 도구·MCP의 부수효과까지 해석하지는 않는다.
 

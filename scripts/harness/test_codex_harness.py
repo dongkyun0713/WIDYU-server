@@ -180,6 +180,104 @@ class HarnessTest(unittest.TestCase):
         ack.write_text("continue\n")
         self.assertEqual(self.pre(), {})
 
+    def test_ignored_files_skip_branch_and_session_checks(self):
+        self.write(".gitignore", "private/\n")
+        self.write("private/이력서 초안.tex")
+        for branch in ("feature/549", "develop", "main", "master"):
+            if branch != "feature/549":
+                self.git("switch", "-qc", branch)
+            for operation in ("Add File", "Update File", "Delete File"):
+                with self.subTest(branch=branch, operation=operation):
+                    patch = f"*** Begin Patch\n*** {operation}: private/이력서 초안.tex\n*** End Patch"
+                    self.assertEqual(self.pre(command=patch, session=None), {})
+        self.git("checkout", "--detach", "-q")
+        self.assertEqual(self.pre(command=patch, session=None), {})
+        self.assertFalse((self.root / ".codex/state").exists())
+
+    def test_tracked_negated_and_mixed_targets_keep_branch_checks(self):
+        self.write(".gitignore", "private/*\n!private/publish.md\n")
+        self.write("private/tracked.md")
+        self.git("add", "-f", "private/tracked.md")
+        cases = (
+            "*** Update File: private/tracked.md",
+            "*** Add File: private/publish.md",
+            "*** Add File: private/new.md\n*** Add File: source.py",
+            "*** Add File: private/new.md\n*** Update File: .gitignore",
+        )
+        for target in cases:
+            with self.subTest(target=target):
+                patch = f"*** Begin Patch\n{target}\n*** End Patch"
+                self.assertEqual(self.pre(command=patch)["decision"], "block")
+
+    def test_move_checks_both_source_and_destination(self):
+        self.write(".gitignore", "private/\n")
+        for source, target, allowed in (
+            ("private/old.md", "private/new.md", True),
+            ("private/old.md", "public.md", False),
+            ("public.md", "private/new.md", False),
+        ):
+            with self.subTest(source=source, target=target):
+                patch = f"*** Begin Patch\n*** Update File: {source}\n*** Move to: {target}\n*** End Patch"
+                result = self.pre(command=patch)
+                self.assertEqual(result == {}, allowed)
+
+    def test_ignore_does_not_bypass_path_boundaries(self):
+        self.write(".gitignore", "private/\n.git/\n")
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        (self.root / "private").mkdir()
+        (self.root / "private/link").symlink_to(outside, target_is_directory=True)
+        nested = self.root / "private/nested"
+        nested.mkdir()
+        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        for path in ("private/link/file.md", "private/nested/file.md", ".git/config"):
+            with self.subTest(path=path):
+                patch = f"*** Begin Patch\n*** Add File: {path}\n*** End Patch"
+                self.assertEqual(self.pre(command=patch)["decision"], "block")
+
+    def test_ignore_checks_lexical_and_resolved_paths(self):
+        self.write(".gitignore", "private/\n")
+        self.write("private/note.md")
+        self.write("tracked.md")
+        self.git("add", "tracked.md")
+        (self.root / "private/alias.md").symlink_to(self.root / "tracked.md")
+        (self.root / "alias.md").symlink_to(self.root / "private/note.md")
+        self.git("add", "alias.md")
+        for path in ("private/alias.md", "alias.md"):
+            with self.subTest(path=path):
+                patch = f"*** Begin Patch\n*** Update File: {path}\n*** End Patch"
+                self.assertEqual(self.pre(command=patch)["decision"], "block")
+
+    def test_ignored_paths_use_session_directory_and_protocol(self):
+        self.write(".gitignore", "private/\n")
+        cwd = self.root / "private"
+        cwd.mkdir()
+        for path in ("new dir/이력서.tex", str(cwd / "absolute.tex")):
+            with self.subTest(path=path):
+                payload = {"hook_event_name": "PreToolUse", "tool_name": "apply_patch",
+                           "cwd": str(cwd), "tool_input": {
+                               "command": f"*** Begin Patch\n*** Add File: {path}\n+text\n*** End Patch"}}
+                result = subprocess.run(
+                    ["python3", str(self.root / "scripts/harness/codex-hooks.py")],
+                    input=json.dumps(payload), cwd=cwd, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout), {})
+
+    def test_ignore_errors_block_editing(self):
+        self.write(".gitignore", "private/\n")
+        original_run = subprocess.run
+
+        def fail_ignore(command, **kwargs):
+            if command[:2] == ["git", "check-ignore"]:
+                return subprocess.CompletedProcess(command, 128, "", "failure")
+            return original_run(command, **kwargs)
+
+        patch = "*** Begin Patch\n*** Add File: private/note.md\n*** End Patch"
+        with mock.patch.object(hooks.subprocess, "run", side_effect=fail_ignore):
+            result = self.pre(command=patch)
+        self.assertEqual(result["decision"], "block")
+        self.assertIn("ignore", result["reason"])
+
     def test_ack_is_not_shared_by_session_or_similar_branch(self):
         ack = hooks.ack_path(self.root, SESSION_A, "feature/549")
         ack.parent.mkdir(parents=True)

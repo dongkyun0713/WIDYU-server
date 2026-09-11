@@ -53,6 +53,28 @@ def check_patch_paths(command, cwd, root):
     return {}
 
 
+def patch_only_ignored(command, cwd, root):
+    """Skip branch checks only when every lexical and resolved target is ignored."""
+    targets = set()
+    for line in command.strip().splitlines():
+        for prefix in ("*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: "):
+            if line.startswith(prefix):
+                target = cwd / line[len(prefix):]
+                targets.add(target)
+                targets.add(target.resolve())
+    if not targets:
+        return False
+    for target in sorted(targets):
+        # Keep the default index check: even force-added ignored files need branch protection.
+        result = subprocess.run(["git", "check-ignore", "--quiet", "--", str(target)],
+                                cwd=root, capture_output=True, text=True)
+        if result.returncode == 1:
+            return False
+        if result.returncode != 0:
+            raise RuntimeError("Git ignore 판정에 실패했습니다.")
+    return True
+
+
 def check_edit_branch(payload, root):
     result = subprocess.run(["git", "branch", "--show-current"],
                             cwd=root, capture_output=True, text=True)
@@ -125,6 +147,11 @@ def handle(payload, root=ROOT):
             result = check_patch_paths(tool_input["command"], cwd, root)
             if result:
                 return result
+            try:
+                if patch_only_ignored(tool_input["command"], cwd, root):
+                    return {}
+            except (OSError, RuntimeError) as error:
+                return block(str(error))
             return check_edit_branch(payload, root)
         return {}
     if event == "Stop":

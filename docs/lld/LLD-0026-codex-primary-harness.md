@@ -3,7 +3,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Review |
-| Issue | #549 |
+| Issue | #549, #570 |
 | 관련 ADR | ADR-0022 |
 | 작성자 | Codex |
 | 작성일 | 2026-09-07 |
@@ -34,7 +34,7 @@ DB 변경 없음. Git의 NUL 구분 경로 목록을 사용한다. Codex 브랜�
 1. 명시된 base 또는 HEAD를 검증하고 base → 현재 작업 트리 diff와 untracked 경로를 합친다. rename은 이전/이후 경로를 모두 영향 분석에 포함한다.
 2. 존재하는 main Java 파일을 기존 정적 검사기에 전달한다. 검사기는 같은 base를 사용한다. 삭제 파일은 규칙 검사에서 제외하되 영향 모듈에는 포함한다.
 3. backend 변경은 compileJava 후 테스트한다. domain/공통 Gradle 변경이면 domain과 API를 모두, API 변경이면 API를 실행한다. admin 변경이면 lint/build를 실행한다. 문서만 변경하면 애플리케이션 검사를 생략했다고 출력한다.
-4. PreToolUse Bash는 기존 명령 가드를 적용한다. apply_patch는 main/master/develop 및 detached HEAD를 차단한다. 작업 브랜치의 세션 최초 편집도 차단하고, 현재 요청이 그 브랜치의 기존 작업을 이어가는 경우에만 세션×브랜치 ack 생성 명령을 안내한다. 새 작업이면 issue 스킬로 새 브랜치/worktree를 만든다.
+4. PreToolUse Bash는 기존 명령 가드를 적용한다. apply_patch는 경로 경계를 먼저 검사하고 모든 대상이 Git 무시 비추적 파일이면 브랜치 검사를 생략한다. 그 외에는 main/master/develop 및 detached HEAD를 차단한다. 작업 브랜치의 세션 최초 편집도 차단하고, 현재 요청이 그 브랜치의 기존 작업을 이어가는 경우에만 세션×브랜치 ack 생성 명령을 안내한다. 새 작업이면 issue 스킬로 새 브랜치/worktree를 만든다.
 5. Stop은 작업 트리 정적 검사 결과만 반환한다. 실패 시 한 번 후속 수정을 요청하고 stop_hook_active인 재진입에서는 미해결 결과를 알린다. 별도 LLM 호출은 없다.
 6. 스킬 검수는 인수조건과 변경 동작을 확인한다. 커밋/PR은 해당 요청 범위일 때만 실행한다.
 
@@ -53,6 +53,10 @@ DB 변경 없음. Git의 NUL 구분 경로 목록을 사용한다. Codex 브랜�
 
 ## 7. 인수조건 (Acceptance Criteria)
 
+- [x] Git 무시 비추적 파일만 포함한 patch는 보호 브랜치·detached HEAD·세션 ID·ack와 무관하게 허용한다 (#570).
+- [x] 추적 파일, ignore 예외 패턴의 파일, 일반 신규 파일이 섞이면 기존 브랜치 검사를 유지한다 (#570).
+- [x] 이동 원본·목적지와 심볼릭 링크의 표기 경로·실제 경로를 모두 판정한다. worktree 경계·Git 메타데이터 검사는 ignore 판정보다 먼저 수행한다 (#570).
+- [x] Git ignore 판정 오류는 차단으로 반환한다 (#570).
 - [x] Codex는 루트/backend/admin AGENTS.md에서 공통·영역별 규칙을 읽고, 기존 CLAUDE.md 상세 내용은 삭제·축약 없이 유지한다.
 - [x] 기존 스킬의 LLD·ERD 확인, 구현·테스트 규칙, 리뷰 체크리스트를 보존하면서 Codex 기본 구현과 정확한 diff 범위를 지원한다.
 - [x] staged/unstaged/untracked, 공백 경로, 삭제, rename, 명시 base의 커밋된 변경을 감지한다.
@@ -95,3 +99,12 @@ DB 변경 없음. Git의 NUL 구분 경로 목록을 사용한다. Codex 브랜�
 - 실제 Codex CLI 0.153.4 + 로컬 Responses fixture에서 훅 발견·신뢰, Bash/patch 차단, Stop 실패 전달·재진입 통과. 실제 모델 API 호출 없음.
 - 현재 feature/549 linked worktree의 doctor는 NOT READY다. primary checkout에 새 훅 정의가 없어 로드되지 않는 것을 실제 hooks/list와 OpenAI의 worktree 테스트로 확인했다. 머지 후 원본 checkout 갱신 및 /hooks 신뢰가 필요하다.
 - 이전 커밋 8f929ee의 원격 harness/backend/admin CI는 통과했다. 이 기록을 새 커밋의 CI 결과로 재사용하지 않는다.
+
+## Git 무시 파일 예외 검증 (#570, 2026-09-11)
+
+- Git 무시 비추적 파일의 Add/Update/Delete, 보호 브랜치·detached HEAD·세션 ID 누락 시 허용을 확인했다.
+- 추적 파일·ignore 예외 패턴·혼합 patch는 브랜치 검사를 유지하며, 이동 양쪽·심볼릭 링크·중첩 저장소·Git 판정 오류를 검사했다.
+- `bash scripts/harness/verify.sh`: Codex 39건, Bash 가드 68건, Claude 브랜치 가드 11건으로 총 118건 통과.
+- `git diff --check` 통과. 애플리케이션 변경이 없어 Gradle/npm은 생략했다.
+- review 자체 검수: 인수조건·경로 검증 순서·Git 오류 처리·기존 가드 호환성을 확인했으며 판정은 APPROVE다.
+- 별도 feature/570 worktree의 수정이며 원본 작업 폴더의 훅은 갱신하지 않았다. 실제 Codex CLI 통합 검사는 재실행하지 않았다.
