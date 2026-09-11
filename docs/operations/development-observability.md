@@ -4,6 +4,8 @@
 
 프론트 개발자는 `https://dev.widyu.store/grafana/`에서 Grafana에 접속한다. Grafana 계정을 사용하며 익명 접근과 공개 회원가입은 비활성화한다.
 
+로컬 `scripts/docker/dev-up.sh`는 Grafana 대시보드와 데이터소스만 시작한다. Discord contact point와 alert rule은 `docker-compose.dev-server.yml`에서 Oracle 개발 서버에만 마운트하므로, 로컬 API ERROR 로그는 Discord로 전송되지 않는다.
+
 로그인 뒤 **WIDYU Development / WIDYU Development Errors** 대시보드를 연다. Loki Explore에서는 다음 LogQL로 특정 오류를 찾는다.
 
 ```logql

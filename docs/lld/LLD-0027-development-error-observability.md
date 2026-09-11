@@ -45,6 +45,7 @@ DB 변경 없음.
 - [ ] 5xx 응답과 ERROR 로그가 같은 traceId를 가진다.
 - [ ] Grafana에서 개발 API ERROR 로그를 조회할 수 있다.
 - [ ] Discord 오류 알림은 traceId와 Grafana 대시보드 링크만 전달한다.
+- [ ] 로컬 개발 환경의 API ERROR 로그는 Discord로 전송되지 않는다.
 - [ ] Grafana는 `https://dev.widyu.store/grafana/`에서 로그인 후 접근할 수 있고, 관측 도구 포트는 외부 인터페이스에 게시되지 않는다.
 - [ ] `./gradlew :backend:widyu-api:test`가 통과한다.
 
