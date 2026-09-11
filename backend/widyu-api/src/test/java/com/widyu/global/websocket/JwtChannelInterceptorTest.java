@@ -117,6 +117,45 @@ class JwtChannelInterceptorTest {
         assertThat(result).isNotNull();
     }
 
+    @Test
+    @DisplayName("와일드카드 위치 topic 구독 시 가족 검증 없이 null을 반환한다")
+    void 와일드카드_위치_topic_구독_시_null을_반환한다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/location/senior/*", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("와일드카드 심박수 topic 구독 시 가족 검증 없이 null을 반환한다")
+    void 와일드카드_심박수_topic_구독_시_null을_반환한다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/heart-rate/*", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("Long 범위를 벗어난 대상 ID 구독 시 null을 반환한다")
+    void Long_범위를_벗어난_대상_ID_구독_시_null을_반환한다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/heart-rate/99999999999999999999", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+    }
+
     private Message<?> buildSubscribeMessage(String destination, Long subscriberId) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setDestination(destination);
