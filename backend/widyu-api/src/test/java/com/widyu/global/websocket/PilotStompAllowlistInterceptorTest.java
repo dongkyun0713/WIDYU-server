@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
 @DisplayName("실증 STOMP 허용 목록 인터셉터 단위 테스트")
+@ExtendWith(MockitoExtension.class)
 class PilotStompAllowlistInterceptorTest {
 
     private final PilotStompAllowlistInterceptor interceptor = new PilotStompAllowlistInterceptor();
@@ -79,6 +82,19 @@ class PilotStompAllowlistInterceptorTest {
     void 와일드카드_구독은_차단한다() {
         // given
         Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, "/topic/heart-rate/*");
+
+        // when
+        Message<?> result = interceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("Long 범위를 벗어난 대상 ID 구독은 차단한다")
+    void Long_범위를_벗어난_대상_ID_구독은_차단한다() {
+        // given
+        Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, "/topic/heart-rate/99999999999999999999");
 
         // when
         Message<?> result = interceptor.preSend(message, null);

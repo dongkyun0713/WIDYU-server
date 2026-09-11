@@ -30,9 +30,11 @@ public class PilotStompAllowlistInterceptor implements ChannelInterceptor {
             "/app/location/update"
     );
 
+    // 대상 ID는 1~18자리 숫자만 허용한다. 18자리는 항상 Long 범위 안이라,
+    // 하위 JwtChannelInterceptor의 Long.parseLong 에서 NumberFormatException 이 나지 않는다.
     private static final List<Pattern> ALLOWED_SUBSCRIBE_PATTERNS = List.of(
-            Pattern.compile("^/topic/heart-rate/\\d+$"),
-            Pattern.compile("^/topic/location/senior/\\d+$"),
+            Pattern.compile("^/topic/heart-rate/\\d{1,18}$"),
+            Pattern.compile("^/topic/location/senior/\\d{1,18}$"),
             Pattern.compile("^/user/queue/heart-rate/result$"),
             Pattern.compile("^/user/queue/location/ack$"),
             Pattern.compile("^/user/queue/errors$")

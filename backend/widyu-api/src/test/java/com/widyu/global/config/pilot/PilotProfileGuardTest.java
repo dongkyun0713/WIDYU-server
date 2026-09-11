@@ -6,9 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.widyu.global.properties.PilotProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.env.MockEnvironment;
 
 @DisplayName("실증 프로파일 격리 게이트 단위 테스트")
+@ExtendWith(MockitoExtension.class)
 class PilotProfileGuardTest {
 
     private PilotProfileGuard guard(MockEnvironment environment, PilotProperties properties) {
