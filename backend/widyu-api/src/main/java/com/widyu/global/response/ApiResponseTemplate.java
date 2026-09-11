@@ -1,5 +1,6 @@
 package com.widyu.global.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -13,6 +14,7 @@ public class ApiResponseTemplate<T> {
     private final String message;
     private final T data;
     private final String traceId;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private final ApiErrorDebugInfo debug;
 
     public static BodyBuilder ok() {

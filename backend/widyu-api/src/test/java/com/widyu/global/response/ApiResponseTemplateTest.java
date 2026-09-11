@@ -2,6 +2,7 @@ package com.widyu.global.response;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,5 +30,21 @@ class ApiResponseTemplateTest {
 
         // then
         assertThat(response.getTraceId()).isEqualTo("frontend-request-1");
+    }
+
+    @Test
+    @DisplayName("debug 정보가 없으면 JSON 응답에서 제외한다")
+    void debug_정보가_없으면_JSON_응답에서_제외한다() throws Exception {
+        // given
+        ApiResponseTemplate<String> response = ApiResponseTemplate.ok()
+                .code("SUCCESS")
+                .message("성공")
+                .body("data");
+
+        // when
+        String json = new ObjectMapper().writeValueAsString(response);
+
+        // then
+        assertThat(json).doesNotContain("\"debug\"");
     }
 }
