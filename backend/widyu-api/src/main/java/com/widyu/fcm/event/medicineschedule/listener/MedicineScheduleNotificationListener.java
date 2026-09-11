@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
+@org.springframework.context.annotation.Profile("!pilot") // 실증 제외: 자동 알림
 @Component
 @RequiredArgsConstructor
 public class MedicineScheduleNotificationListener {

@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+@org.springframework.context.annotation.Profile("!pilot") // 실증 제외: 위치 이벤트 부수효과
 @Component
 @RequiredArgsConstructor
 public class HealthScheduleLocationEventListener {

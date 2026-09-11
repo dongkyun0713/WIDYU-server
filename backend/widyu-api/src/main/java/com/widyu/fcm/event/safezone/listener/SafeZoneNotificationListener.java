@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Slf4j
+@org.springframework.context.annotation.Profile("!pilot") // 실증 제외: 위치 이벤트 자동 알림
 @Component
 @RequiredArgsConstructor
 public class SafeZoneNotificationListener {

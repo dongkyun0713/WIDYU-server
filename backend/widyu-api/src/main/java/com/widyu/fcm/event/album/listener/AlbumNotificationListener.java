@@ -33,6 +33,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Slf4j
+@org.springframework.context.annotation.Profile("!pilot") // 실증 제외: 자동 알림
 @Component
 @RequiredArgsConstructor
 public class AlbumNotificationListener {

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
+@org.springframework.context.annotation.Profile("!pilot") // 실증 제외: 자동 알림
 @Component
 @RequiredArgsConstructor
 public class HealthScheduleNotificationListener {

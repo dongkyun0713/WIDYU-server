@@ -6,6 +6,7 @@ spring:
       local: "local, datasource, fcm, pay, s3"
       dev: "dev, datasource, fcm, pay, s3"
       test: "test, fcm, pay, s3"
+      pilot: "pilot, datasource, fcm, pay, s3"
 
     include:
       - security
