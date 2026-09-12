@@ -22,11 +22,24 @@ class PiiMaskingUtilTest {
     }
 
     @Test
-    @DisplayName("null이거나 너무 짧은 전화번호는 완전 마스킹한다")
-    void null이거나_너무_짧은_전화번호는_완전_마스킹한다() {
+    @DisplayName("휴대폰 형식이 아닌 값은 완전 마스킹한다")
+    void 휴대폰_형식이_아닌_값은_완전_마스킹한다() {
         // when & then
         assertThat(PiiMaskingUtil.maskPhoneNumber(null)).isEqualTo("***");
         assertThat(PiiMaskingUtil.maskPhoneNumber("0101")).isEqualTo("***");
+        // 길이가 11 이상이어도 휴대폰 형식이 아니면 부분 노출 없이 전체 마스킹
+        assertThat(PiiMaskingUtil.maskPhoneNumber("1234567890123456")).isEqualTo("***");
+        assertThat(PiiMaskingUtil.maskPhoneNumber("020123456789")).isEqualTo("***");
+    }
+
+    @Test
+    @DisplayName("10자리 휴대폰 번호도 가운데를 마스킹한다")
+    void 열자리_휴대폰_번호도_가운데를_마스킹한다() {
+        // when
+        String masked = PiiMaskingUtil.maskPhoneNumber("0111234567");
+
+        // then
+        assertThat(masked).isEqualTo("011****567");
     }
 
     @Test
