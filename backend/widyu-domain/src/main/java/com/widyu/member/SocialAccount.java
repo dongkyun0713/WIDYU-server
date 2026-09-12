@@ -1,6 +1,8 @@
 package com.widyu.member;
 
+import com.widyu.global.crypto.AesGcmStringConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -35,7 +37,9 @@ public class SocialAccount {
     @Column(nullable = false)
     private String oauthId;
 
-    @Column(name = "refresh_token", length = 1000)
+    // 저장 시 AES-256-GCM 암호화(ADR-0025 ②). 암호문 확장을 고려해 길이를 늘린다.
+    @Convert(converter = AesGcmStringConverter.class)
+    @Column(name = "refresh_token", length = 2048)
     private String refreshToken;
 
     @Column(name = "is_first")
