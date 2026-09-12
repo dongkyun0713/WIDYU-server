@@ -91,7 +91,9 @@ public class AesGcmStringConverter implements AttributeConverter<String, String>
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(TAG_LENGTH_BITS, iv));
             return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
-        } catch (GeneralSecurityException e) {
+        } catch (GeneralSecurityException | RuntimeException e) {
+            // 복호화 실패·손상된 암호문·잘못된 Base64(IllegalArgumentException)·버퍼 부족 등을
+            // 일관된 예외로 변환한다. 원문·암호문 값은 메시지에 남기지 않는다.
             throw new IllegalStateException("필드 복호화에 실패했습니다.", e);
         }
     }

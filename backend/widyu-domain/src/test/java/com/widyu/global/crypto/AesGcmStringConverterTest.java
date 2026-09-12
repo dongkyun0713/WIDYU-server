@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+@ExtendWith(MockitoExtension.class)
 @DisplayName("AES-GCM 문자열 컨버터 단위 테스트")
 class AesGcmStringConverterTest {
 
@@ -60,6 +63,17 @@ class AesGcmStringConverterTest {
     void 키가_32바이트가_아니면_예외가_발생한다() {
         // when & then
         assertThatThrownBy(() -> new AesGcmStringConverter("c2hvcnQ="))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("암호화 접두사는 있으나 손상된 값은 IllegalStateException으로 처리한다")
+    void 손상된_암호문은_IllegalStateException으로_처리한다() {
+        // given
+        String corrupted = "enc:v1:!!!not-base64!!!";
+
+        // when & then
+        assertThatThrownBy(() -> converter.convertToEntityAttribute(corrupted))
                 .isInstanceOf(IllegalStateException.class);
     }
 }
