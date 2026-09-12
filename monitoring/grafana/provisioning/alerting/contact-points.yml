@@ -12,6 +12,8 @@ contactPoints:
           message: |
             {{ .CommonAnnotations.summary }}
             {{ range .Alerts.Firing }}
+            error: {{ .Annotations.error_summary }}
+            request: {{ .Annotations.request_uri }}
             traceId: {{ .Labels.traceId }}
-            {{ .Annotations.grafana_url }}
+            Grafana: {{ .Annotations.grafana_url }}
             {{ end }}
