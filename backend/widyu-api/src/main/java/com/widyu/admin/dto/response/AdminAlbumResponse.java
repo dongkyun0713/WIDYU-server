@@ -17,10 +17,14 @@ public record AdminAlbumResponse(
         LocalDateTime createdAt
 ) {
     public static AdminAlbumResponse from(Album album) {
-        String thumbnail = album.getThumbnailUrls().isEmpty() ? null : album.getThumbnailUrls().get(0);
-        String preview = album.getContent() != null && album.getContent().length() > 50
-                ? album.getContent().substring(0, 50) + "..."
-                : album.getContent();
+        String thumbnail = null;
+        if (!album.getThumbnailUrls().isEmpty()) {
+            thumbnail = album.getThumbnailUrls().get(0);
+        }
+        String preview = album.getContent();
+        if (preview != null && preview.length() > 50) {
+            preview = preview.substring(0, 50) + "...";
+        }
         return new AdminAlbumResponse(
                 album.getId(),
                 album.getMember().getId(),

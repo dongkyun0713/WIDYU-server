@@ -17,6 +17,10 @@ public record GuardianGoalHomeResponse(
         @Schema(description = "병원 일정 정보")
         HospitalInfo hospital
 ) {
+    public static GuardianGoalHomeResponse of(MedicineInfo medicine, StepsInfo steps, HospitalInfo hospital) {
+        return new GuardianGoalHomeResponse(medicine, steps, hospital);
+    }
+
     @Schema(description = "약 스케줄 정보")
     public record MedicineInfo(
             @Schema(description = "오늘 총 복용 예정 개수", example = "6")

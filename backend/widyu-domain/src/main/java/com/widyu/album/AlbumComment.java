@@ -67,9 +67,9 @@ public class AlbumComment extends BaseTimeEntity {
         this.member = member;
         this.parentComment = parentComment;
         this.content = content;
-        this.likeCount = likeCount != null ? likeCount : 0;
-        this.depth = depth != null ? depth : 0;
-        this.status = status != null ? status : Status.ACTIVE;
+        this.likeCount = defaultInteger(likeCount);
+        this.depth = defaultInteger(depth);
+        this.status = defaultStatus(status);
         this.replies = new ArrayList<>();
     }
 
@@ -80,6 +80,20 @@ public class AlbumComment extends BaseTimeEntity {
                 .content(content)
                 .depth(0)
                 .build();
+    }
+
+    private static Integer defaultInteger(Integer value) {
+        if (value != null) {
+            return value;
+        }
+        return 0;
+    }
+
+    private static Status defaultStatus(Status value) {
+        if (value != null) {
+            return value;
+        }
+        return Status.ACTIVE;
     }
 
     public static AlbumComment createReply(Album album, Member member, AlbumComment parentComment, String content) {

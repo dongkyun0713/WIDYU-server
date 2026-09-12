@@ -57,12 +57,16 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
             AppleIdTokenPayload idTokenPayload = parseIdToken(tokenResponse.idToken());
 
             // 클라이언트에서 email 보내주면 사용, 없으면 ID Token에서 조회
-            String email = (request.profile() != null && request.profile().email() != null)
-                    ? request.profile().email()
-                    : idTokenPayload.email();
+            String email = idTokenPayload.email();
+            if (request.profile() != null && request.profile().email() != null) {
+                email = request.profile().email();
+            }
 
             // 클라이언트에서 name 보내주면 사용
-            String name = (request.profile() != null) ? request.profile().name() : null;
+            String name = null;
+            if (request.profile() != null) {
+                name = request.profile().name();
+            }
 
             return SocialClientResponse.of(
                     idTokenPayload.subject(),
@@ -111,7 +115,10 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
     }
 
     private String getValueOrDefault(String currentValue, String defaultValue) {
-        return (currentValue != null && !currentValue.isBlank()) ? currentValue : defaultValue;
+        if (currentValue != null && !currentValue.isBlank()) {
+            return currentValue;
+        }
+        return defaultValue;
     }
 
 

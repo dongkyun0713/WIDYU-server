@@ -56,7 +56,11 @@ public class Walk extends BaseTimeEntity {
         this.member = member;
         this.walkDate = walkDate;
         this.goalSteps = goalSteps;
-        this.actualSteps = actualSteps != null ? actualSteps : 0;
+        if (actualSteps != null) {
+            this.actualSteps = actualSteps;
+        } else {
+            this.actualSteps = 0;
+        }
     }
 
     public static Walk createWithGoal(Member member, LocalDate date, Integer goalSteps) {
@@ -90,7 +94,10 @@ public class Walk extends BaseTimeEntity {
     }
 
     public Integer getPointRewarded() {
-        return isGoalAchieved() ? POINT_REWARD : 0;
+        if (isGoalAchieved()) {
+            return POINT_REWARD;
+        }
+        return 0;
     }
 
     private static void validateGoalSteps(Integer goalSteps) {

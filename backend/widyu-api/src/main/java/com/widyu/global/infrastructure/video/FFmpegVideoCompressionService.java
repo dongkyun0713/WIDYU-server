@@ -122,7 +122,7 @@ public class FFmpegVideoCompressionService implements VideoCompressionService {
             double durationSeconds = probeResult.getStreams().stream()
                     .filter(s -> s.codec_type == FFmpegStream.CodecType.VIDEO)
                     .findFirst()
-                    .map(s -> s.duration > 0 ? s.duration : 0.0)
+                    .map(this::nonNegativeDuration)
                     .orElse(0.0);
 
             int duration = (int) Math.round(durationSeconds);
@@ -250,7 +250,10 @@ public class FFmpegVideoCompressionService implements VideoCompressionService {
         targetHeight = alignTo8(targetHeight);
 
         long videoBitRate = calculateVideoBitRate(targetHeight, compressionRatio);
-        double frameRate  = videoStream.r_frame_rate != null ? videoStream.r_frame_rate.doubleValue() : 25.0;
+        double frameRate = 25.0;
+        if (videoStream.r_frame_rate != null) {
+            frameRate = videoStream.r_frame_rate.doubleValue();
+        }
 
         return new CompressionSettings(targetWidth, targetHeight, videoBitRate, 128_000L, frameRate);
     }
@@ -290,6 +293,13 @@ public class FFmpegVideoCompressionService implements VideoCompressionService {
 
     private int alignTo8(int value) {
         return (value / 8) * 8;
+    }
+
+    private double nonNegativeDuration(FFmpegStream stream) {
+        if (stream.duration > 0) {
+            return stream.duration;
+        }
+        return 0.0;
     }
 
     private String getFileExtension(String filename) {

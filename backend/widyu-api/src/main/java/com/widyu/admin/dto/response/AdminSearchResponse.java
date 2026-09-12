@@ -9,6 +9,10 @@ public record AdminSearchResponse(
         List<MemberHit> members,
         List<PaymentHit> payments
 ) {
+    public static AdminSearchResponse of(List<MemberHit> members, List<PaymentHit> payments) {
+        return new AdminSearchResponse(members, payments);
+    }
+
     public record MemberHit(
             Long id,
             String name,

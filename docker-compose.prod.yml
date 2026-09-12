@@ -6,21 +6,30 @@ services:
   widyu-api:
     container_name: widyu-api-prod
     restart: always
+    stop_grace_period: 45s
+    mem_limit: 1536m
     environment:
       # Profile
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: never
+      SPRINGDOC_API_DOCS_ENABLED: "false"
+      SPRINGDOC_SWAGGER_UI_ENABLED: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
 
       # Database (RDS)
-      MYSQL_HOST: ${RDS_ENDPOINT}
-      MYSQL_PORT: ${RDS_PORT}
-      MYSQL_USERNAME: ${RDS_USERNAME}
-      MYSQL_PASSWORD: ${RDS_PASSWORD}
+      MYSQL_HOST: ${RDS_ENDPOINT:?RDS_ENDPOINT is required}
+      MYSQL_PORT: ${RDS_PORT:-3306}
+      MYSQL_USERNAME: ${RDS_USERNAME:?RDS_USERNAME is required}
+      MYSQL_PASSWORD: ${RDS_PASSWORD:?RDS_PASSWORD is required}
 
       # JVM Options (운영 환경) - Dockerfile ENV JAVA_OPTS 기본값을 완전히 대체
       JAVA_OPTS: >
         -XX:+UseContainerSupport
-        -Xms1024m
-        -Xmx2048m
+        -Xms256m
+        -Xmx768m
         -XX:+UseG1GC
         -XX:MaxGCPauseMillis=200
         -XX:+HeapDumpOnOutOfMemoryError
@@ -30,7 +39,7 @@ services:
         -Djava.security.egd=file:/dev/./urandom
 
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       redis:
         condition: service_healthy
@@ -50,19 +59,8 @@ services:
   redis:
     container_name: widyu-redis-prod
     restart: always
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-      --save 900 1
-      --save 300 10
-      --save 60 10000
-    ports:
-      - "127.0.0.1:${REDIS_PORT}:6379"  # 내부 접근만
-    healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     logging:
       driver: "json-file"
       options:
@@ -73,10 +71,43 @@ services:
   nginx:
     container_name: widyu-nginx-prod
     restart: always
+    environment:
+      PROD_DOMAIN: ${PROD_DOMAIN:?PROD_DOMAIN is required}
+      NGINX_ENVSUBST_FILTER: ^PROD_DOMAIN$
     volumes:
-      - ./nginx/ssl:/etc/nginx/ssl:ro  # SSL 인증서
+      # !override needs Docker Compose v2.24.4+ to replace the base nginx mounts.
+      !override
+      - ./nginx/prod/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/prod/templates:/etc/nginx/templates:ro
+      - ./admin/dist:/usr/share/nginx/admin:ro
+      - nginx_logs:/var/log/nginx
+      - certbot_webroot:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
+
+  node-exporter:
+    container_name: widyu-node-exporter-prod
+  prometheus:
+    container_name: widyu-prometheus-prod
+  grafana:
+    container_name: widyu-grafana-prod
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+  loki:
+    container_name: widyu-loki-prod
+    volumes:
+      !override
+      - ./monitoring/loki/loki-config.prod.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+  promtail:
+    container_name: widyu-promtail-prod
+    volumes:
+      # !override removes the inherited writable Docker daemon socket mount.
+      !override
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - app_logs:/var/log/widyu:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro

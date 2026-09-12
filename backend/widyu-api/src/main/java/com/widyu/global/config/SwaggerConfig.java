@@ -59,7 +59,10 @@ public class SwaggerConfig {
 
     private Server server() {
         String url = swaggerProperties.url();
-        String description = url.contains(LOCAL_IDENTIFIER) ? LOCAL_SERVER : DEV_SERVER;
+        String description = DEV_SERVER;
+        if (url.contains(LOCAL_IDENTIFIER)) {
+            description = LOCAL_SERVER;
+        }
         return new Server().url(url).description(description);
     }
 

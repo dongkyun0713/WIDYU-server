@@ -22,8 +22,14 @@ public record AlbumMediaResponse(
         
         for (int i = 0; i < mediaUrls.size(); i++) {
             String mediaUrl = mediaUrls.get(i);
-            String thumbnailUrl = i < thumbnailUrls.size() ? thumbnailUrls.get(i) : null;
-            Integer duration = i < durations.size() ? durations.get(i) : null;
+            String thumbnailUrl = null;
+            if (i < thumbnailUrls.size()) {
+                thumbnailUrl = thumbnailUrls.get(i);
+            }
+            Integer duration = null;
+            if (i < durations.size()) {
+                duration = durations.get(i);
+            }
             
             // 이미지인 경우 썸네일 URL을 미디어 URL로 사용, duration은 null
             if (isImageUrl(mediaUrl)) {
@@ -31,10 +37,14 @@ public record AlbumMediaResponse(
                 duration = null;
             }
             
+            String type = "video";
+            if (isImageUrl(mediaUrl)) {
+                type = "image";
+            }
             albumMediaResponses.add(new AlbumMediaResponse(
                     generateMediaId(album.getId(), i), // 앨범ID + 인덱스로 고유 ID 생성
                     album.getId(),
-                    isImageUrl(mediaUrl) ? "image" : "video",
+                    type,
                     duration, // 동영상은 실제 duration, 이미지는 null
                     thumbnailUrl,
                     album.getCreatedAt()

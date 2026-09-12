@@ -59,6 +59,9 @@ public class InMemoryLogAppender extends AppenderBase<ILoggingEvent> {
     private static String shortenLogger(String logger) {
         if (logger == null) return "";
         int dot = logger.lastIndexOf('.');
-        return dot >= 0 ? logger.substring(dot + 1) : logger;
+        if (dot >= 0) {
+            return logger.substring(dot + 1);
+        }
+        return logger;
     }
 }

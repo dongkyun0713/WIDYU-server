@@ -5,6 +5,7 @@ spring:
     group:
       local: "local, datasource, fcm, pay, s3"
       dev: "dev, datasource, fcm, pay, s3"
+      prod: "prod, datasource, fcm, pay, s3"
       test: "test, fcm, pay, s3"
 
     include:

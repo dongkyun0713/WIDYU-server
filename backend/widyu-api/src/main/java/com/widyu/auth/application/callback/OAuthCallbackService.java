@@ -31,9 +31,15 @@ public class OAuthCallbackService {
             return String.format("error=%s", urlEncode(error));
         }
 
-        return String.format("code=%s&id_token=%s",
-                urlEncode(code != null ? code : ""),
-                urlEncode(idToken != null ? idToken : ""));
+        String encodedCode = "";
+        if (code != null) {
+            encodedCode = code;
+        }
+        String encodedIdToken = "";
+        if (idToken != null) {
+            encodedIdToken = idToken;
+        }
+        return String.format("code=%s&id_token=%s", urlEncode(encodedCode), urlEncode(encodedIdToken));
     }
 
     private void logCallbackResult(String error) {

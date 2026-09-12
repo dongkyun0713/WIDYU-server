@@ -13,10 +13,14 @@ public record FcmNotificationResponse(
         String scheme
 ) {
     public static FcmNotificationResponse from(FcmNotification n) {
+        String category = "ALL";
+        if (n.getFcmCategory() != null) {
+            category = n.getFcmCategory().name();
+        }
         return new FcmNotificationResponse(
                 n.getId(),
                 n.getImage(),
-                n.getFcmCategory() != null ? n.getFcmCategory().name() : "ALL",
+                category,
                 n.getTitle(),
                 n.getBody(),
                 n.getCreatedAt(),

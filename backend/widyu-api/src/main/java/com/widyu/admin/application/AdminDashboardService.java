@@ -61,7 +61,7 @@ public class AdminDashboardService {
                 })
                 .toList();
 
-        return new AdminDashboardResponse(
+        return AdminDashboardResponse.of(
                 memberRepository.countByRoleNot(MemberRole.ADMIN),
                 memberRepository.countByTypeAndRoleNot(MemberType.SENIOR, MemberRole.ADMIN),
                 memberRepository.countByTypeAndRoleNot(MemberType.GUARDIAN, MemberRole.ADMIN),

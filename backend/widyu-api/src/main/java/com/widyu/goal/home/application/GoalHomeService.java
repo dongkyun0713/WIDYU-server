@@ -166,7 +166,7 @@ public class GoalHomeService {
         // Hospital 정보
         GuardianGoalHomeResponse.HospitalInfo hospitalInfo = getGuardianHospitalInfo(targetMember);
 
-        return new GuardianGoalHomeResponse(medicineInfo, stepsInfo, hospitalInfo);
+        return GuardianGoalHomeResponse.of(medicineInfo, stepsInfo, hospitalInfo);
     }
 
     // ===== Private Helper Methods =====

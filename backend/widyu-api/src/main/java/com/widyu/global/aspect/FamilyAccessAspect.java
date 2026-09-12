@@ -59,7 +59,10 @@ public class FamilyAccessAspect {
         for (int i = 0; i < parameters.length; i++) {
             if (parameters[i].getName().equals(paramName)) {
                 Object value = args[i];
-                return value instanceof Long ? (Long) value : null;
+                if (value instanceof Long) {
+                    return (Long) value;
+                }
+                return null;
             }
         }
 

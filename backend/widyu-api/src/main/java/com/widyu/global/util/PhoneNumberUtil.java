@@ -32,9 +32,11 @@ public final class PhoneNumberUtil {
         }
 
         if (cleaned.indexOf('+') > 0) {
-            cleaned = cleaned.charAt(0) == '+'
-                    ? "+" + cleaned.substring(1).replace("+", "")
-                    : cleaned.replace("+", "");
+            if (cleaned.charAt(0) == '+') {
+                cleaned = "+" + cleaned.substring(1).replace("+", "");
+            } else {
+                cleaned = cleaned.replace("+", "");
+            }
         }
 
         if (cleaned.startsWith("+82")) {

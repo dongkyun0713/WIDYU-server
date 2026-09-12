@@ -1,78 +1,36 @@
-#!/bin/bash
-
-# 프로덕션 환경 시작 스크립트
-set -e
-
-echo "🚀 Starting WIDYU Production Environment..."
-
-# .env 파일 존재 여부 확인
-if [ ! -f .env ]; then
-    echo "❌ Error: .env not found!"
-    echo "📝 Please create .env from .env.example.prod"
-    exit 1
-fi
-
-# 필수 환경 변수 검증
-echo "🔍 Validating environment variables..."
-required_vars=(
-    "RDS_ENDPOINT"
-    "RDS_USERNAME"
-    "RDS_PASSWORD"
-    "REDIS_PASSWORD"
-    "JWT_ACCESS_SECRET"
-    "JWT_REFRESH_SECRET"
-)
-
-for var in "${required_vars[@]}"; do
-    if ! grep -q "^${var}=" .env || grep -q "^${var}=$" .env; then
-        echo "❌ Error: ${var} is not set in .env"
-        exit 1
-    fi
+#!/usr/bin/env bash
+# Run from a release directory; secrets stay outside release artifacts.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+: "${PROD_ENV_FILE:?Set PROD_ENV_FILE to the absolute server environment file}"
+: "${DOCKER_IMAGE_NAME:?Set DOCKER_IMAGE_NAME}"
+: "${IMAGE_TAG:?Set IMAGE_TAG to the release commit SHA}"
+: "${PROD_DOMAIN:?Set PROD_DOMAIN}"
+[[ "$IMAGE_TAG" =~ ^[a-f0-9]{40}$ ]] || { echo "A full commit SHA is required." >&2; exit 1; }
+[[ "$PROD_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || exit 1
+[[ "$PROD_ENV_FILE" = /* && -f "$PROD_ENV_FILE" ]] || exit 1
+: "${PROD_DEPLOY_LOCK_FILE:=/home/ec2-user/widyu-prod-deploy.lock}"
+[[ "$PROD_DEPLOY_LOCK_FILE" = /* ]] || exit 1
+exec 9>"$PROD_DEPLOY_LOCK_FILE"
+flock -n 9 || { echo "Another production deployment is running." >&2; exit 1; }
+compose=(docker compose --project-name widyu-prod --env-file "$PROD_ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml)
+"${compose[@]}" config --quiet
+python3 scripts/docker/validate-prod.py "${compose[@]}"
+test -s admin/dist/index.html
+"${compose[@]}" pull widyu-api
+# Check certificates and the rendered proxy configuration before replacing a working API.
+"${compose[@]}" run --rm --no-deps --entrypoint sh certbot -c 'test -s "/etc/letsencrypt/live/$1/fullchain.pem" && test -s "/etc/letsencrypt/live/$1/privkey.pem"' sh "$PROD_DOMAIN"
+"${compose[@]}" run --rm --no-deps nginx nginx -t
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-build --no-deps redis widyu-ai
+"${compose[@]}" up -d --wait --wait-timeout 240 --no-build --no-deps widyu-api
+for endpoint in http://127.0.0.1:8080/actuator/health http://127.0.0.1:8080/actuator/prometheus; do
+  curl --fail --silent --show-error --output /dev/null --retry 12 --retry-all-errors --retry-delay 5 --connect-timeout 5 --max-time 10 "$endpoint"
 done
-
-# 최신 코드 Pull (CI/CD 환경인 경우)
-if [ "$CI" = "true" ]; then
-    echo "📦 Pulling latest code..."
-    git pull origin main
-fi
-
-# Docker 이미지 빌드
-echo "🔨 Building Docker image..."
-docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
-
-# 기존 컨테이너 안전하게 종료
-if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -q | grep -q .; then
-    echo "🔄 Stopping old containers..."
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml down --timeout 30
-fi
-
-# 새 컨테이너 시작
-echo "🚢 Starting containers..."
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# 헬스 체크 대기
-echo "⏳ Waiting for health checks..."
-sleep 15
-
-# 서비스 상태 확인
-echo ""
-echo "📊 Service Status:"
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
-
-# 헬스 체크 검증
-echo ""
-echo "🏥 Health Check:"
-if curl -f http://localhost/actuator/health > /dev/null 2>&1; then
-    echo "✅ Application is healthy!"
-else
-    echo "⚠️  Warning: Health check failed. Check logs:"
-    echo "   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs widyu-api"
-fi
-
-echo ""
-echo "✅ Production environment is up!"
-echo ""
-echo "📝 Useful commands:"
-echo "   - View logs: docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f"
-echo "   - Stop services: ./scripts/docker/prod-down.sh"
-echo "   - Restart API: docker compose -f docker-compose.yml -f docker-compose.prod.yml restart widyu-api"
+"${compose[@]}" up -d --no-build --no-deps --force-recreate nginx
+curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 --connect-timeout 5 --max-time 10 --resolve "$PROD_DOMAIN:443:127.0.0.1" "https://$PROD_DOMAIN/actuator/health"
+echo "API and Nginx are healthy; starting monitoring services."
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-build node-exporter prometheus loki promtail grafana
+for endpoint in http://127.0.0.1:9090/-/ready http://127.0.0.1:3100/ready http://127.0.0.1:3000/api/health; do
+  curl --fail --silent --show-error --output /dev/null --retry 12 --retry-all-errors --retry-delay 5 --connect-timeout 5 --max-time 10 "$endpoint"
+done
+echo "Production deployment succeeded: $IMAGE_TAG"

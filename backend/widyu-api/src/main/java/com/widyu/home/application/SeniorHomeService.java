@@ -52,7 +52,7 @@ public class SeniorHomeService {
 
         LocalDate today = LocalDate.now();
 
-        return new SeniorHomeCardsResponse(
+        return SeniorHomeCardsResponse.of(
                 getHeartRateInfo(member),
                 getMedicineInfo(member, today),
                 getScoredAlbums(member, today),

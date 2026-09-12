@@ -44,9 +44,12 @@ public class AdminFcmService {
     @Transactional(readOnly = true)
     public AdminPageResponse<AdminMemberDetailResponse> getMemberPage(String name, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("id").descending());
-        Page<AdminMemberDetailResponse> result = (name != null && !name.isBlank())
-                ? memberRepository.findByNameContainingOrderByIdDesc(name, pageRequest).map(AdminMemberDetailResponse::from)
-                : memberRepository.findAllByOrderByIdDesc(pageRequest).map(AdminMemberDetailResponse::from);
+        Page<AdminMemberDetailResponse> result;
+        if (name != null && !name.isBlank()) {
+            result = memberRepository.findByNameContainingOrderByIdDesc(name, pageRequest).map(AdminMemberDetailResponse::from);
+        } else {
+            result = memberRepository.findAllByOrderByIdDesc(pageRequest).map(AdminMemberDetailResponse::from);
+        }
         return AdminPageResponse.from(result);
     }
 
@@ -60,18 +63,25 @@ public class AdminFcmService {
             return member.getName() + "님의 등록된 FCM 토큰이 없습니다.";
         }
 
+        FcmCategory category = request.category();
+        if (category == null) {
+            category = FcmCategory.ETC;
+        }
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(request.title())
                 .content(request.content())
-                .fcmCategory(request.category() != null ? request.category() : FcmCategory.ETC)
+                .fcmCategory(category)
                 .scheme("")
                 .image(null)
                 .build();
 
         int sent = fcmService.sendTestMessageToUser(request.memberId(), fcmSendDto);
-        String resultMsg = (sent == 0)
-                ? member.getName() + "님에게 전송 시도했으나 FCM 서버 응답 실패 (토큰 " + tokens.size() + "개)"
-                : member.getName() + "님에게 알림을 전송했습니다. (" + sent + "/" + tokens.size() + "개 성공)";
+        String resultMsg;
+        if (sent == 0) {
+            resultMsg = member.getName() + "님에게 전송 시도했으나 FCM 서버 응답 실패 (토큰 " + tokens.size() + "개)";
+        } else {
+            resultMsg = member.getName() + "님에게 알림을 전송했습니다. (" + sent + "/" + tokens.size() + "개 성공)";
+        }
         adminAuditLogService.log(
                 AdminAction.FCM_TEST_SEND, "MEMBER", request.memberId(),
                 "'" + request.title() + "' → " + sent + "/" + tokens.size() + "개 성공"

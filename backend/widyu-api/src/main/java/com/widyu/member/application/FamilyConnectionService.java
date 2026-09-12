@@ -46,9 +46,12 @@ public class FamilyConnectionService {
         }
 
         boolean hasLeader = familyMembershipRepository.existsByFamilyIdAndIsLeaderTrue(family.getId());
-        FamilyMembership membership = hasLeader
-                ? FamilyMembership.createMembership(family, currentMember)
-                : FamilyMembership.createLeaderMembership(family, currentMember);
+        FamilyMembership membership;
+        if (hasLeader) {
+            membership = FamilyMembership.createMembership(family, currentMember);
+        } else {
+            membership = FamilyMembership.createLeaderMembership(family, currentMember);
+        }
         familyMembershipRepository.save(membership);
 
         List<SeniorProfile> seniors = seniorProfileRepository.findAllByFamilyIdWithMember(family.getId());
