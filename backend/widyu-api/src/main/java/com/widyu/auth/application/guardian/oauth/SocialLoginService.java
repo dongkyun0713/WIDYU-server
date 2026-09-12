@@ -22,6 +22,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.util.JwtUtil;
+import com.widyu.global.util.PiiMaskingUtil;
 import com.widyu.global.util.TemporaryMemberUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
@@ -79,7 +80,7 @@ public class SocialLoginService {
         TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
 
         member.updatePhoneNumber(temporaryMember.getPhoneNumber());
-        log.info("애플 사용자 전화번호 업데이트 완료: memberId={}, email={}", member.getId(), request.email());
+        log.info("애플 사용자 전화번호 업데이트 완료: memberId={}, email={}", member.getId(), PiiMaskingUtil.maskEmail(request.email()));
     }
 
     public TokenPairResponse integrateSocialAccount(HttpServletRequest httpServletRequest) {
@@ -93,7 +94,7 @@ public class SocialLoginService {
         try {
             socialToken = socialTemporaryTokenService.validateAndRetrieve(socialTemporaryToken);
         } catch (BusinessException e) {
-            log.warn("소셜 임시 토큰 검증 실패: token={}, error={}", socialTemporaryToken.substring(0, Math.min(20, socialTemporaryToken.length())), e.getMessage());
+            log.warn("소셜 임시 토큰 검증 실패: error={}", e.getMessage());
             throw e;
         }
 
@@ -117,7 +118,7 @@ public class SocialLoginService {
         socialTemporaryTokenService.deleteSocialTemporaryToken(socialTemporaryToken);
 
         log.info("소셜 계정 연동 완료: memberId={}, provider={}, email={}",
-                member.getId(), provider.getValue(), socialToken.email());
+                member.getId(), provider.getValue(), PiiMaskingUtil.maskEmail(socialToken.email()));
 
         return jwtTokenProvider.generateTokenPair(member.getId(), MemberRole.USER, provider.getValue());
     }
@@ -199,9 +200,9 @@ public class SocialLoginService {
     private void logMemberCreationOrUpdate(Member member, OAuthProvider provider, String email) {
         if (member.getId() != null) {
             log.info("기존 회원에 소셜 계정 추가: memberId={}, provider={}, email={}",
-                    member.getId(), provider.getValue(), email);
+                    member.getId(), provider.getValue(), PiiMaskingUtil.maskEmail(email));
         } else {
-            log.info("신규 회원 생성 완료: provider={}, email={}", provider.getValue(), email);
+            log.info("신규 회원 생성 완료: provider={}, email={}", provider.getValue(), PiiMaskingUtil.maskEmail(email));
         }
     }
 
@@ -221,7 +222,7 @@ public class SocialLoginService {
         if (userInfo.hasPhoneNumber()) {
             Optional<Member> member = memberRepository.findByPhoneNumber(userInfo.phoneNumber());
             if (member.isPresent()) {
-                log.info("전화번호로 기존 회원 발견: phoneNumber={}", userInfo.phoneNumber());
+                log.info("전화번호로 기존 회원 발견: phoneNumber={}", PiiMaskingUtil.maskPhoneNumber(userInfo.phoneNumber()));
                 return memberRepository.findWithAllAccountsById(member.get().getId());
             }
         }
@@ -229,7 +230,7 @@ public class SocialLoginService {
         if (userInfo.hasEmail()) {
             Optional<Member> member = memberRepository.findBySocialAccounts_Email(userInfo.email());
             if (member.isPresent()) {
-                log.info("이메일로 기존 회원 발견: email={}", userInfo.email());
+                log.info("이메일로 기존 회원 발견: email={}", PiiMaskingUtil.maskEmail(userInfo.email()));
                 return memberRepository.findWithAllAccountsById(member.get().getId());
             }
         }

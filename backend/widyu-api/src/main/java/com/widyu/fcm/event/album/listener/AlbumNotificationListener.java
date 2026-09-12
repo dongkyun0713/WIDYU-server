@@ -119,7 +119,7 @@ public class AlbumNotificationListener {
         long totalCount = albumRepository.countByMemberId(writer.getId());
         long viewedCount = albumViewRepository.countViewedAlbumsByGuardianAndParent(viewerId, writer.getId());
 
-        log.info("작성자: {}, 전체: {}, 본 개수: {}", writer.getName(), totalCount, viewedCount);
+        log.info("작성자 memberId: {}, 전체: {}, 본 개수: {}", writer.getId(), totalCount, viewedCount);
         return viewedCount == totalCount && totalCount > 0;
     }
 
@@ -175,9 +175,9 @@ public class AlbumNotificationListener {
             FcmSendDto dto = new FcmSendDto(message, "새로운 소식을 공유해보세요.", FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE);
             try {
                 fcmService.sendMessageToUser(senior.getMember().getId(), dto);
-                log.info("{}일 비활성 알림 전송 완료: {} -> {}", days, member.getName(), senior.getMember().getName());
+                log.info("{}일 비활성 알림 전송 완료: {} -> {}", days, member.getId(), senior.getMember().getId());
             } catch (Exception e) {
-                log.error("{}일 비활성 알림 전송 실패: {} -> {}", days, member.getName(), senior.getMember().getName(), e);
+                log.error("{}일 비활성 알림 전송 실패: {} -> {}", days, member.getId(), senior.getMember().getId(), e);
             }
         }
     }
