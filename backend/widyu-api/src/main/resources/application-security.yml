@@ -1,3 +1,8 @@
+widyu:
+  encryption:
+    # AES-256용 32바이트 키의 Base64. 운영·개발 환경은 환경변수로 반드시 주입한다(ADR-0025).
+    aes-key: ${WIDYU_ENCRYPTION_AES_KEY}
+
 jwt:
   access-token-secret: ${JWT_ACCESS_TOKEN_SECRET}
   access-token-expiration-time: ${JWT_ACCESS_TOKEN_EXPIRATION_TIME}
