@@ -7,6 +7,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.application.FamilyAccessService;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,8 +28,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class JwtChannelInterceptor implements ChannelInterceptor {
 
-    private static final Pattern LOCATION_TOPIC = Pattern.compile("^/topic/location/senior/(\\d+)$");
-    private static final Pattern HEART_RATE_TOPIC = Pattern.compile("^/topic/heart-rate/(\\d+)$");
+    // 대상 ID는 1~18자리 숫자만 허용한다. 18자리는 항상 Long 범위 안이라 parseLong 오버플로가 없다.
+    private static final Pattern LOCATION_TOPIC = Pattern.compile("^/topic/location/senior/(\\d{1,18})$");
+    private static final Pattern HEART_RATE_TOPIC = Pattern.compile("^/topic/heart-rate/(\\d{1,18})$");
+
+    // 보호 토픽 접두사. 이 접두사로 시작하지만 정확한 숫자 대상이 아니면(와일드카드 등) 구독을 거부한다.
+    private static final List<String> PROTECTED_TOPIC_PREFIXES = List.of(
+            "/topic/heart-rate/",
+            "/topic/location/senior/"
+    );
 
     private final JwtTokenProvider jwtTokenProvider;
     private final FamilyAccessService familyAccessService;
@@ -80,9 +88,15 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             return message;
         }
 
+        if (!isProtectedTopic(destination)) {
+            return message;
+        }
+
         Long targetMemberId = extractProtectedMemberId(destination);
         if (targetMemberId == null) {
-            return message;
+            // 보호 토픽 접두사이지만 정확한 숫자 대상이 아님(와일드카드·비숫자·초과 길이) → 가족 검증을 우회하지 못하게 차단
+            log.warn("WebSocket SUBSCRIBE 거부 - 보호 토픽의 대상 ID가 유효하지 않음, destination: {}", destination);
+            return null;
         }
 
         Long subscriberId = resolveSubscriberId(accessor);
@@ -100,6 +114,10 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         }
 
         return message;
+    }
+
+    private boolean isProtectedTopic(String destination) {
+        return PROTECTED_TOPIC_PREFIXES.stream().anyMatch(destination::startsWith);
     }
 
     private Long extractProtectedMemberId(String destination) {
