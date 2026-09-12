@@ -5,6 +5,7 @@ import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.CoolsmsProperties;
+import com.widyu.global.util.PiiMaskingUtil;
 import java.security.SecureRandom;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -54,16 +55,16 @@ public class SmsService {
             Message message = createMessage(toPhoneNumber, messageText);
             messageService.send(message);
 
-            log.info("SMS 전송 성공 - 수신번호: {}, 이름: {}", maskPhoneNumber(toPhoneNumber), name);
+            log.info("SMS 전송 성공 - 수신번호: {}", PiiMaskingUtil.maskPhoneNumber(toPhoneNumber));
 
         } catch (NurigoMessageNotReceivedException exception) {
             log.error("SMS 전송 실패 - 수신 불가: 수신번호={}, 실패목록={}",
-                    maskPhoneNumber(toPhoneNumber), exception.getFailedMessageList());
+                    PiiMaskingUtil.maskPhoneNumber(toPhoneNumber), exception.getFailedMessageList());
             throw new BusinessException(ErrorCode.SMS_SEND_FAILED);
 
         } catch (Exception exception) {
             log.error("SMS 전송 중 알 수 없는 오류 발생: 수신번호={}, 오류={}",
-                    maskPhoneNumber(toPhoneNumber), exception.getMessage(), exception);
+                    PiiMaskingUtil.maskPhoneNumber(toPhoneNumber), exception.getMessage(), exception);
             throw new BusinessException(ErrorCode.SMS_SEND_FAILED);
         }
     }
@@ -114,16 +115,4 @@ public class SmsService {
         return message;
     }
 
-    private String maskPhoneNumber(final String phoneNumber) {
-        if (phoneNumber == null || phoneNumber.length() < 8) {
-            return "***";
-        }
-
-        // 01012345678 -> 010****5678
-        if (phoneNumber.length() >= 11) {
-            return phoneNumber.substring(0, 3) + "****" + phoneNumber.substring(7);
-        }
-
-        return phoneNumber.substring(0, 3) + "****";
-    }
 }

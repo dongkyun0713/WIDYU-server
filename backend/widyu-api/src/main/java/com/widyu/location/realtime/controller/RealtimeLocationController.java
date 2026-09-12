@@ -34,9 +34,8 @@ public class RealtimeLocationController {
             SimpMessageHeaderAccessor headerAccessor
     ) {
         Long authenticatedMemberId = resolveMemberId(principal, headerAccessor);
-        log.info("위치 업데이트 수신 - authenticatedMemberId: {}, requestMemberId: {}, lat: {}, lng: {}",
-                 authenticatedMemberId, request.memberId(),
-                 request.latitude(), request.longitude());
+        log.info("위치 업데이트 수신 - authenticatedMemberId: {}, requestMemberId: {}",
+                 authenticatedMemberId, request.memberId());
 
         return realtimeLocationService.updateAndBroadcast(request, authenticatedMemberId);
     }

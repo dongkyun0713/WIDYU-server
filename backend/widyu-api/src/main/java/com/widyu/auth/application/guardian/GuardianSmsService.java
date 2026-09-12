@@ -8,6 +8,7 @@ import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.util.PiiMaskingUtil;
 import com.widyu.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,7 @@ public class GuardianSmsService {
      */
     @Transactional
     public void sendVerificationSms(SmsVerificationRequest request) {
-        log.info("SMS 인증 요청: phoneNumber={}, name={}", request.phoneNumber(), request.name());
+        log.info("SMS 인증 요청: phoneNumber={}", PiiMaskingUtil.maskPhoneNumber(request.phoneNumber()));
         smsService.sendVerificationSms(request.phoneNumber(), request.name());
     }
 
@@ -40,8 +41,8 @@ public class GuardianSmsService {
      */
     @Transactional
     public void sendVerificationSmsForPasswordReset(FindPasswordRequest request) {
-        log.info("비밀번호 찾기 SMS 인증 요청: phoneNumber={}, email={}", 
-                request.phoneNumber(), request.email());
+        log.info("비밀번호 찾기 SMS 인증 요청: phoneNumber={}, email={}",
+                PiiMaskingUtil.maskPhoneNumber(request.phoneNumber()), PiiMaskingUtil.maskEmail(request.email()));
         
         // 회원 존재 여부 확인
         memberRepository.findByPhoneNumberAndNameAndLocalAccount_Email(
@@ -49,8 +50,8 @@ public class GuardianSmsService {
                 request.name(),
                 request.email()
         ).orElseThrow(() -> {
-            log.error("비밀번호 찾기 대상 회원을 찾을 수 없음: phoneNumber={}, email={}", 
-                    request.phoneNumber(), request.email());
+            log.error("비밀번호 찾기 대상 회원을 찾을 수 없음: phoneNumber={}, email={}",
+                    PiiMaskingUtil.maskPhoneNumber(request.phoneNumber()), PiiMaskingUtil.maskEmail(request.email()));
             return new BusinessException(ErrorCode.MEMBER_NOT_FOUND);
         });
         
@@ -62,7 +63,7 @@ public class GuardianSmsService {
      */
     @Transactional
     public TemporaryTokenResponse verifyCodeAndIssueToken(SmsCodeRequest request) {
-        log.info("SMS 인증 코드 검증: phoneNumber={}", request.phoneNumber());
+        log.info("SMS 인증 코드 검증: phoneNumber={}", PiiMaskingUtil.maskPhoneNumber(request.phoneNumber()));
         return verificationCodeService.verifyAndIssueTemporaryToken(request.phoneNumber(), request.code());
     }
 }
