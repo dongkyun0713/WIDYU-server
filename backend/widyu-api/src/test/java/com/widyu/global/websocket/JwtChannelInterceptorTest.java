@@ -156,6 +156,32 @@ class JwtChannelInterceptorTest {
         assertThat(result).isNull();
     }
 
+    @Test
+    @DisplayName("19자리 대상 ID 구독은 차단한다")
+    void 열아홉자리_대상_ID_구독은_차단한다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/heart-rate/1000000000000000000", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @DisplayName("18자리 대상 ID 구독은 가족 검증을 거쳐 통과시킨다")
+    void 열여덟자리_대상_ID_구독은_통과시킨다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/heart-rate/100000000000000000", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNotNull();
+    }
+
     private Message<?> buildSubscribeMessage(String destination, Long subscriberId) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setDestination(destination);
