@@ -18,7 +18,7 @@ public class ExceptionLogEntry {
                 "[EXCEPTION] Time=%s ExceptionType=%s Message=%s RequestURI=%s StackTrace=%s",
                 timestamp,
                 exceptionType,
-                message,
+                escapeLineBreaks(message),
                 requestUri,
                 escapeLineBreaks(stackTrace)
         );

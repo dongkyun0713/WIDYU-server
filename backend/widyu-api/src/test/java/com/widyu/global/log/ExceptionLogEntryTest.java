@@ -13,7 +13,7 @@ class ExceptionLogEntryTest {
         ExceptionLogEntry entry = ExceptionLogEntry.builder()
                 .timestamp("2026-09-12T03:43:28Z")
                 .exceptionType("java.lang.IllegalStateException")
-                .message("처리 실패")
+                .message("처리\n실패")
                 .requestUri("/api/v1/test")
                 .stackTrace("line one\nline two")
                 .build();
@@ -22,7 +22,7 @@ class ExceptionLogEntryTest {
 
         assertThat(log)
                 .contains("ExceptionType=java.lang.IllegalStateException")
-                .contains("Message=처리 실패")
+                .contains("Message=처리\\n실패")
                 .contains("StackTrace=line one\\nline two")
                 .doesNotContain("\n");
     }
