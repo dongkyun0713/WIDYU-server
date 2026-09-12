@@ -190,6 +190,9 @@ jobs:
             echo "🔧 Ensuring Nginx is running..."
             docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps nginx
 
+            echo "🔍 Validating nginx config..."
+            docker exec widyu-nginx-dev nginx -t
+
             echo "🔄 Reloading nginx config..."
             docker exec widyu-nginx-dev nginx -s reload
 
@@ -203,6 +206,23 @@ jobs:
               COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml:docker-compose.dev-server.yml \
                 ./scripts/ssl/certbot-init.sh dev.widyu.store "${{ env.ORACLE_CERTBOT_EMAIL }}"
             fi
+
+            echo "🩺 Checking the API through nginx..."
+            for attempt in 1 2 3 4 5; do
+              if curl --fail --silent --show-error --max-time 10 \
+                --resolve dev.widyu.store:443:127.0.0.1 \
+                https://dev.widyu.store/actuator/health >/dev/null; then
+                echo "✅ API health check through nginx passed."
+                break
+              fi
+
+              if [ "$attempt" -eq 5 ]; then
+                echo "❌ API health check through nginx failed after HTTPS setup." >&2
+                exit 1
+              fi
+
+              sleep 2
+            done
           REMOTE_SCRIPT
 
   renew-development-certificate:
