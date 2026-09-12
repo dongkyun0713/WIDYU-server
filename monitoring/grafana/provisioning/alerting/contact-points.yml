@@ -11,9 +11,17 @@ contactPoints:
           title: "{{ .CommonLabels.alertname }}"
           message: |
             {{ .CommonAnnotations.summary }}
-            {{ range .Alerts.Firing }}
-            error: {{ .Annotations.error_summary }}
-            request: {{ .Annotations.request_uri }}
-            traceId: {{ .Labels.traceId }}
-            Grafana: {{ .Annotations.grafana_url }}
+            {{ $$limit := 2 }}
+            {{ range $$index, $$alert := .Alerts.Firing }}
+            {{ if lt $$index $$limit }}
+            {{ if $$alert.Annotations.error_summary }}
+            error: {{ reReplaceAll "^(.{0,180}).*$" "$$1" $$alert.Annotations.error_summary }}
+            request: {{ reReplaceAll "^(.{0,120}).*$" "$$1" $$alert.Annotations.request_uri }}
+            {{ end }}
+            traceId: {{ $$alert.Labels.traceId }}
+            Grafana: {{ $$alert.Annotations.grafana_url }}
+            {{ end }}
+            {{ end }}
+            {{ if gt (len .Alerts.Firing) $$limit }}
+            총 {{ len .Alerts.Firing }}건 중 앞 {{ $$limit }}건만 표시합니다.
             {{ end }}
