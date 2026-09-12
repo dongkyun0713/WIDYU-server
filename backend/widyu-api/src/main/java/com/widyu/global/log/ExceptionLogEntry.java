@@ -14,22 +14,20 @@ public class ExceptionLogEntry {
     private String stackTrace;
 
     public String toLogString() {
-        return String.format("""
-                
-                [EXCEPTION]
-                  Time          : %s
-                  ExceptionType : %s
-                  Message       : %s
-                  Request URI   : %s
-                ----------------- Stack Trace -----------------
-                %s
-                ------------------------------------------------
-                """,
+        return String.format(
+                "[EXCEPTION] Time=%s ExceptionType=%s Message=%s RequestURI=%s StackTrace=%s",
                 timestamp,
                 exceptionType,
-                message,
+                escapeLineBreaks(message),
                 requestUri,
-                stackTrace
+                escapeLineBreaks(stackTrace)
         );
+    }
+
+    private static String escapeLineBreaks(final String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace("\r", "\\r").replace("\n", "\\n");
     }
 }

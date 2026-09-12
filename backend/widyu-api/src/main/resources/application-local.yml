@@ -16,3 +16,6 @@ logging:
   level:
     org.hibernate.SQL: debug
     org.hibernate.type: trace
+observability:
+  error-response:
+    include-debug-details: true

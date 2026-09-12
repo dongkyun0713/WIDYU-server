@@ -1,0 +1,8 @@
+apiVersion: 1
+
+providers:
+  - name: widyu-development
+    folder: WIDYU Development
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

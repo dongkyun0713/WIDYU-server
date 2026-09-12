@@ -1,0 +1,116 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: widyu-development-errors
+    folder: WIDYU Development
+    interval: 1m
+    rules:
+      - uid: widyu-development-api-error
+        title: DEV API ERROR
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "개발 API ERROR 로그가 발생했습니다."
+          trace_id: "{{ $labels.traceId }}"
+          grafana_url: "{{ externalURL }}d/widyu-development-errors?var-traceId={{ $labels.traceId }}"
+        labels:
+          environment: dev
+          service: widyu-api-dev
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (traceId) (count_over_time({service="widyu-api-dev", environment="dev"} |= "ERROR" !~ "\\[EXCEPTION\\]" | regexp "traceId=(?P<traceId>[A-Za-z0-9._-]{1,64})" [1m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+      - uid: widyu-development-api-exception
+        title: DEV API EXCEPTION
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "개발 API ERROR 로그가 발생했습니다."
+          error_summary: "{{ $labels.exceptionType }}: {{ $labels.errorMessage }}"
+          request_uri: "{{ $labels.requestUri }}"
+          trace_id: "{{ $labels.traceId }}"
+          grafana_url: "{{ externalURL }}d/widyu-development-errors?var-traceId={{ $labels.traceId }}"
+        labels:
+          environment: dev
+          service: widyu-api-dev
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (traceId, exceptionType, errorMessage, requestUri) (count_over_time({service="widyu-api-dev", environment="dev"} |= "ERROR" | regexp ".*traceId=(?P<traceId>[A-Za-z0-9._-]{1,64}).*\\[EXCEPTION\\] Time=.* ExceptionType=(?P<exceptionType>[^ ]+) Message=(?P<errorMessage>.*) RequestURI=(?P<requestUri>[^ ]+) StackTrace=.*" [1m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query

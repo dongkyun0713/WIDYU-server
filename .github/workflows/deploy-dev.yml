@@ -98,7 +98,7 @@ jobs:
             "mkdir -p -- '$ORACLE_DEPLOY_PATH/nginx' '$ORACLE_DEPLOY_PATH/admin/dist'"
 
           rsync -avz -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
-            docker-compose.yml docker-compose.dev.yml \
+            docker-compose.yml docker-compose.dev.yml docker-compose.dev-server.yml \
             "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/"
 
           # --inplace: nginx.conf가 단일 파일 바인드 마운트라, 파일 교체 시 inode가 바뀌면
@@ -111,6 +111,10 @@ jobs:
           rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
             scripts/ \
             "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/scripts/"
+
+          rsync -avz --delete -e "ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$DEPLOY_KNOWN_HOSTS_FILE" \
+            monitoring/ \
+            "$ORACLE_SSH_USER@$ORACLE_HOST:$ORACLE_DEPLOY_PATH/monitoring/"
 
           rsync -av --delete .well-known/ admin/dist/.well-known/
 
@@ -140,7 +144,7 @@ jobs:
             echo "DOCKER_IMAGE_NAME=${{ env.DOCKER_IMAGE_NAME }}" >> .env
             echo "IMAGE_TAG=${{ github.sha }}" >> .env
 
-            if docker compose --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42' < /dev/null; then
+            if docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml --profile manual run --rm --entrypoint sh certbot -c 'if test -f /etc/letsencrypt/live/dev.widyu.store/fullchain.pem && test -f /etc/letsencrypt/live/dev.widyu.store/privkey.pem; then exit 0; fi; exit 42' < /dev/null; then
               CERTIFICATE_STATUS=0
             else
               CERTIFICATE_STATUS=$?
@@ -159,7 +163,7 @@ jobs:
             docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
 
             echo "🔧 Ensuring MySQL, Redis, and AI are running..."
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps mysql redis widyu-ai
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps mysql redis widyu-ai
 
             PREVIOUS_IMAGE=""
             if docker inspect widyu-api-dev >/dev/null 2>&1; then
@@ -167,21 +171,27 @@ jobs:
             fi
 
             echo "🚀 Deploying and checking widyu-api..."
-            if ! docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps --force-recreate widyu-api; then
+            if ! docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps --force-recreate widyu-api; then
               if [ -n "$PREVIOUS_IMAGE" ]; then
                 PREVIOUS_TAG="${PREVIOUS_IMAGE##*:}"
                 if [ "$PREVIOUS_TAG" != "$PREVIOUS_IMAGE" ]; then
                   echo "↩️ Restoring the previous widyu-api image..."
                   sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$PREVIOUS_TAG/" .env
                   docker pull "$PREVIOUS_IMAGE"
-                  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps --force-recreate widyu-api
+                  docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps --force-recreate widyu-api
                 fi
               fi
               exit 1
             fi
 
+            echo "🔧 Ensuring monitoring stack is running..."
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --force-recreate prometheus grafana loki promtail node-exporter
+
             echo "🔧 Ensuring Nginx is running..."
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait --no-build --no-deps nginx
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps nginx
+
+            echo "🔍 Validating nginx config..."
+            docker exec widyu-nginx-dev nginx -t
 
             echo "🔄 Reloading nginx config..."
             docker exec widyu-nginx-dev nginx -s reload
@@ -193,12 +203,26 @@ jobs:
               fi
 
               echo "🔐 Issuing the first HTTPS certificate..."
-              COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml \
+              COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml:docker-compose.dev-server.yml \
                 ./scripts/ssl/certbot-init.sh dev.widyu.store "${{ env.ORACLE_CERTBOT_EMAIL }}"
             fi
 
-            # echo "🔧 Ensuring monitoring stack is running..."
-            # docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d prometheus grafana loki promtail node-exporter
+            echo "🩺 Checking the API through nginx..."
+            for attempt in 1 2 3 4 5; do
+              if curl --fail --silent --show-error --max-time 10 \
+                --resolve dev.widyu.store:443:127.0.0.1 \
+                https://dev.widyu.store/actuator/health >/dev/null; then
+                echo "✅ API health check through nginx passed."
+                break
+              fi
+
+              if [ "$attempt" -eq 5 ]; then
+                echo "❌ API health check through nginx failed after HTTPS setup." >&2
+                exit 1
+              fi
+
+              sleep 2
+            done
           REMOTE_SCRIPT
 
   renew-development-certificate:

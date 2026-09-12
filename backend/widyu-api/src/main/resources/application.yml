@@ -32,3 +32,7 @@ swagger:
 springdoc:
   swagger-ui:
     urls-primary-name: 전체 API
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level traceId=%X{traceId:-none} [%thread] %logger{36} - %msg%n"
