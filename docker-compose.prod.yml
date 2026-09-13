@@ -18,12 +18,14 @@ services:
       SPRINGDOC_SWAGGER_UI_ENABLED: "false"
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_SSL_ENABLED: ${REDIS_SSL_ENABLED:-false}
 
       # Database (RDS)
       MYSQL_HOST: ${RDS_ENDPOINT:?RDS_ENDPOINT is required}
       MYSQL_PORT: ${RDS_PORT:-3306}
       MYSQL_USERNAME: ${RDS_USERNAME:?RDS_USERNAME is required}
       MYSQL_PASSWORD: ${RDS_PASSWORD:?RDS_PASSWORD is required}
+      MYSQL_SSL_MODE: ${MYSQL_SSL_MODE:-DISABLED}
 
       # JVM Options (운영 환경) - Dockerfile ENV JAVA_OPTS 기본값을 완전히 대체
       JAVA_OPTS: >

@@ -7,7 +7,7 @@ Amazon Linux 2023 ARM64 / t4g.medium에서 API 한 개를 교체한다. 블루�
 1. EC2에 Docker Engine, Docker Compose v2.24.4 이상(`!override`, `up --wait`, `--wait-timeout` 지원), Python 3, curl, tar, util-linux(flock)를 설치한다. ec2-user가 Docker를 실행할 수 있도록 준비한다.
 2. 운영 DNS를 EC2에 연결한다. 아래 접속·보안 그룹 기준으로 80/443을 공개하고 관리 접속과 배포 접속을 분리한다. RDS는 운영 EC2 보안 그룹에서만 접근하도록 구성한다.
 3. /home/ec2-user/.env를 운영 값으로 준비한다. 공통 docker-compose.yml의 환경변수를 기준으로 RDS_ENDPOINT, RDS_PORT, RDS_USERNAME, RDS_PASSWORD, DB_NAME, REDIS_PASSWORD를 지정한다. JWT 변수는 JWT_ACCESS_TOKEN_SECRET, JWT_REFRESH_TOKEN_SECRET, JWT_TEMPORARY_TOKEN_SECRET과 각 EXPIRATION_TIME 이름을 사용한다. 파일을 source하거나 내용을 로그에 출력하지 않는다.
-4. NGINX_HTTP_PORT=80, NGINX_HTTPS_PORT=443, SPRING_PROFILES_ACTIVE=prod, REDIS_HOST=redis, REDIS_PORT=6379를 설정한다. FFMPEG_PATH와 FFPROBE_PATH는 컨테이너의 /usr/bin/ffmpeg, /usr/bin/ffprobe를 사용한다.
+4. NGINX_HTTP_PORT=80, NGINX_HTTPS_PORT=443, SPRING_PROFILES_ACTIVE=prod, REDIS_HOST=redis, REDIS_PORT=6379를 설정한다. RDS TLS를 적용하면 MYSQL_SSL_MODE=VERIFY_IDENTITY를 설정하고 RDS CA를 JVM 신뢰 저장소에 등록한다. Redis가 TLS 종단을 제공하는 구성에서만 REDIS_SSL_ENABLED=true를 설정한다. FFMPEG_PATH와 FFPROBE_PATH는 컨테이너의 /usr/bin/ffmpeg, /usr/bin/ffprobe를 사용한다.
 5. FIREBASE_CREDENTIALS_FILE은 Firebase 파일의 절대 경로로 지정하고 파일이 컨테이너 spring 사용자에게 읽히는지 확인한다. OAuth redirect, S3, 결제, SMS, 관리자 계정은 운영 값을 사용한다. private Docker Hub 이미지는 서버에서도 읽기 전용 자격증명으로 docker login을 준비한다.
 6. RDS 스냅샷과 복구 절차를 확보한다. 빈 DB는 전체 기준 스키마를 먼저 준비한다. 기존 DB는 결제 멱등 키·PG 트랜잭션 분리·포인트 version·FULLTEXT 인덱스 등의 미적용 변경을 확인해 사전 적용한다. validate는 스키마를 생성하지 않는다.
 7. S3 직접 업로드용 CORS와 ETag 노출, 미완료 multipart 1일 후 중단, albums/staging/ 7일 만료 규칙을 확인한다.

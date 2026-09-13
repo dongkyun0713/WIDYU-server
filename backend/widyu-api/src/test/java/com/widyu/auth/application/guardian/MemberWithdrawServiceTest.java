@@ -12,6 +12,7 @@ import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
@@ -45,6 +46,7 @@ class MemberWithdrawServiceTest {
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private SocialLoginStrategyFactory strategyFactory;
     @Mock private MemberUtil memberUtil;
+    @Mock private MedicationProofDeletionService medicationProofDeletionService;
     @Mock private SocialLoginStrategy kakaoStrategy;
     @Mock private SocialLoginStrategy appleStrategy;
 
@@ -65,6 +67,7 @@ class MemberWithdrawServiceTest {
 
         // then
         verify(refreshTokenRepository).deleteById(1L);
+        verify(medicationProofDeletionService).deleteAllByMember(member);
         verify(memberRepository).save(member);
     }
 

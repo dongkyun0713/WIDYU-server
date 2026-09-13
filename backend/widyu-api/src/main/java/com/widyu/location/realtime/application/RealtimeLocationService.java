@@ -92,7 +92,7 @@ public class RealtimeLocationService {
         Long listSize = redisTemplate.opsForList().leftPush(trailKey, point);
         redisTemplate.expire(trailKey, TRAIL_TTL_SECONDS, TimeUnit.SECONDS);
 
-        log.info("[DEBUG] Trail 저장 - trailKey: {}, point: {}, listSize: {}", trailKey, point, listSize);
+        log.info("이동 경로 저장: memberId={}, pointCount={}", memberId, listSize);
 
         // 5. 체류 시간 및 위치 타입 계산 (memberId 기준)
         String stayKey = LOCATION_STAY_KEY_PREFIX + memberId;

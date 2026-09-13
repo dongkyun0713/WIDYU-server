@@ -32,7 +32,7 @@ public class ExternalMedicineService {
      */
     @Transactional
     public MedicineSearchResponse searchAndSaveMedicines(String keyword) {
-        log.info("약품 검색 시작: keyword={}", keyword);
+        log.info("약품 검색 시작");
 
         // 1. 자체 DB 검색 (2글자 미만은 prefix LIKE, 이상은 FULLTEXT)
         List<Medicine> dbResults;
@@ -42,12 +42,12 @@ public class ExternalMedicineService {
             dbResults = medicineRepository.searchByNameFullText(keyword);
         }
         if (!dbResults.isEmpty()) {
-            log.info("자체 DB 검색 성공: keyword={}, 결과 수={}", keyword, dbResults.size());
+            log.info("자체 DB 검색 성공: resultCount={}", dbResults.size());
             return toSearchResponse(dbResults);
         }
 
         // 2. DB에 없으면 외부 API fallback
-        log.info("자체 DB 결과 없음, 외부 API 호출: keyword={}", keyword);
+        log.info("자체 DB 결과 없음, 외부 API 호출");
         try {
             MedicineApiResponse response = medicineApiClient.searchMedicines(
                     medicineProperties.api().serviceKey(),
@@ -58,27 +58,27 @@ public class ExternalMedicineService {
             );
 
             if (response == null || response.body() == null) {
-                log.warn("외부 API 응답이 비어있음: keyword={}", keyword);
+                log.warn("외부 API 응답이 비어있음");
                 return MedicineSearchResponse.empty();
             }
 
             List<MedicineApiResponse.MedicineItem> apiItems = getApiItems(response);
 
             if (apiItems.isEmpty()) {
-                log.warn("외부 API 검색 결과가 없음: keyword={}", keyword);
+                log.warn("외부 API 검색 결과가 없음");
                 return MedicineSearchResponse.empty();
             }
 
             List<Medicine> saved = upsertMedicines(apiItems);
-            log.info("외부 API 검색 완료: keyword={}, 결과 수={}", keyword, saved.size());
+            log.info("외부 API 검색 완료: resultCount={}", saved.size());
             return toSearchResponse(saved);
 
         } catch (DataIntegrityViolationException e) {
-            log.warn("약품 중복 저장 감지, DB 재조회: keyword={}", keyword);
+            log.warn("약품 중복 저장 감지, DB 재조회");
             List<Medicine> fallbackResults = medicineRepository.searchByNameFullText(keyword);
             return toSearchResponse(fallbackResults);
         } catch (Exception e) {
-            log.error("약품 검색 실패: keyword={}, error={}", keyword, e.getMessage(), e);
+            log.error("약품 검색 실패: errorType={}", e.getClass().getSimpleName());
             return MedicineSearchResponse.empty();
         }
     }

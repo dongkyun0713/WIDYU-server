@@ -3,7 +3,7 @@ spring:
     activate:
       on-profile: "datasource"
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${DB_NAME}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${DB_NAME}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&sslMode=${MYSQL_SSL_MODE:DISABLED}
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}

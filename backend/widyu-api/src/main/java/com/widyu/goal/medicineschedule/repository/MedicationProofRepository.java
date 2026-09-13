@@ -29,6 +29,8 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
             @Param("endDate") LocalDateTime endDate
     );
 
+    List<MedicationProof> findAllByMember(Member member);
+
     boolean existsByMedicineScheduleAndVerifiedAtBetween(
             MedicineSchedule medicineSchedule,
             LocalDateTime startDateTime,

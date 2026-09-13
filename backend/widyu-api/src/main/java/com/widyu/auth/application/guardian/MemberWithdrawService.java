@@ -5,6 +5,7 @@ import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFac
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.OAuthProvider;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.SocialAccount;
@@ -33,15 +34,18 @@ public class MemberWithdrawService {
     private final SeniorProfileRepository seniorProfileRepository;
     private final SocialLoginStrategyFactory strategyFactory;
     private final MemberUtil memberUtil;
+    private final MedicationProofDeletionService medicationProofDeletionService;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
         Member member = memberUtil.getCurrentMember();
 
-        log.info("회원 탈퇴 시작: memberId={}, reason={}", member.getId(), request.reason());
+        log.info("회원 탈퇴 시작: memberId={}", member.getId());
 
         // 외부 side-effect 전 방장 위임 여부 사전 검증
         validateLeaderCanWithdraw(member.getId());
+
+        medicationProofDeletionService.deleteAllByMember(member);
 
         // 1. 리프레시 토큰 삭제
         refreshTokenRepository.deleteById(member.getId());
@@ -100,8 +104,8 @@ public class MemberWithdrawService {
                 try {
                     withdrawSocialAccount(provider, null, socialAccount.getOauthId());
                 } catch (Exception e) {
-                    log.warn("카카오 계정 탈퇴 실패하지만 진행 계속: oauthId={}, error={}", 
-                            socialAccount.getOauthId(), e.getMessage());
+                    log.warn("카카오 계정 탈퇴 실패하지만 진행 계속: errorType={}",
+                            e.getClass().getSimpleName());
                 }
             } 
             // 애플, 네이버의 경우 저장된 리프레시 토큰 사용
@@ -110,12 +114,11 @@ public class MemberWithdrawService {
                 try {
                     withdrawSocialAccount(provider, socialAccount.getRefreshToken(), socialAccount.getOauthId());
                 } catch (Exception e) {
-                    log.warn("{} 계정 탈퇴 실패하지만 진행 계속: oauthId={}, error={}", 
-                            provider, socialAccount.getOauthId(), e.getMessage());
+                    log.warn("{} 계정 탈퇴 실패하지만 진행 계속: errorType={}",
+                            provider, e.getClass().getSimpleName());
                 }
             } else {
-                log.warn("소셜 계정 탈퇴를 위한 토큰 없음: provider={}, oauthId={}", 
-                        provider, socialAccount.getOauthId());
+                log.warn("소셜 계정 탈퇴를 위한 토큰 없음: provider={}", provider);
             }
         }
     }
@@ -127,10 +130,10 @@ public class MemberWithdrawService {
             
             strategy.withdrawSocialAccount(accessToken, oauthId);
             
-            log.info("소셜 계정 탈퇴 성공: provider={}, oauthId={}", providerName, oauthId);
+            log.info("소셜 계정 탈퇴 성공: provider={}", providerName);
         } catch (Exception e) {
-            log.error("소셜 계정 탈퇴 실패: provider={}, oauthId={}, error={}", 
-                    providerName, oauthId, e.getMessage(), e);
+            log.error("소셜 계정 탈퇴 실패: provider={}, errorType={}",
+                    providerName, e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
     }

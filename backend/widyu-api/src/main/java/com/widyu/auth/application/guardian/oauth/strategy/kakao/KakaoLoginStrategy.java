@@ -105,7 +105,7 @@ public class KakaoLoginStrategy implements SocialLoginStrategy {
     @Override
     public void withdrawSocialAccount(String accessToken, String oauthId) {
         try {
-            log.info("카카오 계정 탈퇴 요청 시작 (어드민 키 사용): oauthId={}", oauthId);
+            log.info("카카오 계정 탈퇴 요청 시작 (어드민 키 사용)");
             
             restClient.post()
                     .uri(KAKAO_ADMIN_WITHDRAW_URL)
@@ -117,11 +117,11 @@ public class KakaoLoginStrategy implements SocialLoginStrategy {
                             log.error("카카오 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
                             throw new BusinessException(ErrorCode.KAKAO_WITHDRAW_ERROR);
                         }
-                        log.info("카카오 계정 탈퇴 성공 (어드민 키 사용): oauthId={}", oauthId);
+                        log.info("카카오 계정 탈퇴 성공 (어드민 키 사용)");
                         return null;
                     });
         } catch (Exception e) {
-            log.error("카카오 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            log.error("카카오 계정 탈퇴 중 오류 발생: errorType={}", e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.KAKAO_WITHDRAW_ERROR);
         }
     }

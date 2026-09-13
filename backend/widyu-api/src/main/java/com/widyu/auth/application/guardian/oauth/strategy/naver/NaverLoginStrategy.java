@@ -102,10 +102,10 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
     @Override
     public void withdrawSocialAccount(String refreshToken, String oauthId) {
         try {
-            log.info("네이버 계정 탈퇴 요청 시작 (리프레시 토큰 사용): oauthId={}", oauthId);
+            log.info("네이버 계정 탈퇴 요청 시작 (리프레시 토큰 사용)");
             
             if (refreshToken == null || refreshToken.isBlank()) {
-                log.warn("네이버 계정 탈퇴를 위한 리프레시 토큰이 없습니다: oauthId={}", oauthId);
+                log.warn("네이버 계정 탈퇴를 위한 리프레시 토큰이 없습니다");
                 throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
             }
             
@@ -120,11 +120,11 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
                             log.error("네이버 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
                             throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
                         }
-                        log.info("네이버 계정 탈퇴 성공 (리프레시 토큰 사용): oauthId={}", oauthId);
+                        log.info("네이버 계정 탈퇴 성공 (리프레시 토큰 사용)");
                         return null;
                     });
         } catch (Exception e) {
-            log.error("네이버 계정 탈퇴 중 오류 발생: oauthId={}, error={}", oauthId, e.getMessage(), e);
+            log.error("네이버 계정 탈퇴 중 오류 발생: errorType={}", e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
         }
     }
