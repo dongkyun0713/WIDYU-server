@@ -275,6 +275,18 @@ erDiagram
         Long member_id FK
     }
 
+    MedicationProofImageDeletionTask {
+        Long id PK
+        Long member_id FK
+        String object_key
+        MedicationProofImageDeletionTaskStatus status
+        int retry_count
+        int processing_attempt
+        LocalDateTime lease_expires_at
+        LocalDateTime next_retry_at
+        String last_error_type
+    }
+
     Member ||--o{ LocalAccount : "1:1"
     Member ||--o{ SocialAccount : "1:N"
     Member ||--o{ FamilyMembership : "보호자"
@@ -294,6 +306,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
+    Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
     Family |o--o{ SeniorProfile : "시니어 구성"

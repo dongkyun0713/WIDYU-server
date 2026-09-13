@@ -1,6 +1,6 @@
 package com.widyu.goal.medicineschedule.event;
 
-import com.widyu.global.infrastructure.s3.S3Service;
+import com.widyu.goal.medicineschedule.application.MedicationProofImageDeletionTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -12,27 +12,19 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class MedicationProofImageDeletionListener {
 
-    private final S3Service s3Service;
+    private final MedicationProofImageDeletionTaskService taskService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void deleteImagesAfterCommit(MedicationProofImagesDeletionEvent event) {
-        int failedFileDeletionCount = deleteImages(event);
-        if (failedFileDeletionCount > 0) {
-            log.error("회원 복약 인증 사진 삭제 실패: memberId={}, failedFileDeletionCount={}",
-                    event.memberId(), failedFileDeletionCount);
-            return;
-        }
-        log.info("회원 복약 인증 사진 삭제 완료: memberId={}, imageCount={}",
-                event.memberId(), event.imageUrls().size());
+        event.taskIds().forEach(this::process);
     }
 
-    private int deleteImages(MedicationProofImagesDeletionEvent event) {
-        int failedCount = 0;
-        for (String imageUrl : event.imageUrls()) {
-            if (!s3Service.deleteFile(imageUrl)) {
-                failedCount++;
-            }
+    private void process(Long taskId) {
+        try {
+            taskService.process(taskId);
+        } catch (Exception e) {
+            log.error("복약 인증 사진 삭제 작업 처리 실패: taskId={}, errorType={}",
+                    taskId, e.getClass().getSimpleName());
         }
-        return failedCount;
     }
 }

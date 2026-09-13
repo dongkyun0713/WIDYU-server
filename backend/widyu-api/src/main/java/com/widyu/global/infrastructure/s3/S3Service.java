@@ -6,4 +6,6 @@ public interface S3Service {
     String uploadFile(MultipartFile file, String filePath);
     String generateFilePath(String directory, String fileName);
     boolean deleteFile(String url);
+    S3DeleteResult deleteFileByKey(String objectKey);
+    String extractObjectKey(String url);
 }

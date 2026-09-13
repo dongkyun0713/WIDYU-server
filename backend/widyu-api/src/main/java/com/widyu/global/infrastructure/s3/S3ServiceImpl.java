@@ -48,7 +48,14 @@ public class S3ServiceImpl implements S3Service {
     @Override
     public boolean deleteFile(String fileUrl) {
         try {
-            String fileName = extractFileNameFromUrl(fileUrl);
+            return deleteFileByKey(extractObjectKey(fileUrl)).deleted();
+        } catch (Exception e) {
+            log.error("S3 파일 삭제 실패: errorType={}", e.getClass().getSimpleName()); return false;
+        }
+    }
+    @Override
+    public S3DeleteResult deleteFileByKey(String fileName) {
+        try {
             DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                     .bucket(s3Properties.s3().bucketName())
                     .key(fileName)
@@ -56,11 +63,16 @@ public class S3ServiceImpl implements S3Service {
 
             s3Client.deleteObject(deleteObjectRequest);
             log.info("S3 파일 삭제 성공");
-            return true;
+            return S3DeleteResult.success();
         } catch (Exception e) {
             log.error("S3 파일 삭제 실패: errorType={}", e.getClass().getSimpleName());
-            return false;
+            return S3DeleteResult.failure(e.getClass().getSimpleName());
         }
+    }
+
+    @Override
+    public String extractObjectKey(String fileUrl) {
+        return extractFileNameFromUrl(fileUrl);
     }
 
     @Override
