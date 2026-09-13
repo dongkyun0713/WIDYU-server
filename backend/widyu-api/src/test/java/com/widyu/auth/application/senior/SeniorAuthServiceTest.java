@@ -35,6 +35,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -57,8 +58,8 @@ class SeniorAuthServiceTest {
     private SeniorAuthService seniorAuthService;
 
     @Test
-    @DisplayName("시니어 일괄 등록 시 멤버, 프로필, 가족 연결이 모두 저장된다")
-    void 시니어_일괄_등록_시_멤버_프로필_가족연결_모두_저장() {
+    @DisplayName("시니어 일괄 등록 시 방장을 대표 연락처로 저장한다")
+    void 시니어_일괄_등록_시_방장을_대표연락처로_저장한다() {
         // given
         Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01099999999");
         ReflectionTestUtils.setField(guardian, "id", 1L);
@@ -88,7 +89,12 @@ class SeniorAuthServiceTest {
         // then
         verify(memberRepository).saveAll(anyList());
         verify(seniorProfileRepository).saveAll(anyList());
-        verify(familyMembershipRepository).save(any());
+        ArgumentCaptor<FamilyMembership> membershipCaptor = ArgumentCaptor.forClass(FamilyMembership.class);
+        verify(familyMembershipRepository).save(membershipCaptor.capture());
+
+        FamilyMembership membership = membershipCaptor.getValue();
+        assertThat(membership.isLeader()).isTrue();
+        assertThat(membership.isRepresentative()).isTrue();
     }
 
     @Test
