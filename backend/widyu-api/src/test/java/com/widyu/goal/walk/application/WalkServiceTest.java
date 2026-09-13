@@ -1,10 +1,13 @@
 package com.widyu.goal.walk.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.walk.dto.request.UpdateStepsRequest;
 import com.widyu.goal.walk.dto.response.UpdateStepsResponse;
@@ -88,8 +91,8 @@ class WalkServiceTest {
         long pointsBefore = seniorProfile.getPoints();
 
         // when
-        UpdateStepsResponse first = walkService.updateSteps(new UpdateStepsRequest(6000));
-        UpdateStepsResponse second = walkService.updateSteps(new UpdateStepsRequest(8000));
+        UpdateStepsResponse first = walkService.updateSteps(new UpdateStepsRequest(6000, LocalDate.now()));
+        UpdateStepsResponse second = walkService.updateSteps(new UpdateStepsRequest(8000, LocalDate.now()));
 
         // then
         assertThat(first.achieved()).isTrue();
@@ -110,11 +113,54 @@ class WalkServiceTest {
         given(walkRepository.findByMemberAndWalkDate(any(), any())).willReturn(Optional.of(walk));
 
         // when
-        UpdateStepsResponse response = walkService.updateSteps(new UpdateStepsRequest(6000));
+        UpdateStepsResponse response = walkService.updateSteps(new UpdateStepsRequest(6000, LocalDate.now()));
 
         // then
         assertThat(response.achieved()).isTrue();
         assertThat(walk.getActualSteps()).isEqualTo(6000);
         assertThat(walk.isRewarded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("최근 7일 중 가장 이른 날짜를 연동하면 해당 날짜의 걸음 수를 갱신한다")
+    void 최근_7일_중_가장_이른_날짜를_연동하면_해당_날짜의_걸음수를_갱신한다() {
+        // given
+        Member member = org.mockito.Mockito.mock(Member.class);
+        LocalDate syncDate = LocalDate.now().minusDays(6);
+        Walk walk = Walk.createWithGoal(member, syncDate, 5000);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(walkRepository.findByMemberAndWalkDate(member, syncDate)).willReturn(Optional.of(walk));
+
+        // when
+        UpdateStepsResponse response = walkService.updateSteps(new UpdateStepsRequest(6000, syncDate));
+
+        // then
+        assertThat(response.achieved()).isTrue();
+        assertThat(walk.getActualSteps()).isEqualTo(6000);
+        assertThat(walk.getWalkDate()).isEqualTo(syncDate);
+    }
+
+    @Test
+    @DisplayName("7일 전 날짜를 연동하면 BAD_REQUEST 예외가 발생한다")
+    void 일주일_전_날짜를_연동하면_BAD_REQUEST_예외가_발생한다() {
+        // given
+        LocalDate expiredDate = LocalDate.now().minusDays(7);
+
+        // when & then
+        assertThatThrownBy(() -> walkService.updateSteps(new UpdateStepsRequest(6000, expiredDate)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("미래 날짜를 연동하면 BAD_REQUEST 예외가 발생한다")
+    void 미래_날짜를_연동하면_BAD_REQUEST_예외가_발생한다() {
+        // given
+        LocalDate futureDate = LocalDate.now().plusDays(1);
+
+        // when & then
+        assertThatThrownBy(() -> walkService.updateSteps(new UpdateStepsRequest(6000, futureDate)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_REQUEST);
     }
 }

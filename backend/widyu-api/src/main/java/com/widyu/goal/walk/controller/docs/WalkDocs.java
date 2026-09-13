@@ -119,23 +119,24 @@ public interface WalkDocs {
     @Operation(
             summary = "걸음 수 연동",
             description = """
-                    오늘 날짜의 실제 걸음 수를 자동으로 연동합니다.
+                    지정한 날짜의 실제 걸음 수를 자동으로 연동합니다.
 
                     **기능:**
-                    - 오늘 날짜의 걸음 수 업데이트
+                    - 지정한 날짜의 걸음 수 업데이트
                     - 목표 달성 시 포인트 자동 지급 (25포인트)
                     - Walk 기록이 없으면 기본 목표로 자동 생성 후 연동
                     - 목표 달성 여부를 반환 (achieved: true/false)
 
                     **처리 순서:**
-                    1. 오늘 날짜의 Walk 기록 조회
-                    2. 없으면 → 기본 걷기 목표(defaultWalkGoal)로 자동 생성
-                    3. 실제 걸음 수 업데이트
-                    4. 목표 달성 시 → 자동으로 포인트 지급
+                    1. 지정한 날짜가 오늘을 포함한 최근 7일 이내인지 검증
+                    2. 지정한 날짜의 Walk 기록 조회
+                    3. 없으면 → 기본 걷기 목표(defaultWalkGoal)로 자동 생성
+                    4. 실제 걸음 수 업데이트
+                    5. 목표 달성 시 → 자동으로 포인트 지급
 
                     **제약사항:**
+                    - date는 오늘을 포함해 최근 7일 이내여야 함 (예: 9/13 요청 시 9/7~9/13 허용)
                     - 기본 목표도 없으면 에러 발생 (먼저 목표 설정 필요)
-                    - 이미 목표를 달성한 경우 당일 재연동 불가
 
                     **권한:**
                     - 시니어 본인만 가능 (보호자는 연동 불가)
@@ -146,7 +147,7 @@ public interface WalkDocs {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "연동 성공 (목표 달성 여부 포함)"),
-            @ApiResponse(responseCode = "400", description = "잘못된 요청 (목표 미설정, 이미 목표 달성 등)"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (목표 미설정, 허용되지 않은 연동 날짜 등)"),
             @ApiResponse(responseCode = "401", description = "인증 실패")
     })
     ApiResponseTemplate<UpdateStepsResponse> syncSteps(
