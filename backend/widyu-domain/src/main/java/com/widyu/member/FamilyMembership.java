@@ -71,7 +71,7 @@ public class FamilyMembership extends BaseTimeEntity {
                 .family(family)
                 .guardian(guardian)
                 .connectedAt(LocalDateTime.now())
-                .isRepresentative(false)
+                .isRepresentative(true)
                 .isLeader(true)
                 .build();
     }
