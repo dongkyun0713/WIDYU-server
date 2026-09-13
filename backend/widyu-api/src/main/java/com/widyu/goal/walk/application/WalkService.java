@@ -138,14 +138,16 @@ public class WalkService {
     public UpdateStepsResponse updateSteps(UpdateStepsRequest request) {
         Member currentMember = memberUtil.getCurrentMember();
         LocalDate today = LocalDate.now();
+        LocalDate syncDate = request.date();
+        validateSyncDate(syncDate, today);
 
-        Walk walk = walkRepository.findByMemberAndWalkDate(currentMember, today)
+        Walk walk = walkRepository.findByMemberAndWalkDate(currentMember, syncDate)
                 .orElseGet(() -> {
                     if (currentMember.getSeniorProfile() != null &&
                         currentMember.getSeniorProfile().hasDefaultWalkGoal()) {
                         Walk newWalk = Walk.createWithGoal(
                                 currentMember,
-                                today,
+                                syncDate,
                                 currentMember.getSeniorProfile().getDefaultWalkGoal()
                         );
                         return walkRepository.save(newWalk);
@@ -166,11 +168,18 @@ public class WalkService {
         }
 
         log.info("걸음 수 연동: memberId={}, date={}, actualSteps={}, achieved={}",
-                currentMember.getId(), today, request.steps(), achieved);
+                currentMember.getId(), syncDate, request.steps(), achieved);
 
         return UpdateStepsResponse.of(achieved);
     }
 
+    private void validateSyncDate(LocalDate syncDate, LocalDate today) {
+        LocalDate earliestSyncDate = today.minusDays(6);
+        if (syncDate.isBefore(earliestSyncDate) || syncDate.isAfter(today)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "걸음 수는 오늘을 포함해 최근 7일 이내 날짜만 연동할 수 있습니다.");
+        }
+    }
 
     private WalkMonthlyResponse.WalkSummary calculateSummary(
             Member member,
