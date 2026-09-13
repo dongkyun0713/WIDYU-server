@@ -1,10 +1,9 @@
 package com.widyu.goal.medicineschedule.event;
 
 import java.util.List;
-
-public record MedicationProofImagesDeletionEvent(Long memberId, List<String> imageUrls) {
+public record MedicationProofImagesDeletionEvent(List<Long> taskIds) {
 
     public MedicationProofImagesDeletionEvent {
-        imageUrls = List.copyOf(imageUrls);
+        taskIds = taskIds.stream().filter(java.util.Objects::nonNull).toList();
     }
 }

@@ -1,13 +1,17 @@
 package com.widyu.goal.medicineschedule.application;
 
 import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.goal.medicineschedule.event.MedicationProofImagesDeletionEvent;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
+import com.widyu.goal.medicineschedule.repository.MedicationProofImageDeletionTaskRepository;
+import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.medicine.MedicationProof;
+import com.widyu.medicine.MedicationProofImageDeletionTask;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +28,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MedicationProofDeletionServiceTest {
 
     @Mock private MedicationProofRepository medicationProofRepository;
+    @Mock private MedicationProofImageDeletionTaskRepository deletionTaskRepository;
+    @Mock private S3Service s3Service;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private MedicationProofDeletionService medicationProofDeletionService;
@@ -36,6 +42,13 @@ class MedicationProofDeletionServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         MedicationProof proof = createProof("https://cdn.example.com/medication-proof/1/proof.jpg");
         given(medicationProofRepository.findAllByMember(member)).willReturn(List.of(proof));
+        given(s3Service.extractObjectKey("https://cdn.example.com/medication-proof/1/proof.jpg"))
+                .willReturn("medication-proof/1/proof.jpg");
+        given(deletionTaskRepository.saveAll(any())).willAnswer(invocation -> {
+            List<MedicationProofImageDeletionTask> tasks = invocation.getArgument(0);
+            ReflectionTestUtils.setField(tasks.get(0), "id", 11L);
+            return tasks;
+        });
 
         // when
         medicationProofDeletionService.deleteAllByMember(member);
@@ -46,9 +59,7 @@ class MedicationProofDeletionServiceTest {
                 ArgumentCaptor.forClass(MedicationProofImagesDeletionEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         MedicationProofImagesDeletionEvent event = eventCaptor.getValue();
-        org.assertj.core.api.Assertions.assertThat(event.memberId()).isEqualTo(1L);
-        org.assertj.core.api.Assertions.assertThat(event.imageUrls())
-                .containsExactly("https://cdn.example.com/medication-proof/1/proof.jpg");
+        org.assertj.core.api.Assertions.assertThat(event.taskIds()).containsExactly(11L);
     }
 
     @Test
@@ -68,7 +79,7 @@ class MedicationProofDeletionServiceTest {
         ArgumentCaptor<MedicationProofImagesDeletionEvent> eventCaptor =
                 ArgumentCaptor.forClass(MedicationProofImagesDeletionEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        org.assertj.core.api.Assertions.assertThat(eventCaptor.getValue().imageUrls()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(eventCaptor.getValue().taskIds()).isEmpty();
     }
 
     private MedicationProof createProof(String imageUrl) {
