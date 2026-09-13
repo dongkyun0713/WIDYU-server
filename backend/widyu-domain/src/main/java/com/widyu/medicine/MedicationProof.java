@@ -68,8 +68,16 @@ public class MedicationProof extends BaseTimeEntity {
                             List<String> proofImageUrls, LocalDateTime verifiedAt) {
         this.medicineSchedule = medicineSchedule;
         this.member = member;
-        this.proofImageUrls = proofImageUrls != null ? proofImageUrls : new ArrayList<>();
-        this.verifiedAt = verifiedAt != null ? verifiedAt : LocalDateTime.now();
+        if (proofImageUrls != null) {
+            this.proofImageUrls = proofImageUrls;
+        } else {
+            this.proofImageUrls = new ArrayList<>();
+        }
+        if (verifiedAt != null) {
+            this.verifiedAt = verifiedAt;
+        } else {
+            this.verifiedAt = LocalDateTime.now();
+        }
     }
 
     @PrePersist

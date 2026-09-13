@@ -53,7 +53,7 @@ public class AdminFcmStatsService {
                 ))
                 .toList();
 
-        return new AdminFcmStatsResponse(
+        return AdminFcmStatsResponse.of(
                 activeTokens, inactiveTokens,
                 membersWithToken, membersWithoutToken,
                 recentlyDeactivated, recentTestSends

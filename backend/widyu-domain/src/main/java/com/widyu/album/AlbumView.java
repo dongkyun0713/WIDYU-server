@@ -48,7 +48,11 @@ public class AlbumView extends BaseTimeEntity {
     private AlbumView(Album album, Member member, Integer viewCount) {
         this.album = album;
         this.member = member;
-        this.viewCount = viewCount != null ? viewCount : 1;
+        if (viewCount != null) {
+            this.viewCount = viewCount;
+        } else {
+            this.viewCount = 1;
+        }
     }
 
     public static AlbumView createView(Album album, Member member) {

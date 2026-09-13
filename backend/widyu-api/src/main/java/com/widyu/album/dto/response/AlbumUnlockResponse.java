@@ -14,12 +14,14 @@ public record AlbumUnlockResponse(
 ) {
     
     public static AlbumUnlockResponse from(AlbumUnlock albumUnlock, Long remainingPoints) {
+        String albumTitle = albumUnlock.getAlbum().getContent();
+        if (albumTitle.length() > 50) {
+            albumTitle = albumTitle.substring(0, 50) + "...";
+        }
         return new AlbumUnlockResponse(
                 albumUnlock.getId(),
                 albumUnlock.getAlbum().getId(),
-                albumUnlock.getAlbum().getContent().length() > 50 
-                    ? albumUnlock.getAlbum().getContent().substring(0, 50) + "..." 
-                    : albumUnlock.getAlbum().getContent(),
+                albumTitle,
                 albumUnlock.getUnlockedAt(),
                 remainingPoints,
                 "앨범이 해금되었습니다."

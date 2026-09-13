@@ -35,9 +35,12 @@ public class ExternalMedicineService {
         log.info("약품 검색 시작: keyword={}", keyword);
 
         // 1. 자체 DB 검색 (2글자 미만은 prefix LIKE, 이상은 FULLTEXT)
-        List<Medicine> dbResults = keyword.length() < 2
-                ? medicineRepository.searchByNamePrefix(keyword + "%")
-                : medicineRepository.searchByNameFullText(keyword);
+        List<Medicine> dbResults;
+        if (keyword.length() < 2) {
+            dbResults = medicineRepository.searchByNamePrefix(keyword + "%");
+        } else {
+            dbResults = medicineRepository.searchByNameFullText(keyword);
+        }
         if (!dbResults.isEmpty()) {
             log.info("자체 DB 검색 성공: keyword={}, 결과 수={}", keyword, dbResults.size());
             return toSearchResponse(dbResults);
@@ -56,16 +59,14 @@ public class ExternalMedicineService {
 
             if (response == null || response.body() == null) {
                 log.warn("외부 API 응답이 비어있음: keyword={}", keyword);
-                return new MedicineSearchResponse(List.of());
+                return MedicineSearchResponse.empty();
             }
 
-            List<MedicineApiResponse.MedicineItem> apiItems = response.body().items() != null
-                    ? response.body().items()
-                    : (response.body().item() != null ? response.body().item() : List.of());
+            List<MedicineApiResponse.MedicineItem> apiItems = getApiItems(response);
 
             if (apiItems.isEmpty()) {
                 log.warn("외부 API 검색 결과가 없음: keyword={}", keyword);
-                return new MedicineSearchResponse(List.of());
+                return MedicineSearchResponse.empty();
             }
 
             List<Medicine> saved = upsertMedicines(apiItems);
@@ -78,7 +79,7 @@ public class ExternalMedicineService {
             return toSearchResponse(fallbackResults);
         } catch (Exception e) {
             log.error("약품 검색 실패: keyword={}, error={}", keyword, e.getMessage(), e);
-            return new MedicineSearchResponse(List.of());
+            return MedicineSearchResponse.empty();
         }
     }
 
@@ -126,6 +127,16 @@ public class ExternalMedicineService {
                         m.getEfcyQesitm()
                 ))
                 .collect(Collectors.toList());
-        return new MedicineSearchResponse(items);
+        return MedicineSearchResponse.of(items);
+    }
+
+    private List<MedicineApiResponse.MedicineItem> getApiItems(MedicineApiResponse response) {
+        if (response.body().items() != null) {
+            return response.body().items();
+        }
+        if (response.body().item() != null) {
+            return response.body().item();
+        }
+        return List.of();
     }
 }

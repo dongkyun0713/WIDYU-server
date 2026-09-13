@@ -96,13 +96,13 @@ public class Album extends BaseTimeEntity {
     private Album(Member member, String content, List<String> mediaUrls, List<String> thumbnailUrls, List<Integer> durations, Integer likeCount, Integer commentCount, Integer viewCount, Status status) {
         this.member = member;
         this.content = content;
-        this.likeCount = likeCount != null ? likeCount : 0;
-        this.commentCount = commentCount != null ? commentCount : 0;
-        this.viewCount = viewCount != null ? viewCount : 0;
-        this.status = status != null ? status : Status.ACTIVE;
-        this.mediaUrls = mediaUrls != null ? mediaUrls : new ArrayList<>();
-        this.thumbnailUrls = thumbnailUrls != null ? thumbnailUrls : new ArrayList<>();
-        this.durations = durations != null ? durations : new ArrayList<>();
+        this.likeCount = defaultInteger(likeCount);
+        this.commentCount = defaultInteger(commentCount);
+        this.viewCount = defaultInteger(viewCount);
+        this.status = defaultStatus(status);
+        this.mediaUrls = defaultList(mediaUrls);
+        this.thumbnailUrls = defaultList(thumbnailUrls);
+        this.durations = defaultList(durations);
         this.comments = new ArrayList<>();
         this.likes = new ArrayList<>();
         this.views = new ArrayList<>();
@@ -171,7 +171,31 @@ public class Album extends BaseTimeEntity {
 
         // 동영상이 하나라도 있으면 VIDEO, 아니면 PHOTO
         boolean hasVideo = mediaUrls.stream().anyMatch(this::isVideoUrl);
-        return hasVideo ? MediaType.VIDEO : MediaType.PHOTO;
+        if (hasVideo) {
+            return MediaType.VIDEO;
+        }
+        return MediaType.PHOTO;
+    }
+
+    private static Integer defaultInteger(Integer value) {
+        if (value != null) {
+            return value;
+        }
+        return 0;
+    }
+
+    private static Status defaultStatus(Status value) {
+        if (value != null) {
+            return value;
+        }
+        return Status.ACTIVE;
+    }
+
+    private static <T> List<T> defaultList(List<T> values) {
+        if (values != null) {
+            return values;
+        }
+        return new ArrayList<>();
     }
 
     private boolean isPhotoUrl(String url) {

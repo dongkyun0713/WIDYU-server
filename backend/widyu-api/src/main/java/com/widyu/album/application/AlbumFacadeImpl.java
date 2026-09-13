@@ -55,7 +55,7 @@ public class AlbumFacadeImpl implements AlbumFacade {
             albumVideoProcessingService.processVideosAsync(albumId, currentMember.getId(), prep.videoEntries());
         }
 
-        return new AlbumUploadAcceptedResponse(albumId);
+        return AlbumUploadAcceptedResponse.from(albumId);
     }
 
     @Override

@@ -37,6 +37,12 @@ public record SeniorHomeCardsResponse(
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final long WEARING_THRESHOLD_SECONDS = 30;
 
+    public static SeniorHomeCardsResponse of(HeartRateInfo heartRate, MedicineInfo medicine,
+                                             List<AlbumInfo> albums, HealthScheduleInfo healthSchedule,
+                                             WalkInfo walk) {
+        return new SeniorHomeCardsResponse(heartRate, medicine, albums, healthSchedule, walk);
+    }
+
     public record HeartRateInfo(
             @Schema(description = "워치 착용 여부 (최근 30초 이내 심박 데이터 수신 시 true)", example = "true")
             boolean isWearing,

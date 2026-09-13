@@ -11,6 +11,13 @@ public record AdminFcmStatsResponse(
         List<InactiveTokenEntry> recentlyDeactivated,
         List<RecentTestSend> recentTestSends
 ) {
+    public static AdminFcmStatsResponse of(long activeTokenCount, long inactiveTokenCount, long membersWithToken,
+                                           long membersWithoutToken, List<InactiveTokenEntry> recentlyDeactivated,
+                                           List<RecentTestSend> recentTestSends) {
+        return new AdminFcmStatsResponse(activeTokenCount, inactiveTokenCount, membersWithToken, membersWithoutToken,
+                recentlyDeactivated, recentTestSends);
+    }
+
     public record InactiveTokenEntry(
             Long memberId,
             String memberName,

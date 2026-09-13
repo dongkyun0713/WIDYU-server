@@ -16,11 +16,15 @@ public record CursorPage<T>(
             Function<E, String> cursorExtractor
     ) {
         boolean hasNext = content.size() > size;
-        List<E> pageContent = hasNext ? content.subList(0, size) : content;
+        List<E> pageContent = content;
+        if (hasNext) {
+            pageContent = content.subList(0, size);
+        }
 
-        String next = hasNext && !pageContent.isEmpty()
-                ? cursorExtractor.apply(pageContent.getLast())
-                : null;
+        String next = null;
+        if (hasNext && !pageContent.isEmpty()) {
+            next = cursorExtractor.apply(pageContent.getLast());
+        }
 
         return new CursorPage<>(
                 pageContent.stream().map(mapper).toList(),

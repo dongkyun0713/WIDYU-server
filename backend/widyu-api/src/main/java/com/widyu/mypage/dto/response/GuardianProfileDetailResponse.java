@@ -11,13 +11,7 @@ public record GuardianProfileDetailResponse(
         List<String> socialProviders
 ) {
     public static GuardianProfileDetailResponse from(Member member) {
-        String email = member.getLocalAccount() != null
-                ? member.getLocalAccount().getEmail()
-                : member.getSocialAccounts().stream()
-                        .map(sa -> sa.getEmail())
-                        .filter(e -> e != null && !e.isBlank())
-                        .findFirst()
-                        .orElse(null);
+        String email = getEmail(member);
 
         List<String> providers = member.getSocialAccounts().stream()
                 .map(sa -> sa.getProvider())
@@ -30,5 +24,16 @@ public record GuardianProfileDetailResponse(
                 email,
                 providers
         );
+    }
+
+    private static String getEmail(Member member) {
+        if (member.getLocalAccount() != null) {
+            return member.getLocalAccount().getEmail();
+        }
+        return member.getSocialAccounts().stream()
+                .map(sa -> sa.getEmail())
+                .filter(e -> e != null && !e.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 }

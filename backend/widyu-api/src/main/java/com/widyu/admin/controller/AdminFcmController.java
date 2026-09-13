@@ -31,9 +31,12 @@ public class AdminFcmController {
     @GetMapping("/members")
     public ApiResponseTemplate<List<AdminMemberResponse>> getMembers(
             @RequestParam(required = false) String name) {
-        List<AdminMemberResponse> members = name != null && !name.isBlank()
-                ? adminFcmService.searchMembers(name).stream().map(AdminMemberResponse::from).toList()
-                : adminFcmService.getAllMembers().stream().map(AdminMemberResponse::from).toList();
+        List<AdminMemberResponse> members;
+        if (name != null && !name.isBlank()) {
+            members = adminFcmService.searchMembers(name).stream().map(AdminMemberResponse::from).toList();
+        } else {
+            members = adminFcmService.getAllMembers().stream().map(AdminMemberResponse::from).toList();
+        }
 
         return ApiResponseTemplate.ok()
                 .code("200")

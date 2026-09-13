@@ -92,6 +92,9 @@ public class Medicine extends BaseTimeEntity {
             description.append(useMethodQesitm);
         }
 
-        return description.length() > 0 ? description.toString() : null;
+        if (description.length() > 0) {
+            return description.toString();
+        }
+        return null;
     }
 }

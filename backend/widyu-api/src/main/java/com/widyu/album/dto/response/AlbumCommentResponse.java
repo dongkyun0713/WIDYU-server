@@ -20,6 +20,7 @@ public record AlbumCommentResponse(
 ) {
     
     public static AlbumCommentResponse from(AlbumComment comment) {
+        Long parentCommentId = getParentCommentId(comment);
         return new AlbumCommentResponse(
                 comment.getId(),
                 comment.getAlbum().getId(),
@@ -28,7 +29,7 @@ public record AlbumCommentResponse(
                 comment.getMember().getId(),
                 comment.getLikeCount(),
                 comment.getParentComment() != null,
-                comment.getParentComment() != null ? comment.getParentComment().getId() : null,
+                parentCommentId,
                 comment.getReplies().stream()
                         .map(AlbumCommentResponse::from)
                         .toList(),
@@ -38,6 +39,7 @@ public record AlbumCommentResponse(
     }
     
     public static AlbumCommentResponse fromWithoutReplies(AlbumComment comment) {
+        Long parentCommentId = getParentCommentId(comment);
         return new AlbumCommentResponse(
                 comment.getId(),
                 comment.getAlbum().getId(),
@@ -46,10 +48,17 @@ public record AlbumCommentResponse(
                 comment.getMember().getId(),
                 comment.getLikeCount(),
                 comment.getParentComment() != null,
-                comment.getParentComment() != null ? comment.getParentComment().getId() : null,
+                parentCommentId,
                 List.of(),
                 comment.getCreatedAt(),
                 comment.getUpdatedAt()
         );
+    }
+
+    private static Long getParentCommentId(AlbumComment comment) {
+        if (comment.getParentComment() == null) {
+            return null;
+        }
+        return comment.getParentComment().getId();
     }
 }

@@ -33,7 +33,21 @@ public class AddressSearchService {
         }
 
         List<JusoApiResponse.JusoItem> jusoItems = response.results().juso();
-        List<AddressItem> addresses = (jusoItems == null) ? List.of() : jusoItems.stream()
+        List<AddressItem> addresses = getAddresses(jusoItems);
+
+        return AddressSearchResponse.of(
+                addresses,
+                AddressSearchResponse.parseIntSafe(common.totalCount()),
+                AddressSearchResponse.parseIntSafe(common.currentPage()),
+                AddressSearchResponse.parseIntSafe(common.countPerPage())
+        );
+    }
+
+    private List<AddressItem> getAddresses(List<JusoApiResponse.JusoItem> jusoItems) {
+        if (jusoItems == null) {
+            return List.of();
+        }
+        return jusoItems.stream()
                 .map(item -> {
                     Double latitude = null;
                     Double longitude = null;
@@ -47,12 +61,5 @@ public class AddressSearchService {
                     return AddressItem.from(item, latitude, longitude);
                 })
                 .toList();
-
-        return new AddressSearchResponse(
-                addresses,
-                AddressSearchResponse.parseIntSafe(common.totalCount()),
-                AddressSearchResponse.parseIntSafe(common.currentPage()),
-                AddressSearchResponse.parseIntSafe(common.countPerPage())
-        );
     }
 }

@@ -21,9 +21,10 @@ public record FamilyAlbumResponse(
     public static FamilyAlbumResponse from(Album album, List<Member> viewers) {
         Member member = album.getMember();
 
-        List<String> urls = album.getMediaUrls() != null
-                ? List.copyOf(album.getMediaUrls())
-                : List.of();
+        List<String> urls = List.of();
+        if (album.getMediaUrls() != null) {
+            urls = List.copyOf(album.getMediaUrls());
+        }
 
         List<ViewerInfo> viewerInfos = viewers.stream()
                 .map(ViewerInfo::from)

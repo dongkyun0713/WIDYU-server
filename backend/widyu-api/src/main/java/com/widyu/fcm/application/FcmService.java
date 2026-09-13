@@ -122,10 +122,12 @@ public class FcmService {
         }
 
         boolean hasNext = notifications.size() > pageSize;
-        List<FcmNotification> pageNotifications = hasNext ?
-                notifications.subList(0, pageSize) : notifications;
-
-        Long nextCursor = hasNext ? pageNotifications.get(pageSize - 1).getId() : null;
+        List<FcmNotification> pageNotifications = notifications;
+        Long nextCursor = null;
+        if (hasNext) {
+            pageNotifications = notifications.subList(0, pageSize);
+            nextCursor = pageNotifications.get(pageSize - 1).getId();
+        }
 
         return FcmNotificationResponses.of(pageNotifications, hasNext, nextCursor);
     }

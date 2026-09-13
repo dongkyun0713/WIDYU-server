@@ -9,6 +9,11 @@ public record AddressSearchResponse(
         int currentPage,
         int countPerPage
 ) {
+    public static AddressSearchResponse of(List<AddressItem> addresses, int totalCount,
+                                           int currentPage, int countPerPage) {
+        return new AddressSearchResponse(addresses, totalCount, currentPage, countPerPage);
+    }
+
     public record AddressItem(
             String roadAddr,
             String jibunAddr,

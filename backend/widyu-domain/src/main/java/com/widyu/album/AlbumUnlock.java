@@ -51,7 +51,11 @@ public class AlbumUnlock extends BaseTimeEntity {
     private AlbumUnlock(Album album, Member member, LocalDateTime unlockedAt) {
         this.album = album;
         this.member = member;
-        this.unlockedAt = unlockedAt != null ? unlockedAt : LocalDateTime.now();
+        if (unlockedAt != null) {
+            this.unlockedAt = unlockedAt;
+        } else {
+            this.unlockedAt = LocalDateTime.now();
+        }
     }
 
     public static AlbumUnlock createUnlock(Album album, Member member) {

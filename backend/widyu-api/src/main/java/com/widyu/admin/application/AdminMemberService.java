@@ -49,12 +49,7 @@ public class AdminMemberService {
         List<RecentAlbum> recentAlbums = albumRepository
                 .findTop3ByMemberIdAndStatusNotOrderByIdDesc(memberId, Status.DELETED)
                 .stream()
-                .map(a -> new RecentAlbum(
-                        a.getId(),
-                        a.getThumbnailUrls().isEmpty() ? null : a.getThumbnailUrls().get(0),
-                        a.getStatus(),
-                        a.getCreatedAt()
-                ))
+                .map(RecentAlbum::from)
                 .toList();
 
         List<RecentPayment> recentPayments = paymentRepository
@@ -65,7 +60,7 @@ public class AdminMemberService {
 
         long emergencyCount = heartRateEmergencyRepository.countByMemberId(memberId);
 
-        return new AdminMemberDetailFullResponse(
+        return AdminMemberDetailFullResponse.of(
                 member.getId(),
                 member.getName(),
                 member.getPhoneNumber(),

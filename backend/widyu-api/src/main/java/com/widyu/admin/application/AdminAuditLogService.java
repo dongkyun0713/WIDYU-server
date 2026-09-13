@@ -35,9 +35,12 @@ public class AdminAuditLogService {
     @Transactional(readOnly = true)
     public AdminPageResponse<AdminAuditLogResponse> getLogs(AdminAction action, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("id").descending());
-        Page<AdminAuditLogResponse> result = (action != null)
-                ? auditLogRepository.findByActionOrderByIdDesc(action, pageRequest).map(AdminAuditLogResponse::from)
-                : auditLogRepository.findAllByOrderByIdDesc(pageRequest).map(AdminAuditLogResponse::from);
+        Page<AdminAuditLogResponse> result;
+        if (action != null) {
+            result = auditLogRepository.findByActionOrderByIdDesc(action, pageRequest).map(AdminAuditLogResponse::from);
+        } else {
+            result = auditLogRepository.findAllByOrderByIdDesc(pageRequest).map(AdminAuditLogResponse::from);
+        }
         return AdminPageResponse.from(result);
     }
 

@@ -76,7 +76,7 @@ public class AdminSearchService {
         paymentRepository.findByOrderId(trimmed)
                 .ifPresent(p -> payments.add(toPaymentHit(p)));
 
-        return new AdminSearchResponse(new ArrayList<>(memberMap.values()), payments);
+        return AdminSearchResponse.of(new ArrayList<>(memberMap.values()), payments);
     }
 
     private MemberHit toMemberHit(Member m) {
