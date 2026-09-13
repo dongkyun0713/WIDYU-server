@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record RedisProperties(
         String host,
         int port,
-        String password
+        String password,
+        boolean sslEnabled
 ) {
 }

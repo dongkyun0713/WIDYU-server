@@ -30,11 +30,15 @@ public class RedisConfig {
                 new RedisStandaloneConfiguration(redisProperties.host(), redisProperties.port());
         config.setPassword(redisProperties.password());
 
-        LettuceClientConfiguration clientConfig =
+        LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder =
                 LettuceClientConfiguration.builder()
                         .commandTimeout(Duration.ofSeconds(1))
-                        .shutdownTimeout(Duration.ZERO)
-                        .build();
+                        .shutdownTimeout(Duration.ZERO);
+        if (redisProperties.sslEnabled()) {
+            clientConfigBuilder.useSsl();
+        }
+
+        LettuceClientConfiguration clientConfig = clientConfigBuilder.build();
 
         return new LettuceConnectionFactory(config, clientConfig);
     }

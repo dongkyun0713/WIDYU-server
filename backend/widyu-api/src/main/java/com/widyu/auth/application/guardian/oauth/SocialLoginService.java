@@ -124,8 +124,7 @@ public class SocialLoginService {
     }
 
     private SocialLoginResponse handleExistingMemberLogin(Member member, OAuthProvider provider, String oauthId) {
-        log.info("기존 회원 로그인: providerId={}, oauthId={}, memberId={}",
-                provider.getValue(), oauthId, member.getId());
+        log.info("기존 회원 로그인: providerId={}, memberId={}", provider.getValue(), member.getId());
 
         member.markSocialAsNotFirst(provider.getValue(), oauthId);
         boolean isFirstLogin = member.getSocialAccount(provider.getValue()).isFirst();
