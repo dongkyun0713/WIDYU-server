@@ -1,7 +1,5 @@
 package com.widyu.global.security;
 
-import static com.widyu.global.constant.SecurityConstant.TOKEN_ROLE_NAME;
-
 import com.widyu.auth.RefreshToken;
 import com.widyu.auth.TemporaryMember;
 import com.widyu.auth.dto.AccessTokenDto;
@@ -11,14 +9,18 @@ import com.widyu.auth.dto.TemporaryTokenDto;
 import com.widyu.auth.dto.response.TemporaryTokenResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.JwtUtil;
+import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
 import io.jsonwebtoken.ExpiredJwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -27,10 +29,18 @@ public class JwtTokenProvider {
 
     private final JwtUtil jwtUtil;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final MemberSessionService memberSessionService;
 
+    @Transactional
     public TokenPairResponse generateTokenPair(Long memberId, MemberRole memberRole, String loginType) {
-        String accessToken = generateAccessToken(memberId, memberRole, loginType);
-        String refreshToken = generateAndSaveRefreshToken(memberId);
+        Member member = memberSessionService.lock(memberId);
+        member.requireActive();
+        if (memberRole == MemberRole.ADMIN && member.getRole() != MemberRole.ADMIN) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        String accessToken = jwtUtil.generateAccessToken(memberId, memberRole, loginType, member.getAuthVersion());
+        String refreshToken = jwtUtil.generateRefreshToken(memberId, member.getAuthVersion());
+        saveRefreshTokenToStorage(memberId, refreshToken);
 
         return TokenPairResponse.of(memberId, accessToken, refreshToken);
     }
@@ -40,22 +50,35 @@ public class JwtTokenProvider {
         return TemporaryTokenResponse.from(temporaryToken);
     }
 
+    @Transactional
     public String generateSocialTemporaryToken(Long memberId, String provider, String oauthId, String email) {
-        return jwtUtil.generateSocialTemporaryToken(memberId, provider, oauthId, email);
+        Member member = memberSessionService.lock(memberId);
+        member.requireActive();
+        return jwtUtil.generateSocialTemporaryToken(memberId, provider, oauthId, email, member.getAuthVersion());
     }
 
+    @Transactional
     public String generateAccessToken(Long memberId, MemberRole memberRole, String loginType) {
-        return jwtUtil.generateAccessToken(memberId, memberRole, loginType);
+        Member member = memberSessionService.lock(memberId);
+        member.requireActive();
+        if (memberRole == MemberRole.ADMIN && member.getRole() != MemberRole.ADMIN) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return jwtUtil.generateAccessToken(memberId, memberRole, loginType, member.getAuthVersion());
     }
 
+    @Transactional
     public AccessTokenDto generateAccessTokenDto(Long memberId, MemberRole memberRole, String loginType) {
-        return jwtUtil.generateAccessTokenDto(memberId, memberRole, loginType);
+        return jwtUtil.parseAccessToken(generateAccessToken(memberId, memberRole, loginType));
     }
 
     public AccessTokenDto retrieveAccessToken(String accessTokenValue) {
         try {
             AccessTokenDto accessTokenDto = jwtUtil.parseAccessToken(accessTokenValue);
             if (accessTokenDto == null) {
+                throw new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN);
+            }
+            if (!memberSessionService.isCurrent(accessTokenDto.memberId(), jwtUtil.accessVersion(accessTokenValue))) {
                 throw new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN);
             }
             return accessTokenDto;
@@ -68,8 +91,15 @@ public class JwtTokenProvider {
         }
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public RefreshTokenDto retrieveRefreshToken(String refreshTokenValue) {
         RefreshTokenDto refreshTokenDto = parseRefreshTokenSafely(refreshTokenValue);
+        Member member = memberSessionService.lock(refreshTokenDto.memberId());
+        Long version = jwtUtil.refreshVersion(refreshTokenValue);
+        if (member.getStatus() != Status.ACTIVE
+                || version == null || version != member.getAuthVersion()) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
         validateRefreshTokenMatches(refreshTokenDto.memberId(), refreshTokenValue);
         return refreshTokenDto;
     }
@@ -80,15 +110,21 @@ public class JwtTokenProvider {
         } catch (ExpiredJwtException e) {
             throw new BusinessException(ErrorCode.TEMPORARY_TOKEN_EXPIRED);
         } catch (Exception e) {
-            log.debug("Temporary Token 파싱 실패: {}", e.getMessage());
+            log.debug("Temporary Token 파싱 실패");
             return null;
         }
     }
 
+    @Transactional
     public SocialTemporaryTokenDto retrieveSocialTemporaryToken(String socialTemporaryTokenValue) {
         try {
             SocialTemporaryTokenDto socialTemporaryTokenDto = jwtUtil.parseSocialTemporaryToken(socialTemporaryTokenValue);
             if (socialTemporaryTokenDto == null) {
+                throw new BusinessException(ErrorCode.INVALID_TEMPORARY_TOKEN);
+            }
+            Member member = memberSessionService.lock(socialTemporaryTokenDto.memberId());
+            Long version = jwtUtil.temporaryVersion(socialTemporaryTokenValue);
+            if (member.getStatus() != Status.ACTIVE || version == null || version != member.getAuthVersion()) {
                 throw new BusinessException(ErrorCode.INVALID_TEMPORARY_TOKEN);
             }
             return socialTemporaryTokenDto;
@@ -97,30 +133,23 @@ public class JwtTokenProvider {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.debug("Social Temporary Token 파싱 실패: {}", e.getMessage());
+            log.debug("Social Temporary Token 파싱 실패");
             throw new BusinessException(ErrorCode.INVALID_TEMPORARY_TOKEN);
         }
     }
 
     public AccessTokenDto reissueAccessTokenIfExpired(String accessTokenValue) {
-        try {
-            jwtUtil.parseAccessToken(accessTokenValue);
-            return null; // 토큰이 유효하면 재발급 불필요
-        } catch (ExpiredJwtException e) {
-            return reissueAccessTokenFromExpired(e);
-        }
+        retrieveAccessToken(accessTokenValue);
+        return null;
     }
 
+    @Transactional
     public RefreshTokenDto createRefreshTokenDto(Long memberId) {
-        RefreshTokenDto refreshTokenDto = jwtUtil.generateRefreshTokenDto(memberId);
-        saveRefreshTokenToStorage(memberId, refreshTokenDto.tokenValue());
-        return refreshTokenDto;
-    }
-
-    private String generateAndSaveRefreshToken(Long memberId) {
-        String refreshTokenValue = jwtUtil.generateRefreshToken(memberId);
-        saveRefreshTokenToStorage(memberId, refreshTokenValue);
-        return refreshTokenValue;
+        Member member = memberSessionService.lock(memberId);
+        member.requireActive();
+        String token = jwtUtil.generateRefreshToken(memberId, member.getAuthVersion());
+        saveRefreshTokenToStorage(memberId, token);
+        return jwtUtil.parseRefreshToken(token);
     }
 
     private void saveRefreshTokenToStorage(Long memberId, String refreshTokenValue) {
@@ -158,13 +187,4 @@ public class JwtTokenProvider {
         }
     }
 
-    private AccessTokenDto reissueAccessTokenFromExpired(ExpiredJwtException expiredException) {
-        Long memberId = Long.parseLong(expiredException.getClaims().getSubject());
-        MemberRole memberRole = MemberRole.valueOf(
-                expiredException.getClaims().get(TOKEN_ROLE_NAME, String.class)
-        );
-        String loginType = expiredException.getClaims().get("loginType", String.class);
-
-        return generateAccessTokenDto(memberId, memberRole, loginType);
-    }
 }

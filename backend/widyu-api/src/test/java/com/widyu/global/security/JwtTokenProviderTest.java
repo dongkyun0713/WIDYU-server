@@ -11,6 +11,9 @@ import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.JwtUtil;
+import com.widyu.member.Member;
+import com.widyu.member.MemberRole;
+import com.widyu.member.MemberType;
 import io.jsonwebtoken.ExpiredJwtException;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,10 +30,29 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class JwtTokenProviderTest {
 
     @Mock private JwtUtil jwtUtil;
+    @Mock private MemberSessionService memberSessionService;
     @Mock private RefreshTokenRepository refreshTokenRepository;
 
     @InjectMocks
     private JwtTokenProvider jwtTokenProvider;
+
+    @Test
+    @DisplayName("refresh 없이 만료 access만으로 재발급을 요청하면 만료 오류로 거절한다")
+    void 만료_access_단독_재발급을_거절한다() {
+        // given
+        given(jwtUtil.parseAccessToken("expired"))
+                .willThrow(new ExpiredJwtException(null, null, "expired"));
+        // when / then
+        assertThatThrownBy(() -> jwtTokenProvider.reissueAccessTokenIfExpired("expired"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.EXPIRED_ACCESS_TOKEN);
+        Mockito.verifyNoInteractions(refreshTokenRepository, memberSessionService);
+    }
+
+    private void stubCurrent(Long id, String token) {
+        given(memberSessionService.lock(id)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
+        given(jwtUtil.refreshVersion(token)).willReturn(0L);
+    }
 
     @Test
     @DisplayName("만료된 액세스 토큰은 EXPIRED_ACCESS_TOKEN 예외를 던진다")
@@ -64,6 +87,7 @@ class JwtTokenProviderTest {
         // given
         given(jwtUtil.parseRefreshToken("refresh-token"))
                 .willReturn(new RefreshTokenDto(1L, "refresh-token", 3600L));
+        stubCurrent(1L, "refresh-token");
         given(refreshTokenRepository.findById(1L)).willReturn(Optional.empty());
 
         // when & then
@@ -85,6 +109,7 @@ class JwtTokenProviderTest {
                 .ttl(3600L)
                 .build();
 
+        stubCurrent(1L, refreshToken);
         given(jwtUtil.parseRefreshToken(refreshToken)).willReturn(refreshTokenDto);
         given(refreshTokenRepository.findById(1L)).willReturn(Optional.of(savedRefreshToken));
 
@@ -108,6 +133,7 @@ class JwtTokenProviderTest {
                 .ttl(3600L)
                 .build();
 
+        stubCurrent(1L, oldRefreshToken);
         given(jwtUtil.parseRefreshToken(oldRefreshToken)).willReturn(oldRefreshTokenDto);
         given(refreshTokenRepository.findById(1L)).willReturn(Optional.of(savedRefreshToken));
 
@@ -130,6 +156,7 @@ class JwtTokenProviderTest {
                 .ttl(3600L)
                 .build();
 
+        stubCurrent(2L, requestedRefreshToken);
         given(jwtUtil.parseRefreshToken(requestedRefreshToken)).willReturn(requestedRefreshTokenDto);
         given(refreshTokenRepository.findById(2L)).willReturn(Optional.of(savedRefreshToken));
 
@@ -157,13 +184,14 @@ class JwtTokenProviderTest {
     @DisplayName("토큰 쌍 생성 시 리프레시 토큰은 한 번만 저장된다")
     void 토큰_쌍_생성_시_리프레시_토큰은_한_번만_저장된다() {
         // given
-        given(jwtUtil.generateAccessToken(1L, com.widyu.member.MemberRole.USER, "local"))
+        given(memberSessionService.lock(1L)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
+        given(jwtUtil.generateAccessToken(1L, MemberRole.USER, "local", 0L))
                 .willReturn("access-token");
-        given(jwtUtil.generateRefreshToken(1L)).willReturn("refresh-token");
+        given(jwtUtil.generateRefreshToken(1L, 0L)).willReturn("refresh-token");
         given(jwtUtil.getRefreshTokenExpirationTime()).willReturn(3600L);
 
         // when
-        jwtTokenProvider.generateTokenPair(1L, com.widyu.member.MemberRole.USER, "local");
+        jwtTokenProvider.generateTokenPair(1L, MemberRole.USER, "local");
 
         // then
         ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);

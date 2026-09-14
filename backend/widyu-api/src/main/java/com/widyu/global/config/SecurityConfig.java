@@ -57,6 +57,7 @@ public class SecurityConfig {
                                         // SockJS 핸드쉐이크 및 통신 경로 허용
                                         .requestMatchers("/ws/location/**").permitAll()
                                         // 인증/인가 관련 API 경로 허용
+                                        .requestMatchers("/api/v1/auth/admin/logout").hasRole("ADMIN")
                                         .requestMatchers("/api/v1/auth/**").permitAll()
                                         // Swagger UI 및 API 문서 경로 허용
                                         .requestMatchers(

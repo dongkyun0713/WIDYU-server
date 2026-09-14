@@ -8,6 +8,7 @@ import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
@@ -28,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AdminMemberServiceTest {
 
     @Mock private MemberRepository memberRepository;
+    @Mock private MemberSessionService memberSessionService;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private MemberFcmTokenRepository memberFcmTokenRepository;
@@ -57,7 +59,7 @@ class AdminMemberServiceTest {
     void 허용되지_않는_회원_상태_변경_시_예외가_발생한다() {
         // given
         Member member = Member.createMember(MemberType.GUARDIAN, "보호자", "01011112222");
-        given(memberRepository.findById(1L)).willReturn(Optional.of(member));
+        given(memberSessionService.revoke(1L)).willReturn(member);
 
         // when & then
         assertThatThrownBy(() -> adminMemberService.changeStatus(1L, Status.DELETED))

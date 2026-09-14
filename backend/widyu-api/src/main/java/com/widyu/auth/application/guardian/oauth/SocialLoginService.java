@@ -1,29 +1,30 @@
 package com.widyu.auth.application.guardian.oauth;
 
+import com.widyu.auth.OAuthProvider;
+import com.widyu.auth.TemporaryMember;
 import com.widyu.auth.application.SocialTemporaryTokenService;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
 import com.widyu.auth.application.guardian.oauth.strategy.UserInfo;
+import com.widyu.auth.dto.SocialTemporaryTokenDto;
 import com.widyu.auth.dto.request.AppleSignUpRequest;
 import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.auth.dto.response.UserProfile;
-import com.widyu.auth.OAuthProvider;
-import com.widyu.auth.dto.SocialTemporaryTokenDto;
-import com.widyu.auth.TemporaryMember;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.security.MemberSessionService;
+import com.widyu.global.util.JwtUtil;
+import com.widyu.global.util.PiiMaskingUtil;
+import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
 import com.widyu.member.MemberType;
 import com.widyu.member.SocialAccount;
 import com.widyu.member.repository.MemberRepository;
-import com.widyu.global.error.BusinessException;
-import com.widyu.global.error.ErrorCode;
-import com.widyu.global.security.JwtTokenProvider;
-import com.widyu.global.util.JwtUtil;
-import com.widyu.global.util.PiiMaskingUtil;
-import com.widyu.global.util.TemporaryMemberUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,7 @@ public class SocialLoginService {
     private final JwtTokenProvider jwtTokenProvider;
     private final TemporaryMemberUtil temporaryMemberUtil;
     private final SocialTemporaryTokenService socialTemporaryTokenService;
+    private final MemberSessionService memberSessionService;
 
     @Transactional
     public SocialLoginResponse socialLogin(String providerName, SocialLoginRequest request) {
@@ -83,6 +85,7 @@ public class SocialLoginService {
         log.info("애플 사용자 전화번호 업데이트 완료: memberId={}, email={}", member.getId(), PiiMaskingUtil.maskEmail(request.email()));
     }
 
+    @Transactional
     public TokenPairResponse integrateSocialAccount(HttpServletRequest httpServletRequest) {
         String socialTemporaryToken = JwtUtil.extractTokenFromAuthorizationHeader(httpServletRequest);
         if (socialTemporaryToken == null || socialTemporaryToken.trim().isEmpty()) {
@@ -100,6 +103,7 @@ public class SocialLoginService {
 
         Member member = memberRepository.findById(socialToken.memberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        member.requireActive();
 
         OAuthProvider provider = OAuthProvider.from(socialToken.provider());
 
@@ -124,6 +128,11 @@ public class SocialLoginService {
     }
 
     private SocialLoginResponse handleExistingMemberLogin(Member member, OAuthProvider provider, String oauthId) {
+        member = memberSessionService.lock(member.getId());
+        member.requireActive();
+        if (!oauthId.equals(member.getSocialAccount(provider.getValue()).getOauthId())) {
+            throw new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN);
+        }
         log.info("기존 회원 로그인: providerId={}, memberId={}", provider.getValue(), member.getId());
 
         member.markSocialAsNotFirst(provider.getValue(), oauthId);
@@ -137,6 +146,8 @@ public class SocialLoginService {
                                                        UserInfo userInfo,
                                                        String oauthId) {
         Optional<Member> existingMember = findExistingMemberByUserInfo(userInfo);
+        existingMember = existingMember.map(member -> memberSessionService.lock(member.getId()));
+        existingMember.ifPresent(Member::requireActive);
 
         if (existingMember.isPresent() && hasOtherAccounts(existingMember.get())) {
             return handleConflictingSocialAccount(existingMember.get(), provider, userInfo, oauthId);

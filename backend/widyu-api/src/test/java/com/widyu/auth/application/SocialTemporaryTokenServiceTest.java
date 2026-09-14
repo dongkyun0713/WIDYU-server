@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SocialTemporaryTokenServiceTest {
 
     @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private com.widyu.global.security.MemberSessionService memberSessionService;
 
     @InjectMocks
     private SocialTemporaryTokenService socialTemporaryTokenService;
@@ -73,9 +74,14 @@ class SocialTemporaryTokenServiceTest {
     }
 
     @Test
-    @DisplayName("소셜 임시 토큰 삭제는 아무 동작도 수행하지 않는다")
-    void 소셜_임시_토큰_삭제는_아무_동작도_하지_않는다() {
-        // when & then
+    @DisplayName("소셜 임시 토큰을 소비하면 회원의 이전 버전을 폐기한다")
+    void 소셜_임시_토큰_소비는_이전_버전을_폐기한다() {
+        // given
+        given(jwtTokenProvider.retrieveSocialTemporaryToken("any-token"))
+                .willReturn(new SocialTemporaryTokenDto(1L, "kakao", "oauth", "test@example.com"));
+        // when
         socialTemporaryTokenService.deleteSocialTemporaryToken("any-token");
+        // then
+        verify(memberSessionService).revoke(1L);
     }
 }

@@ -12,9 +12,10 @@ import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.repository.RefreshTokenRepository;
-import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -30,6 +31,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +42,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MemberWithdrawServiceTest {
 
     @Mock private MemberRepository memberRepository;
+    @Mock private MemberSessionService memberSessionService;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private FamilyRepository familyRepository;
@@ -61,6 +64,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
 
         // when
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("서비스 불만족"));
@@ -79,6 +83,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
 
         // when & then
         assertThatCode(() -> memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유")))
@@ -99,6 +104,7 @@ class MemberWithdrawServiceTest {
         FamilyMembership membership = FamilyMembership.createMembership(family, member);
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(membership));
 
         // when
@@ -122,6 +128,7 @@ class MemberWithdrawServiceTest {
         FamilyMembership leaderMembership = FamilyMembership.createLeaderMembership(family, member);
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(leaderMembership));
         given(familyMembershipRepository.countByFamilyId(100L)).willReturn(2L);
 
@@ -145,6 +152,7 @@ class MemberWithdrawServiceTest {
         FamilyMembership leaderMembership = FamilyMembership.createLeaderMembership(family, member);
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(leaderMembership));
         given(familyMembershipRepository.countByFamilyId(100L)).willReturn(2L);
 
@@ -167,6 +175,7 @@ class MemberWithdrawServiceTest {
         FamilyMembership leaderMembership = FamilyMembership.createLeaderMembership(family, member);
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(leaderMembership));
         given(familyMembershipRepository.countByFamilyId(100L)).willReturn(1L);
 
@@ -189,6 +198,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(kakaoAccount));
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(strategyFactory.getStrategy("kakao")).willReturn(kakaoStrategy);
 
         // when
@@ -210,6 +220,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(strategyFactory.getStrategy("apple")).willReturn(appleStrategy);
 
         // when
@@ -229,6 +240,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(kakaoAccount));
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
         given(strategyFactory.getStrategy("kakao")).willReturn(kakaoStrategy);
         willThrow(new RuntimeException("카카오 서버 오류")).given(kakaoStrategy).withdrawSocialAccount(any(), any());
 
@@ -252,6 +264,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccountNoToken));
 
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
 
         // when
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
@@ -268,13 +281,14 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.revoke(1L)).willReturn(member);
 
         // when
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
 
         // then
         verify(memberRepository).save(
-                org.mockito.ArgumentMatchers.argThat(
+                ArgumentMatchers.argThat(
                         m -> !"홍길동".equals(m.getName())
                 )
         );

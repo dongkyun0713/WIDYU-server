@@ -108,7 +108,7 @@ public class GuardianAuthService {
         return localLoginService.findMemberByPhoneNumberAndName(request);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenPairResponse reissueTokenPair(RefreshTokenRequest request) {
         return guardianTokenService.reissueTokenPair(request);
     }
@@ -168,7 +168,7 @@ public class GuardianAuthService {
         return familyMembershipRepository.findByGuardianId(member.getId()).isPresent();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public void logout() {
         logoutService.logout();
     }

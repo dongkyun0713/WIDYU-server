@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ class LogoutServiceTest {
 
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private MemberUtil memberUtil;
+    @Mock private MemberSessionService memberSessionService;
 
     @InjectMocks
     private LogoutService logoutService;
@@ -36,7 +38,7 @@ class LogoutServiceTest {
         logoutService.logout();
 
         // then
-        verify(refreshTokenRepository).deleteById(1L);
+        verify(memberSessionService).revoke(1L);
     }
 
     @Test
@@ -51,6 +53,6 @@ class LogoutServiceTest {
         logoutService.logout();
 
         // then
-        verify(refreshTokenRepository).deleteById(99L);
+        verify(memberSessionService).revoke(99L);
     }
 }

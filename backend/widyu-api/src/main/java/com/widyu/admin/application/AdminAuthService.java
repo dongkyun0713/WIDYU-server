@@ -11,6 +11,7 @@ import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.member.LocalAccount;
 import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
@@ -32,6 +33,7 @@ public class AdminAuthService {
     private final AuthLimitStore authLimitStore;
     private final ClientIpResolver clientIpResolver;
     private static final String DUMMY_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private final MemberSessionService memberSessionService;
 
     @Transactional
     public TokenPairResponse login(String email, String password) {
@@ -44,24 +46,23 @@ public class AdminAuthService {
         String clientIp = clientIpResolver.resolve();
         LocalAccount localAccount = localAccountRepository.findByEmail(email).orElse(null);
         String accountKey = "unknown:" + email;
-        String encodedPassword = DUMMY_PASSWORD;
         if (localAccount != null) {
             accountKey = "id:" + localAccount.getId();
-            encodedPassword = localAccount.getPassword();
         }
         AuthLimitStore.LoginAttempt attempt = authLimitStore.reserveLogin(accountKey, clientIp);
-        boolean matches = passwordEncoder.matches(password, encodedPassword);
         if (localAccount == null) {
+            passwordEncoder.matches(password, DUMMY_PASSWORD);
             authLimitStore.completeLogin(attempt, false);
             throw new BusinessException(ErrorCode.INVALID_EMAIL);
         }
 
-        if (!matches) {
+        Member member = memberSessionService.lock(localAccount.getMember().getId());
+        localAccount = memberSessionService.lockLocalAccount(member.getId());
+        if (!passwordEncoder.matches(password, localAccount.getPassword())) {
             authLimitStore.completeLogin(attempt, false);
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
-        Member member = localAccount.getMember();
         try {
             adminAccessValidator.validateMember(member);
         } catch (BusinessException exception) {

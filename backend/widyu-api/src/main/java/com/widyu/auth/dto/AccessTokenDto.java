@@ -8,8 +8,12 @@ public record AccessTokenDto(
         Long memberId,
         MemberRole memberRole,
         String loginType,
-        String tokenValue
+        String tokenValue,
+        Long authVersion
 ) {
+    public AccessTokenDto(Long memberId, MemberRole memberRole, String loginType, String tokenValue) {
+        this(memberId, memberRole, loginType, tokenValue, null);
+    }
     public static AccessTokenDto of(final Long memberId, final MemberRole memberRole, final String loginType, final String tokenValue) {
         return AccessTokenDto.builder()
                 .memberId(memberId)

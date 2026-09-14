@@ -13,6 +13,15 @@ public class PrincipalDetails implements UserDetails {
 
     private final Long memberId;
     private final MemberRole role;
+    private final Long authVersion;
+
+    public PrincipalDetails(Long memberId, MemberRole role) {
+        this(memberId, role, null);
+    }
+
+    public Long getAuthVersion() {
+        return authVersion;
+    }
 
     public Long getMemberId() {
         return memberId;

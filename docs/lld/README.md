@@ -49,6 +49,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0033](LLD-0033-session-revocation.md) | 전체 기기 세션 폐기 | Review | #603 |
 | [LLD-0031](LLD-0031-admin-current-authority.md) | 관리자 인증의 현재 권한·활성 상태 검증 | Review | #605 |
 | [LLD-0032](LLD-0032-websocket-destination-allowlist.md) | WebSocket 목적지 allowlist | Approved | #602 |
 | [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |

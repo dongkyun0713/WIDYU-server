@@ -64,7 +64,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (accessTokenDto.memberRole() == MemberRole.ADMIN) {
                     adminAccessValidator.validateMemberId(accessTokenDto.memberId());
                 }
-                setAuthenticationToContext(accessTokenDto.memberId(), accessTokenDto.memberRole());
+                setAuthenticationToContext(accessTokenDto);
             } catch (BusinessException e) {
                 SecurityContextHolder.clearContext();
                 writeErrorResponse(response, e);
@@ -85,8 +85,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         ));
     }
 
-    private void setAuthenticationToContext(final Long memberId, final MemberRole memberRole) {
-        UserDetails userDetails = new PrincipalDetails(memberId, memberRole);
+    private void setAuthenticationToContext(final AccessTokenDto token) {
+        UserDetails userDetails = new PrincipalDetails(token.memberId(), token.memberRole(), token.authVersion());
         Authentication authentication =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(authentication);

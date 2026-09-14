@@ -15,6 +15,7 @@ import com.widyu.auth.dto.response.UserProfile;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.global.util.TemporaryMemberUtil;
 import com.widyu.member.LocalAccount;
 import com.widyu.member.Member;
@@ -43,6 +44,7 @@ public class LocalLoginService {
 
     // Valid BCrypt hash used only to equalize the password work for unknown accounts.
     private static final String DUMMY_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private final MemberSessionService memberSessionService;
 
     @Transactional
     public LocalSignupResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
@@ -50,8 +52,13 @@ public class LocalLoginService {
             throw new BusinessException(ErrorCode.ALREADY_REGISTERED_EMAIL);
         }
 
-        // 전화번호와 이름으로 기존 멤버 찾기
-        Member member = memberRepository.findByPhoneNumberAndName(temp.getPhoneNumber(), temp.getName())
+        Member member;
+        if (temp.getMemberId() != null) {
+            // 기존 회원의 본인확인은 식별자를 고정한다. 탈퇴/삭제 후 신규 가입으로 우회하지 않는다.
+            member = memberSessionService.validateTemporaryMember(temp, temp.getMemberId());
+        } else {
+            member = memberRepository.findByPhoneNumberAndName(temp.getPhoneNumber(), temp.getName())
+                .map(existing -> memberSessionService.validateTemporaryMember(temp, existing.getId()))
                 .orElseGet(() -> {
                     // 기존 멤버가 없으면 새로 생성
                     Member newMember = Member.createMember(
@@ -61,6 +68,9 @@ public class LocalLoginService {
                     );
                     return memberRepository.save(newMember);
                 });
+        }
+
+        member.requireActive();
 
         // 로컬 계정 생성 및 멤버와 연결
         LocalAccount local = LocalAccount.createLocalAccount(
@@ -70,6 +80,11 @@ public class LocalLoginService {
         );
 
         localAccountRepository.save(local);
+
+        if (temp.getMemberId() != null) {
+            // Redis 삭제 전에 선조회한 다른 요청도 이전 버전으로 재사용할 수 없다.
+            member = memberSessionService.revoke(member.getId());
+        }
 
         // 토큰 생성
         TokenPairResponse tokenPair = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
@@ -85,7 +100,7 @@ public class LocalLoginService {
         return !localAccountRepository.existsByEmail(request.email());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenPairResponse signIn(LocalGuardianSignInRequest request) {
         if (request.email() == null || request.email().isBlank() || request.email().length() > 254
                 || request.password() == null || request.password().isBlank() || request.password().length() > 256) {
@@ -99,18 +114,19 @@ public class LocalLoginService {
             accountKey = "id:" + localAccount.getId();
         }
         AuthLimitStore.LoginAttempt attempt = authLimitStore.reserveLogin(accountKey, clientIp);
-        String encodedPassword = DUMMY_PASSWORD;
-        if (localAccount != null) {
-            encodedPassword = localAccount.getPassword();
-        }
-        boolean matches = passwordEncoder.matches(request.password(), encodedPassword);
-        boolean authenticated = localAccount != null && matches;
-        authLimitStore.completeLogin(attempt, authenticated);
-        if (!authenticated) {
+        if (localAccount == null) {
+            passwordEncoder.matches(request.password(), DUMMY_PASSWORD);
+            authLimitStore.completeLogin(attempt, false);
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
-
-        Member member = localAccount.getMember();
+        Member member = memberSessionService.lock(localAccount.getMember().getId());
+        member.requireActive();
+        localAccount = memberSessionService.lockLocalAccount(member.getId());
+        boolean matches = passwordEncoder.matches(request.password(), localAccount.getPassword());
+        authLimitStore.completeLogin(attempt, matches);
+        if (!matches) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
         return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
     }
 
@@ -132,7 +148,10 @@ public class LocalLoginService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
         String encodedPw = passwordEncoder.encode(request.password());
-        member.getLocalAccount().changePassword(encodedPw);
+        memberSessionService.validateTemporaryMember(temporaryMember, member.getId());
+        member = memberSessionService.revoke(member.getId());
+        member.requireActive();
+        memberSessionService.lockLocalAccount(member.getId()).changePassword(encodedPw);
 
         temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
 
@@ -144,6 +163,10 @@ public class LocalLoginService {
         TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
         Member member = memberRepository.findByPhoneNumberAndName(temporaryMember.getPhoneNumber(), temporaryMember.getName())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (!member.getId().equals(temporaryMember.getMemberId())
+                || !memberSessionService.isCurrent(member.getId(), temporaryMember.getAuthVersion())) {
+            throw new BusinessException(ErrorCode.INVALID_TEMPORARY_TOKEN);
+        }
 
         String email = member.getSocialAccounts().stream()
                 .map(SocialAccount::getEmail)

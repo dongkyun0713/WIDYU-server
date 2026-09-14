@@ -39,11 +39,12 @@ class LocalLoginLimitRedisTest {
     @Mock private JwtTokenProvider tokens;
     @Mock private TemporaryMemberUtil temporary;
     @Mock private ClientIpResolver ip;
+    @Mock private com.widyu.global.security.MemberSessionService sessions;
 
     private LocalLoginService service(AuthRedisFixture fixture) {
         given(ip.resolve()).willReturn("192.0.2.1");
         var store = new AuthLimitStore(fixture.redis, new AuthLimitProperties(60, 3, 10, 30, 1000, 900, 10, 100));
-        return new LocalLoginService(encoder, members, accounts, tokens, temporary, store, ip);
+        return new LocalLoginService(encoder, members, accounts, tokens, temporary, store, ip, sessions);
     }
 
     private LocalAccount account() {
@@ -51,6 +52,8 @@ class LocalLoginLimitRedisTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         var account = LocalAccount.createLocalAccount(member, "user@example.com", "encoded");
         ReflectionTestUtils.setField(account, "id", 7L);
+        given(sessions.lock(1L)).willReturn(member);
+        given(sessions.lockLocalAccount(1L)).willReturn(account);
         return account;
     }
 

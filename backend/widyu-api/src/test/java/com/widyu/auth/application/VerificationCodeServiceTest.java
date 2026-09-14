@@ -27,10 +27,36 @@ class VerificationCodeServiceTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TemporaryMemberRepository temporaryMemberRepository;
     @InjectMocks private VerificationCodeService service;
+    @Mock private com.widyu.member.repository.MemberRepository memberRepository;
+    @Mock private com.widyu.global.security.MemberSessionService memberSessionService;
+
 
     @Test
-    @DisplayName("코드를 소비하면 저장된 이름으로 임시 회원과 토큰을 생성한다")
-    void 코드를_소비하면_저장된_이름으로_임시회원과_토큰을_생성한다() {
+    @DisplayName("기존 회원이 SMS를 확인하면 현재 인증 버전을 임시 데이터에 저장한다")
+    void 기존_회원_본인확인의_인증_버전을_저장한다() {
+        // given
+        var member = com.widyu.member.Member.createMember(com.widyu.member.MemberType.GUARDIAN, "회원", "01012345678");
+        org.springframework.test.util.ReflectionTestUtils.setField(member, "id", 1L);
+        member.revokeSessions();
+        given(authLimitStore.consumeCode("01012345678", "123456")).willReturn("회원");
+        given(memberRepository.findByPhoneNumberAndName("01012345678", "회원")).willReturn(java.util.Optional.of(member));
+        given(memberSessionService.lock(1L)).willReturn(member);
+        var saved = new java.util.concurrent.atomic.AtomicReference<TemporaryMember>();
+        given(temporaryMemberRepository.save(any(TemporaryMember.class))).willAnswer(call -> {
+            TemporaryMember temporary = call.getArgument(0);
+            saved.set(temporary);
+            return temporary;
+        });
+        // when
+        service.verifyAndIssueTemporaryToken("01012345678", "123456");
+        // then
+        assertThat(saved.get().getMemberId()).isEqualTo(1L);
+        assertThat(saved.get().getAuthVersion()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("올바른 인증 코드 입력 시 임시 토큰을 반환한다")
+    void 올바른_인증코드_입력_시_임시토큰을_반환한다() {
         // given
         given(authLimitStore.consumeCode("01000000000", "123456")).willReturn("합성 사용자");
         TemporaryMember member = TemporaryMember.createTemporaryMember("합성 사용자", "01000000000");

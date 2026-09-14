@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 
 import com.widyu.auth.OAuthProvider;
+import com.widyu.auth.TemporaryMember;
 import com.widyu.auth.application.SocialTemporaryTokenService;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
@@ -18,6 +19,7 @@ import com.widyu.auth.dto.request.SocialLoginRequest;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.auth.dto.response.SocialLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
@@ -27,7 +29,6 @@ import com.widyu.member.MemberRole;
 import com.widyu.member.MemberType;
 import com.widyu.member.SocialAccount;
 import com.widyu.member.repository.MemberRepository;
-import com.widyu.auth.TemporaryMember;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,8 +36,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -49,9 +53,36 @@ class SocialLoginServiceTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TemporaryMemberUtil temporaryMemberUtil;
     @Mock private SocialTemporaryTokenService socialTemporaryTokenService;
+    @Mock private com.widyu.global.security.MemberSessionService memberSessionService;
 
     @InjectMocks
     private SocialLoginService socialLoginService;
+
+    @ParameterizedTest
+    @EnumSource(value = Status.class, names = {"INACTIVE", "DELETED"})
+    @DisplayName("정지 또는 탈퇴 회원이 소셜 재로그인하면 재활성화와 발급을 거절한다")
+    void 비활성_회원의_소셜_재로그인을_거절한다(Status status) {
+        // given
+        SocialLoginRequest request = mock(SocialLoginRequest.class);
+        SocialLoginStrategy strategy = mock(SocialLoginStrategy.class);
+        given(strategyFactory.getStrategy("kakao")).willReturn(strategy);
+        given(strategy.getSupportedProvider()).willReturn(OAuthProvider.KAKAO);
+        SocialClientResponse response = mock(SocialClientResponse.class);
+        given(response.oauthId()).willReturn("oauth-inactive");
+        given(strategy.getUserInfo(request)).willReturn(response);
+        given(strategy.enrichWithRefreshToken(response, request)).willReturn(response);
+        UserInfo info = mock(UserInfo.class);
+        given(strategy.processUserInfo(response, request)).willReturn(info);
+        Member member = Member.createMember(MemberType.GUARDIAN, "회원", "01012345678");
+        ReflectionTestUtils.setField(member, "status", status);
+        given(memberRepository.findMemberIdByProviderAndOauthId("kakao", "oauth-inactive")).willReturn(Optional.of(1L));
+        given(memberRepository.findWithAllAccountsById(1L)).willReturn(Optional.of(member));
+        given(memberSessionService.lock(member.getId())).willReturn(member);
+        // when / then
+        assertThatThrownBy(() -> socialLoginService.socialLogin("kakao", request)).isInstanceOf(BusinessException.class);
+        assertThat(member.getStatus()).isEqualTo(status);
+        Mockito.verifyNoInteractions(jwtTokenProvider);
+    }
 
     @Test
     @DisplayName("소셜 임시 토큰 헤더 없이 계정 연동 시도 시 BusinessException을 던진다")
@@ -180,10 +211,12 @@ class SocialLoginServiceTest {
         given(memberRepository.findMemberIdByProviderAndOauthId("kakao", "oauth123"))
                 .willReturn(Optional.of(1L));
         given(memberRepository.findWithAllAccountsById(1L)).willReturn(Optional.of(existingMember));
+        given(memberSessionService.lock(1L)).willReturn(existingMember);
 
         SocialAccount kakaoAccount = mock(SocialAccount.class);
         given(kakaoAccount.getProvider()).willReturn("kakao");
         given(kakaoAccount.isFirst()).willReturn(false);
+        given(kakaoAccount.getOauthId()).willReturn("oauth123");
         given(existingMember.getSocialAccounts()).willReturn(List.of(kakaoAccount));
         given(existingMember.getSocialAccount("kakao")).willReturn(kakaoAccount);
 

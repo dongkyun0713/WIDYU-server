@@ -2,9 +2,9 @@ package com.widyu.member.application;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
-import com.widyu.member.FamilyMembership;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -44,10 +46,13 @@ public class FamilyAccessService {
         throw new BusinessException(ErrorCode.FORBIDDEN, "같은 가족의 앨범만 접근할 수 있습니다.");
     }
 
+    @Transactional(readOnly = true,
+            propagation = Propagation.REQUIRES_NEW)
     public void verifyFamilyAccess(Long guardianId, Long targetMemberId) {
         Member targetMember = memberRepository.findById(targetMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
+        targetMember.requireActive();
 
         if (targetMember.getType() != MemberType.SENIOR) {
             throw new BusinessException(ErrorCode.BAD_REQUEST,

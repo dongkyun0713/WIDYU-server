@@ -11,6 +11,9 @@ import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.JwtUtil;
+import com.widyu.member.Member;
+import com.widyu.member.MemberRole;
+import com.widyu.member.MemberType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +51,7 @@ class JwtTokenProviderRedisTest {
     @Mock
     private JwtUtil jwtUtil;
     private JwtTokenProvider jwtTokenProvider;
+    @Mock private MemberSessionService memberSessionService;
 
     @BeforeEach
     void setUp() {
@@ -69,7 +73,7 @@ class JwtTokenProviderRedisTest {
         RedisRepositoryFactory repositoryFactory = new RedisRepositoryFactory(keyValueTemplate);
         refreshTokenRepository = repositoryFactory.getRepository(RefreshTokenRepository.class);
 
-        jwtTokenProvider = new JwtTokenProvider(jwtUtil, refreshTokenRepository);
+        jwtTokenProvider = new JwtTokenProvider(jwtUtil, refreshTokenRepository, memberSessionService);
     }
 
     @AfterEach
@@ -94,6 +98,7 @@ class JwtTokenProviderRedisTest {
     @DisplayName("저장된 최신 리프레시 토큰으로 retrieveRefreshToken을 호출하면 토큰 정보를 반환한다")
     void 저장된_최신_리프레시_토큰으로_retrieveRefreshToken을_호출하면_토큰_정보를_반환한다() {
         // given
+        given(memberSessionService.lock(MEMBER_ID)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
         String refreshToken = "refresh-token-1";
         RefreshToken savedToken = RefreshToken.builder()
                 .memberId(MEMBER_ID)
@@ -102,6 +107,7 @@ class JwtTokenProviderRedisTest {
                 .build();
         refreshTokenRepository.save(savedToken);
 
+        given(jwtUtil.refreshVersion(refreshToken)).willReturn(0L);
         given(jwtUtil.parseRefreshToken(refreshToken))
                 .willReturn(new RefreshTokenDto(MEMBER_ID, refreshToken, TTL_SECONDS));
 
@@ -117,6 +123,7 @@ class JwtTokenProviderRedisTest {
     @DisplayName("회전 이후 이전 리프레시 토큰으로 재사용하면 INVALID_REFRESH_TOKEN 예외가 발생한다")
     void 회전_이후_이전_리프레시_토큰으로_재사용하면_예외가_발생한다() {
         // given — token A 저장 후 token B로 덮어쓰기 (회전)
+        given(memberSessionService.lock(MEMBER_ID)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
         String tokenA = "refresh-token-old";
         String tokenB = "refresh-token-new";
 
@@ -136,6 +143,7 @@ class JwtTokenProviderRedisTest {
         refreshTokenRepository.save(rotatedToken);
 
         // 이전 token A로 parseRefreshToken stub
+        given(jwtUtil.refreshVersion(tokenA)).willReturn(0L);
         given(jwtUtil.parseRefreshToken(tokenA))
                 .willReturn(new RefreshTokenDto(MEMBER_ID, tokenA, TTL_SECONDS));
 
@@ -149,6 +157,7 @@ class JwtTokenProviderRedisTest {
     @DisplayName("재발급 성공 후 Redis 저장값은 새 토큰과 일치하고 이전 토큰은 검증에 실패한다")
     void 재발급_성공_후_Redis_저장값은_새_토큰과_일치하고_이전_토큰은_검증에_실패한다() {
         // given — token A 저장
+        given(memberSessionService.lock(MEMBER_ID)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
         String oldToken = "refresh-token-before-reissue";
         String newToken = "refresh-token-after-reissue";
 
@@ -160,18 +169,19 @@ class JwtTokenProviderRedisTest {
         refreshTokenRepository.save(initialToken);
 
         // when — 재발급 성공 시 generateTokenPair 내부에서 새 token 저장 (stub)
-        given(jwtUtil.generateRefreshToken(MEMBER_ID)).willReturn(newToken);
+        given(jwtUtil.generateRefreshToken(MEMBER_ID, 0L)).willReturn(newToken);
         given(jwtUtil.getRefreshTokenExpirationTime()).willReturn(TTL_SECONDS);
-        given(jwtUtil.generateAccessToken(MEMBER_ID, com.widyu.member.MemberRole.USER, "local"))
+        given(jwtUtil.generateAccessToken(MEMBER_ID, MemberRole.USER, "local", 0L))
                 .willReturn("access-token");
 
-        jwtTokenProvider.generateTokenPair(MEMBER_ID, com.widyu.member.MemberRole.USER, "local");
+        jwtTokenProvider.generateTokenPair(MEMBER_ID, MemberRole.USER, "local");
 
         // then — Redis 저장값이 newToken과 일치
         RefreshToken storedToken = refreshTokenRepository.findById(MEMBER_ID).orElseThrow();
         assertThat(storedToken.getToken()).isEqualTo(newToken);
 
         // 이전 토큰(oldToken)으로 retrieveRefreshToken 호출 시 실패
+        given(jwtUtil.refreshVersion(oldToken)).willReturn(0L);
         given(jwtUtil.parseRefreshToken(oldToken))
                 .willReturn(new RefreshTokenDto(MEMBER_ID, oldToken, TTL_SECONDS));
 
@@ -184,6 +194,7 @@ class JwtTokenProviderRedisTest {
     @DisplayName("로그아웃으로 삭제 후 리프레시 토큰을 재사용하면 INVALID_REFRESH_TOKEN 예외가 발생한다")
     void 로그아웃으로_삭제_후_리프레시_토큰을_재사용하면_예외가_발생한다() {
         // given — token 저장 후 삭제 (로그아웃)
+        given(memberSessionService.lock(MEMBER_ID)).willReturn(Member.createMember(MemberType.GUARDIAN, "회원", "01012345678"));
         String refreshToken = "refresh-token-to-logout";
 
         RefreshToken savedToken = RefreshToken.builder()
@@ -194,6 +205,7 @@ class JwtTokenProviderRedisTest {
         refreshTokenRepository.save(savedToken);
         refreshTokenRepository.deleteById(MEMBER_ID);
 
+        given(jwtUtil.refreshVersion(refreshToken)).willReturn(0L);
         given(jwtUtil.parseRefreshToken(refreshToken))
                 .willReturn(new RefreshTokenDto(MEMBER_ID, refreshToken, TTL_SECONDS));
 

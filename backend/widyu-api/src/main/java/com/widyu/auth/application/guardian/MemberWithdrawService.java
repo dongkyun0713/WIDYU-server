@@ -1,10 +1,14 @@
 package com.widyu.auth.application.guardian;
 
+import com.widyu.auth.OAuthProvider;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
-import com.widyu.auth.OAuthProvider;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.MemberSessionService;
+import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -13,9 +17,6 @@ import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
-import com.widyu.global.error.BusinessException;
-import com.widyu.global.error.ErrorCode;
-import com.widyu.global.util.MemberUtil;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,10 +36,11 @@ public class MemberWithdrawService {
     private final SocialLoginStrategyFactory strategyFactory;
     private final MemberUtil memberUtil;
     private final MedicationProofDeletionService medicationProofDeletionService;
+    private final MemberSessionService memberSessionService;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
-        Member member = memberUtil.getCurrentMember();
+        Member member = memberSessionService.revoke(memberUtil.getCurrentMember().getId());
 
         log.info("회원 탈퇴 시작: memberId={}", member.getId());
 

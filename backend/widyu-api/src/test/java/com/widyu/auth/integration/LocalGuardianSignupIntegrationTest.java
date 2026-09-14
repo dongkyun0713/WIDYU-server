@@ -115,6 +115,7 @@ class LocalGuardianSignupIntegrationTest {
 
         long memberCountBefore = memberRepository.count();
         TemporaryMember temp = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
+        temp.bindSession(existingMember.getId(), existingMember.getAuthVersion());
 
         // when - 같은 이름+전화번호로 로컬 계정 등록
         localLoginService.signupGuardianWithLocal(temp, "local@test.com", "password1!");

@@ -29,6 +29,8 @@
 ```mermaid
 erDiagram
     Member {
+        Long auth_version "NOT NULL DEFAULT 0, 전체 기기 폐기 버전"
+        Boolean reactivation_blocked "NOT NULL DEFAULT FALSE, 과거 미분류 INACTIVE는 TRUE"
         Long id PK
         String name
         String phoneNumber
@@ -363,7 +365,7 @@ erDiagram
 | `VerificationCode` | - | - | code |
 | `OAuthState` | - | - | state |
 | `PhoneChangeVerified` | - | - | verified |
-| `TemporaryMember` | - | - | member 임시 정보 |
+| `TemporaryMember` | `temporaryMember:{id}` | 1800s | name, phoneNumber, 기존 회원 본인확인 시 고정 memberId·authVersion (재설정·로컬 연동 성공 시 버전 증가로 소비, 폐기·탈퇴 후 재사용 차단) |
 | `AlbumUploadSession` | `albumUploadSession:{uuid}` | 21600s (대기) / 600s (완료) | memberId, status, albumId, files(objectKey·uploadId·partCount) |
 
 ## Enum 값

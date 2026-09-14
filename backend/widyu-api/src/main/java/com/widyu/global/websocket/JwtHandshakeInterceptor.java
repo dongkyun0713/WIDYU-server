@@ -5,10 +5,10 @@ import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.member.MemberRole;
-import java.util.Map;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -55,12 +55,14 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
         try {
             String decodedTokenId = URLDecoder.decode(tokenId, StandardCharsets.UTF_8.name());
-            Long memberId = wsTokenService.validateAndConsume(decodedTokenId);
-            if (memberId == null) {
+            WsTokenService.WsSessionIdentity identity = wsTokenService.consumeIdentity(decodedTokenId);
+            if (identity == null) {
                 log.warn("WebSocket handshake 실패 - WS 토큰 만료 또는 존재하지 않음");
                 return false;
             }
+            Long memberId = identity.memberId();
             attributes.put("memberId", memberId);
+            attributes.put("authVersion", identity.authVersion());
             attributes.put("memberRole", MemberRole.USER);
             log.info("WebSocket handshake 성공 (WS 토큰) - memberId: {}", memberId);
             return true;
@@ -85,6 +87,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         }
 
         attributes.put("memberId", accessTokenDto.memberId());
+        attributes.put("authVersion", accessTokenDto.authVersion());
         attributes.put("memberRole", accessTokenDto.memberRole());
         log.info("WebSocket handshake 성공 (JWT) - memberId: {}", accessTokenDto.memberId());
         return true;

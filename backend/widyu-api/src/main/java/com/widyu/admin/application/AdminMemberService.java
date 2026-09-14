@@ -1,15 +1,16 @@
 package com.widyu.admin.application;
 
 import com.widyu.admin.AdminAction;
-import com.widyu.admin.dto.response.AdminMemberDetailFullResponse;
 import com.widyu.admin.dto.response.AdminMemberDetailFullResponse.FamilyInfo;
 import com.widyu.admin.dto.response.AdminMemberDetailFullResponse.RecentAlbum;
 import com.widyu.admin.dto.response.AdminMemberDetailFullResponse.RecentPayment;
+import com.widyu.admin.dto.response.AdminMemberDetailFullResponse;
 import com.widyu.album.repository.AlbumRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -37,6 +38,7 @@ public class AdminMemberService {
     private final PaymentRepository paymentRepository;
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final AdminAuditLogService adminAuditLogService;
+    private final MemberSessionService memberSessionService;
 
     @Transactional(readOnly = true)
     public AdminMemberDetailFullResponse getMemberDetail(Long memberId) {
@@ -78,13 +80,12 @@ public class AdminMemberService {
 
     @Transactional
     public Status changeStatus(Long memberId, Status newStatus) {
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        Member member = memberSessionService.revoke(memberId);
         Status before = member.getStatus();
         if (newStatus == Status.ACTIVE) {
             member.reactivate();
         } else if (newStatus == Status.INACTIVE) {
-            member.withdraw();
+            member.suspend();
         } else {
             throw new BusinessException(ErrorCode.FORBIDDEN, "ACTIVE 또는 INACTIVE만 허용됩니다.");
         }

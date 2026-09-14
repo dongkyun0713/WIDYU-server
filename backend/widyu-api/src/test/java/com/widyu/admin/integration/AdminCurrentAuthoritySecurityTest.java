@@ -14,6 +14,7 @@ import com.widyu.admin.application.AdminAuthService;
 import com.widyu.admin.controller.AdminAuthController;
 import com.widyu.admin.repository.AdminAuditLogRepository;
 import com.widyu.admin.validator.AdminAccessValidator;
+import com.widyu.auth.application.LogoutService;
 import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.dto.response.TokenPairResponse;
@@ -49,11 +50,13 @@ class AdminCurrentAuthoritySecurityTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private JwtTokenProvider jwtTokenProvider;
+    @MockBean private LogoutService logoutService;
     @MockBean private MemberRepository memberRepository;
     @MockBean private LocalAccountRepository localAccountRepository;
     @MockBean private AdminAuditLogRepository adminAuditLogRepository;
     @MockBean private com.widyu.auth.infrastructure.AuthLimitStore authLimitStore;
     @MockBean private com.widyu.auth.infrastructure.ClientIpResolver clientIpResolver;
+    @MockBean private com.widyu.global.security.MemberSessionService memberSessionService;
 
     @Test
     @DisplayName("일반 회원 refresh를 관리자 쿠키에 넣으면 발급을 거절한다")

@@ -3,10 +3,13 @@ package com.widyu.admin.controller;
 import com.widyu.admin.application.AdminAuthService;
 import com.widyu.admin.controller.docs.AdminAuthDocs;
 import com.widyu.admin.dto.response.AdminLoginResponse;
+import com.widyu.auth.application.LogoutService;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.Arrays;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -14,9 +17,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Arrays;
-import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -27,6 +27,7 @@ public class AdminAuthController implements AdminAuthDocs {
     private static final int COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7일
 
     private final AdminAuthService adminAuthService;
+    private final LogoutService logoutService;
 
     @PostMapping("/login")
     public AdminLoginResponse login(@RequestBody Map<String, String> request,
@@ -46,6 +47,7 @@ public class AdminAuthController implements AdminAuthDocs {
 
     @PostMapping("/logout")
     public void logout(HttpServletResponse response) {
+        logoutService.logout();
         clearRefreshTokenCookie(response);
     }
 

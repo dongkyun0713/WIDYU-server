@@ -24,8 +24,10 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 @Entity
+@DynamicUpdate
 @Getter
 @EqualsAndHashCode(callSuper = false, of = "id")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -72,6 +74,12 @@ public class Member extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Status status;
+
+    @Column(nullable = false)
+    private long authVersion;
+
+    @Column(nullable = false)
+    private boolean reactivationBlocked;
 
     @Builder(access = AccessLevel.PRIVATE)
     private Member(final MemberRole role, final MemberType type, final String name, final String phoneNumber,
@@ -131,11 +139,31 @@ public class Member extends BaseTimeEntity {
     }
 
     public void withdraw() {
+        this.status = Status.DELETED;
+    }
+
+    public void suspend() {
+        if (this.status == Status.DELETED || this.reactivationBlocked) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
         this.status = Status.INACTIVE;
     }
 
     public void reactivate() {
+        if (this.status == Status.DELETED || this.reactivationBlocked) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
         this.status = Status.ACTIVE;
+    }
+
+    public void revokeSessions() {
+        this.authVersion = Math.incrementExact(this.authVersion);
+    }
+
+    public void requireActive() {
+        if (this.status != Status.ACTIVE) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
     }
 
     public void maskPersonalInfo() {

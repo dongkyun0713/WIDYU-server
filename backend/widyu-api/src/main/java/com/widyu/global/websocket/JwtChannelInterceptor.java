@@ -7,8 +7,8 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.application.FamilyAccessService;
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -77,6 +77,12 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         if (authHeader != null && authHeader.startsWith(TOKEN_PREFIX)) {
             String token = authHeader.replace(TOKEN_PREFIX, "");
             AccessTokenDto accessTokenDto = jwtTokenProvider.retrieveAccessToken(token);
+
+            Map<String, Object> attributes = accessor.getSessionAttributes();
+            if (attributes != null && attributes.containsKey("memberId")
+                    && !attributes.get("memberId").equals(accessTokenDto.memberId())) {
+                return null;
+            }
 
             if (accessTokenDto != null && accessTokenDto.memberId() != null) {
                 PrincipalDetails principal = new PrincipalDetails(

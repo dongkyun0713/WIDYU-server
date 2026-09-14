@@ -4,6 +4,8 @@ import com.widyu.auth.dto.SocialTemporaryTokenDto;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.global.security.MemberSessionService;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class SocialTemporaryTokenService {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final MemberSessionService memberSessionService;
 
     public String createSocialTemporaryToken(Long memberId, String provider, String oauthId, String email) {
         String token = jwtTokenProvider.generateSocialTemporaryToken(memberId, provider, oauthId, email);
@@ -36,8 +39,9 @@ public class SocialTemporaryTokenService {
         return tokenDto;
     }
 
+    @Transactional
     public void deleteSocialTemporaryToken(String token) {
-        // JWT 토큰은 stateless이므로 삭제할 필요 없음
-        log.info("소셜 임시 토큰 삭제 (JWT는 자동 만료)");
+        SocialTemporaryTokenDto dto = jwtTokenProvider.retrieveSocialTemporaryToken(token);
+        memberSessionService.revoke(dto.memberId());
     }
 }

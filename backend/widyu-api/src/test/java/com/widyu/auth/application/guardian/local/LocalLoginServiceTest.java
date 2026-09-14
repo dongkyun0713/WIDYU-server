@@ -14,6 +14,7 @@ import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
+import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
@@ -27,8 +28,11 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -42,12 +46,30 @@ class LocalLoginServiceTest {
     @Mock private LocalAccountRepository localAccountRepository;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TemporaryMemberUtil temporaryMemberUtil;
+    @Mock private com.widyu.global.security.MemberSessionService memberSessionService;
 
     @Mock private AuthLimitStore authLimitStore;
     @Mock private ClientIpResolver clientIpResolver;
 
     @InjectMocks
     private LocalLoginService localLoginService;
+
+    @ParameterizedTest
+    @EnumSource(value = Status.class, names = {"INACTIVE", "DELETED"})
+    @DisplayName("정지 또는 탈퇴 회원이 올바른 비밀번호로 로그인해도 재활성화하지 않는다")
+    void 비활성_회원의_로컬_재로그인을_거절한다(Status status) {
+        // given
+        Member member = Member.createMember(MemberType.GUARDIAN, "회원", "01012345678");
+        ReflectionTestUtils.setField(member, "status", status);
+        LocalAccount account = LocalAccount.createLocalAccount(member, "member@test.example", "encoded");
+        given(localAccountRepository.findByEmail("member@test.example")).willReturn(Optional.of(account));
+        given(memberSessionService.lock(member.getId())).willReturn(member);
+        // when / then
+        assertThatThrownBy(() -> localLoginService.signIn(new LocalGuardianSignInRequest("member@test.example", "password")))
+                .isInstanceOf(BusinessException.class);
+        assertThat(member.getStatus()).isEqualTo(status);
+        Mockito.verifyNoInteractions(jwtTokenProvider);
+    }
 
     @Test
     @DisplayName("신규 이메일로 회원가입 시 새 멤버를 생성하고 토큰을 반환한다")
@@ -87,11 +109,12 @@ class LocalLoginServiceTest {
         String email = "new@test.com";
         Member existingMember = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
         ReflectionTestUtils.setField(existingMember, "id", 1L);
+        temp.bindSession(1L, 0L);
         TokenPairResponse tokenPair = TokenPairResponse.of(1L, "access", "refresh");
 
         given(localAccountRepository.existsByEmail(email)).willReturn(false);
-        given(memberRepository.findByPhoneNumberAndName("01012345678", "홍길동"))
-                .willReturn(Optional.of(existingMember));
+        given(memberSessionService.validateTemporaryMember(temp, 1L)).willReturn(existingMember);
+        given(memberSessionService.revoke(1L)).willReturn(existingMember);
         given(passwordEncoder.encode(any())).willReturn("encoded");
         given(localAccountRepository.save(any())).willReturn(
                 LocalAccount.createLocalAccount(existingMember, email, "encoded")
@@ -158,6 +181,8 @@ class LocalLoginServiceTest {
 
         given(localAccountRepository.findByEmail(email)).willReturn(Optional.of(localAccount));
         given(passwordEncoder.matches(rawPassword, "encoded-password")).willReturn(true);
+        given(memberSessionService.lock(member.getId())).willReturn(member);
+        given(memberSessionService.lockLocalAccount(member.getId())).willReturn(localAccount);
         given(jwtTokenProvider.generateTokenPair(any(), any(), any())).willReturn(expectedToken);
 
         // when
@@ -190,6 +215,8 @@ class LocalLoginServiceTest {
 
         given(localAccountRepository.findByEmail(email)).willReturn(Optional.of(localAccount));
         given(passwordEncoder.matches("wrong-password", "encoded-password")).willReturn(false);
+        given(memberSessionService.lock(member.getId())).willReturn(member);
+        given(memberSessionService.lockLocalAccount(member.getId())).willReturn(localAccount);
 
         // when & then
         assertThatThrownBy(() -> localLoginService.signIn(new LocalGuardianSignInRequest(email, "wrong-password")))

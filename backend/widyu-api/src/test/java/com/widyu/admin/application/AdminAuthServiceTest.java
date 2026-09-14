@@ -48,6 +48,7 @@ class AdminAuthServiceTest {
     @Mock private com.widyu.auth.infrastructure.ClientIpResolver clientIpResolver;
 
     @Mock private MemberRepository memberRepository;
+    @Mock private com.widyu.global.security.MemberSessionService memberSessionService;
 
     @ParameterizedTest
     @NullAndEmptySource
@@ -97,6 +98,8 @@ class AdminAuthServiceTest {
         String email = "a".repeat(emailLength);
         String password = "p".repeat(emailLength + 2);
         LocalAccount account = LocalAccount.createLocalAccount(member(1L, MemberRole.ADMIN), email, "encoded");
+        given(memberSessionService.lock(1L)).willReturn(account.getMember());
+        given(memberSessionService.lockLocalAccount(1L)).willReturn(account);
         given(localAccountRepository.findByEmail(email)).willReturn(Optional.of(account));
         // when / then
         assertThatThrownBy(() -> service().login(email, password))
@@ -127,6 +130,8 @@ class AdminAuthServiceTest {
         LocalAccount localAccount = LocalAccount.createLocalAccount(
                 member(1L, MemberRole.ADMIN), "admin@test.com", "encoded");
         given(localAccountRepository.findByEmail("admin@test.com")).willReturn(Optional.of(localAccount));
+        given(memberSessionService.lock(1L)).willReturn(localAccount.getMember());
+        given(memberSessionService.lockLocalAccount(1L)).willReturn(localAccount);
         given(passwordEncoder.matches("wrong", "encoded")).willReturn(false);
 
         // when & then
@@ -143,6 +148,8 @@ class AdminAuthServiceTest {
         LocalAccount localAccount = LocalAccount.createLocalAccount(
                 member(1L, MemberRole.USER), "user@test.com", "encoded");
         given(localAccountRepository.findByEmail("user@test.com")).willReturn(Optional.of(localAccount));
+        given(memberSessionService.lock(1L)).willReturn(localAccount.getMember());
+        given(memberSessionService.lockLocalAccount(1L)).willReturn(localAccount);
         given(passwordEncoder.matches("password", "encoded")).willReturn(true);
 
         // when & then
@@ -170,6 +177,8 @@ class AdminAuthServiceTest {
         ReflectionTestUtils.setField(member, "status", status);
         LocalAccount account = LocalAccount.createLocalAccount(member, "admin@test.com", "encoded");
         given(localAccountRepository.findByEmail("admin@test.com")).willReturn(Optional.of(account));
+        given(memberSessionService.lock(1L)).willReturn(member);
+        given(memberSessionService.lockLocalAccount(1L)).willReturn(account);
         given(passwordEncoder.matches("password", "encoded")).willReturn(true);
 
         // when & then
@@ -234,6 +243,8 @@ class AdminAuthServiceTest {
         // given
         LocalAccount account = LocalAccount.createLocalAccount(member(1L, MemberRole.ADMIN), "admin@test.com", "encoded");
         given(localAccountRepository.findByEmail("admin@test.com")).willReturn(Optional.of(account));
+        given(memberSessionService.lock(1L)).willReturn(account.getMember());
+        given(memberSessionService.lockLocalAccount(1L)).willReturn(account);
         given(passwordEncoder.matches("password", "encoded")).willReturn(true);
         TokenPairResponse expected = TokenPairResponse.of(1L, "access", "refresh");
         given(jwtTokenProvider.generateTokenPair(1L, MemberRole.ADMIN, "local")).willReturn(expected);
@@ -264,7 +275,8 @@ class AdminAuthServiceTest {
 
     private AdminAuthService service() {
         return new AdminAuthService(localAccountRepository, passwordEncoder, jwtTokenProvider,
-                adminAuditLogRepository, new AdminAccessValidator(memberRepository), authLimitStore, clientIpResolver);
+                adminAuditLogRepository, new AdminAccessValidator(memberRepository), authLimitStore, clientIpResolver,
+                memberSessionService);
     }
 
     private Member member(Long id, MemberRole role) {

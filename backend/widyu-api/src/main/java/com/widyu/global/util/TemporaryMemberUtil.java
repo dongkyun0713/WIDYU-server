@@ -6,6 +6,7 @@ import com.widyu.auth.repository.TemporaryMemberRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.MemberRole;
+import com.widyu.global.security.MemberSessionService;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ public class TemporaryMemberUtil {
 
     private final JwtUtil jwtUtil;
     private final TemporaryMemberRepository temporaryMemberRepository;
+    private final MemberSessionService memberSessionService;
 
     @Transactional(readOnly = true)
     public TemporaryMember getTemporaryMemberFromRequest(HttpServletRequest request) {
@@ -39,8 +41,13 @@ public class TemporaryMemberUtil {
         }
 
         String tempId = dto.temporaryMemberId();
-        return temporaryMemberRepository.findById(tempId)
+        TemporaryMember temporary = temporaryMemberRepository.findById(tempId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (temporary.getMemberId() != null
+                && !memberSessionService.isCurrent(temporary.getMemberId(), temporary.getAuthVersion())) {
+            throw new BusinessException(ErrorCode.INVALID_TEMPORARY_TOKEN);
+        }
+        return temporary;
     }
 
     @Transactional(readOnly = true)

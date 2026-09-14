@@ -18,8 +18,10 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
 import java.security.Key;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -42,11 +44,19 @@ public class JwtUtil {
     private static final String HS256_ALG = "HS256";
 
     public String generateAccessToken(Long memberId, MemberRole memberRole, String loginType) {
+        return generateAccessToken(memberId, memberRole, loginType, null);
+    }
+
+    public String generateAccessToken(Long memberId, MemberRole memberRole, String loginType, Long authVersion) {
         TokenTimeInfo timeInfo = createTokenTimeInfo(jwtProperties.accessTokenExpirationMilliTime());
+        Map<String, Object> claims = new HashMap<>(Map.of(TOKEN_ROLE_NAME, memberRole.name(), LOGIN_TYPE_KEY_NAME, loginType));
+        if (authVersion != null) {
+            claims.put("authVersion", authVersion);
+        }
         return buildJwtToken(
                 TokenType.ACCESS,
                 memberId.toString(),
-                Map.of(TOKEN_ROLE_NAME, memberRole.name(), LOGIN_TYPE_KEY_NAME, loginType),
+                claims,
                 timeInfo,
                 getAccessTokenKey()
         );
@@ -58,11 +68,20 @@ public class JwtUtil {
     }
 
     public String generateRefreshToken(Long memberId) {
+        return generateRefreshToken(memberId, null);
+    }
+
+    public String generateRefreshToken(Long memberId, Long authVersion) {
         TokenTimeInfo timeInfo = createTokenTimeInfo(jwtProperties.refreshTokenExpirationMilliTime());
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("jti", UUID.randomUUID().toString());
+        if (authVersion != null) {
+            claims.put("authVersion", authVersion);
+        }
         return buildJwtToken(
                 TokenType.REFRESH,
                 memberId.toString(),
-                Map.of(),
+                claims,
                 timeInfo,
                 getRefreshTokenKey()
         );
@@ -80,16 +99,23 @@ public class JwtUtil {
     }
 
     public String generateSocialTemporaryToken(Long memberId, String provider, String oauthId, String email) {
+        return generateSocialTemporaryToken(memberId, provider, oauthId, email, null);
+    }
+
+    public String generateSocialTemporaryToken(Long memberId, String provider, String oauthId, String email, Long authVersion) {
         TokenTimeInfo timeInfo = createTokenTimeInfo(jwtProperties.temporaryTokenExpirationTime());
+        Map<String, Object> claims = new HashMap<>();
+        claims.put(TOKEN_ROLE_NAME, MemberRole.USER.name());
+        claims.put(PROVIDER_KEY_NAME, provider);
+        claims.put(OAUTH_ID_KEY_NAME, oauthId);
+        claims.put(EMAIL_KEY_NAME, email);
+        if (authVersion != null) {
+            claims.put("authVersion", authVersion);
+        }
         return buildJwtToken(
                 TokenType.TEMPORARY,
                 memberId.toString(),
-                Map.of(
-                        TOKEN_ROLE_NAME, MemberRole.USER.name(),
-                        PROVIDER_KEY_NAME, provider,
-                        OAUTH_ID_KEY_NAME, oauthId,
-                        EMAIL_KEY_NAME, email
-                ),
+                claims,
                 timeInfo,
                 getTemporaryTokenKey()
         );
@@ -104,7 +130,8 @@ public class JwtUtil {
                     Long.parseLong(body.getSubject()),
                     MemberRole.valueOf(body.get(TOKEN_ROLE_NAME, String.class)),
                     body.get(LOGIN_TYPE_KEY_NAME, String.class),
-                    token
+                    token,
+                    body.get("authVersion", Long.class)
             );
         } catch (ExpiredJwtException e) {
             throw e;
@@ -198,6 +225,18 @@ public class JwtUtil {
 
     public long getRefreshTokenExpirationTime() {
         return jwtProperties.refreshTokenExpirationTime();
+    }
+
+    public Long accessVersion(String token) {
+        return parseTokenClaims(token, getAccessTokenKey()).getBody().get("authVersion", Long.class);
+    }
+
+    public Long refreshVersion(String token) {
+        return parseTokenClaims(token, getRefreshTokenKey()).getBody().get("authVersion", Long.class);
+    }
+
+    public Long temporaryVersion(String token) {
+        return parseTokenClaims(token, getTemporaryTokenKey()).getBody().get("authVersion", Long.class);
     }
 
     private String buildJwtToken(TokenType tokenType, String subject,

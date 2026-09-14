@@ -1,6 +1,7 @@
 package com.widyu.auth.application;
 
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.global.security.MemberSessionService;
 import com.widyu.global.util.MemberUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -12,12 +13,13 @@ public class LogoutService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final MemberUtil memberUtil;
+    private final MemberSessionService memberSessionService;
 
     @Transactional
     public void logout() {
         Long memberId = memberUtil.getCurrentMember().getId();
+        memberSessionService.revoke(memberId);
         // 멱등: 존재하지 않아도 예외 없이 무시
         refreshTokenRepository.deleteById(memberId);
     }
 }
-

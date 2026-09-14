@@ -375,6 +375,8 @@ public interface GuardianAuthDocs {
             summary = "비밀번호 변경(임시 토큰 필요)",
             description = """
                     SMS 본인확인 후 발급된 임시 토큰(Authorization: Bearer)을 사용하여 비밀번호를 변경합니다.
+                    ACTIVE 회원만 변경할 수 있으며 변경 후 모든 기기의 토큰과 WebSocket 연결이 폐기됩니다.
+                    본인확인 이후 세션이 폐기되거나 이미 비밀번호를 변경한 임시 토큰은 재사용할 수 없습니다.
                     """
     )
     @ApiResponse(
@@ -547,8 +549,9 @@ public interface GuardianAuthDocs {
             description = """
                     소셜 임시 토큰을 사용하여 기존 계정에 새로운 소셜 계정을 연동합니다.
                     소셜 로그인 시 기존 계정이 있는 경우 socialTemporaryToken이 발급되며,
-                    이 토큰을 X-Social-Temporary-Token 헤더에 포함하여 연동을 완료할 수 있습니다.
-                    연동 성공 시 새로운 액세스/리프레시 토큰 쌍을 반환합니다.
+                    이 토큰을 Authorization: Bearer 헤더에 포함하여 연동을 완료할 수 있습니다.
+                    ACTIVE와 발급 당시 인증 버전을 검사하며, 폐기된 토큰은 사용할 수 없습니다.
+                    연동 성공 시 이전 임시 토큰과 모든 기존 세션을 폐기하고 새 버전의 액세스/리프레시 토큰 쌍을 반환합니다.
                     """
     )
     @ApiResponse(
@@ -620,11 +623,11 @@ public interface GuardianAuthDocs {
     )
     ApiResponseTemplate<TokenPairResponse> integrateSocialAccount(
             @Parameter(
-                    name = "X-Social-Temporary-Token",
+                    name = "Authorization",
                     description = "소셜 로그인 시 받은 임시 토큰 (socialTemporaryToken)",
                     in = ParameterIn.HEADER,
                     required = true,
-                    example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    example = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
             )
             HttpServletRequest httpServletRequest
     );
@@ -682,6 +685,7 @@ public interface GuardianAuthDocs {
             summary = "회원 탈퇴",
             description = """
                     현재 로그인된 사용자의 계정을 탈퇴처리합니다. 연동된 모든 소셜 계정도 함께 탈퇴됩니다.
+                    모든 기기 토큰과 WebSocket 연결을 폐기하고 DELETED 상태로 전환합니다. 재로그인으로 복구되지 않습니다.
                     카카오의 경우 앱 어드민 키를 사용하므로 액세스 토큰이 불필요합니다.
                     애플, 네이버의 경우 로그인 시 저장된 리프레시 토큰을 자동으로 사용합니다.
                     """

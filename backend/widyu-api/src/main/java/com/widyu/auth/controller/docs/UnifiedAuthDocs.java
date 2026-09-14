@@ -20,6 +20,7 @@ public interface UnifiedAuthDocs {
             description = """
                     유효한 **리프레시 토큰**을 제출하면 새로운 **액세스/리프레시 토큰 페어**를 발급합니다.
                     서버 저장소에 존재하지 않거나 위·변조된 리프레시 토큰은 거절됩니다.
+                    현재 회원이 ACTIVE이고 인증 버전이 일치해야 합니다. 버전 없는 구토큰은 재로그인이 필요합니다.
                     """
     )
     @ApiResponse(
@@ -82,7 +83,7 @@ public interface UnifiedAuthDocs {
     @Operation(
             summary = "로그아웃",
             description = """
-                    현재 인증된 사용자 기준으로 **서버 저장소의 리프레시 토큰을 삭제**합니다.
+                    현재 인증된 사용자의 **모든 기기 access/refresh/WS 토큰과 연결을 폐기**합니다.
                     바디는 필요하지 않으며, `Authorization: Bearer <accessToken>` 헤더가 필요합니다.
                     (선택) 클라이언트는 로컬에 보관 중인 액세스/리프레시 토큰을 함께 제거하세요.
                     """

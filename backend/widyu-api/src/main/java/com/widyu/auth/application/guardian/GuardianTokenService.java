@@ -24,7 +24,7 @@ public class GuardianTokenService {
     /**
      * 리프레시 토큰으로 새로운 토큰 쌍 발급
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenPairResponse reissueTokenPair(RefreshTokenRequest request) {
 
         RefreshTokenDto refreshTokenDto = jwtTokenProvider.retrieveRefreshToken(request.refreshToken());

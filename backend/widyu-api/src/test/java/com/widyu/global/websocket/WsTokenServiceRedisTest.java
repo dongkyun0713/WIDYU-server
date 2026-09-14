@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
+import com.widyu.global.security.MemberSessionService;
+import com.widyu.global.security.PrincipalDetails;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
+import com.widyu.member.MemberRole;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +29,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * WebSocket 일회용 토큰 발급/소비를 실제 Redis로 검증한다.
@@ -45,6 +50,7 @@ class WsTokenServiceRedisTest {
     @Mock
     private MemberUtil memberUtil;
     private WsTokenService wsTokenService;
+    @Mock private MemberSessionService memberSessionService;
 
     @BeforeEach
     void setUp() {
@@ -57,11 +63,12 @@ class WsTokenServiceRedisTest {
         redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
 
-        wsTokenService = new WsTokenService(redisTemplate, memberUtil);
+        wsTokenService = new WsTokenService(redisTemplate, memberUtil, memberSessionService);
     }
 
     @AfterEach
     void tearDown() {
+        SecurityContextHolder.clearContext();
         if (connectionFactory != null) {
             connectionFactory.destroy();
         }
@@ -82,6 +89,10 @@ class WsTokenServiceRedisTest {
         Member member = mock(Member.class);
         given(member.getId()).willReturn(42L);
         given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberSessionService.lock(42L)).willReturn(member);
+        var principal = new PrincipalDetails(42L, MemberRole.USER, 0L);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
 
         // when
         String tokenId = wsTokenService.issueToken();
@@ -90,7 +101,7 @@ class WsTokenServiceRedisTest {
         String key = KEY_PREFIX + tokenId;
         Long ttl = redisTemplate.getExpire(key);
         try {
-            assertThat(redisTemplate.opsForValue().get(key)).isEqualTo("42");
+            assertThat(redisTemplate.opsForValue().get(key)).isEqualTo("42:0");
             assertThat(ttl).isBetween(25L, 30L);
         } finally {
             redisTemplate.delete(key);
@@ -101,9 +112,10 @@ class WsTokenServiceRedisTest {
     @DisplayName("동일 토큰으로 100건이 동시에 요청해도 한 건만 인증되고 나머지는 재사용이 차단된다")
     void 동일_토큰_100건_동시_요청_시_한_건만_인증되고_나머지는_차단된다() throws Exception {
         // given — 일회용 토큰을 Redis에 직접 저장 (issueToken은 로그인 사용자를 요구하므로 값을 직접 넣는다)
+        given(memberSessionService.isCurrent(1L, 0L)).willReturn(true);
         int threadCount = 100;
         String tokenId = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(KEY_PREFIX + tokenId, "1", Duration.ofSeconds(30));
+        redisTemplate.opsForValue().set(KEY_PREFIX + tokenId, "1:0", Duration.ofSeconds(30));
 
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch ready = new CountDownLatch(threadCount);

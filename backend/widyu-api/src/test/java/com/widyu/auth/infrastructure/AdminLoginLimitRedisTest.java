@@ -32,6 +32,7 @@ class AdminLoginLimitRedisTest {
     @Mock private JwtTokenProvider tokens;
     @Mock private AdminAuditLogRepository audits;
     @Mock private ClientIpResolver ip;
+    @Mock private com.widyu.global.security.MemberSessionService sessions;
 
     @ParameterizedTest
     @ValueSource(strings = {"missing", "password", "role"})
@@ -50,7 +51,8 @@ class AdminLoginLimitRedisTest {
                     error = ErrorCode.FORBIDDEN;
                     given(encoder.matches("password", "encoded")).willReturn(true);
                 }
-                given(accounts.findByEmail(anyString())).willReturn(Optional.of(account(role)));
+                LocalAccount localAccount = account(role);
+                given(accounts.findByEmail(anyString())).willReturn(Optional.of(localAccount));
             }
             // when / then
             for (int i = 0; i < 2; i++) {
@@ -70,7 +72,8 @@ class AdminLoginLimitRedisTest {
         try (var fixture = new AuthRedisFixture()) {
             var store = store(fixture, 2, 100);
             var service = service(store);
-            given(accounts.findByEmail(anyString())).willReturn(Optional.of(account(MemberRole.ADMIN)));
+            LocalAccount localAccount = account(MemberRole.ADMIN);
+            given(accounts.findByEmail(anyString())).willReturn(Optional.of(localAccount));
             given(encoder.matches("correct", "encoded")).willReturn(true);
             store.completeLogin(store.reserveLogin("id:7", "192.0.2.1"), false);
             // when
@@ -113,7 +116,7 @@ class AdminLoginLimitRedisTest {
         given(ip.resolve()).willReturn("192.0.2.1");
         return new AdminAuthService(accounts, encoder, tokens, audits,
                 new com.widyu.admin.validator.AdminAccessValidator(
-                        mock(com.widyu.member.repository.MemberRepository.class)), store, ip);
+                        mock(com.widyu.member.repository.MemberRepository.class)), store, ip, sessions);
     }
 
     private LocalAccount account(MemberRole role) {
@@ -122,6 +125,8 @@ class AdminLoginLimitRedisTest {
         ReflectionTestUtils.setField(member, "role", role);
         var account = LocalAccount.createLocalAccount(member, "admin@example.com", "encoded");
         ReflectionTestUtils.setField(account, "id", 7L);
+        given(sessions.lock(1L)).willReturn(member);
+        given(sessions.lockLocalAccount(1L)).willReturn(account);
         return account;
     }
 }

@@ -19,6 +19,13 @@ public class TemporaryMember {
 
     private String name;
     private String phoneNumber;
+    private Long memberId;
+    private Long authVersion;
+
+    public void bindSession(Long memberId, long authVersion) {
+        this.memberId = memberId;
+        this.authVersion = authVersion;
+    }
 
     @TimeToLive
     private final long ttl;
