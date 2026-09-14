@@ -2,6 +2,8 @@
 
 기능별 상세 설계 문서. **PR 본문의 오라클**로 사용된다. 새 LLD는 `../templates/lld.md`를 복사해 `LLD-XXXX-<slug>.md`로 만든다.
 
+현재 시스템 흐름은 [Architecture](../architecture/README.md), 선택 이유는 [ADR](../adr/README.md)에서 설명한다. LLD는 API·테이블·실패 처리·인수조건을 관리한다.
+
 LLD는 프로젝트 전체 기능 목록이 아니다. 단순 CRUD나 작은 버그 수정까지 모두 LLD로 만들면 문서가 코드보다 빨리 낡는다.
 LLD는 리뷰어와 구현 도구가 "이 구현이 맞는가"를 판단할 기준이 필요한 기능에 작성한다.
 
