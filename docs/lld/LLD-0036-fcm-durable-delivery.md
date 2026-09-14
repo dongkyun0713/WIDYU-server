@@ -12,6 +12,35 @@
 
 FCM 장애와 프로세스 재시작 때 발송 요청이 사라지지 않도록 업무 데이터와 outbox를 함께 저장한다. 실제 HTTP는 DB 트랜잭션 밖에서 수행하고, 재시도 직전 수신자 자격을 다시 확인해 정지·가족 해제·계정 전환 뒤 잘못된 발송을 막는다.
 
+### 변경 전: 업무 트랜잭션 안의 동기 FCM 호출
+
+```mermaid
+flowchart LR
+    A[업무 요청] --> B[업무 트랜잭션 시작]
+    B --> C[업무 DB 변경]
+    C --> D[FCM HTTP 호출]
+    D --> E[업무 커밋]
+    D -. timeout 또는 실패 .-> F[업무 처리 지연 또는 실패]
+    D -. 프로세스 종료 .-> G[발송 결과 복구 불가]
+```
+
+### 변경 후: 영속 outbox와 트랜잭션 밖 발송
+
+```mermaid
+flowchart LR
+    A[업무 요청] --> B[업무 DB 변경과 outbox PENDING 저장]
+    B --> C{업무 커밋}
+    C -->|rollback| D[outbox 없음]
+    C -->|성공| E[즉시 wakeup 또는 polling]
+    E --> F[worker claim REQUIRES_NEW]
+    F --> G[preflight REQUIRES_NEW<br/>회원 토큰 가족 관계 재검증]
+    G --> H[FCM HTTP<br/>트랜잭션 밖]
+    H -->|성공| I[finalize REQUIRES_NEW<br/>SENT와 알림 이력 저장]
+    H -->|재시도 가능 실패| J[finalize REQUIRES_NEW<br/>PENDING과 다음 실행 시각 저장]
+    H -->|권한 소멸 또는 만료| K[finalize REQUIRES_NEW<br/>CANCELLED EXPIRED EXHAUSTED]
+    J --> E
+```
+
 ## 2. 범위
 
 ### In scope
