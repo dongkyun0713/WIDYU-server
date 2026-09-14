@@ -7,6 +7,10 @@ import java.util.function.BooleanSupplier;
 public interface FcmTransport {
     Result send(String token, FcmSendDto dto);
 
+    default Result send(FcmDelivery delivery, BooleanSupplier beforeSend) {
+        return send(delivery.token(), delivery.message(), beforeSend);
+    }
+
     default Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend) {
         if (!beforeSend.getAsBoolean()) {
             return Result.rejected(false);

@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
+/** maxRetries is the number of additional retries; total attempts are 1 + maxRetries. No policy defaults. */
 public record FcmDeliveryProperties(int maxRetries, Duration normalTtl, Duration emergencyTtl, Duration lease) {
     @org.springframework.beans.factory.annotation.Autowired
     public FcmDeliveryProperties(

@@ -50,7 +50,7 @@ public class FcmOutboxDispatcher {
             FcmDelivery delivery = transactions.claim(id);
             if (delivery != null) {
                 metrics.record(() -> {
-                    FcmTransport.Result result = transport.send(delivery.token(), delivery.message(),
+                    FcmTransport.Result result = transport.send(delivery,
                             () -> transactions.preflight(delivery));
                     transactions.finish(delivery, result);
                 });

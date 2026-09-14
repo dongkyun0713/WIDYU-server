@@ -27,7 +27,7 @@ public class WalkNotificationListener {
      * 매일 저녁 7시에 실행되어 오늘 만보계 목표 미달성자에게 알림 발송
      */
     @Scheduled(cron = "0 0 19 * * *")
-    @Transactional(readOnly = true)
+    @Transactional
     public void sendWalkGoalReminderToUnachieved() {
         LocalDate today = LocalDate.now();
 
