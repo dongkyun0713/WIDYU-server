@@ -14,8 +14,8 @@
 
 ## 2. 범위
 
-- In scope: widyu-api의 JwtChannelInterceptor, 보안 회귀 테스트, 기존 ACK 호환성.
-- Out of scope: #603 세션 폐기, DB tokenversion, 관리자 필터, JwtTokenProvider, 운영/AWS 호출, 커밋·push.
+- In scope: widyu-api의 inbound allowlist, 보호 토픽 outbound 현재 권한 재검증, 보안 회귀 테스트, 기존 ACK 호환성.
+- Out of scope: #603의 명시적 연결 종료와 DB tokenversion, 관리자 필터, JwtTokenProvider, 운영/AWS 호출.
 
 ## 3. 인터페이스 / API
 
@@ -33,7 +33,7 @@ memberId는 기존 계약인 ASCII 숫자 1~18자리를 유지한다. 존재·�
 
 ## 4. 데이터 모델
 
-변경 없음. ERD-0001의 Member, SeniorProfile, FamilyMembership 관계를 기존 FamilyAccessService로 조회한다. 서버가 인증 후 저장한 세션 memberId fallback을 유지한다.
+DB 변경 없음. ERD-0001의 Member, SeniorProfile, FamilyMembership 관계를 기존 FamilyAccessService로 조회한다. 서버는 연결 중인 STOMP 세션 ID와 인증 회원 ID를 노드 로컬 메모리에 보관하고 disconnect 시 제거한다.
 
 ## 5. 처리 흐름
 
@@ -42,12 +42,13 @@ memberId는 기존 계약인 ASCII 숫자 1~18자리를 유지한다. 존재·�
 3. 가족 토픽은 추출한 대상 회원과 호출자 ID로 가족 검증 후 통과시킨다.
 4. SEND는 인증 회원과 정확한 애플리케이션 목적지 2개를 확인한다.
 5. heartbeat(command 없음), ACK/NACK, UNSUBSCRIBE, DISCONNECT 등 제어 프레임은 기존대로 통과시킨다.
+6. 서버가 위치·심박 보호 토픽을 outbound로 전달할 때는 세션의 회원 ID를 찾고 현재 가족 관계와 양쪽 회원 ACTIVE 상태를 다시 검증한다. 관계 해제·정지·세션 매핑 누락·조회 오류면 해당 세션 메시지를 폐기한다.
 
-인터셉터는 clientInboundChannel에만 적용되므로 서버의 브로커 발송은 유지된다. 트랜잭션·이벤트 경계는 변경하지 않는다.
+inbound allowlist와 outbound 권한 재검증은 각각 clientInboundChannel, clientOutboundChannel에 적용한다. 트랜잭션·이벤트 경계는 변경하지 않는다.
 
 ## 6. 예외 / 에러 처리
 
-인가 거절은 기존 SUBSCRIBE와 같이 null 반환으로 프레임을 폐기한다. 새 STOMP ERROR 또는 오류 큐 응답을 도입하지 않는다. 가족 검증의 BusinessException은 거절하고 예상 밖 오류는 전파된다.
+인가 거절은 기존 SUBSCRIBE와 같이 null 반환으로 프레임을 폐기한다. 새 STOMP ERROR 또는 오류 큐 응답을 도입하지 않는다. outbound 가족·상태 조회 실패도 정보 노출을 막기 위해 fail-closed로 폐기한다.
 
 ## 7. 인수조건 (Acceptance Criteria)
 
@@ -57,8 +58,11 @@ memberId는 기존 계약인 ASCII 숫자 1~18자리를 유지한다. 존재·�
 - [x] AC4: 인증 누락은 허용 목적지에서도 거절하며 Principal과 인증 세션 fallback을 유지한다.
 - [x] AC5: 사용자 ACK·오류 큐 구독과 heartbeat·ACK/NACK·unsubscribe·disconnect를 유지한다.
 - [x] AC6: 채널을 통한 차단과 정상 전달 회귀 테스트 및 `bash scripts/harness/verify.sh`가 통과한다.
+- [x] AC7: 정상 구독 뒤 가족 관계가 해제되거나 보호자·시니어가 INACTIVE가 되면 이후 보호 토픽 outbound 메시지를 수신하지 않는다.
 
 2026-09-14 검증: Java 21 하네스 정적 검사·compileJava·API 테스트 통과. 총 586건 중 577건 통과, 실패/오류 0건, 9건 건너뜀(로컬 Redis 부재 6건, 영상 fixture 부재 3건). JwtChannelInterceptorTest 68건은 모두 통과했으며 실제 Simple Broker 전달 회귀 2건을 포함한다. 기존 HeartRateWebSocketControllerTest의 발신 세션 ACK 검증도 통과했다. 실제 브라우저/SockJS 네트워크 E2E는 실행하지 않았다.
+
+2026-09-14 추가 검증: `JwtChannelInterceptorTest`, `FamilyTopicOutboundInterceptorTest`, `FamilyAccessServiceTest`를 실행해 정상 구독 뒤 가족 해제 모사 시 위치·심박 outbound 수신 0건, 정지된 보호자·시니어의 현재 접근 거절을 확인했다. `bash scripts/harness/verify.sh --base "$(git merge-base origin/develop HEAD)"`도 통과했다. 실제 브라우저/SockJS 및 다중 서버 연결 종료 검증은 미실행이다.
 
 ## 8. 영향 범위 / 마이그레이션
 
@@ -68,7 +72,7 @@ DB 마이그레이션 없음. 미등록 목적지를 쓰는 클라이언트는 �
 
 ## 미결정 사항(Open Questions)
 
-없음. 기존 구독의 가족 탈퇴 후 즉시 폐기와 세션 수명 관리는 별도 작업이다.
+없음. 연결 자체를 종료하고 다중 노드에서 세션을 전파 폐기하는 기능은 #603 범위로 남기되, 이 LLD 범위에서는 다음 보호 토픽 전달 전에 현재 권한을 재확인해 노출을 차단한다.
 
 ## 10. 참고
 

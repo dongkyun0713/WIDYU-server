@@ -46,6 +46,7 @@ class JwtChannelInterceptorTest {
 
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private FamilyAccessService familyAccessService;
+    @Mock private WebSocketSessionRegistry webSocketSessionRegistry;
 
     @InjectMocks
     private JwtChannelInterceptor jwtChannelInterceptor;
@@ -335,12 +336,18 @@ class JwtChannelInterceptorTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"/topic/location/senior/42", "/topic/heart-rate/42"})
-    @DisplayName("브로커에서 wildcard 구독과 위조 SEND를 차단하고 정상 가족에게 서버 메시지만 전달한다")
-    void 브로커는_정상_가족에게_서버_메시지만_전달한다(String destination) {
+    @DisplayName("구독 뒤 가족 관계가 해제되면 브로커는 이후 서버 메시지를 전달하지 않는다")
+    void 브로커는_가족_해제_뒤_기존_구독에_메시지를_전달하지_않는다(String destination) {
         // given
+        WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
+        JwtChannelInterceptor brokerInterceptor = new JwtChannelInterceptor(
+                jwtTokenProvider, familyAccessService, sessionRegistry);
+        FamilyTopicOutboundInterceptor outboundInterceptor = new FamilyTopicOutboundInterceptor(
+                familyAccessService, sessionRegistry);
         ExecutorSubscribableChannel inbound = new ExecutorSubscribableChannel();
-        inbound.addInterceptor(jwtChannelInterceptor);
+        inbound.addInterceptor(brokerInterceptor);
         ExecutorSubscribableChannel outbound = new ExecutorSubscribableChannel();
+        outbound.addInterceptor(outboundInterceptor);
         ExecutorSubscribableChannel brokerChannel = new ExecutorSubscribableChannel();
         List<Message<?>> received = new ArrayList<>();
         outbound.subscribe(received::add);
@@ -373,6 +380,16 @@ class JwtChannelInterceptorTest {
                     .isEqualTo("family");
             assertThat(SimpMessageHeaderAccessor.getMessageType(received.getFirst().getHeaders()))
                     .isEqualTo(SimpMessageType.MESSAGE);
+
+            received.clear();
+            willThrow(new BusinessException(ErrorCode.FORBIDDEN, "가족 연결이 해제되었습니다."))
+                    .given(familyAccessService).verifyActiveFamilyAccess(100L, 42L);
+
+            // when
+            new SimpMessagingTemplate(brokerChannel).convertAndSend(destination, "revoked-measurement");
+
+            // then
+            assertThat(received).isEmpty();
         } finally {
             broker.stop();
         }

@@ -44,6 +44,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final FamilyAccessService familyAccessService;
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -91,6 +92,8 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             }
         }
 
+        webSocketSessionRegistry.register(accessor.getSessionId(), resolveSubscriberId(accessor));
+
         return message;
     }
 
@@ -100,6 +103,8 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         if (destination == null || subscriberId == null) {
             return null;
         }
+
+        webSocketSessionRegistry.register(accessor.getSessionId(), subscriberId);
 
         if (USER_SUBSCRIPTIONS.contains(destination)) {
             return message;
