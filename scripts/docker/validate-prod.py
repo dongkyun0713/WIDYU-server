@@ -49,6 +49,9 @@ def validate(config):
     password = config["services"]["grafana"]["environment"].get("GF_SECURITY_ADMIN_PASSWORD", "")
     if not password.strip() or password.strip() == "admin":
         raise ValueError("GRAFANA_ADMIN_PASSWORD must be nonempty and not the default")
+    webhook = config["services"]["grafana"]["environment"].get("PROD_DISCORD_WEBHOOK_URL", "")
+    if not re.fullmatch(r"https://(?:discord\.com|discordapp\.com)/api/webhooks/[0-9]+/[A-Za-z0-9_-]+", webhook):
+        raise ValueError("PROD_DISCORD_WEBHOOK_URL must be a Discord HTTPS webhook")
 
 
 if __name__ == "__main__":

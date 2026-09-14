@@ -1,0 +1,323 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "widyu-production-health",
+      "folder": "WIDYU Production",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "widyu-prod-api-down",
+          "title": "PROD API 수집 중단",
+          "condition": "C",
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "1m",
+          "annotations": {
+            "summary": "API health와 컨테이너 상태를 확인하세요. 호스트 전체 장애는 외부 감시가 필요합니다.",
+            "runbook_url": ""
+          },
+          "labels": {
+            "environment": "prod",
+            "service": "widyu-api-prod"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "max(1 - up{job=\"widyu-api\"}) or absent(up{job=\"widyu-api\"})",
+                "instant": true,
+                "range": false,
+                "refId": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "expression": "A",
+                "refId": "C",
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "uid": "widyu-prod-api-errors",
+          "title": "PROD API 5xx 증가",
+          "condition": "C",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "1m",
+          "annotations": {
+            "summary": "최근 5분 5xx가 3건 이상이고 오류율이 5%를 초과했습니다. 요청 ID로 내부 로그를 확인하세요.",
+            "runbook_url": ""
+          },
+          "labels": {
+            "environment": "prod",
+            "service": "widyu-api-prod"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "((sum(increase(http_server_requests_seconds_count{job=\"widyu-api\",status=~\"5..\"}[5m])) / clamp_min(sum(increase(http_server_requests_seconds_count{job=\"widyu-api\"}[5m])), 1)) and (sum(increase(http_server_requests_seconds_count{job=\"widyu-api\",status=~\"5..\"}[5m])) >= 3)) or vector(0)",
+                "instant": true,
+                "range": false,
+                "refId": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "expression": "A",
+                "refId": "C",
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0.05
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "uid": "widyu-prod-disk-low",
+          "title": "PROD 디스크 여유 부족",
+          "condition": "C",
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "호스트 루트 파일시스템 여유가 15% 미만입니다. 로그·볼륨 용량을 확인하고 DB/볼륨을 임의 삭제하지 마세요.",
+            "runbook_url": ""
+          },
+          "labels": {
+            "environment": "prod",
+            "service": "widyu-api-prod"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "min(100 * node_filesystem_avail_bytes{job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=\"node-exporter\",mountpoint=\"/\",fstype!~\"tmpfs|overlay|squashfs\"})",
+                "instant": true,
+                "range": false,
+                "refId": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "expression": "A",
+                "refId": "C",
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        15
+                      ],
+                      "type": "lt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "uid": "widyu-prod-node-down",
+          "title": "PROD 호스트 지표 수집 중단",
+          "condition": "C",
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "annotations": {
+            "summary": "Node Exporter 수집이 중단됐습니다. EC2 전체 중단은 동일 호스트 Grafana에서 통지할 수 없습니다.",
+            "runbook_url": ""
+          },
+          "labels": {
+            "environment": "prod",
+            "service": "widyu-api-prod"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "max(1 - up{job=\"node-exporter\"}) or absent(up{job=\"node-exporter\"})",
+                "instant": true,
+                "range": false,
+                "refId": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "expression": "A",
+                "refId": "C",
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "widyu-production-discord",
+      "receivers": [
+        {
+          "uid": "widyu-production-discord",
+          "type": "discord",
+          "settings": {
+            "url": "$PROD_DISCORD_WEBHOOK_URL",
+            "title": "{{ .CommonLabels.alertname }}",
+            "message": "운영 담당자 내부 알림입니다. 이용자 공지가 아닙니다.\n{{ range .Alerts }}{{ .Annotations.summary }}\n상태: {{ .Status }}\n{{ end }}"
+          }
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "orgId": 1,
+      "receiver": "widyu-production-discord",
+      "group_by": [
+        "alertname",
+        "environment"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    }
+  ]
+}

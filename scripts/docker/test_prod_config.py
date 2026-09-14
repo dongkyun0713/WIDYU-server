@@ -22,6 +22,7 @@ class ProductionComposeTest(unittest.TestCase):
         env.update(PATH=os.environ["PATH"], NGINX_HTTP_PORT="80", NGINX_HTTPS_PORT="443",
                    RDS_PORT="3306", REDIS_PORT="6379", MYSQL_PORT="3306",
                    PROD_DOMAIN="prod.example.com", DOCKER_IMAGE_NAME="example/api",
+                   PROD_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/123/synthetic-token",
                    IMAGE_TAG="a" * 40, FIREBASE_CREDENTIALS_FILE="/dev/null",
                    JWT_ACCESS_TOKEN_EXPIRATION_TIME="3600",
                    JWT_REFRESH_TOKEN_EXPIRATION_TIME="1209600",
@@ -70,6 +71,40 @@ class ProductionComposeTest(unittest.TestCase):
     def test_default_grafana_password_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "GRAFANA_ADMIN_PASSWORD"):
             validator.validate(self.config(GRAFANA_ADMIN_PASSWORD="admin"))
+
+    def test_production_alerting_is_mounted_with_its_own_receiver(self):
+        grafana = self.config()["services"]["grafana"]
+        mounts = [mount for mount in grafana["volumes"]
+                  if mount["target"] == "/etc/grafana/provisioning/alerting"]
+        self.assertEqual(len(mounts), 1)
+        self.assertTrue(mounts[0]["source"].endswith("/monitoring/grafana/alerting-prod"))
+        self.assertTrue(mounts[0]["read_only"])
+        self.assertIn("PROD_DISCORD_WEBHOOK_URL", grafana["environment"])
+
+    def test_invalid_production_receiver_is_rejected_without_echoing_it(self):
+        for value in ("http://discord.com/api/webhooks/123/test", "https://example.com/secret"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "PROD_DISCORD_WEBHOOK_URL") as context:
+                    validator.validate(self.config(PROD_DISCORD_WEBHOOK_URL=value))
+                self.assertNotIn(value, str(context.exception))
+
+    def test_production_alert_rules_cover_failures_without_sensitive_log_payloads(self):
+        provisioning = json.loads((ROOT / "monitoring/grafana/alerting-prod/production.json").read_text())
+        self.assertEqual(provisioning["apiVersion"], 1)
+        rules = provisioning["groups"][0]["rules"]
+        self.assertEqual(len({rule["uid"] for rule in rules}), 4)
+        for rule in rules:
+            self.assertEqual(rule["labels"]["environment"], "prod")
+            self.assertEqual(rule["execErrState"], "Alerting")
+            self.assertEqual(rule["data"][0]["datasourceUid"], "prometheus")
+            self.assertEqual(rule["condition"], "C")
+        by_id = {rule["uid"]: rule for rule in rules}
+        self.assertIn("absent(up", by_id["widyu-prod-api-down"]["data"][0]["model"]["expr"])
+        self.assertEqual(by_id["widyu-prod-disk-low"]["noDataState"], "Alerting")
+        receiver = provisioning["contactPoints"][0]
+        self.assertEqual(provisioning["policies"][0]["receiver"], receiver["name"])
+        self.assertEqual(receiver["receivers"][0]["settings"]["url"], "$PROD_DISCORD_WEBHOOK_URL")
+        self.assertNotIn("errorMessage", json.dumps(provisioning))
 
     def test_sms_and_video_settings_are_required(self):
         for key in ("COOLSMS_API_KEY", "COOLSMS_API_SECRET", "COOLSMS_PHONE",

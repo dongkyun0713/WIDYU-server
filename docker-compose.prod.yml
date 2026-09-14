@@ -99,6 +99,9 @@ services:
     container_name: widyu-grafana-prod
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      PROD_DISCORD_WEBHOOK_URL: ${PROD_DISCORD_WEBHOOK_URL:?PROD_DISCORD_WEBHOOK_URL is required}
+    volumes:
+      - ./monitoring/grafana/alerting-prod:/etc/grafana/provisioning/alerting:ro
   loki:
     container_name: widyu-loki-prod
     volumes:

@@ -94,7 +94,7 @@ Actions의 Deploy production에서 배포 ref를 선택해 실행한다. 릴리�
 
 ## 운영 모니터링
 
-Prometheus·Grafana·Loki와 기존 수집기 Node Exporter·Promtail을 기본 기동한다. 릴리스에 monitoring 설정을 포함하고 Prometheus/Grafana/Loki 데이터 볼륨은 배포 간 유지한다. 운영 환경 파일에 기본값 admin이 아닌 강한 GRAFANA_ADMIN_PASSWORD를 설정한다. 기존 Grafana 볼륨이 있으면 환경변수 변경만으로 기존 계정 비밀번호가 변경되지는 않으므로 Grafana에서 별도로 변경한다. Nginx는 stdout/stderr로 기록하고 Docker의 20 MiB×5 로그 회전을 적용한다. Loki는 compactor로 30일 보존 후 삭제한다. 이 보존 기간은 단일 t4g.medium의 초기 용량 가정이며, 실제 디스크 사용량을 측정해 조정한다. Prometheus에 디스크 사용량은 수집되지만 이 저장소에는 알림 수신처가 없으므로 디스크 임계치 통지는 별도 Alertmanager/수신처 구성 전까지 구현되지 않는다.
+Prometheus·Grafana·Loki와 기존 수집기 Node Exporter·Promtail을 기본 기동한다. 릴리스에 monitoring 설정을 포함하고 Prometheus/Grafana/Loki 데이터 볼륨은 배포 간 유지한다. 운영 환경 파일에 기본값 admin이 아닌 강한 GRAFANA_ADMIN_PASSWORD를 설정한다. 기존 Grafana 볼륨이 있으면 환경변수 변경만으로 기존 계정 비밀번호가 변경되지는 않으므로 Grafana에서 별도로 변경한다. Nginx는 stdout/stderr로 기록하고 Docker의 20 MiB×5 로그 회전을 적용한다. Loki는 compactor로 30일 보존 후 삭제한다. 이 보존 기간은 단일 t4g.medium의 초기 용량 가정이며, 실제 디스크 사용량을 측정해 조정한다. 운영 Grafana에는 별도 alerting provisioning으로 API 수집 중단·5xx 증가·디스크 부족·호스트 지표 수집 중단 규칙을 로드한다. 운영 환경 파일에 PROD_DISCORD_WEBHOOK_URL을 추가해야 배포 사전 검사를 통과한다. 개발용 수신처와 분리하며 실제 수신·EC2 전체 중단 외부 감지·백업 복원은 아직 검증되지 않았다. 실행 절차와 판정 기록은 [운영 장애 알림·복원 검증](operations/production-recovery-verification.md)을 따른다.
 
 API의 health·prometheus만 내부에 노출한다. Nginx는 health 외 actuator를 차단하며 3000/9090/3100/9100은 호스트 loopback에만 바인딩한다. Grafana는 내 PC에서 SSM 포트 포워딩을 실행한 뒤 http://localhost:3000에서 접근한다. 아래 인스턴스 ID와 리전을 실제 값으로 바꾸고 세션을 유지한다. 로컬 3000번이 사용 중이면 localPortNumber만 변경한다.
 
