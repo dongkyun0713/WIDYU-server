@@ -7,7 +7,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.application.FamilyAccessService;
-import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,10 +32,14 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     private static final Pattern LOCATION_TOPIC = Pattern.compile("^/topic/location/senior/(\\d{1,18})$");
     private static final Pattern HEART_RATE_TOPIC = Pattern.compile("^/topic/heart-rate/(\\d{1,18})$");
 
-    // 보호 토픽 접두사. 이 접두사로 시작하지만 정확한 숫자 대상이 아니면(와일드카드 등) 구독을 거부한다.
-    private static final List<String> PROTECTED_TOPIC_PREFIXES = List.of(
-            "/topic/heart-rate/",
-            "/topic/location/senior/"
+    private static final Set<String> USER_SUBSCRIPTIONS = Set.of(
+            "/user/queue/location/ack",
+            "/user/queue/heart-rate/result",
+            "/user/queue/errors"
+    );
+    private static final Set<String> SEND_DESTINATIONS = Set.of(
+            "/app/location/update",
+            "/app/heart-rate/send-single"
     );
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -54,6 +58,14 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
         if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
             return handleSubscribe(message, accessor);
+        }
+
+        if (StompCommand.SEND.equals(accessor.getCommand())) {
+            String destination = accessor.getDestination();
+            if (destination == null || !SEND_DESTINATIONS.contains(destination)
+                    || resolveSubscriberId(accessor) == null) {
+                return null;
+            }
         }
 
         return message;
@@ -84,24 +96,18 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private Message<?> handleSubscribe(Message<?> message, StompHeaderAccessor accessor) {
         String destination = accessor.getDestination();
-        if (destination == null) {
-            return message;
+        Long subscriberId = resolveSubscriberId(accessor);
+        if (destination == null || subscriberId == null) {
+            return null;
         }
 
-        if (!isProtectedTopic(destination)) {
+        if (USER_SUBSCRIPTIONS.contains(destination)) {
             return message;
         }
 
         Long targetMemberId = extractProtectedMemberId(destination);
         if (targetMemberId == null) {
-            // 보호 토픽 접두사이지만 정확한 숫자 대상이 아님(와일드카드·비숫자·초과 길이) → 가족 검증을 우회하지 못하게 차단
-            log.warn("WebSocket SUBSCRIBE 거부 - 보호 토픽의 대상 ID가 유효하지 않음, destination: {}", destination);
-            return null;
-        }
-
-        Long subscriberId = resolveSubscriberId(accessor);
-        if (subscriberId == null) {
-            log.warn("WebSocket SUBSCRIBE 인가 실패 - 인증 정보 없음, destination: {}", destination);
+            log.warn("WebSocket SUBSCRIBE 거부 - 허용되지 않은 목적지, destination: {}", destination);
             return null;
         }
 
@@ -114,10 +120,6 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         }
 
         return message;
-    }
-
-    private boolean isProtectedTopic(String destination) {
-        return PROTECTED_TOPIC_PREFIXES.stream().anyMatch(destination::startsWith);
     }
 
     private Long extractProtectedMemberId(String destination) {
