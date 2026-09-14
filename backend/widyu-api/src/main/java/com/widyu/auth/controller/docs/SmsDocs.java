@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 @Tag(name = "Sms", description = "문자 인증 API")
 public interface SmsDocs {
+    @ApiResponse(responseCode = "429", description = "AUTH_4290: 발송 한도 초과. Retry-After 초 이후 재시도",
+            headers = @io.swagger.v3.oas.annotations.headers.Header(name = "Retry-After", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "503", description = "AUTH_5030: Redis 장애 또는 운영 전체 발송 예산 미설정")
     @Operation(
             summary = "SMS 인증번호 전송",
             description = "사용자의 이름과 전화번호를 받아 인증번호를 전송합니다."
@@ -80,6 +83,11 @@ public interface SmsDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "429", description = "AUTH_4290: 오입력 5회 도달. Retry-After 초 이후 재발송",
+            headers = @io.swagger.v3.oas.annotations.headers.Header(name = "Retry-After", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "503", description = "AUTH_5030: 인증 저장소 장애")
+    @ApiResponse(responseCode = "400", description = "SMS_4000: 인증 코드 불일치")
+    @ApiResponse(responseCode = "404", description = "SMS_4040: 코드 만료 또는 이미 소비됨")
     ApiResponseTemplate<TemporaryTokenResponse> verifySmsCode(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -141,6 +149,9 @@ public interface SmsDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "429", description = "AUTH_4290: 발송 한도 초과. Retry-After 초 이후 재시도",
+            headers = @io.swagger.v3.oas.annotations.headers.Header(name = "Retry-After", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "503", description = "AUTH_5030: Redis 장애 또는 운영 전체 발송 예산 미설정")
     ApiResponseTemplate<Void> sendSmsVerificationIfMemberExist(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -162,4 +173,3 @@ public interface SmsDocs {
             ) final FindPasswordRequest request
     );
 }
-

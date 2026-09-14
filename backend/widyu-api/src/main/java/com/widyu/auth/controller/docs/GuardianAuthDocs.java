@@ -151,6 +151,10 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "401", description = "AUTH_4012: 이메일 또는 비밀번호 불일치")
+    @ApiResponse(responseCode = "429", description = "AUTH_4290: 계정/IP 실패 및 진행 중 요청 한도. Retry-After 초 이후 재시도",
+            headers = @io.swagger.v3.oas.annotations.headers.Header(name = "Retry-After", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "503", description = "AUTH_5030: 인증 제한 저장소 장애")
     ApiResponseTemplate<TokenPairResponse> signInLocal(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(

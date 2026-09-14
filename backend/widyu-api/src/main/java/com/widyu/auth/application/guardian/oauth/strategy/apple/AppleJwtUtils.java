@@ -41,7 +41,7 @@ public class AppleJwtUtils {
         Date expiration = Date.from(now.plusMinutes(5).atZone(ZoneId.systemDefault()).toInstant());
 
         String clientId = getClientIdByPlatform(platformValue);
-        log.debug("Apple JWT 생성: platform={}", platformValue);
+        log.debug("Apple JWT 생성");
 
         return Jwts.builder()
                 .setHeaderParam("alg", "ES256")
@@ -76,7 +76,7 @@ public class AppleJwtUtils {
             
             return keyFactory.generatePrivate(keySpec);
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            log.error("Apple 개인 키 파싱 실패", e);
+            log.error("Apple 개인 키 파싱 실패");
             throw new BusinessException(ErrorCode.APPLE_PRIVATE_KEY_PARSING_FAILED);
         }
     }

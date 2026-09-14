@@ -44,7 +44,7 @@ public class OAuthCallbackService {
 
     private void logCallbackResult(String error) {
         if (error != null) {
-            log.warn("애플 OAuth 콜백 에러: {}", error);
+            log.warn("애플 OAuth 콜백 에러");
             return;
         }
 

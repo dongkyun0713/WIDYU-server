@@ -46,6 +46,8 @@ public enum ErrorCode {
     SMS_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "SMS_4040", "문자 인증 코드가 존재하지 않습니다."),
     SMS_VERIFICATION_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "SMS_4000", "문자 인증 코드가 일치하지 않습니다."),
     SMS_SEND_FAILED(HttpStatus.BAD_GATEWAY, "SMS_5000", "SMS 전송에 실패했습니다."),
+    AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "AUTH_4290", "요청 한도를 초과했습니다. Retry-After 이후 다시 시도해주세요."),
+    AUTH_LIMIT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_5030", "인증 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요."),
     INVALID_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "SMS_4001", "유효하지 않은 전화번호 형식입니다."),
     PHONE_NUMBER_REQUIRED(HttpStatus.BAD_REQUEST, "SMS_4002", "전화번호는 필수입니다."),
 

@@ -1,7 +1,7 @@
 package com.widyu.auth.application;
 
-import com.widyu.auth.VerificationCode;
-import com.widyu.auth.repository.VerificationCodeRepository;
+import com.widyu.auth.infrastructure.AuthLimitStore;
+import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.CoolsmsProperties;
@@ -22,14 +22,20 @@ public class SmsService {
     private final CoolsmsProperties coolsmsProperties;
     private final DefaultMessageService messageService;
     private final SecureRandom secureRandom;
-    private final VerificationCodeRepository verificationCodeRepository;
+    private final AuthLimitStore authLimitStore;
+    private final ClientIpResolver clientIpResolver;
 
     private static final Pattern PHONE_PATTERN = Pattern.compile("^01[016789]\\d{7,8}$");
 
     public SmsService(final CoolsmsProperties coolsmsProperties,
-                      final VerificationCodeRepository verificationCodeRepository) {
+                      final AuthLimitStore authLimitStore,
+                      final ClientIpResolver clientIpResolver) {
         this.coolsmsProperties = coolsmsProperties;
-        this.verificationCodeRepository = verificationCodeRepository;
+        this.authLimitStore = authLimitStore;
+        this.clientIpResolver = clientIpResolver;
+        if (coolsmsProperties.verificationCodeLength() != 6 || coolsmsProperties.verificationCodeTtl() < 1) {
+            throw new IllegalArgumentException("SMS code length must be 6 and TTL must be positive");
+        }
         this.messageService = NurigoApp.INSTANCE.initialize(
                 coolsmsProperties.apiKey(),
                 coolsmsProperties.apiSecret(),
@@ -40,16 +46,21 @@ public class SmsService {
 
     public void sendVerificationSms(final String toPhoneNumber, final String name) {
         validatePhoneNumber(toPhoneNumber);
+        authLimitStore.reserveSms(toPhoneNumber, clientIpResolver.resolve());
         String code = generateVerificationCode();
 
-        saveVerificationCode(toPhoneNumber, code, name);
+        String id = authLimitStore.saveCode(toPhoneNumber, code, name, coolsmsProperties.verificationCodeTtl());
         String messageText = createMessageText(code);
 
-        sendMessageWithLogging(toPhoneNumber, name, messageText);
+        try {
+            sendMessageWithLogging(toPhoneNumber, messageText);
+        } catch (BusinessException exception) {
+            authLimitStore.discardCode(toPhoneNumber, id);
+            throw exception;
+        }
     }
 
     private void sendMessageWithLogging(final String toPhoneNumber,
-                                        final String name,
                                         final String messageText) {
         try {
             Message message = createMessage(toPhoneNumber, messageText);
@@ -58,28 +69,15 @@ public class SmsService {
             log.info("SMS 전송 성공 - 수신번호: {}", PiiMaskingUtil.maskPhoneNumber(toPhoneNumber));
 
         } catch (NurigoMessageNotReceivedException exception) {
-            log.error("SMS 전송 실패 - 수신 불가: 수신번호={}, 실패목록={}",
-                    PiiMaskingUtil.maskPhoneNumber(toPhoneNumber), exception.getFailedMessageList());
+            log.error("SMS 전송 실패 - 수신 불가");
             throw new BusinessException(ErrorCode.SMS_SEND_FAILED);
 
         } catch (Exception exception) {
-            log.error("SMS 전송 중 알 수 없는 오류 발생: 수신번호={}, 오류={}",
-                    PiiMaskingUtil.maskPhoneNumber(toPhoneNumber), exception.getMessage(), exception);
+            log.error("SMS 전송 중 오류 발생");
             throw new BusinessException(ErrorCode.SMS_SEND_FAILED);
         }
     }
 
-
-    private void saveVerificationCode(final String phoneNumber, final String code, final String name) {
-        VerificationCode verificationCode = VerificationCode.builder()
-                .phoneNumber(phoneNumber)
-                .code(code)
-                .name(name)
-                .ttl(coolsmsProperties.verificationCodeTtl())
-                .build();
-
-        verificationCodeRepository.save(verificationCode);
-    }
 
     private void validatePhoneNumber(final String phoneNumber) {
         if (phoneNumber == null || phoneNumber.trim().isEmpty()) {

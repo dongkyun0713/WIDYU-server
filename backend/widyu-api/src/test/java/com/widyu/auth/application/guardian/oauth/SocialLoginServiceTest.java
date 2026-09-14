@@ -161,7 +161,6 @@ class SocialLoginServiceTest {
     void 기존_소셜_회원_로그인_시_토큰_쌍이_반환된다() {
         // given
         SocialLoginRequest request = mock(SocialLoginRequest.class);
-        given(request.platform()).willReturn("AOS");
 
         SocialLoginStrategy strategy = mock(SocialLoginStrategy.class);
         given(strategyFactory.getStrategy("kakao")).willReturn(strategy);

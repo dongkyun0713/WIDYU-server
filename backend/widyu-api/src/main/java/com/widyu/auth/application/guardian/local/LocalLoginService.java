@@ -1,6 +1,8 @@
 package com.widyu.auth.application.guardian.local;
 
 import com.widyu.auth.TemporaryMember;
+import com.widyu.auth.infrastructure.AuthLimitStore;
+import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.auth.dto.request.ChangePasswordRequest;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
@@ -36,6 +38,11 @@ public class LocalLoginService {
     private final LocalAccountRepository localAccountRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final TemporaryMemberUtil temporaryMemberUtil;
+    private final AuthLimitStore authLimitStore;
+    private final ClientIpResolver clientIpResolver;
+
+    // Valid BCrypt hash used only to equalize the password work for unknown accounts.
+    private static final String DUMMY_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     @Transactional
     public LocalSignupResponse signupGuardianWithLocal(TemporaryMember temp, String email, String rawPassword) {
@@ -80,22 +87,31 @@ public class LocalLoginService {
 
     @Transactional(readOnly = true)
     public TokenPairResponse signIn(LocalGuardianSignInRequest request) {
-        LocalAccount localAccount = findLocalAccountByEmail(request.email());
-        validatePassword(request.password(), localAccount.getPassword());
+        if (request.email() == null || request.email().isBlank() || request.email().length() > 254
+                || request.password() == null || request.password().isBlank() || request.password().length() > 256) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+        String clientIp = clientIpResolver.resolve();
+        LocalAccount localAccount = localAccountRepository.findByEmail(request.email()).orElse(null);
+        String accountKey = "unknown:" + request.email();
+        if (localAccount != null) {
+            // Use the persisted identity, so DB collation aliases share the same limit.
+            accountKey = "id:" + localAccount.getId();
+        }
+        AuthLimitStore.LoginAttempt attempt = authLimitStore.reserveLogin(accountKey, clientIp);
+        String encodedPassword = DUMMY_PASSWORD;
+        if (localAccount != null) {
+            encodedPassword = localAccount.getPassword();
+        }
+        boolean matches = passwordEncoder.matches(request.password(), encodedPassword);
+        boolean authenticated = localAccount != null && matches;
+        authLimitStore.completeLogin(attempt, authenticated);
+        if (!authenticated) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
 
         Member member = localAccount.getMember();
         return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
-    }
-
-    private LocalAccount findLocalAccountByEmail(String email) {
-        return localAccountRepository.findByEmail(email)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_EMAIL));
-    }
-
-    private void validatePassword(String rawPassword, String encodedPassword) {
-        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
-            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
-        }
     }
 
     public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {

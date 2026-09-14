@@ -2,6 +2,8 @@ package com.widyu.admin.application;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.widyu.admin.repository.AdminAuditLogRepository;
 import com.widyu.global.error.BusinessException;
@@ -16,6 +18,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,9 +35,69 @@ class AdminAuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private AdminAuditLogRepository adminAuditLogRepository;
+    @Mock private com.widyu.auth.infrastructure.AuthLimitStore authLimitStore;
+    @Mock private com.widyu.auth.infrastructure.ClientIpResolver clientIpResolver;
 
     @InjectMocks
     private AdminAuthService adminAuthService;
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t\n"})
+    @DisplayName("이메일이 null 또는 공백이면 조회와 비밀번호 검증 전에 거부한다")
+    void 빈_이메일은_비밀번호_검증_전에_거부한다(String email) {
+        // given / when / then
+        assertThatThrownBy(() -> adminAuthService.login(email, "password"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_EMAIL);
+        verifyNoInteractions(localAccountRepository, passwordEncoder, authLimitStore,
+                clientIpResolver, jwtTokenProvider, adminAuditLogRepository);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t\n"})
+    @DisplayName("비밀번호가 null 또는 공백이면 조회와 비밀번호 검증 전에 거부한다")
+    void 빈_비밀번호는_비밀번호_검증_전에_거부한다(String password) {
+        // given / when / then
+        assertThatThrownBy(() -> adminAuthService.login("admin@test.com", password))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_PASSWORD);
+        verifyNoInteractions(localAccountRepository, passwordEncoder, authLimitStore,
+                clientIpResolver, jwtTokenProvider, adminAuditLogRepository);
+    }
+
+    @Test
+    @DisplayName("이메일 255자 또는 비밀번호 257자를 입력하면 비밀번호 검증 전에 거부한다")
+    void 입력_최대길이를_넘으면_검증_전에_거부한다() {
+        // given / when / then
+        assertThatThrownBy(() -> adminAuthService.login("a".repeat(255), "password"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_EMAIL);
+        assertThatThrownBy(() -> adminAuthService.login("admin@test.com", "p".repeat(257)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_PASSWORD);
+        verifyNoInteractions(localAccountRepository, passwordEncoder, authLimitStore,
+                clientIpResolver, jwtTokenProvider, adminAuditLogRepository);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 254})
+    @DisplayName("LocalLogin 허용 길이 경계의 입력이면 비밀번호를 검증하고 실패 예약을 완료한다")
+    void 허용_길이_경계는_인증을_진행한다(int emailLength) {
+        // given
+        String email = "a".repeat(emailLength);
+        String password = "p".repeat(emailLength + 2);
+        LocalAccount account = LocalAccount.createLocalAccount(member(1L, MemberRole.ADMIN), email, "encoded");
+        given(localAccountRepository.findByEmail(email)).willReturn(Optional.of(account));
+        // when / then
+        assertThatThrownBy(() -> adminAuthService.login(email, password))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_PASSWORD);
+        verify(passwordEncoder).matches(password, "encoded");
+        verify(authLimitStore).completeLogin(null, false);
+        verifyNoInteractions(jwtTokenProvider, adminAuditLogRepository);
+    }
 
     @Test
     @DisplayName("등록되지 않은 이메일로 로그인하면 INVALID_EMAIL 예외를 던진다")

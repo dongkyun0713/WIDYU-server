@@ -27,6 +27,8 @@ class ProductionComposeTest(unittest.TestCase):
                    JWT_REFRESH_TOKEN_EXPIRATION_TIME="1209600",
                    JWT_TEMPORARY_TOKEN_EXPIRATION_TIME="1800",
                    COOLSMS_VERIFICATION_CODE_LENGTH="6",
+                   AUTH_PROXY_TRUSTEDCIDRS="192.0.2.10/32,2001:db8::/64",
+                   AUTH_LIMITS_SMSGLOBALDAY="1000",
                    COOLSMS_VERIFICATION_CODE_TTL="300")
         env.update(overrides)
         result = subprocess.run([
@@ -97,6 +99,46 @@ class ProductionComposeTest(unittest.TestCase):
                        "X-Forwarded-Host $server_name", "X-Forwarded-Port $server_port",
                        "X-Forwarded-Prefix \"\"", "X-Forwarded-Ssl on"):
             self.assertGreaterEqual(template.count(header), 2, header)
+
+    def test_auth_settings_are_required_for_deployment(self):
+        config = self.config()
+        for key in ("AUTH_PROXY_TRUSTEDCIDRS", "AUTH_LIMITS_SMSGLOBALDAY"):
+            for value in (None, "", " "):
+                with self.subTest(key=key, value=value):
+                    candidate = json.loads(json.dumps(config))
+                    candidate["services"]["widyu-api"]["environment"][key] = value
+                    with self.assertRaisesRegex(ValueError, key):
+                        validator.validate(candidate)
+
+    def test_auth_cidrs_reject_invalid_addresses_and_prefixes(self):
+        config = self.config()
+        for value in ("proxy.example.com/24", "192.0.2.1", "192.0.2.1/33",
+                      "2001:db8::/129", "300.0.0.1/24", "192.0.2.1/255.255.255.0",
+                      "192.0.2.1/-1", "fe80::1%eth0/64", "192.0.2.1/32,",
+                      "192.0.2.1/32,,::1/128"):
+            with self.subTest(value=value):
+                config["services"]["widyu-api"]["environment"]["AUTH_PROXY_TRUSTEDCIDRS"] = value
+                with self.assertRaisesRegex(ValueError, "AUTH_PROXY_TRUSTEDCIDRS"):
+                    validator.validate(config)
+
+    def test_auth_budget_is_a_positive_java_integer(self):
+        config = self.config()
+        environment = config["services"]["widyu-api"]["environment"]
+        for value in ("0", "-1", "1.5", "1_000", "abc", "2147483648"):
+            with self.subTest(value=value):
+                environment["AUTH_LIMITS_SMSGLOBALDAY"] = value
+                with self.assertRaisesRegex(ValueError, "AUTH_LIMITS_SMSGLOBALDAY"):
+                    validator.validate(config)
+        for value in ("1", "2147483647"):
+            environment["AUTH_LIMITS_SMSGLOBALDAY"] = value
+            validator.validate(config)
+
+    def test_auth_cidrs_accept_ipv4_ipv6_and_host_bits(self):
+        config = self.config()
+        for value in ("192.0.2.1/32", "2001:db8::1/128", "192.0.2.10/24, 2001:db8::1/64"):
+            with self.subTest(value=value):
+                config["services"]["widyu-api"]["environment"]["AUTH_PROXY_TRUSTEDCIDRS"] = value
+                validator.validate(config)
 
     def run_prod_up_with_fakes(self, nginx_test_return=0, monitoring_return=0):
         with tempfile.TemporaryDirectory() as directory:

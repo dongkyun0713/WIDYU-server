@@ -49,6 +49,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0034](LLD-0034-auth-request-limits.md) | 인증·로그인 제한과 민감 로그 정리 | Review | #606 |
 | [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
 | [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |
 | [LLD-0029](LLD-0029-japan-pilot-sensitive-data-safeguards.md) | 일본 실증 민감정보 보호 장치 | Approved | #595 |
