@@ -3,6 +3,7 @@ package com.widyu.admin.application;
 import com.widyu.admin.AdminAction;
 import com.widyu.admin.AdminAuditLog;
 import com.widyu.admin.repository.AdminAuditLogRepository;
+import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.RefreshTokenDto;
 import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.infrastructure.ClientIpResolver;
@@ -30,6 +31,7 @@ public class AdminAuthService {
     private final AuthLimitStore authLimitStore;
     private final ClientIpResolver clientIpResolver;
     private static final String DUMMY_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    private final AdminAccessValidator adminAccessValidator;
 
     @Transactional
     public TokenPairResponse login(String email, String password) {
@@ -60,9 +62,11 @@ public class AdminAuthService {
         }
 
         Member member = localAccount.getMember();
-        if (member.getRole() != MemberRole.ADMIN) {
+        try {
+            adminAccessValidator.validateMember(member);
+        } catch (BusinessException exception) {
             authLimitStore.completeLogin(attempt, false);
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw exception;
         }
 
         authLimitStore.completeLogin(attempt, true);
@@ -79,6 +83,7 @@ public class AdminAuthService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "리프레시 토큰이 없습니다.");
         }
         RefreshTokenDto refreshTokenDto = jwtTokenProvider.retrieveRefreshToken(refreshToken);
+        adminAccessValidator.validateMemberId(refreshTokenDto.memberId());
         return jwtTokenProvider.generateTokenPair(refreshTokenDto.memberId(), MemberRole.ADMIN, "local");
     }
 }

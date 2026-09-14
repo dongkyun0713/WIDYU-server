@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.widyu.auth.application.guardian.GuardianAuthService;
+import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.dto.response.SignUpUserInfo;
@@ -42,6 +43,9 @@ class GuardianAuthTemporaryTokenSecurityTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private AdminAccessValidator adminAccessValidator;
 
     @Test
     @DisplayName("임시 토큰으로 이메일 회원가입하면 서비스까지 요청을 전달한다")

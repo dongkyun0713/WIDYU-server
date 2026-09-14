@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 
 import com.widyu.admin.application.AdminAuthService;
 import com.widyu.admin.repository.AdminAuditLogRepository;
+import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.exception.AuthRateLimitException;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -14,6 +15,7 @@ import com.widyu.global.properties.AuthLimitProperties;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.member.*;
 import com.widyu.member.repository.LocalAccountRepository;
+import com.widyu.member.repository.MemberRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,7 @@ class AdminLoginLimitRedisTest {
     @Mock private JwtTokenProvider tokens;
     @Mock private AdminAuditLogRepository audits;
     @Mock private ClientIpResolver ip;
+    @Mock private MemberRepository members;
 
     @ParameterizedTest
     @ValueSource(strings = {"missing", "password", "role"})
@@ -111,7 +114,8 @@ class AdminLoginLimitRedisTest {
 
     private AdminAuthService service(AuthLimitStore store) {
         given(ip.resolve()).willReturn("192.0.2.1");
-        return new AdminAuthService(accounts, encoder, tokens, audits, store, ip);
+        return new AdminAuthService(accounts, encoder, tokens, audits, store, ip,
+                new AdminAccessValidator(members));
     }
 
     private LocalAccount account(MemberRole role) {
