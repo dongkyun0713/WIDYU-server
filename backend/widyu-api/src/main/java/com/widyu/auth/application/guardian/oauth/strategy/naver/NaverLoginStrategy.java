@@ -63,7 +63,7 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
                     null  // 네이버는 getUserInfo API로 리프레시 토큰을 받을 수 없음
             );
         } catch (Exception e) {
-            log.error("네이버 사용자 정보 조회 실패: {}", e.getMessage(), e);
+            log.error("네이버 사용자 정보 조회 실패");
             throw new BusinessException(ErrorCode.NAVER_COMMUNICATION_ERROR);
         }
     }

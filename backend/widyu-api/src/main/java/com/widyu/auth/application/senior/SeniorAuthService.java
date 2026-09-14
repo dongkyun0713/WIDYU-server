@@ -172,7 +172,7 @@ public class SeniorAuthService {
     private SeniorProfile findByInviteCodeAndPhoneNumber(String inviteCode, String phoneNumber) {
         return seniorProfileRepository.findByInviteCodeAndMemberPhoneNumber(inviteCode, phoneNumber)
                 .orElseThrow(() -> {
-                    log.warn("초대코드로 시니어 프로필을 찾을 수 없습니다. inviteCode: {}", inviteCode);
+                    log.warn("초대코드로 시니어 프로필을 찾을 수 없습니다.");
                     return new BusinessException(ErrorCode.INVITE_CODE_NOT_FOUND);
                 });
     }

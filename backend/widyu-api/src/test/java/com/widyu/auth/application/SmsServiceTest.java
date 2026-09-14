@@ -6,8 +6,9 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.widyu.auth.VerificationCode;
-import com.widyu.auth.repository.VerificationCodeRepository;
+import com.widyu.auth.infrastructure.AuthLimitStore;
+import com.widyu.auth.infrastructure.ClientIpResolver;
+
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.CoolsmsProperties;
@@ -27,7 +28,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 class SmsServiceTest {
 
     @Mock
-    private VerificationCodeRepository verificationCodeRepository;
+    private AuthLimitStore authLimitStore;
+
+    @Mock
+    private ClientIpResolver clientIpResolver;
 
     private static final CoolsmsProperties TEST_PROPERTIES = new CoolsmsProperties(
             "test-api-key",
@@ -40,7 +44,7 @@ class SmsServiceTest {
     );
 
     private SmsService createSmsService(DefaultMessageService messageService) {
-        SmsService service = new SmsService(TEST_PROPERTIES, verificationCodeRepository);
+        SmsService service = new SmsService(TEST_PROPERTIES, authLimitStore, clientIpResolver);
         ReflectionTestUtils.setField(service, "messageService", messageService);
         return service;
     }
@@ -56,7 +60,9 @@ class SmsServiceTest {
         smsService.sendVerificationSms("01012345678", "홍길동");
 
         // then
-        verify(verificationCodeRepository).save(any(VerificationCode.class));
+        verify(authLimitStore).saveCode(org.mockito.ArgumentMatchers.eq("01012345678"),
+                org.mockito.ArgumentMatchers.matches("[0-9]{6}"), org.mockito.ArgumentMatchers.eq("홍길동"),
+                org.mockito.ArgumentMatchers.eq(300));
         verify(mockSms).send(any(Message.class));
     }
 
@@ -139,10 +145,8 @@ class SmsServiceTest {
         smsService.sendVerificationSms(phone, name);
 
         // then
-        verify(verificationCodeRepository).save(
-                org.mockito.ArgumentMatchers.argThat(
-                        vc -> vc.getPhoneNumber().equals(phone) && vc.getName().equals(name)
-                )
-        );
+        verify(authLimitStore).saveCode(org.mockito.ArgumentMatchers.eq(phone),
+                org.mockito.ArgumentMatchers.matches("[0-9]{6}"), org.mockito.ArgumentMatchers.eq(name),
+                org.mockito.ArgumentMatchers.eq(300));
     }
 }

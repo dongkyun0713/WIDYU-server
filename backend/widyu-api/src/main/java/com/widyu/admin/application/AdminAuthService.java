@@ -5,6 +5,8 @@ import com.widyu.admin.AdminAuditLog;
 import com.widyu.admin.repository.AdminAuditLogRepository;
 import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.RefreshTokenDto;
+import com.widyu.auth.infrastructure.AuthLimitStore;
+import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -27,19 +29,47 @@ public class AdminAuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final AdminAuditLogRepository adminAuditLogRepository;
     private final AdminAccessValidator adminAccessValidator;
+    private final AuthLimitStore authLimitStore;
+    private final ClientIpResolver clientIpResolver;
+    private static final String DUMMY_PASSWORD = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     @Transactional
     public TokenPairResponse login(String email, String password) {
-        LocalAccount localAccount = localAccountRepository.findByEmail(email)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_EMAIL));
+        if (email == null || email.isBlank() || email.length() > 254) {
+            throw new BusinessException(ErrorCode.INVALID_EMAIL);
+        }
+        if (password == null || password.isBlank() || password.length() > 256) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
+        }
+        String clientIp = clientIpResolver.resolve();
+        LocalAccount localAccount = localAccountRepository.findByEmail(email).orElse(null);
+        String accountKey = "unknown:" + email;
+        String encodedPassword = DUMMY_PASSWORD;
+        if (localAccount != null) {
+            accountKey = "id:" + localAccount.getId();
+            encodedPassword = localAccount.getPassword();
+        }
+        AuthLimitStore.LoginAttempt attempt = authLimitStore.reserveLogin(accountKey, clientIp);
+        boolean matches = passwordEncoder.matches(password, encodedPassword);
+        if (localAccount == null) {
+            authLimitStore.completeLogin(attempt, false);
+            throw new BusinessException(ErrorCode.INVALID_EMAIL);
+        }
 
-        if (!passwordEncoder.matches(password, localAccount.getPassword())) {
+        if (!matches) {
+            authLimitStore.completeLogin(attempt, false);
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
         Member member = localAccount.getMember();
-        adminAccessValidator.validateMember(member);
+        try {
+            adminAccessValidator.validateMember(member);
+        } catch (BusinessException exception) {
+            authLimitStore.completeLogin(attempt, false);
+            throw exception;
+        }
 
+        authLimitStore.completeLogin(attempt, true);
         TokenPairResponse tokens = jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
         adminAuditLogRepository.save(
                 AdminAuditLog.of(member.getId(), member.getName(), AdminAction.ADMIN_LOGIN, null, null, null)

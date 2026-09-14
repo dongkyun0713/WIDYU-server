@@ -66,7 +66,7 @@ public class KakaoLoginStrategy implements SocialLoginStrategy {
                     phoneNumber
             );
         } catch (Exception e) {
-            log.error("카카오 사용자 정보 조회 실패: {}", e.getMessage(), e);
+            log.error("카카오 사용자 정보 조회 실패");
             throw new BusinessException(ErrorCode.KAKAO_COMMUNICATION_ERROR);
         }
     }

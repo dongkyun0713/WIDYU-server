@@ -74,6 +74,9 @@ jobs:
         run: chmod +x gradlew
 
       # 도메인과 API 소비자를 함께 검증한다.
+      - name: Install isolated Redis test executable without starting a host service
+        run: bash scripts/ci/prepare-redis.sh
+
       - name: Build & Run Tests (domain and API)
         run: ./gradlew :backend:widyu-api:clean :backend:widyu-domain:test :backend:widyu-api:test --no-daemon
 

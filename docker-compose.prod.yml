@@ -22,6 +22,9 @@ services:
       FCM_DELIVERY_MAX_RETRIES: ${FCM_DELIVERY_MAX_RETRIES:?FCM_DELIVERY_MAX_RETRIES is required}
       FCM_DELIVERY_NORMAL_TTL: ${FCM_DELIVERY_NORMAL_TTL:?FCM_DELIVERY_NORMAL_TTL is required}
       FCM_DELIVERY_EMERGENCY_TTL: ${FCM_DELIVERY_EMERGENCY_TTL:?FCM_DELIVERY_EMERGENCY_TTL is required}
+      AUTH_PROXY_TRUSTEDCIDRS: ${AUTH_PROXY_TRUSTEDCIDRS:-}
+      # Runtime: no budget blocks SMS. validate-prod.py requires both AUTH inputs before deployment.
+      AUTH_LIMITS_SMSGLOBALDAY: ${AUTH_LIMITS_SMSGLOBALDAY:-}
 
       # Database (RDS)
       MYSQL_HOST: ${RDS_ENDPOINT:?RDS_ENDPOINT is required}
@@ -64,6 +67,8 @@ services:
   redis:
     container_name: widyu-redis-prod
     restart: always
+    # Preserve authentication counters under memory pressure; writes fail instead of evicting keys.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --maxmemory 256mb --maxmemory-policy noeviction --appendonly yes"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     logging:

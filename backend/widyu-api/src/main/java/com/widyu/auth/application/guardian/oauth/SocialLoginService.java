@@ -47,7 +47,7 @@ public class SocialLoginService {
 
     @Transactional
     public SocialLoginResponse socialLogin(String providerName, SocialLoginRequest request) {
-        log.info("소셜 로그인 시도: provider={}, platform={}", providerName, request.platform());
+        log.info("소셜 로그인 시도");
 
         SocialLoginStrategy strategy = strategyFactory.getStrategy(providerName);
         OAuthProvider provider = strategy.getSupportedProvider();
@@ -94,7 +94,7 @@ public class SocialLoginService {
         try {
             socialToken = socialTemporaryTokenService.validateAndRetrieve(socialTemporaryToken);
         } catch (BusinessException e) {
-            log.warn("소셜 임시 토큰 검증 실패: error={}", e.getMessage());
+            log.warn("소셜 임시 토큰 검증 실패");
             throw e;
         }
 
