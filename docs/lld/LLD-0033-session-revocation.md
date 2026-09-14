@@ -61,6 +61,8 @@ Member.authVersion: BIGINT NOT NULL DEFAULT 0. Member.reactivationBlocked: BOOLE
 
 ## 8. 영향 범위 / 마이그레이션
 
+통합 후 #606 요청 제한을 먼저 예약하고 Member → LocalAccount 잠금 아래 비밀번호를 검증하도록 결합했다. SMS는 Lua 원자 소비 후 기존 회원 버전을 저장한다. 2026-09-14 `feature/604-integration` 최종 전체 하네스는 API 817건·Domain 28건 모두 실패/skip 없이 통과했다. API에는 실제 MySQL 세션 경합 27건과 FCM 회귀 14건이 포함된다. 별도 결제 MySQL 6건도 통과했다. 자체 통합 review는 충돌 해결에서 권한·버전·제한을 모두 보존했음을 확인했다. 운영 알림·복원·배포 승인은 포함하지 않는다.
+
 `scripts/mysql/add_member_auth_version.sql`을 애플리케이션 전환 전에 적용한다. 구 서버를 중지하고 새 버전으로 전환해야 하며 구 서버와의 혼합 운영은 폐기를 보장하지 않는다. Redis blacklist는 eviction 시 폐기가 사라져 제외했다. DB 버전 조회·잠금은 DB 부하와 동일 회원 발급 직렬화 비용이 있다. 이미 인가되어 실행 중인 REST 요청/네트워크 전송은 소급 취소하지 않는다.
 
 WS 유휴 검사 간격은 fixedDelay 1초다. 실제 종료 지연은 검사 시간과 스케줄 지연을 더하므로 1초 이내를 보장하지 않는다. 50세션·20Hz 전체 fanout이면 초당 1,000개 outbound 전달이며 버전 검사는 1,000 + poll 50 ≈ 1,050회/초 모델이다. 가족 토픽은 전달마다 FamilyAccessService의 별도 SQL이 추가되며 지연 로딩에 따라 실제 쿼리 수가 달라진다. 연결·인바운드·업무 SQL도 별도다. 실제 RDS 부하와 개선율은 측정하지 않았다. 자세한 목표·조회 모델·실행 결과는 Git 제외 `apiDocs/api/auth/session-revocation-measurement-record.md`에 기록한다.
