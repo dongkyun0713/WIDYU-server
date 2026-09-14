@@ -11,6 +11,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CountDownLatch;
@@ -18,6 +24,109 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
+    @Test
+    @DisplayName("인증과 preflight 후 발송하면 잔여 TTL과 고정 notificationId를 플랫폼 payload에 전달한다")
+    void 인증과_검증_대기를_차감한_TTL과_중복식별자를_전달한다() throws Exception {
+        // given
+        Instant start = Instant.parse("2026-09-14T00:00:00Z");
+        MutableClock clock = new MutableClock(start);
+        List<com.fasterxml.jackson.databind.JsonNode> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        ObjectMapper mapper = new ObjectMapper();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper, () -> {
+            clock.advance(Duration.ofSeconds(30));
+            return "loopback-access-token";
+        }, Duration.ofSeconds(2), clock);
+        FcmDelivery first = new FcmDelivery(608L, 1, "loopback-token", message(), start.plusSeconds(300));
+        FcmDelivery retry = new FcmDelivery(608L, 2, "loopback-token", message(), first.expiresAt());
+        try {
+            // when
+            assertThat(transport.send(first, () -> {
+                clock.advance(Duration.ofSeconds(10));
+                return true;
+            }).success()).isTrue();
+            clock.advance(Duration.ofSeconds(20));
+            assertThat(transport.send(retry, () -> true).success()).isTrue();
+            // then: 300 - 30 OAuth - 10 preflight; retry keeps the original expiration and ID.
+            assertThat(bodies).hasSize(2);
+            assertThat(bodies.get(0).at("/message/android/ttl").asText()).isEqualTo("260s");
+            assertThat(bodies.get(1).at("/message/android/ttl").asText()).isEqualTo("210s");
+            for (var body : bodies) {
+                assertThat(body.at("/message/apns/headers/apns-expiration").asText())
+                        .isEqualTo(Long.toString(first.expiresAt().getEpochSecond()));
+                assertThat(body.at("/message/data/notificationId").isTextual()).isTrue();
+                assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("608");
+                assertThat(body.at("/message/notification/title").asText()).isEqualTo("알림");
+                assertThat(body.at("/message/token").asText()).isEqualTo("loopback-token");
+            }
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    @DisplayName("인증 또는 preflight 대기 중 만료되면 HTTP 요청을 보내지 않는다")
+    void 인증_또는_검증_중_만료는_HTTP를_차단한다(boolean expireInPreflight) throws Exception {
+        // given
+        Instant start = Instant.parse("2026-09-14T00:00:00Z");
+        MutableClock clock = new MutableClock(start);
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = countingServer(requests);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), new ObjectMapper(), () -> {
+            if (!expireInPreflight) {
+                clock.advance(Duration.ofSeconds(1));
+            }
+            return "loopback-access-token";
+        }, Duration.ofSeconds(2), clock);
+        FcmDelivery delivery = new FcmDelivery(608L, 1, "loopback-token", message(), start.plusSeconds(1));
+        try {
+            // when
+            FcmTransport.Result result = transport.send(delivery, () -> {
+                if (expireInPreflight) {
+                    clock.advance(Duration.ofSeconds(1));
+                }
+                return true;
+            });
+            // then
+            assertThat(result.success()).isFalse();
+            assertThat(result.retryable()).isFalse();
+            assertThat(result.permanentToken()).isFalse();
+            assertThat(requests.get()).isZero();
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("잔여 TTL이 1초 미만이거나 28일을 넘으면 Android 보관 한도 안으로 내림한다")
+    void 플랫폼_TTL의_초단위와_최대한도를_지킨다() throws Exception {
+        // given
+        Instant start = Instant.parse("2026-09-14T00:00:00Z");
+        ObjectMapper mapper = new ObjectMapper();
+        List<com.fasterxml.jackson.databind.JsonNode> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper, () -> "loopback-access-token",
+                Duration.ofSeconds(2), Clock.fixed(start, ZoneOffset.UTC));
+        try {
+            // when
+            assertThat(transport.send(new FcmDelivery(1L, 1, "token", message(), start.plusMillis(900)), () -> true)
+                    .success()).isTrue();
+            assertThat(transport.send(new FcmDelivery(2L, 1, "token", message(), start.plus(Duration.ofDays(30))), () -> true)
+                    .success()).isTrue();
+            // then
+            assertThat(bodies.get(0).at("/message/android/ttl").asText()).isEqualTo("0s");
+            assertThat(bodies.get(0).at("/message/apns/headers/apns-expiration").asText())
+                    .isEqualTo(Long.toString(start.getEpochSecond()));
+            assertThat(bodies.get(1).at("/message/android/ttl").asText()).isEqualTo("2419200s");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
     @Test
     @DisplayName("발송 직전 자격이 없으면 FCM 네트워크를 호출하지 않는다")
     void 발송_직전_자격_거부는_네트워크를_차단한다() throws Exception {
@@ -226,6 +335,28 @@ class FcmHttpTransportTest {
 
     private static FcmSendDto message() {
         return FcmSendDto.builder().title("알림").content("본문").build();
+    }
+
+    private static HttpServer payloadServer(ObjectMapper mapper, List<com.fasterxml.jackson.databind.JsonNode> bodies)
+            throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            bodies.add(mapper.readTree(exchange.getRequestBody()));
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        server.start();
+        return server;
+    }
+
+    private static final class MutableClock extends Clock {
+        private final AtomicReference<Instant> now;
+
+        private MutableClock(Instant start) { this.now = new AtomicReference<>(start); }
+        private void advance(Duration duration) { now.updateAndGet(value -> value.plus(duration)); }
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public Instant instant() { return now.get(); }
     }
 
     private static HttpServer countingServer(AtomicInteger requests) throws Exception {

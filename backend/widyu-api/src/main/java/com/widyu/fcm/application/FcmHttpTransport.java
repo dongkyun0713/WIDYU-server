@@ -18,9 +18,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
 
@@ -30,6 +33,7 @@ public class FcmHttpTransport implements FcmTransport {
     private final ObjectMapper mapper;
     private final AccessTokenProvider credentials;
     private final Duration totalTimeout;
+    private final Clock clock;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private final ExecutorService executor = new ThreadPoolExecutor(4, 4, 0, TimeUnit.SECONDS,
             new SynchronousQueue<>(), Thread.ofPlatform().daemon().name("fcm-http-", 0).factory(),
@@ -50,6 +54,10 @@ public class FcmHttpTransport implements FcmTransport {
     }
 
     FcmHttpTransport(URI endpoint, ObjectMapper mapper, AccessTokenProvider credentials, Duration totalTimeout) {
+        this(endpoint, mapper, credentials, totalTimeout, Clock.systemUTC());
+    }
+
+    FcmHttpTransport(URI endpoint, ObjectMapper mapper, AccessTokenProvider credentials, Duration totalTimeout, Clock clock) {
         if (totalTimeout.isZero() || totalTimeout.isNegative()) {
             throw new IllegalArgumentException("FCM total timeout must be positive");
         }
@@ -57,6 +65,7 @@ public class FcmHttpTransport implements FcmTransport {
         this.mapper = mapper;
         this.credentials = credentials;
         this.totalTimeout = totalTimeout;
+        this.clock = clock;
     }
 
     @Override
@@ -66,13 +75,22 @@ public class FcmHttpTransport implements FcmTransport {
 
     @Override
     public Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend) {
+        return send(token, dto, beforeSend, null, null);
+    }
+
+    @Override
+    public Result send(FcmDelivery delivery, BooleanSupplier beforeSend) {
+        return send(delivery.token(), delivery.message(), beforeSend, delivery.id(), delivery.expiresAt());
+    }
+
+    private Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend, Long notificationId, Instant expiresAt) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("FCM HTTP must run outside a database transaction");
         }
         long deadline = System.nanoTime() + totalTimeout.toNanos();
         Future<Result> task = null;
         try {
-            task = executor.submit(() -> execute(token, dto, beforeSend, deadline));
+            task = executor.submit(() -> execute(token, dto, beforeSend, deadline, notificationId, expiresAt));
             return task.get(totalTimeout.toNanos(), TimeUnit.NANOSECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -86,20 +104,35 @@ public class FcmHttpTransport implements FcmTransport {
         }
     }
 
-    private Result execute(String token, FcmSendDto dto, BooleanSupplier beforeSend, long deadline) throws Exception {
+    private Result execute(String token, FcmSendDto dto, BooleanSupplier beforeSend, long deadline,
+            Long notificationId, Instant expiresAt) throws Exception {
         String accessToken = credentials.get();
+        if (!beforeSend.getAsBoolean()) {
+            return Result.rejected(false);
+        }
         long remaining = deadline - System.nanoTime();
         if (remaining <= 0 || Thread.currentThread().isInterrupted()) {
             return Result.retry(Duration.ZERO);
         }
-        FcmMessageDto body = FcmMessageDto.builder().validateOnly(false)
-                .message(FcmMessageDto.Message.builder().token(token)
-                        .notification(FcmMessageDto.Notification.builder().title(dto.title())
-                                .body(dto.content()).image(dto.image()).build()).build()).build();
+        FcmMessageDto.Message.MessageBuilder message = FcmMessageDto.Message.builder().token(token)
+                .notification(FcmMessageDto.Notification.builder().title(dto.title())
+                        .body(dto.content()).image(dto.image()).build());
+        if (expiresAt != null) {
+            Instant now = clock.instant();
+            if (!expiresAt.isAfter(now)) {
+                return Result.rejected(false);
+            }
+            // FCM accepts at most 28 days and rounds Android TTL down to whole seconds.
+            long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
+            message.data(Map.of("notificationId", notificationId.toString()))
+                    .android(new FcmMessageDto.Android(ttl + "s"))
+                    .apns(new FcmMessageDto.Apns(Map.of("apns-expiration", Long.toString(expiresAt.getEpochSecond()))));
+        }
+        FcmMessageDto body = FcmMessageDto.builder().validateOnly(false).message(message.build()).build();
         HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofNanos(remaining))
                 .header("Authorization", "Bearer " + accessToken).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))).build();
-        if (!beforeSend.getAsBoolean()) {
+        if (expiresAt != null && !expiresAt.isAfter(clock.instant())) {
             return Result.rejected(false);
         }
         if (deadline - System.nanoTime() <= 0 || Thread.currentThread().isInterrupted()) {

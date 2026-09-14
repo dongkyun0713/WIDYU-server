@@ -20,6 +20,10 @@ credential refresh 뒤 HTTP 직전 별도 preflight 트랜잭션에서 소유권
 
 일반 하트와 긴급 심박이 모두 `HEART_MESSAGE`를 사용하므로 긴급 여부를 별도로 저장한다. 운영 재시도 횟수와 일반·긴급 TTL은 기본값 없는 필수 설정이다. 관리자 테스트는 제한시간이 있는 동기 발송으로 기존 HTTP 성공 토큰 수 응답을 유지한다.
 
+후속 검수에서 REQUIRED enqueue가 읽기 전용 스케줄러 트랜잭션에 참여하는 결함을 발견했다. 걷기·건강 일정 스케줄러를 쓰기 트랜잭션으로 수정한다. 모든 호출자의 외부 tx·self-invocation·동기 이벤트 경계를 조사하고 업무와 outbox의 원자성을 유지한다. 일괄 REQUIRES_NEW는 업무 rollback에도 알림이 남으므로 선택하지 않는다. 기존 앨범 조회 기록의 독립 트랜잭션은 유지한다.
+
+서버 재시도 기한만으로 FCM 수락 이후 플랫폼 보관을 제한할 수 없다. 따라서 OAuth 갱신과 preflight 이후 원래 outbox 만료까지 남은 시간을 Android ttl(초 내림, 최대 28일)에 전달하고, APNs apns-expiration에는 원래 만료의 epoch 초를 전달한다. 만료된 요청은 HTTP를 시작하지 않는다. 재시도마다 같은 outbox ID를 data.notificationId로 보내 앱 dedup 구현을 지원한다. `max-retries`는 추가 재시도 수이며 총 허용 시도는 `1 + max-retries`다. 정책값에는 운영 기본값을 두지 않는다. payload 형식은 [FCM 공식 문서](https://firebase.google.com/docs/cloud-messaging/customize-messages/setting-message-lifespan)를 따른다.
+
 관리자 테스트는 기본 30초 발송 예산 안에서 다음 토큰의 HTTP 제한시간이 남을 때만 호출한다. HTTP 직전 ACTIVE·토큰 owner와 활성 상태를 재검증하고 기존 설정 우회 동작은 유지한다. `fcm.send` timer 이름은 유지하며 기기별 durable dispatch를 측정한다.
 
 ## 고려한 대안 (Considered Options)
@@ -42,6 +46,8 @@ credential refresh 뒤 HTTP 직전 별도 preflight 트랜잭션에서 소유권
 - FCM 수락 후 finalize 전 프로세스 종료 시 중복 전달될 수 있다. exactly-once를 보장하지 않는다.
 - 발송 직전 검증 뒤 HTTP 사이에 회원·관계 상태가 변경되는 경쟁 구간은 남는다.
 - HTTP 성공은 단말 수신·화면 노출 보장이 아니다.
+- 플랫폼 보관 기한과 서버 재시도 기한은 다르다. Android TTL은 상대 기간이므로 제공자까지의 전송 지연이 남고, APNs 절대 만료 설정도 단말 도착 시각을 보장하지 않는다.
+- 이미 송신 중인 HTTP를 회수할 수 없다. notificationId를 전달해도 기존 앱 dedup은 미구현이므로 중복 제거를 보장하지 않는다.
 
 ## 후속 / 미결정
 

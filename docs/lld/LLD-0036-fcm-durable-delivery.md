@@ -64,6 +64,37 @@ FCM 장애와 프로세스 재시작 때 발송 요청이 사라지지 않도록
 5. attempts/fence를 증가시키고 CLAIMED 및 lease를 저장한 뒤 트랜잭션을 끝낸다. 인증 credential refresh는 트랜잭션 밖에서 실행한다. 인증 후 실제 HTTP 직전에 별도 REQUIRES_NEW preflight가 fence·lease·만료·수신 자격·토큰 문자열을 다시 확인한다. preflight 트랜잭션을 끝낸 다음 HTTP를 전송한다.
 6. 별도 REQUIRES_NEW finalize가 행을 잠그고 fence·상태·lease를 비교한다. 이전 worker 결과는 무시한다. 성공은 SENT와 고정 수신자 알림 이력을 함께 저장한다. 재시도 가능 실패는 다음 실행 시각을 영속화한다. 영구 무효 토큰 비활성화는 토큰 ID·고정 owner·발송 토큰 문자열을 WHERE 조건으로 둔 bulk UPDATE를 사용해 동시 계정 전환의 owner를 덮어쓰지 않는다.
 
+### 호출자 트랜잭션 경계 (후속 검수 수정)
+
+`sendMessageToUser`의 REQUIRED는 외부 readOnly를 쓰기 트랜잭션으로 승격하지 않는다. 걷기·건강 일정 스케줄러의 public 진입점을 writable로 수정한다. private helper의 self-invocation에는 새 트랜잭션을 기대하지 않으며, 스케줄 실행의 조회와 outbox 저장은 같은 트랜잭션에 둔다. 커밋 실패 시 전체 outbox와 wakeup을 취소한다. enqueue를 일괄 REQUIRES_NEW로 바꾸지 않는다.
+
+production 직접 호출 10곳과 그 외부 경계를 조사했다.
+
+| 호출 경로 | 실제 경계 |
+| --- | --- |
+| 걷기 / 건강 일정 스케줄러 | public writable → private helper → FcmService / outbox REQUIRED |
+| FcmService.sendNotificationToMember | public writable → self sendMessageToUser → 별도 outbox REQUIRED |
+| HeartMessageService | writable 업무 트랜잭션 → FcmService REQUIRED |
+| 심박 긴급 | HeartRatePersistenceService의 writable 저장·동기 이벤트 → listener REQUIRED |
+| 앨범 생성·댓글·좋아요·해금 | writable 업무 이벤트 → 동기 listener REQUIRED |
+| 앨범 영상 | 별도 빈의 @Async @Transactional → 동기 listener REQUIRED |
+| 앨범 조회 | 외부 getAlbumDetail readOnly → 기존 AlbumViewService.recordView REQUIRES_NEW writable에서 조회 기록·outbox 함께 저장 |
+| 앨범 비활성 스케줄러 | public writable → FcmService REQUIRED |
+| 복약 스케줄러의 시니어/보호자 호출 | 외부 tx 없음 → FcmService 프록시가 수신자별 writable 시작 |
+| 안전구역 | updateAndBroadcast writable → private 계산 helper → 동기 이벤트 → listener REQUIRED |
+
+enqueue하는 AFTER_COMMIT listener는 없다. AFTER_COMMIT은 이미 저장한 요청의 worker wakeup만 수행한다. 기존 앨범 조회의 REQUIRES_NEW는 조회 기록의 독립 업무 경계이며 이번에 추가한 우회가 아니다.
+
+### 서버 재시도 기한과 플랫폼 보관 기한
+
+서버는 outbox의 원래 `expiresAt` 이후 새 HTTP를 시작하지 않는다. FCM이 수락한 뒤 오프라인 단말을 기다리는 보관 기한은 별도이므로 durable 요청에 플랫폼 만료 설정도 전달한다. `FcmDelivery`는 claim에서 outbox ID와 원래 만료 시각을 유지한다. 기존 DB의 LocalDateTime은 생성에 사용하는 서버 기본 시간대로 Instant로 변환한다. 모든 worker는 같은 시간대·동기화된 시계를 사용해야 한다.
+
+OAuth 자격증명 갱신과 DB preflight가 끝난 뒤 잔여 시간을 계산한다. Android `message.android.ttl`은 잔여 초를 내림하고 FCM 한도인 28일로 제한한 `Ns` 문자열이다. 양수지만 1초 미만이면 `0s`로 보관 없이 즉시 전달만 요청한다. APNs `message.apns.headers.apns-expiration`은 원래 만료 시각을 Unix epoch 초로 내림한 문자열이다. 만료했으면 HTTP를 시작하지 않으며 직렬화 후에도 다시 검사한다. 관리자 직접 테스트는 outbox가 없으므로 이 메타데이터를 생성하지 않는다.
+
+`message.data.notificationId`는 outbox ID 문자열이다. 재시도 시 fence가 바뀌어도 이 ID와 절대 만료 시각은 유지된다. 기기별 outbox ID이므로 기기 간 공통 이벤트 ID 또는 FcmNotification 이력 ID로 해석하지 않는다. 앱이 이를 사용해 중복을 제거할 수 있지만 기존 앱 dedup은 아직 구현되지 않았다.
+
+플랫폼 보관 제한은 단말 도착·화면 표시 시각 보장이 아니다. Android TTL은 제공자 수락 시점부터의 상대 기간이라 HTTP 전송 지연도 경쟁 구간에 포함된다. 최종 검사 이후 이미 송신 중인 요청은 회수할 수 없으며, 서버가 timeout을 반환해도 FCM이 이미 수락했을 수 있다. 클라이언트 만료 검사·dedup 및 단말 실측은 이번 서버 변경의 보장 범위에 포함하지 않는다. 형식과 의미는 [FCM REST API](https://firebase.google.com/docs/reference/fcm/rest/v1/projects.messages)와 [메시지 수명 문서](https://firebase.google.com/docs/cloud-messaging/customize-messages/setting-message-lifespan)를 따른다.
+
 기존 `fcm.send` timer 이름을 유지하되 측정 단위는 claim을 획득한 기기별 durable dispatch(HTTP/preflight/finalize)로 바뀐다. 큐 대기시간과 claim 이전 시간, 단말 전달시간은 이 timer에 포함되지 않는다.
 
 기술 설정 기본값은 lease 60초, poll-delay-ms 1000, batch 50이다. `firebase.http.total-timeout` 기본값은 10초이며 인증을 포함한 호출 전체 대기시간을 제한한다. lease는 HTTP 제한시간에 5초를 더한 값보다 커야 한다. 정책 설정 `fcm.delivery.max-retries`(Integer), `normal-ttl`·`emergency-ttl`(Duration)은 필수이고 기본값이 없다. 허용 HTTP 시도는 최초 1회 + max-retries이며 테스트에만 구체적인 정책값을 명시한다. 비활성 기본 플래그로 기존 알림을 끄지 않는다.
@@ -99,10 +130,18 @@ preflight가 끝난 직후 실제 HTTP를 시작하기 전 회원·토큰·가�
 - [x] AC9: 관리자 테스트 성공 토큰 수 계약과 응원 접수 문구/Swagger가 반영된다.
 - [x] AC10: 필수 정책 설정 누락을 감지하고 운영 기본 정책값을 임의 지정하지 않는다.
 - [x] AC11: compileJava, 관련 회귀, harness verify 및 review 결과를 기록한다.
+- [x] AC12: 실제 걷기·건강 일정 스케줄러 프록시가 writable tx에서 outbox를 커밋하고, 커밋 직전 실패로 rollback하면 outbox·최초 송신·polling 송신이 없다.
+- [x] AC13: loopback에서 OAuth/preflight 대기를 차감한 Android TTL, APNs 절대 만료, 재시도 notificationId 유지 및 만료 시 HTTP 0건을 확인한다.
 
 최종 `bash scripts/harness/verify.sh`는 exit 0으로 통과했다. Gradle 전체 테스트 실행은 29초이며 Domain 28건 통과, API 574건 중 571건 통과·3건 skipped·실패/오류 0건이다. 합계 599건 통과·3건 skipped다. skipped 3건은 `test_300mb.mp4`가 없는 `VideoCompressionBenchmarkTest` 로컬 벤치마크다. outbox 통합 테스트 13건은 XML 기준 0.213초에 통과했고 HTTP 14케이스는 loopback으로 검증했다. compileJava와 정적 검사도 통과했다. 이 수치는 로컬 회귀 실행시간이며 운영 성능 실측이 아니다.
 
 리뷰의 REQUEST_CHANGES 지적을 수정하고 자체 검수 APPROVE를 받았다. 이 승인과 AC 체크는 로컬 구현·검증 범위에 한하며 운영 정책값이나 배포를 승인한 것이 아니다.
+
+위 수치와 APPROVE는 ebbb6dc 시점 기록이다. 이후 부모 독립 검수에서 두 실제 스케줄러의 readOnly 호출자 결함을 발견해 **REQUEST_CHANGES로 정정했다**. 이전 검수는 실제 호출자 경계를 빠뜨렸으며 AC1을 충분히 검증하지 못한 실패로 보존한다. 후속 회귀는 테스트 자체의 외부 tx 없이 실제 scheduler 프록시를 호출하고, 실제 FcmService·enqueue·H2를 사용한다. H2가 readOnly 쓰기를 허용해도 놓치지 않도록 실제 tx의 readOnly=false도 검사한다. 커밋 직전 예외를 주입해 outbox insert 이후 rollback 및 송신 부재를 확인한다. 후속 집중 회귀는 통과했으며 최종 harness·독립 재검수 결과는 아래에 누적한다.
+
+후속 최종 `bash scripts/harness/verify.sh`는 exit 0이다. 변경 범위 정적 검사와 compileJava(2초), API 전체 테스트(35초)가 통과했다. XML 기준 113개 suite, 582건 중 579건 통과·3건 skipped·실패/오류 0건이다. skipped는 기존 영상 파일 부재 벤치마크 3건이다. HTTP loopback 16건(1.156초), 실제 scheduler 통합 4건(0.127초), outbox 통합 13건(0.573초)이 포함된다. 후속 변경은 API에 한정되므로 Domain 테스트를 다시 실행하지 않았다. 운영 FCM·PG·AWS·MySQL 호출과 단말 전달 실측은 미실행이다.
+
+후속 독립 재검수는 코드·신규 테스트·문서·XML을 확인하고 발견 결함 0건으로 **APPROVE**했다. 자체 review도 AC1~13, 호출자의 업무 원자성, DTO/모듈 규칙, 실패 후 상태와 한계를 대조해 APPROVE했다. 이번 판정은 이전 누락을 없애지 않으며, 현재 후속 수정의 로컬 커밋 근거다. 운영 정책·배포 승인은 포함하지 않는다.
 
 ## 8. 영향 범위 / 마이그레이션
 
