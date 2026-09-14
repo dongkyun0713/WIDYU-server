@@ -52,6 +52,8 @@ class AdminCurrentAuthoritySecurityTest {
     @MockBean private MemberRepository memberRepository;
     @MockBean private LocalAccountRepository localAccountRepository;
     @MockBean private AdminAuditLogRepository adminAuditLogRepository;
+    @MockBean private com.widyu.auth.infrastructure.AuthLimitStore authLimitStore;
+    @MockBean private com.widyu.auth.infrastructure.ClientIpResolver clientIpResolver;
 
     @Test
     @DisplayName("일반 회원 refresh를 관리자 쿠키에 넣으면 발급을 거절한다")
