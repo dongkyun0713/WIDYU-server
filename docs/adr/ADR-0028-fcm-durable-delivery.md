@@ -18,11 +18,11 @@ lease와 fence로 worker 소유권을 구분하고 이전 시도의 finalize를 
 
 credential refresh 뒤 HTTP 직전 별도 preflight 트랜잭션에서 소유권·만료·자격을 다시 조회한다. 영구 무효 토큰은 ID·owner·토큰 문자열 조건의 bulk UPDATE로 비활성화해 동시 계정 전환을 덮어쓰지 않는다. 심박 긴급 이벤트도 persistence 업무 트랜잭션에서 발행해 기록과 outbox를 원자적으로 저장한다.
 
-일반 하트와 긴급 심박이 모두 `HEART_MESSAGE`를 사용하므로 긴급 여부를 별도로 저장한다. 운영 재시도 횟수와 일반·긴급 TTL은 기본값 없는 필수 설정이다. 관리자 테스트는 제한시간이 있는 동기 발송으로 기존 HTTP 성공 토큰 수 응답을 유지한다.
+일반 하트와 긴급 심박이 모두 `HEART_MESSAGE`를 사용하므로 긴급 여부를 별도로 저장한다. 운영 기본값은 2026-09-14 사용자 승인에 따라 추가 재시도 5회, 일반 24시간·긴급 5분이다. 관리자 테스트는 제한시간이 있는 동기 발송으로 기존 HTTP 성공 토큰 수 응답을 유지한다.
 
 후속 검수에서 REQUIRED enqueue가 읽기 전용 스케줄러 트랜잭션에 참여하는 결함을 발견했다. 걷기·건강 일정 스케줄러를 쓰기 트랜잭션으로 수정한다. 모든 호출자의 외부 tx·self-invocation·동기 이벤트 경계를 조사하고 업무와 outbox의 원자성을 유지한다. 일괄 REQUIRES_NEW는 업무 rollback에도 알림이 남으므로 선택하지 않는다. 기존 앨범 조회 기록의 독립 트랜잭션은 유지한다.
 
-서버 재시도 기한만으로 FCM 수락 이후 플랫폼 보관을 제한할 수 없다. 따라서 OAuth 갱신과 preflight 이후 원래 outbox 만료까지 남은 시간을 Android ttl(초 내림, 최대 28일)에 전달하고, APNs apns-expiration에는 원래 만료의 epoch 초를 전달한다. 만료된 요청은 HTTP를 시작하지 않는다. 재시도마다 같은 outbox ID를 data.notificationId로 보내 앱 dedup 구현을 지원한다. `max-retries`는 추가 재시도 수이며 총 허용 시도는 `1 + max-retries`다. 정책값에는 운영 기본값을 두지 않는다. payload 형식은 [FCM 공식 문서](https://firebase.google.com/docs/cloud-messaging/customize-messages/setting-message-lifespan)를 따른다.
+서버 재시도 기한만으로 FCM 수락 이후 플랫폼 보관을 제한할 수 없다. 따라서 OAuth 갱신과 preflight 이후 원래 outbox 만료까지 남은 시간을 Android ttl(초 내림, 최대 28일)에 전달하고, APNs apns-expiration에는 원래 만료의 epoch 초를 전달한다. 만료된 요청은 HTTP를 시작하지 않는다. 재시도마다 같은 outbox ID를 data.notificationId로 보내 앱 dedup 구현을 지원한다. `max-retries`는 추가 재시도 수이며 총 허용 시도는 `1 + max-retries`다. 승인 기본값을 운영 YAML과 Compose에 제공하되 환경변수 재정의는 배포 전에 확인한다. payload 형식은 [FCM 공식 문서](https://firebase.google.com/docs/cloud-messaging/customize-messages/setting-message-lifespan)를 따른다.
 
 관리자 테스트는 기본 30초 발송 예산 안에서 다음 토큰의 HTTP 제한시간이 남을 때만 호출한다. HTTP 직전 ACTIVE·토큰 owner와 활성 상태를 재검증하고 기존 설정 우회 동작은 유지한다. `fcm.send` timer 이름은 유지하며 기기별 durable dispatch를 측정한다.
 
@@ -51,6 +51,6 @@ credential refresh 뒤 HTTP 직전 별도 preflight 트랜잭션에서 소유권
 
 ## 후속 / 미결정
 
-- 운영 재시도 횟수 및 일반·긴급 TTL의 실제 값은 사용자 결정 대기 중이다.
-- 기존 이력의 원수신자는 불명이다. 현재 token owner 일괄 backfill, 숨김·삭제를 하지 않는다. 고정 수신자가 없는 기존 이력은 잠정적으로 기존 token.owner 조회를 유지하므로 계정 전환 노출 위험이 남는다. 이는 이력 정책의 최종 승인이 아니다.
+- 2026-09-14 사용자 승인: 최초 즉시 시도와 최대 5회 추가 재시도, 일반 발생 후 24시간·긴급 5분. 기한이 지난 긴급 요청은 EXPIRED로 보존한다.
+- 2026-09-14 사용자 승인: 원수신자 불명 이력은 DB에 보관하고 앱 목록·개수·읽음 처리에서 숨긴다. 현재 token owner로 backfill하거나 삭제하지 않는다.
 - 운영 FCM·PG·AWS 호출과 운영 MySQL 마이그레이션 검증은 수행하지 않는다.
