@@ -107,7 +107,25 @@ dependencyManagement {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'payment-mysql'
+    }
+}
+
+tasks.register('paymentMySqlTest', Test) {
+    description = 'Runs payment failure measurements against an explicitly selected disposable loopback MySQL.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'payment-mysql'
+    }
+    outputs.upToDateWhen { false }
+    doFirst {
+        if (!System.getenv('PAYMENT_MYSQL_URL')) {
+            throw new GradleException('PAYMENT_MYSQL_URL is required; MySQL measurements cannot be skipped.')
+        }
+    }
 }
 
 bootJar {

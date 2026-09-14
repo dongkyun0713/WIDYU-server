@@ -51,6 +51,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 | --- | --- | --- | --- |
 | [LLD-0031](LLD-0031-admin-current-authority.md) | 관리자 인증의 현재 권한·활성 상태 검증 | Review | #605 |
 | [LLD-0032](LLD-0032-websocket-destination-allowlist.md) | WebSocket 목적지 allowlist | Approved | #602 |
+| [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |
 | [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
 | [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |
 | [LLD-0029](LLD-0029-japan-pilot-sensitive-data-safeguards.md) | 일본 실증 민감정보 보호 장치 | Approved | #595 |
