@@ -9,6 +9,7 @@ import sys
 def validate(config):
     api = config["services"]["widyu-api"]
     environment = api["environment"]
+    validate_fcm_policy(environment)
     required = (
         "MYSQL_HOST", "MYSQL_PORT", "MYSQL_USERNAME", "MYSQL_PASSWORD", "DB_NAME",
         "REDIS_PASSWORD", "JWT_ACCESS_TOKEN_SECRET", "JWT_REFRESH_TOKEN_SECRET",
@@ -52,6 +53,18 @@ def validate(config):
     webhook = config["services"]["grafana"]["environment"].get("PROD_DISCORD_WEBHOOK_URL", "")
     if not re.fullmatch(r"https://(?:discord\.com|discordapp\.com)/api/webhooks/[0-9]+/[A-Za-z0-9_-]+", webhook):
         raise ValueError("PROD_DISCORD_WEBHOOK_URL must be a Discord HTTPS webhook")
+
+
+def validate_fcm_policy(environment):
+    retries = str(environment.get("FCM_DELIVERY_MAX_RETRIES") or "")
+    if not re.fullmatch(r"[0-9]+", retries) or int(retries) >= 2147483647:
+        raise ValueError("FCM_DELIVERY_MAX_RETRIES must be a nonnegative supported integer")
+    for key in ("FCM_DELIVERY_NORMAL_TTL", "FCM_DELIVERY_EMERGENCY_TTL"):
+        value = str(environment.get(key) or "")
+        if not re.fullmatch(r"[1-9][0-9]*s", value):
+            raise ValueError(f"{key} must be positive integer seconds with an s suffix")
+        if int(value[:-1]) > 2419200:
+            raise ValueError(f"{key} must not exceed the FCM 28-day lifetime")
 
 
 if __name__ == "__main__":

@@ -61,6 +61,9 @@ services:
 
       # FCM (공통)
       FIREBASE_CONFIG_PATH: ${FIREBASE_CONFIG_PATH:-file:/run/secrets/firebase-service-account.json}
+      FCM_DELIVERY_MAX_RETRIES: ${FCM_DELIVERY_MAX_RETRIES:-}
+      FCM_DELIVERY_NORMAL_TTL: ${FCM_DELIVERY_NORMAL_TTL:-}
+      FCM_DELIVERY_EMERGENCY_TTL: ${FCM_DELIVERY_EMERGENCY_TTL:-}
 
       # SMS (공통)
       COOLSMS_API_KEY: ${COOLSMS_API_KEY}

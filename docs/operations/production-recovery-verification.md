@@ -8,6 +8,18 @@
 
 운영 Compose는 `monitoring/grafana/alerting-prod`만 alerting provisioning 경로에 읽기 전용으로 마운트한다. 운영 Prometheus는 같은 Compose의 API·Node Exporter를 조회한다. 개발 규칙은 수정하지 않는다. 이 알림은 내부 담당자용이며 이용자 공지 위치·문구를 정하지 않는다.
 
+### 푸시 정책의 배포 입력 (#608)
+
+| 환경 변수 | 의미 | 검증 |
+| --- | --- | --- |
+| FCM_DELIVERY_MAX_RETRIES | 최초 시도 이후 추가 재시도 횟수 | 0 이상의 정수, 최대 정수값 미만 |
+| FCM_DELIVERY_NORMAL_TTL | 일반 알림의 발생 후 유효기간 | 양의 정수 초와 s 접미사 |
+| FCM_DELIVERY_EMERGENCY_TTL | 긴급 알림의 발생 후 유효기간 | 양의 정수 초와 s 접미사 |
+
+운영 기본값은 없다. 기획·운영에서 승인한 값을 입력해야 Compose 사전 검사가 진행된다. `3600s`는 입력 형식 예시이지 확정 정책이 아니다. 유효기간은 플랫폼 상한인 28일을 초과할 수 없다. Compose가 세 변수를 컨테이너로 전달하고 운영 프로파일에서 명시적으로 `fcm.delivery`에 연결한다. 테스트에서 사용하는 값과 운영 승인값을 혼동하지 않는다. 일반/긴급 재시도 기한은 즉시 최초 발송을 시도하지 않고 그 시간만큼 기다린다는 뜻이 아니다.
+
+[FCM 메시지 수명 기준](https://firebase.google.com/docs/cloud-messaging/customize-messages/setting-message-lifespan)을 함께 확인한다. 앱이 실제 수신·표시했는지는 서버의 발송 성공만으로 확정하지 않는다.
+
 ## 기본 감지 기준
 
 아래 값은 이번 구성의 시작값이며 서비스 SLO나 기획 승인으로 간주하지 않는다. 첫 운영 주간의 요청량·오탐을 보고 변경한다.

@@ -23,6 +23,8 @@ class ProductionComposeTest(unittest.TestCase):
                    RDS_PORT="3306", REDIS_PORT="6379", MYSQL_PORT="3306",
                    PROD_DOMAIN="prod.example.com", DOCKER_IMAGE_NAME="example/api",
                    PROD_DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/123/synthetic-token",
+                   FCM_DELIVERY_MAX_RETRIES="2", FCM_DELIVERY_NORMAL_TTL="3600s",
+                   FCM_DELIVERY_EMERGENCY_TTL="60s",
                    IMAGE_TAG="a" * 40, FIREBASE_CREDENTIALS_FILE="/dev/null",
                    JWT_ACCESS_TOKEN_EXPIRATION_TIME="3600",
                    JWT_REFRESH_TOKEN_EXPIRATION_TIME="1209600",
@@ -71,6 +73,20 @@ class ProductionComposeTest(unittest.TestCase):
     def test_default_grafana_password_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "GRAFANA_ADMIN_PASSWORD"):
             validator.validate(self.config(GRAFANA_ADMIN_PASSWORD="admin"))
+
+    def test_fcm_policy_is_forwarded_and_invalid_values_are_rejected(self):
+        environment = self.config()["services"]["widyu-api"]["environment"]
+        self.assertEqual(environment["FCM_DELIVERY_NORMAL_TTL"], "3600s")
+        validator.validate_fcm_policy(environment | {"FCM_DELIVERY_MAX_RETRIES": "0"})
+        for key, value in (("FCM_DELIVERY_MAX_RETRIES", "-1"),
+                           ("FCM_DELIVERY_MAX_RETRIES", "2147483647"),
+                           ("FCM_DELIVERY_NORMAL_TTL", "0s"),
+                           ("FCM_DELIVERY_NORMAL_TTL", "2419201s"),
+                           ("FCM_DELIVERY_EMERGENCY_TTL", "abc"),
+                           ("FCM_DELIVERY_EMERGENCY_TTL", "")):
+            with self.subTest(key=key, value=value):
+                with self.assertRaisesRegex(ValueError, key):
+                    validator.validate_fcm_policy(environment | {key: value})
 
     def test_production_alerting_is_mounted_with_its_own_receiver(self):
         grafana = self.config()["services"]["grafana"]

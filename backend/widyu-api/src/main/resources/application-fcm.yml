@@ -6,3 +6,16 @@ spring:
 firebase:
   config-path: ${FIREBASE_CONFIG_PATH}
   messaging-url: ${FIREBASE_MESSAGING_URL:https://fcm.googleapis.com/v1/projects/widyu-d384f/messages:send}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "prod"
+
+# Approved policy values must be supplied; tests define their own fcm.delivery values.
+fcm:
+  delivery:
+    max-retries: ${FCM_DELIVERY_MAX_RETRIES}
+    normal-ttl: ${FCM_DELIVERY_NORMAL_TTL}
+    emergency-ttl: ${FCM_DELIVERY_EMERGENCY_TTL}
