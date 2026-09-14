@@ -90,6 +90,15 @@ class ProductionComposeTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, key):
                     validator.validate_fcm_policy(environment | {key: value})
 
+    def test_approved_fcm_defaults_are_used_without_overrides(self):
+        config = self.config(FCM_DELIVERY_MAX_RETRIES="", FCM_DELIVERY_NORMAL_TTL="",
+                             FCM_DELIVERY_EMERGENCY_TTL="")
+        environment = config["services"]["widyu-api"]["environment"]
+        self.assertEqual(environment["FCM_DELIVERY_MAX_RETRIES"], "5")
+        self.assertEqual(environment["FCM_DELIVERY_NORMAL_TTL"], "86400s")
+        self.assertEqual(environment["FCM_DELIVERY_EMERGENCY_TTL"], "300s")
+        validator.validate(config)
+
     def test_production_alerting_is_mounted_with_its_own_receiver(self):
         grafana = self.config()["services"]["grafana"]
         mounts = [mount for mount in grafana["volumes"]

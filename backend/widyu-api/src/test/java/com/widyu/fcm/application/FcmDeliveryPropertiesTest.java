@@ -7,6 +7,42 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class FcmDeliveryPropertiesTest {
     @Test
+    @DisplayName("운영 설정을 읽으면 승인된 재시도 횟수와 유효기간을 적용한다")
+    void 운영_기본값은_추가5회_일반24시간_긴급5분이다() {
+        // given / when / then
+        runner()
+                .withInitializer(new org.springframework.boot.test.context.ConfigDataApplicationContextInitializer())
+                .withPropertyValues("spring.config.location=classpath:application-fcm.yml", "spring.profiles.active=prod")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    var policy = context.getBean(FcmDeliveryProperties.class);
+                    assertThat(policy.maxRetries()).isEqualTo(5);
+                    assertThat(policy.normalTtl()).isEqualTo(java.time.Duration.ofHours(24));
+                    assertThat(policy.emergencyTtl()).isEqualTo(java.time.Duration.ofMinutes(5));
+                    var now = java.time.LocalDateTime.of(2026, 9, 14, 12, 0);
+                    var row = com.widyu.fcm.FcmOutbox.builder()
+                            .state(com.widyu.fcm.FcmOutbox.State.PENDING)
+                            .availableAt(now).expiresAt(now.plus(policy.normalTtl())).build();
+                    for (int attempt = 0; attempt < 6; attempt++) {
+                        assertThat(row.claim(now, policy.lease(), policy.maxRetries())).isTrue();
+                        row.failed(true, java.time.Duration.ZERO, now, policy.maxRetries());
+                    }
+                    assertThat(row.getAttempts()).isEqualTo(6);
+                    assertThat(row.getState()).isEqualTo(com.widyu.fcm.FcmOutbox.State.EXHAUSTED);
+                    assertThat(row.claim(now, policy.lease(), policy.maxRetries())).isFalse();
+                    for (boolean emergency : new boolean[] {false, true}) {
+                        var expiring = com.widyu.fcm.FcmOutbox.builder()
+                                .state(com.widyu.fcm.FcmOutbox.State.PENDING)
+                                .availableAt(now).expiresAt(now.plus(policy.ttl(emergency))).build();
+                        assertThat(expiring.claim(now.plus(policy.ttl(emergency)), policy.lease(), policy.maxRetries()))
+                                .isFalse();
+                        assertThat(expiring.getState()).isEqualTo(com.widyu.fcm.FcmOutbox.State.EXPIRED);
+                        assertThat(expiring.getAttempts()).isZero();
+                    }
+                });
+    }
+
+    @Test
     @DisplayName("운영 정책 설정이 없으면 기동을 거부한다")
     void 정책_설정이_없으면_기동을_거부한다() {
         // given / when / then

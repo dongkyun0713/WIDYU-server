@@ -188,6 +188,12 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.findByIdAndMemberFcmToken_MemberId(notification, other)).isEmpty();
         assertThat(notifications.countByMemberFcmToken_MemberIdAndIsReadFalse(original)).isEqualTo(1);
         assertThat(notifications.countByMemberFcmToken_MemberIdAndIsReadFalse(other)).isZero();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                notifications.markAllAsReadByMemberId(other));
+        assertThat(notifications.findById(notification).orElseThrow().isRead()).isFalse();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                notifications.markAllAsReadByMemberId(original));
+        assertThat(notifications.findById(notification).orElseThrow().isRead()).isTrue();
     }
 
     @Test
@@ -256,20 +262,33 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("기존 수신자 불명 이력은 내용을 변경하지 않고 기존 조회를 유지한다")
-    void 기존_이력은_수신자를_추정하지_않는다() {
+    @DisplayName("수신자 불명 이력은 계정 전환 후에도 숨기고 원본을 보존한다")
+    void 기존_이력은_앱에서_숨기고_DB에_보존한다() {
         // given
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> notifications.save(
                 FcmNotification.builder().memberFcmToken(tokens.findAll().getFirst())
                         .title("기존제목").body("기존본문").fcmCategory(FcmCategory.ALBUM).build()));
         // when
-        List<FcmNotification> history = notifications.findNotificationsByCategoryWithCursor(
-                member, FcmCategory.ALBUM, null, PageRequest.of(0, 10));
+        Long other = transferToken();
+        Long notificationId = notifications.findAll().getFirst().getId();
+        for (Long viewer : List.of(member, other)) {
+            assertThat(notifications.findNotificationsWithCursor(viewer, null, PageRequest.of(0, 10))).isEmpty();
+            assertThat(notifications.findNotificationsByCategoryWithCursor(
+                    viewer, FcmCategory.ALBUM, null, PageRequest.of(0, 10))).isEmpty();
+            assertThat(notifications.findByIdAndMemberFcmToken_MemberId(notificationId, viewer)).isEmpty();
+            assertThat(notifications.countByMemberFcmToken_MemberIdAndIsReadFalse(viewer)).isZero();
+            assertThat(notifications.countByMemberFcmToken_MemberIdAndFcmCategoryAndIsReadFalse(
+                    viewer, FcmCategory.ALBUM)).isZero();
+            new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                    notifications.markAllAsReadByMemberId(viewer));
+        }
         // then
+        List<FcmNotification> history = notifications.findAll();
         assertThat(history).hasSize(1);
         assertThat(history.getFirst().getRecipientMember()).isNull();
         assertThat(history.getFirst().getBody()).isEqualTo("기존본문");
+        assertThat(history.getFirst().isRead()).isFalse();
     }
 
     private Long transferToken() {

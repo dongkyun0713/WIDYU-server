@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Approved (구현 범위; 운영 정책 미확정) |
+| 상태 | Approved (재시도·불명 이력 정책 사용자 승인, 운영 검증 별도) |
 | Issue | #608 (상위 #604) |
 | 관련 ADR | [ADR-0028](../adr/ADR-0028-fcm-durable-delivery.md) |
 | 작성자 | Codex |
@@ -24,8 +24,8 @@ FCM 장애와 프로세스 재시작 때 발송 요청이 사라지지 않도록
 ### Out of scope
 
 - #603 Member 엔티티·MemberRepository 변경. 현재 ACTIVE 상태를 참조한다.
-- 기존 알림 원수신자 추정·backfill·숨김·삭제 정책 확정.
-- 운영 재시도 횟수/일반·긴급 TTL 값 결정, 운영 FCM·PG·AWS 호출, push/PR/배포.
+- 기존 알림 원수신자 추정·backfill·삭제. 불명 이력의 앱 숨김은 범위에 포함한다.
+- 운영 FCM·PG·AWS 호출, push/PR/배포.
 
 ## 3. 인터페이스 / API
 
@@ -53,7 +53,7 @@ FCM 장애와 프로세스 재시작 때 발송 요청이 사라지지 않도록
 | available_at, expires_at, lease_until | DATETIME(6), 다음 실행·만료·claim 종료 시각 |
 | created_at, updated_at | DATETIME(6) |
 
-조회 인덱스는 `(state, available_at, lease_until)`이다. `FcmNotification.recipient_member_id`는 nullable member FK로 추가한다. 신규 이력은 반드시 실제 고정 수신자를 기록한다. legacy null은 현재 token.owner 조회 fallback을 잠정 유지하며 소급 보정하지 않는다.
+조회 인덱스는 `(state, available_at, lease_until)`이다. `FcmNotification.recipient_member_id`는 nullable member FK로 추가한다. 신규 이력은 반드시 실제 고정 수신자를 기록한다. legacy null은 DB에 보관하되 앱 목록·카테고리 목록·미읽음 개수·개별/전체 읽음 처리에서 제외한다. 현재 토큰 소유자로 수신자를 추정하지 않는다.
 
 ## 5. 처리 흐름
 
@@ -97,9 +97,9 @@ OAuth 자격증명 갱신과 DB preflight가 끝난 뒤 잔여 시간을 계산�
 
 기존 `fcm.send` timer 이름을 유지하되 측정 단위는 claim을 획득한 기기별 durable dispatch(HTTP/preflight/finalize)로 바뀐다. 큐 대기시간과 claim 이전 시간, 단말 전달시간은 이 timer에 포함되지 않는다.
 
-기술 설정 기본값은 lease 60초, poll-delay-ms 1000, batch 50이다. `firebase.http.total-timeout` 기본값은 10초이며 인증을 포함한 호출 전체 대기시간을 제한한다. lease는 HTTP 제한시간에 5초를 더한 값보다 커야 한다. 정책 설정 `fcm.delivery.max-retries`(Integer), `normal-ttl`·`emergency-ttl`(Duration)은 필수이고 기본값이 없다. 허용 HTTP 시도는 최초 1회 + max-retries이며 테스트에만 구체적인 정책값을 명시한다. 비활성 기본 플래그로 기존 알림을 끄지 않는다.
+기술 설정 기본값은 lease 60초, poll-delay-ms 1000, batch 50이다. `firebase.http.total-timeout` 기본값은 10초이며 인증을 포함한 호출 전체 대기시간을 제한한다. lease는 HTTP 제한시간에 5초를 더한 값보다 커야 한다. 정책 설정 `fcm.delivery.max-retries`(Integer), `normal-ttl`·`emergency-ttl`(Duration)은 운영 YAML/Compose에서 승인된 기본값 5·86400s·300s를 제공한다. 허용 HTTP 시도는 최초 1회 + max-retries이며 재시도 도중 기한이 지나면 남은 횟수와 관계없이 종료한다. 비활성 기본 플래그로 기존 알림을 끄지 않는다.
 
-배포 환경에서 `FCM_DELIVERY_MAX_RETRIES`, `FCM_DELIVERY_NORMAL_TTL`, `FCM_DELIVERY_EMERGENCY_TTL`로 주입한다. 이 이름들은 각 필수 속성에 대응하는 환경변수 자리표시자이며 승인된 실제 값은 아직 없다. 횟수는 음수가 아닌 정수, TTL은 양의 Duration이어야 한다. 승인되지 않은 예시값을 운영 파일에 복사하지 않는다.
+배포 환경에서 `FCM_DELIVERY_MAX_RETRIES`, `FCM_DELIVERY_NORMAL_TTL`, `FCM_DELIVERY_EMERGENCY_TTL`로 주입한다. 환경변수를 지정하지 않으면 사용자 승인 기본값 5·86400s·300s를 적용한다. 기존 운영 환경변수는 기본값보다 우선하므로 배포 전 실제 값이 승인 정책과 일치하는지 확인한다. 횟수는 음수가 아닌 정수, TTL은 양의 Duration이어야 한다. 승인되지 않은 예시값을 운영 파일에 복사하지 않는다.
 
 ## 6. 예외 / 에러 처리
 
@@ -132,6 +132,8 @@ preflight가 끝난 직후 실제 HTTP를 시작하기 전 회원·토큰·가�
 - [x] AC11: compileJava, 관련 회귀, harness verify 및 review 결과를 기록한다.
 - [x] AC12: 실제 걷기·건강 일정 스케줄러 프록시가 writable tx에서 outbox를 커밋하고, 커밋 직전 실패로 rollback하면 outbox·최초 송신·polling 송신이 없다.
 - [x] AC13: loopback에서 OAuth/preflight 대기를 차감한 Android TTL, APNs 절대 만료, 재시도 notificationId 유지 및 만료 시 HTTP 0건을 확인한다.
+- [x] AC14: 승인된 운영 기본값(추가 5회·24시간·5분)을 YAML/Compose에서 적용한다. 최초 포함 6회 후 EXHAUSTED, 유효기간 경계에서 EXPIRED와 추가 시도 차단을 검증한다.
+- [x] AC15: 수신자 불명 이력은 계정 전환 전후 모두 목록·개수·읽음 처리에서 제외하고 DB 원본을 보존한다. 고정 수신자 이력의 정상 조회·읽음 처리는 유지한다.
 
 최종 `bash scripts/harness/verify.sh`는 exit 0으로 통과했다. Gradle 전체 테스트 실행은 29초이며 Domain 28건 통과, API 574건 중 571건 통과·3건 skipped·실패/오류 0건이다. 합계 599건 통과·3건 skipped다. skipped 3건은 `test_300mb.mp4`가 없는 `VideoCompressionBenchmarkTest` 로컬 벤치마크다. outbox 통합 테스트 13건은 XML 기준 0.213초에 통과했고 HTTP 14케이스는 loopback으로 검증했다. compileJava와 정적 검사도 통과했다. 이 수치는 로컬 회귀 실행시간이며 운영 성능 실측이 아니다.
 
@@ -145,16 +147,16 @@ preflight가 끝난 직후 실제 HTTP를 시작하기 전 회원·토큰·가�
 
 ## 8. 영향 범위 / 마이그레이션
 
-배포 전 [create_fcm_outbox.sql](../../scripts/mysql/create_fcm_outbox.sql)을 MySQL에 적용한다. 신규 테이블 및 nullable 이력 FK만 추가하고 기존 이력 UPDATE/DELETE는 수행하지 않는다. 이력 조회·읽음 권한은 신규 고정 FK를 우선하며 null legacy는 기존 경로를 유지한다. 따라서 기존 이력 계정 전환 노출 위험은 이번 변경으로 완전히 해결되지 않는다.
+배포 전 [create_fcm_outbox.sql](../../scripts/mysql/create_fcm_outbox.sql)을 MySQL에 적용한다. 신규 테이블 및 nullable 이력 FK만 추가하고 기존 이력 UPDATE/DELETE는 수행하지 않는다. 이력 조회·읽음 권한은 고정 FK만 사용하며 null legacy는 앱에서 숨긴다. 기존 행을 삭제하거나 토큰의 현재 소유자로 일괄 보정하지 않는다.
 
-운영 설정 제공 전 배포하면 필수 설정 검증 때문에 기동하지 못한다. 정책값 승인과 주입을 배포 선행조건으로 둔다. 운영 Compose는 세 환경변수를 필수로 전달하며 사전검사는 재시도 횟수와 `Ns` 형식 TTL(최대 28일)을 검사한다. 이 SQL은 자동 실행 마이그레이션이 아니며 운영 실행은 미실행이다.
+운영 Compose는 승인 기본값을 세 환경변수로 전달하며 사전검사는 재시도 횟수와 `Ns` 형식 TTL(최대 28일)을 검사한다. 이 SQL은 자동 실행 마이그레이션이 아니며 운영 실행은 미실행이다.
 
 통합 후 로컬 MySQL 9.0.1 / REPEATABLE-READ에서 `FcmOutboxMySqlIntegrationTest` 14건이 통과했다(실패·skip 0, suite 1.325초). 기존 outbox 회귀 13건과 실제 배포 SQL 적용 후 전체 엔티티 Hibernate `validate` 검증 1건이다. 전용 loopback `fcm_resilience_` DB만 허용하며 합성 데이터의 구버전 테이블 구조를 구성한 뒤 SQL을 적용한다. `state`와 `fcm_category`는 SQL의 VARCHAR와 일치하도록 `@JdbcTypeCode(SqlTypes.VARCHAR)`를 명시한다. Hibernate의 MySQL 기본 ENUM 생성에 의존하지 않는다. 이 결과는 운영 RDS 버전·기존 데이터·실제 배포 호환 검증을 대체하지 않는다.
 
 ## 9. 미결정 사항(Open Questions)
 
-- [ ] 운영 max-retries와 normal-ttl/emergency-ttl의 실제 값. 5회·24시간·5분은 승인된 운영 기본값이 아니다.
-- [ ] 원수신자 불명인 기존 이력의 조회·보존·마이그레이션 정책. 현재 owner 일괄 backfill·숨김·삭제를 확정하지 않는다.
+- [x] 2026-09-14 사용자 대화 승인: 최초 즉시 시도 + 최대 5회 추가 재시도(총 최대 6회), 일반 발생 후 24시간·긴급 5분. 먼저 도달한 횟수/기한으로 종료하며 만료 긴급 건은 EXPIRED로 보존한다.
+- [x] 2026-09-14 사용자 대화 승인: 원수신자 불명 이력은 삭제 없이 보관하되 앱에서 숨긴다. 운영자 전용 보존 기간·삭제 정책은 별도이며 이번에 정하지 않는다.
 - [ ] 운영 HTTP/인증/DB 환경의 지연과 lease 여유 검증. 로컬 mock·loopback 결과가 운영 전달 보장을 의미하지 않는다.
 
 ## 10. 참고

@@ -13,9 +13,9 @@ spring:
     activate:
       on-profile: "prod"
 
-# Approved policy values must be supplied; tests define their own fcm.delivery values.
+# User-approved 2026-09-14: initial attempt + 5 retries; normal 24h, emergency 5m.
 fcm:
   delivery:
-    max-retries: ${FCM_DELIVERY_MAX_RETRIES}
-    normal-ttl: ${FCM_DELIVERY_NORMAL_TTL}
-    emergency-ttl: ${FCM_DELIVERY_EMERGENCY_TTL}
+    max-retries: ${FCM_DELIVERY_MAX_RETRIES:5}
+    normal-ttl: ${FCM_DELIVERY_NORMAL_TTL:86400s}
+    emergency-ttl: ${FCM_DELIVERY_EMERGENCY_TTL:300s}

@@ -13,21 +13,21 @@ import org.springframework.data.repository.query.Param;
 public interface FcmNotificationRepository extends JpaRepository<FcmNotification, Long> {
 
     @Modifying(clearAutomatically = true)
-    @Query("update FcmNotification n set n.isRead = true where n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId)")
+    @Query("update FcmNotification n set n.isRead = true where n.recipientMember.id = :memberId")
     void markAllAsReadByMemberId(@Param("memberId") Long memberId);
 
-    @Query("select n from FcmNotification n where n.id = :id and (n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId))")
+    @Query("select n from FcmNotification n where n.id = :id and (n.recipientMember.id = :memberId)")
     Optional<FcmNotification> findByIdAndMemberFcmToken_MemberId(Long id, Long memberId);
 
-    @Query("select count(n) from FcmNotification n where n.isRead = false and (n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId))")
+    @Query("select count(n) from FcmNotification n where n.isRead = false and (n.recipientMember.id = :memberId)")
     long countByMemberFcmToken_MemberIdAndIsReadFalse(Long memberId);
 
-    @Query("select count(n) from FcmNotification n where n.isRead = false and n.fcmCategory = :fcmCategory and (n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId))")
+    @Query("select count(n) from FcmNotification n where n.isRead = false and n.fcmCategory = :fcmCategory and (n.recipientMember.id = :memberId)")
     long countByMemberFcmToken_MemberIdAndFcmCategoryAndIsReadFalse(Long memberId, FcmCategory fcmCategory);
 
     @Query("""
         SELECT n FROM FcmNotification n
-        WHERE (n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId))
+        WHERE (n.recipientMember.id = :memberId)
         AND (:cursor IS NULL OR n.id < :cursor)
         ORDER BY n.id DESC
         """)
@@ -37,7 +37,7 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
 
     @Query("""
         SELECT n FROM FcmNotification n
-        WHERE (n.recipientMember.id = :memberId or (n.recipientMember is null and n.memberFcmToken.member.id = :memberId))
+        WHERE (n.recipientMember.id = :memberId)
         AND n.fcmCategory = :category
         AND (:cursor IS NULL OR n.id < :cursor)
         ORDER BY n.id DESC

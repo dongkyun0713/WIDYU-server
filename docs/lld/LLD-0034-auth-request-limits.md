@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Review — 구현 승인, 운영 정책 승인 전 |
+| 상태 | Review — 인증 초기값 사용자 승인, 전체 문자 한도 입력·운영 검증 별도 |
 | Issue | #606 |
 | 관련 ADR | ADR-0002, ADR-0025 |
 | 작성자 | Codex |
@@ -35,7 +35,7 @@ ERD-0001의 Member–LocalAccount 관계를 유지하며 JPA·ERD 변경은 없�
 5. Tomcat 첫 engine valve가 forwarding 이전 peer와 X-Forwarded-For 전체 행을 서버 속성으로 보존한다. native/framework forwarding을 이유로 시작을 거부하지 않는다. ClientIpResolver는 보존된 peer가 `auth.proxy.trusted-cidrs`에 포함될 때만 헤더를 오른쪽부터 검사하고 신뢰 프록시를 제거한 첫 비신뢰 IP를 선택한다. 기본 목록은 비어 있다. 검사 중 잘못된 IP·빈 항목을 만나거나 모든 IP가 신뢰 대상이면 peer를 사용한다. 첫 비신뢰 IP 왼쪽의 위조 입력은 무시한다. IP는 숫자 리터럴만 허용하며 IPv4/IPv6를 정규화한다. Forwarded/X-Real-IP는 사용하지 않는다. 보존 속성이 없으면 해당 인증 요청을 503으로 차단한다.
 6. 관리자 로그인도 같은 LocalAccount ID/없는 계정 이메일 및 IP 예약을 공유한다. LocalLogin과 같이 null·blank 및 이메일 254자/비밀번호 256자 초과를 조회·예약·BCrypt 전에 거부한다. 이메일 범위 오류는 INVALID_EMAIL, 비밀번호 범위 오류는 INVALID_PASSWORD다. 유효 범위의 없는 계정은 더미 비밀번호를 검사한다. 기존 INVALID_EMAIL/INVALID_PASSWORD/FORBIDDEN 계약을 유지하고 이미 생성된 예약의 인증 실패는 completeLogin(false)로 완료한다. 관리자 권한 검사 통과 후 자기 예약만 해제한다. 일반 로그인에서 남긴 실패도 관리자 성공으로 삭제되지 않는다.
 
-auth.limits 설정은 **정책 미승인 기술 기본값**이며 운영 적용 승인이 아니다.
+아래 auth.limits 초기값과 코드 오입력 5회는 **2026-09-14 사용자 대화에서 승인**됐다. 실제 구현값이 일치하며 운영 배포 승인은 별도다. 전체 문자 일일 한도는 기본값 없이 운영 배포 전에 입력한다.
 
 | 속성 | 초기값 |
 | --- | --- |
@@ -78,7 +78,7 @@ peer 보존은 embedded Tomcat engine pipeline 첫 valve라는 서버 계약이�
 
 ## 9. 미결정 사항 (Open Questions)
 사용자가 기술 기본값으로 구현을 승인했으므로 아래 운영 결정은 구현을 막지 않는다. 임의 확정하거나 배포하지 않는다.
-- 수치의 기획·운영 승인과 전체 문자 일일한도 입력값.
+- 전체 문자 일일한도 입력값(나머지 표의 초기값은 2026-09-14 승인 완료).
 - 일일 창의 달력 날짜 기준 전환 여부.
 - 실제 프록시 경로·신뢰 목록·공유 IP 영향.
 - Redis 장애·코드 소비 후 토큰 실패의 운영 대응·경보.
