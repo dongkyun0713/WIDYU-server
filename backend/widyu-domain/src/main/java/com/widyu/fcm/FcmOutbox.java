@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Getter
@@ -31,10 +33,12 @@ public class FcmOutbox extends BaseTimeEntity {
     private String image;
     private String scheme;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     private FcmCategory fcmCategory;
     @Column(nullable = false)
     private boolean emergency;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 24)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     private State state;
     @Column(nullable = false)
     private int attempts;

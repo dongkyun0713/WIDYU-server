@@ -147,7 +147,9 @@ preflight가 끝난 직후 실제 HTTP를 시작하기 전 회원·토큰·가�
 
 배포 전 [create_fcm_outbox.sql](../../scripts/mysql/create_fcm_outbox.sql)을 MySQL에 적용한다. 신규 테이블 및 nullable 이력 FK만 추가하고 기존 이력 UPDATE/DELETE는 수행하지 않는다. 이력 조회·읽음 권한은 신규 고정 FK를 우선하며 null legacy는 기존 경로를 유지한다. 따라서 기존 이력 계정 전환 노출 위험은 이번 변경으로 완전히 해결되지 않는다.
 
-운영 설정 제공 전 배포하면 필수 설정 검증 때문에 기동하지 못한다. 정책값 승인과 주입을 배포 선행조건으로 둔다. 이 SQL은 자동 실행 마이그레이션이 아니며 운영 실행·MySQL 실측은 미실행이다.
+운영 설정 제공 전 배포하면 필수 설정 검증 때문에 기동하지 못한다. 정책값 승인과 주입을 배포 선행조건으로 둔다. 운영 Compose는 세 환경변수를 필수로 전달하며 사전검사는 재시도 횟수와 `Ns` 형식 TTL(최대 28일)을 검사한다. 이 SQL은 자동 실행 마이그레이션이 아니며 운영 실행은 미실행이다.
+
+통합 후 로컬 MySQL 9.0.1 / REPEATABLE-READ에서 `FcmOutboxMySqlIntegrationTest` 14건이 통과했다(실패·skip 0, suite 1.325초). 기존 outbox 회귀 13건과 실제 배포 SQL 적용 후 전체 엔티티 Hibernate `validate` 검증 1건이다. 전용 loopback `fcm_resilience_` DB만 허용하며 합성 데이터의 구버전 테이블 구조를 구성한 뒤 SQL을 적용한다. `state`와 `fcm_category`는 SQL의 VARCHAR와 일치하도록 `@JdbcTypeCode(SqlTypes.VARCHAR)`를 명시한다. Hibernate의 MySQL 기본 ENUM 생성에 의존하지 않는다. 이 결과는 운영 RDS 버전·기존 데이터·실제 배포 호환 검증을 대체하지 않는다.
 
 ## 9. 미결정 사항(Open Questions)
 
