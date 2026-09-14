@@ -2,7 +2,7 @@
 
 ## 상태
 
-`feature/606`에서 원격 `feature/605`의 최신 head `af0f266`를 병합한다. #603의 전체 세션 폐기 변경은 포함하지 않는다.
+`feature/606`에서 원격 `feature/605`의 최신 head `af0f266`를 merge commit `7e52068`으로 병합하고 origin에 일반 push했다. #603의 전체 세션 폐기 변경은 포함하지 않는다.
 
 ## 결합 결정
 
@@ -21,7 +21,12 @@
 
 PR #610을 먼저 merge한 뒤 PR #612를 merge한다. #612는 #610을 병합해 두 보안 경계를 함께 검증한 상태이므로 #610보다 먼저 merge하면 안 된다.
 
+## 완료 기록
+
+- `AdminAuthServiceTest`, `AdminLoginLimitRedisTest`, `AdminCurrentAuthoritySecurityTest` 결합 회귀 40개가 통과했다.
+- `bash scripts/harness/verify.sh`가 정적 규칙, compileJava, API 전체 테스트와 함께 통과했다.
+- PR #612 본문에 #610 선행 의존과 `#610 merge → #612 merge` 권장 순서를 반영했다.
+
 ## 남은 조건
 
-- 전체 harness/review 결과와 merge commit hash, 일반 push 및 PR #612 본문 갱신 결과를 이 문서와 PR에 반영한다.
 - GitHub PR merge와 배포는 이번 작업 범위 밖이다.
