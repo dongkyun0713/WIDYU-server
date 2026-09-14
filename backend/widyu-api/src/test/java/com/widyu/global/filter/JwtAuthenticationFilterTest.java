@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.then;
 
 import com.widyu.global.security.JwtTokenProvider;
+import com.widyu.admin.validator.AdminAccessValidator;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +25,9 @@ class JwtAuthenticationFilterTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
 
+    @Mock
+    private AdminAccessValidator adminAccessValidator;
+
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/v1/auth/guardians/sign-up/local",
@@ -36,7 +40,7 @@ class JwtAuthenticationFilterTest {
     void 임시_토큰_API를_호출하면_액세스_토큰_검증을_건너뛴다(String requestUri)
             throws IOException, ServletException {
         // given
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtTokenProvider, adminAccessValidator);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", requestUri);
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer temporary-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
