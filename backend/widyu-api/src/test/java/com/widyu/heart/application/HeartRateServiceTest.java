@@ -12,7 +12,6 @@ import static org.mockito.Mockito.never;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
-import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
 import com.widyu.heart.HeartRateEmergency;
 import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
@@ -38,7 +37,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("HeartRateService 예외 처리 단위 테스트")
@@ -46,7 +44,6 @@ class HeartRateServiceTest {
 
     @Mock private HeartRateAnomalyDetector heartRateAnomalyDetector;
     @Mock private HeartRatePersistenceService heartRatePersistenceService;
-    @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private HeartRateResultRepository heartRateResultRepository;
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private HeartRateEmergencyRepository heartRateEmergencyRepository;
@@ -478,7 +475,6 @@ class HeartRateServiceTest {
         assertThat(response.heartRate()).isEqualTo(78);
         assertThat(response.measuredAt()).isEqualTo(measuredAt);
         assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.NORMAL);
-        then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
     }
 
     @Test
@@ -506,8 +502,8 @@ class HeartRateServiceTest {
     }
 
     @Test
-    @DisplayName("단건이 위급으로 판정되면 심박 긴급 이벤트를 발행한다")
-    void 단건이_위급으로_판정되면_긴급이벤트를_발행한다() {
+    @DisplayName("단건이 위급으로 판정되면 저장 트랜잭션에 긴급 처리를 위임한다")
+    void 단건이_위급으로_판정되면_저장_트랜잭션에_긴급_처리를_위임한다() {
         // given
         Long memberId = 1L;
         LocalDateTime measuredAt = LocalDateTime.of(2026, 8, 18, 22, 0, 0);
@@ -523,10 +519,11 @@ class HeartRateServiceTest {
                 .willReturn(savedResult);
 
         // when
-        heartRateService.processHeartRate(memberId, request);
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
 
         // then
-        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId));
+        assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.EMERGENCY);
+        assertThat(response.heartRate()).isEqualTo(190);
     }
 
     @Test

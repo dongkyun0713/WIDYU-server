@@ -224,7 +224,8 @@ public interface HeartRateDocs {
     @Operation(
             summary = "가족 메시지 전송",
             description = """
-                    같은 가족에게 50자 이내의 메시지를 FCM 알림으로 전송합니다.
+                    같은 가족에게 50자 이내의 메시지 발송 요청을 접수합니다.
+                    업무 커밋 후 비동기로 발송하며, 성공 응답은 FCM 전송 완료나 기기 수신을 보장하지 않습니다.
                     알림은 수신자의 알림 내역에 저장됩니다.
 
                     **접근 권한**:
@@ -250,14 +251,14 @@ public interface HeartRateDocs {
     )
     @ApiResponse(
             responseCode = "200",
-            description = "전송 성공",
+            description = "알림 발송 요청 접수",
             content = @Content(
                     schema = @Schema(implementation = ApiResponseTemplate.class),
                     examples = @ExampleObject(
                             value = """
                                     {
                                       "code": "HEART_2003",
-                                      "message": "메시지 전송 완료",
+                                      "message": "알림 발송 요청을 접수했습니다",
                                       "data": null
                                     }
                                     """

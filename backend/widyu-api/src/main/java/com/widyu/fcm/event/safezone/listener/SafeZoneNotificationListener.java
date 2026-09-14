@@ -14,6 +14,7 @@ import com.widyu.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public class SafeZoneNotificationListener {
     private final FamilyMembershipRepository familyMembershipRepository;
 
     @EventListener
+    @Transactional
     public void handleSafeZoneExit(SafeZoneExitEvent event) {
         Member seniorMember = memberRepository.findById(event.seniorMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -60,6 +62,8 @@ public class SafeZoneNotificationListener {
                     .fcmCategory(FcmCategory.SAFE_ZONE)
                     .scheme("")
                     .image(seniorMember.getProfileImage())
+                    .relatedMemberId(event.seniorMemberId())
+                    .emergency(true)
                     .build();
 
             fcmService.sendMessageToUser(membership.getGuardian().getId(), dto);

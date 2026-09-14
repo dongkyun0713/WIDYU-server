@@ -50,6 +50,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("시니어 포인트 동시성 통합 테스트")
 class SeniorPointConcurrencyIntegrationTest {
+    @MockBean private com.widyu.fcm.application.FcmTransport fcmTransport;
 
     @Autowired private SeniorProfileService seniorProfileService;
     @Autowired private MemberRepository memberRepository;

@@ -38,6 +38,33 @@ class HeartMessageServiceTest {
     private HeartMessageService heartMessageService;
 
     @Test
+    @DisplayName("가족에게 일반 하트를 보내면 긴급 표시 없이 발신자를 고정한다")
+    void 가족에게_일반_하트를_보내면_발신자를_고정한다() {
+        // given
+        Member sender = org.mockito.Mockito.mock(Member.class);
+        Member receiver = org.mockito.Mockito.mock(Member.class);
+        com.widyu.member.SeniorProfile profile = org.mockito.Mockito.mock(com.widyu.member.SeniorProfile.class);
+        given(memberUtil.getCurrentMember()).willReturn(sender);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(receiver));
+        given(sender.getId()).willReturn(1L);
+        given(sender.getType()).willReturn(MemberType.GUARDIAN);
+        given(receiver.getId()).willReturn(2L);
+        given(receiver.getType()).willReturn(MemberType.SENIOR);
+        given(receiver.getSeniorProfile()).willReturn(profile);
+        given(profile.getId()).willReturn(20L);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 20L)).willReturn(true);
+        org.mockito.ArgumentCaptor<FcmSendDto> captor = org.mockito.ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        heartMessageService.sendHeartMessage(new HeartMessageRequest(2L, "응원해요"));
+
+        // then
+        then(fcmService).should().sendMessageToUser(org.mockito.ArgumentMatchers.eq(2L), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().emergency()).isFalse();
+    }
+
+    @Test
     @DisplayName("수신자를 찾을 수 없으면 MEMBER_NOT_FOUND 예외를 던지고 FCM을 전송하지 않는다")
     void 수신자를_찾을_수_없으면_예외가_발생한다() {
         // given

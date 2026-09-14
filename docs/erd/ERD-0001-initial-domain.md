@@ -247,11 +247,32 @@ erDiagram
     FcmNotification {
         Long id PK
         Long member_fcm_token_id FK
+        Long recipient_member_id FK "nullable legacy only; fixed for new notifications"
         String title
         String body
         String image
         Boolean isRead
         FcmCategory fcmCategory
+    }
+
+    FcmOutbox {
+        Long id PK
+        Long recipient_member_id FK
+        Long member_fcm_token_id FK
+        Long related_member_id "nullable relationship subject"
+        Long family_id "nullable family snapshot"
+        String title
+        String body
+        String image
+        String scheme
+        FcmCategory fcmCategory
+        Boolean emergency
+        String state
+        Integer attempts
+        Long fence
+        LocalDateTime availableAt
+        LocalDateTime expiresAt
+        LocalDateTime leaseUntil
     }
 
     MemberNotificationSetting {
@@ -327,6 +348,9 @@ erDiagram
     Payment ||--|| PaymentOrder : "주문 참조"
 
     MemberFcmToken ||--o{ FcmNotification : "알림 수신"
+    Member |o--o{ FcmNotification : "고정 수신자 (기존 이력 nullable)"
+    Member ||--o{ FcmOutbox : "고정 발송 수신자"
+    MemberFcmToken ||--o{ FcmOutbox : "발송 대상 기기"
 ```
 
 ## Redis 엔티티 (MySQL 테이블 아님)

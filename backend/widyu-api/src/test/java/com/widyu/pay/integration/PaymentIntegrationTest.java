@@ -71,6 +71,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("결제 통합 테스트")
 class PaymentIntegrationTest {
+    @MockBean private com.widyu.fcm.application.FcmTransport fcmTransport;
 
     @Autowired private PaymentService paymentService;
     @Autowired private PaymentTransactionService paymentTransactionService;
