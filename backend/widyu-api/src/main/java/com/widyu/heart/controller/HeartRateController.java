@@ -94,7 +94,7 @@ public class HeartRateController implements HeartRateDocs {
         heartMessageService.sendHeartMessage(request);
         return ApiResponseTemplate.ok()
                 .code("HEART_2003")
-                .message("메시지 전송 완료")
+                .message("알림 발송 요청을 접수했습니다")
                 .build();
     }
 

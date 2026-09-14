@@ -22,6 +22,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class FcmNotification extends BaseTimeEntity {
 
+    // Null is reserved for legacy rows whose original recipient is unknown.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recipient_member_id", updatable = false)
+    private com.widyu.member.Member recipientMember;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

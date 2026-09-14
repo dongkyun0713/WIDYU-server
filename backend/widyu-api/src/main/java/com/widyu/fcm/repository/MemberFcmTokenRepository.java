@@ -9,6 +9,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 public interface MemberFcmTokenRepository extends JpaRepository<MemberFcmToken, Long> {
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("update MemberFcmToken t set t.active = false, t.expiredAt = :now where t.id = :id and t.member.id = :recipientId and t.token = :token")
+    int deactivateIfOwned(Long id, Long recipientId, String token, LocalDateTime now);
+
+    @Query("select (count(t) > 0) from MemberFcmToken t where t.id = :id and t.member.id = :recipientId and t.active = true and t.member.status = com.widyu.global.entity.Status.ACTIVE")
+    boolean isDeliverable(Long id, Long recipientId);
+
     Optional<MemberFcmToken> findByToken(String fcmToken);
 
     List<MemberFcmToken> findAllByMemberIdAndActiveTrue(Long id);
@@ -27,4 +35,3 @@ public interface MemberFcmTokenRepository extends JpaRepository<MemberFcmToken, 
     @Query("SELECT t FROM MemberFcmToken t JOIN FETCH t.member WHERE t.active = false ORDER BY t.expiredAt DESC")
     List<MemberFcmToken> findTop10InactiveOrderByExpiredAtDesc(Pageable pageable);
 }
-

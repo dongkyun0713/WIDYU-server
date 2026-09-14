@@ -44,6 +44,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("로컬 보호자 회원가입 통합 테스트")
 class LocalGuardianSignupIntegrationTest {
+    @MockBean private com.widyu.fcm.application.FcmTransport fcmTransport;
 
     @Autowired private VerificationCodeService verificationCodeService;
     @Autowired private LocalLoginService localLoginService;

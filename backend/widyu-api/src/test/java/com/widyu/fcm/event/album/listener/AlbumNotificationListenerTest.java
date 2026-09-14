@@ -1,7 +1,6 @@
 package com.widyu.fcm.event.album.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -41,8 +40,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.context.event.EventListener;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AlbumNotificationListener 예외 처리 단위 테스트")
@@ -59,14 +59,14 @@ class AlbumNotificationListenerTest {
     private AlbumNotificationListener albumNotificationListener;
 
     @Test
-    @DisplayName("앨범 이벤트 핸들러는 커밋 이후 fallback 실행으로 선언된다")
-    void 앨범_이벤트_핸들러는_커밋_이후_fallback_실행으로_선언된다() throws NoSuchMethodException {
+    @DisplayName("앨범 이벤트 핸들러는 업무 트랜잭션에 참여한다")
+    void 앨범_이벤트_핸들러는_업무_트랜잭션에_참여한다() throws NoSuchMethodException {
         // when & then
-        assertAfterCommitHandler("handleAlbumCreated", AlbumCreatedEvent.class);
-        assertAfterCommitHandler("handleAlbumViewed", AlbumViewedEvent.class);
-        assertAfterCommitHandler("handleAlbumCommented", AlbumCommentedEvent.class);
-        assertAfterCommitHandler("handleAlbumLiked", AlbumLikedEvent.class);
-        assertAfterCommitHandler("handleAlbumUnlocked", AlbumUnlockedEvent.class);
+        assertTransactionalHandler("handleAlbumCreated", AlbumCreatedEvent.class);
+        assertTransactionalHandler("handleAlbumViewed", AlbumViewedEvent.class);
+        assertTransactionalHandler("handleAlbumCommented", AlbumCommentedEvent.class);
+        assertTransactionalHandler("handleAlbumLiked", AlbumLikedEvent.class);
+        assertTransactionalHandler("handleAlbumUnlocked", AlbumUnlockedEvent.class);
     }
 
     @Test
@@ -132,8 +132,8 @@ class AlbumNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("댓글 알림 FCM 발송이 실패하면 예외를 전파하지 않는다")
-    void 댓글_알림_FCM_발송_실패_시_예외를_전파하지_않는다() {
+    @DisplayName("댓글 알림 저장이 실패하면 업무 롤백을 위해 예외를 전파한다")
+    void 댓글_알림_저장_실패_시_예외를_전파한다() {
         // given
         Member commenter = member(1L);
         Member albumAuthor = member(2L);
@@ -144,34 +144,36 @@ class AlbumNotificationListenerTest {
                 .sendMessageToUser(eq(2L), any(FcmSendDto.class));
 
         // when & then
-        assertThatCode(() -> albumNotificationListener.handleAlbumCommented(new AlbumCommentedEvent(10L, 1L, 2L)))
-                .doesNotThrowAnyException();
-        then(fcmService).should().sendMessageToUser(eq(2L), any(FcmSendDto.class));
+        assertThatThrownBy(() -> albumNotificationListener.handleAlbumCommented(new AlbumCommentedEvent(10L, 1L, 2L)))
+                .isInstanceOf(RuntimeException.class).hasMessage("fcm failed");
+        then(fcmService).should().sendMessageToUser(eq(2L), argThat(dto -> dto.relatedMemberId().equals(1L)));
     }
 
     @Test
-    @DisplayName("가족 대상 알림 중 한 수신자 FCM 발송이 실패해도 다음 수신자에게 발송을 시도한다")
-    void 가족_대상_알림_일부_FCM_발송_실패_시_다음_수신자에게_발송을_시도한다() {
+    @DisplayName("가족 알림 저장이 실패하면 예외를 전파하고 후속 저장을 중단한다")
+    void 가족_알림_저장_실패_시_예외를_전파한다() {
         // given
         Member author = member(1L);
         FamilyMembership firstMembership = membership(member(2L));
-        FamilyMembership secondMembership = membership(member(3L));
+        FamilyMembership secondMembership = mock(FamilyMembership.class);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(author));
         given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(100L));
         given(familyMembershipRepository.findAllByFamilyIdWithGuardian(100L))
                 .willReturn(List.of(firstMembership, secondMembership));
+        org.mockito.BDDMockito.willDoNothing().given(fcmService)
+                .sendMessageToUser(eq(1L), any(FcmSendDto.class));
         willThrow(new RuntimeException("fcm failed"))
                 .given(fcmService)
                 .sendMessageToUser(eq(2L), any(FcmSendDto.class));
 
         // when & then
-        assertThatCode(() -> albumNotificationListener.handleAlbumCreated(new AlbumCreatedEvent(10L, 1L)))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> albumNotificationListener.handleAlbumCreated(new AlbumCreatedEvent(10L, 1L)))
+                .isInstanceOf(RuntimeException.class).hasMessage("fcm failed");
         then(fcmService).should().sendMessageToUser(eq(1L), argThat(dto ->
                 dto.title().equals("앨범 업로드가 완료되었어요!")));
-        then(fcmService).should().sendMessageToUser(eq(2L), any(FcmSendDto.class));
-        then(fcmService).should().sendMessageToUser(eq(3L), any(FcmSendDto.class));
+        then(fcmService).should().sendMessageToUser(eq(2L), argThat(dto -> dto.relatedMemberId().equals(1L)));
+        then(fcmService).should(never()).sendMessageToUser(eq(3L), any(FcmSendDto.class));
     }
 
     @Test
@@ -188,13 +190,12 @@ class AlbumNotificationListenerTest {
         then(fcmService).should(never()).sendMessageToUser(anyLong(), any(FcmSendDto.class));
     }
 
-    private void assertAfterCommitHandler(String methodName, Class<?> eventType) throws NoSuchMethodException {
+    private void assertTransactionalHandler(String methodName, Class<?> eventType) throws NoSuchMethodException {
         Method method = AlbumNotificationListener.class.getDeclaredMethod(methodName, eventType);
-        TransactionalEventListener listener = method.getAnnotation(TransactionalEventListener.class);
+        EventListener listener = method.getAnnotation(EventListener.class);
 
         assertThat(listener).isNotNull();
-        assertThat(listener.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
-        assertThat(listener.fallbackExecution()).isTrue();
+        assertThat(method.getAnnotation(Transactional.class).propagation()).isEqualTo(Propagation.REQUIRED);
     }
 
     private FamilyMembership membership(Member guardian) {

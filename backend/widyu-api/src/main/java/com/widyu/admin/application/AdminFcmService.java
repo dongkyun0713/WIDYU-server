@@ -53,7 +53,6 @@ public class AdminFcmService {
         return AdminPageResponse.from(result);
     }
 
-    @Transactional
     public String sendTestNotification(AdminFcmTestRequest request) {
         Member member = memberRepository.findById(request.memberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));

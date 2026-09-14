@@ -62,15 +62,17 @@ class HeartRateEmergencyNotificationServiceTest {
         org.assertj.core.api.Assertions.assertThat(notification.title()).isEqualTo("시니어님의 심박수 이상이 감지되었습니다");
         org.assertj.core.api.Assertions.assertThat(notification.content()).isEqualTo("현재 상태를 확인해주세요.");
         org.assertj.core.api.Assertions.assertThat(notification.fcmCategory()).isEqualTo(FcmCategory.HEART_MESSAGE);
+        org.assertj.core.api.Assertions.assertThat(notification.emergency()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(notification.relatedMemberId()).isEqualTo(1L);
     }
 
     @Test
-    @DisplayName("한 보호자 알림 발송이 실패해도 다음 보호자 알림을 계속 발송한다")
-    void 한_보호자_알림_발송이_실패해도_다음_보호자_알림을_계속_발송한다() {
+    @DisplayName("보호자 알림 저장이 실패하면 업무 롤백을 위해 예외를 전파한다")
+    void 보호자_알림_저장이_실패하면_예외를_전파한다() {
         // given
         Member senior = org.mockito.Mockito.mock(Member.class);
         FamilyMembership firstMembership = guardianMembership(2L);
-        FamilyMembership secondMembership = guardianMembership(3L);
+        FamilyMembership secondMembership = org.mockito.Mockito.mock(FamilyMembership.class);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(senior));
         given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
@@ -81,12 +83,12 @@ class HeartRateEmergencyNotificationServiceTest {
         org.mockito.BDDMockito.willThrow(new RuntimeException("FCM 실패"))
                 .given(fcmService).sendMessageToUser(eq(2L), any());
 
-        // when
-        heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L));
-
-        // then
+        // when & then
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L)))
+                .isInstanceOf(RuntimeException.class).hasMessage("FCM 실패");
         then(fcmService).should().sendMessageToUser(eq(2L), any());
-        then(fcmService).should().sendMessageToUser(eq(3L), any());
+        then(fcmService).should(org.mockito.Mockito.never()).sendMessageToUser(eq(3L), any());
     }
 
     private FamilyMembership guardianMembership(Long guardianId) {
