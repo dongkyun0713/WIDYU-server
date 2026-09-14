@@ -1,6 +1,7 @@
 package com.widyu.admin.controller;
 
 import com.widyu.admin.application.AdminAuthService;
+import com.widyu.admin.controller.docs.AdminAuthDocs;
 import com.widyu.admin.dto.response.AdminLoginResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import jakarta.servlet.http.Cookie;
@@ -20,7 +21,7 @@ import java.util.Map;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth/admin")
-public class AdminAuthController {
+public class AdminAuthController implements AdminAuthDocs {
 
     private static final String ADMIN_REFRESH_COOKIE = "admin_refresh_token";
     private static final int COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7일
