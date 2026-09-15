@@ -11,7 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
-/** Credential refresh uses a bounded HTTP exchange, including the response body. */
+/** 자격 증명 갱신에 시간 상한을 건다. HttpRequest.timeout()은 응답 헤더까지만 덮으므로
+ *  ofByteArray로 본문 수신까지 같은 상한 안에 넣는다. */
 final class BoundedGoogleHttpTransport extends HttpTransport {
     private static final HttpClient CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
 

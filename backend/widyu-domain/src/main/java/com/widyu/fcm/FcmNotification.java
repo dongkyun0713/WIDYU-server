@@ -23,7 +23,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class FcmNotification extends BaseTimeEntity {
 
-    // Null is reserved for legacy rows whose original recipient is unknown.
+    // null은 원수신자를 알 수 없는 legacy 행을 위해 남겨둔다.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipient_member_id", updatable = false)
     private Member recipientMember;

@@ -68,7 +68,7 @@ class FcmDeliveryPropertiesTest {
     @Test
     @DisplayName("운영 YAML에 배포 환경변수를 전달하면 필수 정책으로 변환한다")
     void 운영_환경변수가_실제_YAML_속성으로_연결된다() {
-        // given / when / then: synthetic values, not approved production policy.
+        // given / when / then: 승인된 운영 정책이 아니라 임의로 만든 값이다.
         runner()
                 .withInitializer(new ConfigDataApplicationContextInitializer())
                 .withPropertyValues("spring.config.location=classpath:application-fcm.yml",

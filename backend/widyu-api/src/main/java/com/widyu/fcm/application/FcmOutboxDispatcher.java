@@ -56,7 +56,7 @@ public class FcmOutboxDispatcher {
                 });
             }
         } catch (RuntimeException exception) {
-            // DB/finalize failures leave the durable claim for lease recovery. Never log payload or tokens.
+            // DB·finalize 실패는 영속 claim을 남겨 lease 회수로 복구한다. 페이로드와 토큰은 절대 로그에 남기지 않는다.
             log.warn("FCM delivery interrupted; lease recovery required: id={}, type={}",
                     id, exception.getClass().getSimpleName());
         }

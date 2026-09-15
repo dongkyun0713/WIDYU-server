@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-/** maxRetries is the number of additional retries; total attempts are 1 + maxRetries. No policy defaults. */
+/** maxRetries는 추가 재시도 횟수이며 전체 시도는 1 + maxRetries다. 정책 값에는 기본값을 두지 않는다. */
 public record FcmDeliveryProperties(int maxRetries, Duration normalTtl, Duration emergencyTtl, Duration lease) {
     @Autowired
     public FcmDeliveryProperties(

@@ -81,7 +81,7 @@ class FcmSchedulerOutboxIntegrationTest {
         // given
         createWalk();
         observeEnqueue(false);
-        // when: no test transaction; the actual scheduler proxy must open the writable transaction.
+        // when: 테스트 트랜잭션 없이 실제 스케줄러 프록시가 쓰기 트랜잭션을 열어야 한다.
         walkScheduler.sendWalkGoalReminderToUnachieved();
         // then
         assertCommittedAndDispatch(FcmCategory.WALK);

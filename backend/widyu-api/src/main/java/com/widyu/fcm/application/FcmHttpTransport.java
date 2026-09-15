@@ -122,7 +122,7 @@ public class FcmHttpTransport implements FcmTransport {
             if (!expiresAt.isAfter(now)) {
                 return Result.rejected(false);
             }
-            // FCM accepts at most 28 days and rounds Android TTL down to whole seconds.
+            // FCM은 최대 28일까지 받고 Android TTL을 초 단위로 내림한다.
             long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
             message.data(Map.of("notificationId", notificationId.toString()))
                     .android(new FcmMessageDto.Android(ttl + "s"))
@@ -169,7 +169,7 @@ public class FcmHttpTransport implements FcmTransport {
                 }
             }
         } catch (IOException ignored) {
-            // Malformed errors never authorize token invalidation.
+            // 형식이 깨진 오류 응답으로는 토큰을 무효화하지 않는다.
         }
         return false;
     }
@@ -184,7 +184,7 @@ public class FcmHttpTransport implements FcmTransport {
                     return delay;
                 }
             } catch (RuntimeException invalidDate) {
-                // Missing/invalid provider delay uses the persisted retry schedule.
+                // 제공자 지연 값이 없거나 잘못되면 영속화된 재시도 일정을 따른다.
             }
             return Duration.ZERO;
         }

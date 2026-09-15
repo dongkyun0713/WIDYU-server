@@ -52,7 +52,7 @@ class FcmHttpTransportTest {
             }).success()).isTrue();
             clock.advance(Duration.ofSeconds(20));
             assertThat(transport.send(retry, () -> true).success()).isTrue();
-            // then: 300 - 30 OAuth - 10 preflight; retry keeps the original expiration and ID.
+            // then: 300 - OAuth 30 - preflight 10이며, 재시도는 최초 만료 시각과 ID를 유지한다.
             assertThat(bodies).hasSize(2);
             assertThat(bodies.get(0).at("/message/android/ttl").asText()).isEqualTo("260s");
             assertThat(bodies.get(1).at("/message/android/ttl").asText()).isEqualTo("210s");
@@ -301,7 +301,7 @@ class FcmHttpTransportTest {
             try {
                 Thread.sleep(400);
             } catch (InterruptedException ignored) {
-                // Simulate a credential implementation that ignores cancellation.
+                // 취소를 무시하는 자격 증명 구현을 흉내 낸다.
             }
             return "test-access-token";
         }, Duration.ofMillis(80));

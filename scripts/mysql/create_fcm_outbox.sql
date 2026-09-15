@@ -1,5 +1,5 @@
--- #608: apply before deploying the outbox application.
--- Legacy notification recipients remain NULL; no owner backfill or deletion.
+-- #608: outbox 애플리케이션을 배포하기 전에 적용한다.
+-- legacy 알림의 수신자는 NULL로 두며 owner backfill이나 삭제를 하지 않는다.
 ALTER TABLE fcm_notification
     ADD COLUMN recipient_member_id BIGINT NULL,
     ADD CONSTRAINT fk_fcm_notification_recipient FOREIGN KEY (recipient_member_id) REFERENCES member (id),
