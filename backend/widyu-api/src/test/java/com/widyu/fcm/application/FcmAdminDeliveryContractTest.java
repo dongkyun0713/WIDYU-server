@@ -7,7 +7,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.MemberFcmToken;
@@ -26,16 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class FcmAdminDeliveryContractTest {
-    @Test
-    @DisplayName("관리자 예산이 단일 HTTP 제한과 같으면 잘못된 설정으로 거부한다")
-    void 관리자_예산이_HTTP와_같으면_거부한다() {
-        // given
-        givenTimeouts(Duration.ofSeconds(10), Duration.ofSeconds(10));
-
-        // when / then
-        assertThatThrownBy(fcmService::validateTimeouts)
-                .isInstanceOf(IllegalArgumentException.class);
-    }
     @Mock private FcmOutboxService outboxService;
     @Mock private FcmTransport transport;
     @Mock private MemberFcmTokenRepository memberFcmTokenRepository;
@@ -104,8 +93,10 @@ class FcmAdminDeliveryContractTest {
     }
 
     private void givenTimeouts(Duration http, Duration admin) {
-        ReflectionTestUtils.setField(fcmService, "httpTimeout", http);
-        ReflectionTestUtils.setField(fcmService, "adminTimeout", admin);
+        ReflectionTestUtils.setField(fcmService, "deliveryProperties", new FcmDeliveryProperties(
+                5, Duration.ofHours(24), Duration.ofMinutes(5), Duration.ofSeconds(60), admin));
+        ReflectionTestUtils.setField(fcmService, "firebaseProperties", new FirebaseProperties(
+                "classpath:firebase.json", new FirebaseProperties.Http(http)));
     }
 
     private MemberFcmToken token(String value) {

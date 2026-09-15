@@ -28,6 +28,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -42,10 +43,10 @@ import static org.mockito.BDDMockito.*;
 
 @DataJpaTest(properties = {"fcm.delivery.max-retries=2", "fcm.delivery.normal-ttl=1h", "fcm.delivery.emergency-ttl=1m"})
 @ActiveProfiles("test")
+@EnableConfigurationProperties({FcmDeliveryProperties.class, FirebaseProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({JpaAuditingConfig.class, FcmService.class, FcmOutboxService.class, FcmOutboxTransactions.class,
-        FcmEligibility.class, NotificationSettingService.class, FcmDeliveryProperties.class,
-        WalkNotificationListener.class, HealthScheduleNotificationListener.class})
+        FcmEligibility.class, NotificationSettingService.class,         WalkNotificationListener.class, HealthScheduleNotificationListener.class})
 class FcmSchedulerOutboxIntegrationTest {
     @Autowired WalkNotificationListener walkScheduler;
     @Autowired HealthScheduleNotificationListener healthScheduler;

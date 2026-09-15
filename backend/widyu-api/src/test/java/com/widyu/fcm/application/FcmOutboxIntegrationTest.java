@@ -24,6 +24,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
@@ -36,9 +37,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest(properties = {"fcm.delivery.max-retries=5", "fcm.delivery.normal-ttl=24h", "fcm.delivery.emergency-ttl=5m"})
 @ActiveProfiles("test")
+@EnableConfigurationProperties({FcmDeliveryProperties.class, FirebaseProperties.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({JpaAuditingConfig.class, FcmOutboxService.class, FcmOutboxTransactions.class,
-        FcmEligibility.class, NotificationSettingService.class, FcmDeliveryProperties.class})
+        FcmEligibility.class, NotificationSettingService.class})
 class FcmOutboxIntegrationTest {
     @Autowired FcmOutboxService service;
     @Autowired FcmOutboxTransactions transactions;

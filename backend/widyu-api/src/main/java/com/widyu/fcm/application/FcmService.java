@@ -20,17 +20,14 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
@@ -40,18 +37,8 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class FcmService {
 
-    @Value("${firebase.http.total-timeout:10s}")
-    private Duration httpTimeout;
-    @Value("${fcm.delivery.admin-timeout:30s}")
-    private Duration adminTimeout;
-
-    @PostConstruct
-    void validateTimeouts() {
-        if (httpTimeout.isZero() || httpTimeout.isNegative() || adminTimeout.compareTo(httpTimeout) <= 0) {
-            throw new IllegalArgumentException("fcm.delivery.admin-timeout은 양수인 firebase.http.total-timeout보다 커야 합니다.");
-        }
-    }
-
+    private final FcmDeliveryProperties deliveryProperties;
+    private final FirebaseProperties firebaseProperties;
     private final FcmOutboxService outboxService;
     private final FcmTransport transport;
     private final FcmNotificationRepository fcmNotificationRepository;
@@ -126,10 +113,10 @@ public class FcmService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int sendTestMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
         int sent = 0;
-        long deadline = System.nanoTime() + adminTimeout.toNanos();
+        long deadline = System.nanoTime() + deliveryProperties.adminTimeout().toNanos();
         List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(memberId);
         for (MemberFcmToken tokenEntity : tokens) {
-            if (deadline - System.nanoTime() < httpTimeout.toNanos()) {
+            if (deadline - System.nanoTime() < firebaseProperties.http().totalTimeout().toNanos()) {
                 break;
             }
             if (transport.send(tokenEntity.getToken(), fcmSendDto,

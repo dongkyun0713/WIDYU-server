@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Import;
 
 class FcmDeliveryPropertiesTest {
     @Test
@@ -49,6 +51,16 @@ class FcmDeliveryPropertiesTest {
     }
 
     @Test
+    @DisplayName("관리자 예산이 단일 HTTP 제한과 같으면 기동을 거부한다")
+    void 관리자_예산이_HTTP와_같으면_기동을_거부한다() {
+        // given / when / then
+        runner()
+                .withPropertyValues("fcm.delivery.max-retries=5", "fcm.delivery.normal-ttl=24h",
+                        "fcm.delivery.emergency-ttl=5m", "fcm.delivery.admin-timeout=10s")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
     @DisplayName("lease가 HTTP 제한보다 짧으면 기동을 거부한다")
     void 짧은_lease면_기동을_거부한다() {
         // given / when / then
@@ -62,8 +74,12 @@ class FcmDeliveryPropertiesTest {
         return new ApplicationContextRunner()
                 .withInitializer(context -> context.getBeanFactory().setConversionService(
                         ApplicationConversionService.getSharedInstance()))
-                .withUserConfiguration(FcmDeliveryProperties.class);
+                .withUserConfiguration(FcmPropertiesConfig.class);
     }
+
+    @EnableConfigurationProperties({FcmDeliveryProperties.class, FirebaseProperties.class})
+    @Import(FcmTimeoutValidator.class)
+    static class FcmPropertiesConfig {}
 
     @Test
     @DisplayName("운영 YAML에 배포 환경변수를 전달하면 필수 정책으로 변환한다")

@@ -7,7 +7,6 @@ import com.widyu.fcm.dto.FcmMessageDto;
 import com.widyu.fcm.dto.FcmSendDto;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -41,16 +40,15 @@ public class FcmHttpTransport implements FcmTransport {
 
     @Autowired
     public FcmHttpTransport(FcmMessagingUrl url, ObjectMapper mapper, ResourceLoader loader,
-            @Value("${firebase.config-path}") String path,
-            @Value("${firebase.http.total-timeout:10s}") Duration totalTimeout) {
+            FirebaseProperties properties) {
         this(url.value(), mapper, () -> {
-            try (var stream = loader.getResource(path).getInputStream()) {
+            try (var stream = loader.getResource(properties.configPath()).getInputStream()) {
                 GoogleCredentials google = GoogleCredentials.fromStream(stream, BoundedGoogleHttpTransport::new)
                         .createScoped(List.of("https://www.googleapis.com/auth/firebase.messaging"));
                 google.refreshIfExpired();
                 return google.getAccessToken().getTokenValue();
             }
-        }, totalTimeout);
+        }, properties.http().totalTimeout());
     }
 
     FcmHttpTransport(URI endpoint, ObjectMapper mapper, AccessTokenProvider credentials, Duration totalTimeout) {
