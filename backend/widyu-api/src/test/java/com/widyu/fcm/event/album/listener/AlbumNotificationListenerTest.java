@@ -173,7 +173,7 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(1L), argThat(dto ->
                 dto.title().equals("앨범 업로드가 완료되었어요!")));
         then(fcmService).should().sendMessageToUser(eq(2L), argThat(dto -> dto.relatedMemberId().equals(1L)));
-        then(fcmService).should(never()).sendMessageToUser(eq(3L), any(FcmSendDto.class));
+        then(secondMembership).should(never()).getGuardian();
     }
 
     @Test

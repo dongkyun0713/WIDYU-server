@@ -49,7 +49,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
-| [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 정책 미확정) | #608 |
+| [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
 | [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
 | [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |
 | [LLD-0029](LLD-0029-japan-pilot-sensitive-data-safeguards.md) | 일본 실증 민감정보 보호 장치 | Approved | #595 |

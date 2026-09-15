@@ -88,7 +88,7 @@ class HeartRateEmergencyNotificationServiceTest {
                 heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L)))
                 .isInstanceOf(RuntimeException.class).hasMessage("FCM 실패");
         then(fcmService).should().sendMessageToUser(eq(2L), any());
-        then(fcmService).should(org.mockito.Mockito.never()).sendMessageToUser(eq(3L), any());
+        then(secondMembership).should(org.mockito.Mockito.never()).getGuardian();
     }
 
     private FamilyMembership guardianMembership(Long guardianId) {
