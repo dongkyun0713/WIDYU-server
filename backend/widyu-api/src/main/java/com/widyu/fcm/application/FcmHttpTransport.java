@@ -59,7 +59,7 @@ public class FcmHttpTransport implements FcmTransport {
 
     FcmHttpTransport(URI endpoint, ObjectMapper mapper, AccessTokenProvider credentials, Duration totalTimeout, Clock clock) {
         if (totalTimeout.isZero() || totalTimeout.isNegative()) {
-            throw new IllegalArgumentException("FCM total timeout must be positive");
+            throw new IllegalArgumentException("firebase.http.total-timeout은 양수여야 합니다.");
         }
         this.endpoint = endpoint;
         this.mapper = mapper;
@@ -85,7 +85,7 @@ public class FcmHttpTransport implements FcmTransport {
 
     private Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend, Long notificationId, Instant expiresAt) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            throw new IllegalStateException("FCM HTTP must run outside a database transaction");
+            throw new IllegalStateException("FCM HTTP 호출은 DB 트랜잭션 밖에서 실행해야 합니다.");
         }
         long deadline = System.nanoTime() + totalTimeout.toNanos();
         Future<Result> task = null;

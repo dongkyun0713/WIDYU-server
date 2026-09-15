@@ -17,7 +17,7 @@ public record FcmDeliveryProperties(int maxRetries, Duration normalTtl, Duration
             @Value("${firebase.http.total-timeout:10s}") Duration httpTimeout) {
         this(maxRetries, normalTtl, emergencyTtl, lease);
         if (lease.compareTo(httpTimeout.plusSeconds(5)) <= 0) {
-            throw new IllegalArgumentException("FCM lease must exceed HTTP deadline plus 5 seconds");
+            throw new IllegalArgumentException("fcm.delivery.lease는 firebase.http.total-timeout보다 5초 넘게 커야 합니다.");
         }
     }
 
@@ -25,7 +25,7 @@ public record FcmDeliveryProperties(int maxRetries, Duration normalTtl, Duration
         if (maxRetries < 0 || maxRetries == Integer.MAX_VALUE || normalTtl == null || emergencyTtl == null
                 || lease == null || normalTtl.isNegative() || normalTtl.isZero()
                 || emergencyTtl.isNegative() || emergencyTtl.isZero() || lease.isNegative() || lease.isZero()) {
-            throw new IllegalArgumentException("FCM retry count and positive TTL/lease are required");
+            throw new IllegalArgumentException("fcm.delivery.max-retries는 0 이상이어야 하고 normal-ttl, emergency-ttl, lease는 모두 양수여야 합니다.");
         }
     }
 
