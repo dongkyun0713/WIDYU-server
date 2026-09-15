@@ -20,13 +20,17 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 
@@ -36,12 +40,12 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class FcmService {
 
-    @org.springframework.beans.factory.annotation.Value("${firebase.http.total-timeout:10s}")
-    private java.time.Duration httpTimeout = java.time.Duration.ofSeconds(10);
-    @org.springframework.beans.factory.annotation.Value("${fcm.delivery.admin-timeout:30s}")
-    private java.time.Duration adminTimeout = java.time.Duration.ofSeconds(30);
+    @Value("${firebase.http.total-timeout:10s}")
+    private Duration httpTimeout = Duration.ofSeconds(10);
+    @Value("${fcm.delivery.admin-timeout:30s}")
+    private Duration adminTimeout = Duration.ofSeconds(30);
 
-    @jakarta.annotation.PostConstruct
+    @PostConstruct
     void validateTimeouts() {
         if (httpTimeout.isZero() || httpTimeout.isNegative() || adminTimeout.compareTo(httpTimeout) <= 0) {
             throw new IllegalArgumentException("FCM admin timeout must exceed a positive HTTP timeout");
@@ -119,7 +123,7 @@ public class FcmService {
         outboxService.enqueue(memberId, fcmSendDto);
     }
 
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int sendTestMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
         int sent = 0;
         long deadline = System.nanoTime() + adminTimeout.toNanos();

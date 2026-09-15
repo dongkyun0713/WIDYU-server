@@ -1,8 +1,11 @@
 package com.widyu.fcm.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class FcmDeliveryPropertiesTest {
@@ -11,14 +14,14 @@ class FcmDeliveryPropertiesTest {
     void 운영_기본값은_추가5회_일반24시간_긴급5분이다() {
         // given / when / then
         runner()
-                .withInitializer(new org.springframework.boot.test.context.ConfigDataApplicationContextInitializer())
+                .withInitializer(new ConfigDataApplicationContextInitializer())
                 .withPropertyValues("spring.config.location=classpath:application-fcm.yml", "spring.profiles.active=prod")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     FcmDeliveryProperties properties = context.getBean(FcmDeliveryProperties.class);
                     assertThat(properties.maxRetries()).isEqualTo(5);
-                    assertThat(properties.normalTtl()).isEqualTo(java.time.Duration.ofHours(24));
-                    assertThat(properties.emergencyTtl()).isEqualTo(java.time.Duration.ofMinutes(5));
+                    assertThat(properties.normalTtl()).isEqualTo(Duration.ofHours(24));
+                    assertThat(properties.emergencyTtl()).isEqualTo(Duration.ofMinutes(5));
                 });
     }
 
@@ -40,8 +43,8 @@ class FcmDeliveryPropertiesTest {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     FcmDeliveryProperties properties = context.getBean(FcmDeliveryProperties.class);
-                    assertThat(properties.ttl(false)).isEqualTo(java.time.Duration.ofHours(24));
-                    assertThat(properties.ttl(true)).isEqualTo(java.time.Duration.ofMinutes(5));
+                    assertThat(properties.ttl(false)).isEqualTo(Duration.ofHours(24));
+                    assertThat(properties.ttl(true)).isEqualTo(Duration.ofMinutes(5));
                 });
     }
 
@@ -58,7 +61,7 @@ class FcmDeliveryPropertiesTest {
     private ApplicationContextRunner runner() {
         return new ApplicationContextRunner()
                 .withInitializer(context -> context.getBeanFactory().setConversionService(
-                        org.springframework.boot.convert.ApplicationConversionService.getSharedInstance()))
+                        ApplicationConversionService.getSharedInstance()))
                 .withUserConfiguration(FcmDeliveryProperties.class);
     }
 
@@ -67,7 +70,7 @@ class FcmDeliveryPropertiesTest {
     void 운영_환경변수가_실제_YAML_속성으로_연결된다() {
         // given / when / then: synthetic values, not approved production policy.
         runner()
-                .withInitializer(new org.springframework.boot.test.context.ConfigDataApplicationContextInitializer())
+                .withInitializer(new ConfigDataApplicationContextInitializer())
                 .withPropertyValues("spring.config.location=classpath:application-fcm.yml",
                         "spring.profiles.active=prod",
                         "FCM_DELIVERY_MAX_RETRIES=2", "FCM_DELIVERY_NORMAL_TTL=3600s",
@@ -76,8 +79,8 @@ class FcmDeliveryPropertiesTest {
                     assertThat(context).hasNotFailed();
                     FcmDeliveryProperties properties = context.getBean(FcmDeliveryProperties.class);
                     assertThat(properties.maxRetries()).isEqualTo(2);
-                    assertThat(properties.normalTtl()).isEqualTo(java.time.Duration.ofHours(1));
-                    assertThat(properties.emergencyTtl()).isEqualTo(java.time.Duration.ofMinutes(1));
+                    assertThat(properties.normalTtl()).isEqualTo(Duration.ofHours(1));
+                    assertThat(properties.emergencyTtl()).isEqualTo(Duration.ofMinutes(1));
                 });
     }
 }

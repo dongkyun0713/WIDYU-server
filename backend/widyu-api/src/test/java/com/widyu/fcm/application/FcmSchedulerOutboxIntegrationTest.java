@@ -20,6 +20,7 @@ import com.widyu.walk.Walk;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -153,7 +154,7 @@ class FcmSchedulerOutboxIntegrationTest {
         given(transport.send(any(FcmDelivery.class), any())).willAnswer(invocation -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             assertThat(outbox.findById(id).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CLAIMED);
-            java.util.function.BooleanSupplier preflight = invocation.getArgument(1);
+            BooleanSupplier preflight = invocation.getArgument(1);
             assertThat(preflight.getAsBoolean()).isTrue();
             return FcmTransport.Result.delivered();
         });

@@ -21,6 +21,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
@@ -30,7 +35,7 @@ class FcmHttpTransportTest {
         // given
         Instant start = Instant.parse("2026-09-14T00:00:00Z");
         MutableClock clock = new MutableClock(start);
-        List<com.fasterxml.jackson.databind.JsonNode> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
         ObjectMapper mapper = new ObjectMapper();
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper, () -> {
@@ -106,7 +111,7 @@ class FcmHttpTransportTest {
         // given
         Instant start = Instant.parse("2026-09-14T00:00:00Z");
         ObjectMapper mapper = new ObjectMapper();
-        List<com.fasterxml.jackson.databind.JsonNode> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper, () -> "loopback-access-token",
                 Duration.ofSeconds(2), Clock.fixed(start, ZoneOffset.UTC));
@@ -161,15 +166,15 @@ class FcmHttpTransportTest {
             refreshing.countDown();
             try {
                 if (!refreshed.await(2, TimeUnit.SECONDS)) {
-                    throw new java.io.IOException("Test credential refresh deadline");
+                    throw new IOException("Test credential refresh deadline");
                 }
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
-                throw new java.io.IOException(exception);
+                throw new IOException(exception);
             }
             return "test-access-token";
         }, Duration.ofSeconds(3));
-        var caller = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var caller = Executors.newSingleThreadExecutor();
         try {
             // when
             var pending = caller.submit(() -> transport.send("test-token", message(), eligible::get));
@@ -337,7 +342,7 @@ class FcmHttpTransportTest {
         return FcmSendDto.builder().title("알림").content("본문").build();
     }
 
-    private static HttpServer payloadServer(ObjectMapper mapper, List<com.fasterxml.jackson.databind.JsonNode> bodies)
+    private static HttpServer payloadServer(ObjectMapper mapper, List<JsonNode> bodies)
             throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
@@ -385,7 +390,7 @@ class FcmHttpTransportTest {
             if (retryAfter != null) {
                 exchange.getResponseHeaders().add("Retry-After", retryAfter);
             }
-            byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status, bytes.length);
             try {
                 Thread.sleep(bodyDelay);

@@ -1,6 +1,7 @@
 package com.widyu.fcm;
 
 import com.widyu.global.entity.BaseTimeEntity;
+import com.widyu.member.Member;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -25,7 +26,7 @@ public class FcmNotification extends BaseTimeEntity {
     // Null is reserved for legacy rows whose original recipient is unknown.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipient_member_id", updatable = false)
-    private com.widyu.member.Member recipientMember;
+    private Member recipientMember;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -161,7 +162,7 @@ class AlbumNotificationListenerTest {
         given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(100L));
         given(familyMembershipRepository.findAllByFamilyIdWithGuardian(100L))
                 .willReturn(List.of(firstMembership, secondMembership));
-        org.mockito.BDDMockito.willDoNothing().given(fcmService)
+        willDoNothing().given(fcmService)
                 .sendMessageToUser(eq(1L), any(FcmSendDto.class));
         willThrow(new RuntimeException("fcm failed"))
                 .given(fcmService)

@@ -4,6 +4,7 @@ import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
+import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ public class FcmOutboxTransactions {
     private final FcmNotificationRepository notifications;
     private final FcmEligibility eligibility;
     private final FcmDeliveryProperties properties;
-    private final com.widyu.fcm.repository.MemberFcmTokenRepository tokens;
+    private final MemberFcmTokenRepository tokens;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FcmDelivery claim(Long id) {

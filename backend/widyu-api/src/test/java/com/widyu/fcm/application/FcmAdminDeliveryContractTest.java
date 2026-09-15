@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.MemberFcmToken;
@@ -29,9 +30,9 @@ class FcmAdminDeliveryContractTest {
     @DisplayName("관리자 예산이 단일 HTTP 제한과 같으면 잘못된 설정으로 거부한다")
     void 관리자_예산이_HTTP와_같으면_거부한다() {
         // given
-        org.springframework.test.util.ReflectionTestUtils.setField(fcmService, "adminTimeout", Duration.ofSeconds(10));
+        ReflectionTestUtils.setField(fcmService, "adminTimeout", Duration.ofSeconds(10));
         // when / then
-        org.assertj.core.api.Assertions.assertThatThrownBy(fcmService::validateTimeouts)
+        assertThatThrownBy(fcmService::validateTimeouts)
                 .isInstanceOf(IllegalArgumentException.class);
     }
     @Mock private FcmOutboxService outboxService;

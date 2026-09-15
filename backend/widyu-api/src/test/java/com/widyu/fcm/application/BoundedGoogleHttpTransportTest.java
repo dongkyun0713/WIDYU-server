@@ -9,6 +9,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.*;
 
 class BoundedGoogleHttpTransportTest {
@@ -48,7 +51,7 @@ class BoundedGoogleHttpTransportTest {
     void 자격증명_응답_본문_지연을_제한한다() throws Exception {
         // given
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+        server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.createContext("/token", exchange -> {
             exchange.sendResponseHeaders(200, 10);
             try {
@@ -66,11 +69,11 @@ class BoundedGoogleHttpTransportTest {
             request.setNumberOfRetries(0);
             // when / then
             long start = System.nanoTime();
-            assertThatThrownBy(request::execute).isInstanceOf(java.io.IOException.class);
+            assertThatThrownBy(request::execute).isInstanceOf(IOException.class);
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(4));
         } finally {
             server.stop(0);
-            ((java.util.concurrent.ExecutorService) server.getExecutor()).shutdownNow();
+            ((ExecutorService) server.getExecutor()).shutdownNow();
         }
     }
 }

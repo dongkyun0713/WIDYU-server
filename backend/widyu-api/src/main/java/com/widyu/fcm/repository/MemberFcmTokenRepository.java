@@ -6,11 +6,13 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface MemberFcmTokenRepository extends JpaRepository<MemberFcmToken, Long> {
-    @org.springframework.data.jpa.repository.Modifying
-    @org.springframework.transaction.annotation.Transactional
+    @Modifying
+    @Transactional
     @Query("update MemberFcmToken t set t.active = false, t.expiredAt = :now where t.id = :id and t.member.id = :recipientId and t.token = :token")
     int deactivateIfOwned(Long id, Long recipientId, String token, LocalDateTime now);
 

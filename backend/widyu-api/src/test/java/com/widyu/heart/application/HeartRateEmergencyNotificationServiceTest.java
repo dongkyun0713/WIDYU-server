@@ -1,9 +1,14 @@
 package com.widyu.heart.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.application.FcmService;
@@ -40,9 +45,9 @@ class HeartRateEmergencyNotificationServiceTest {
     @DisplayName("심박 긴급 상태가 발생하면 가족 보호자에게 알림을 발송한다")
     void 심박_긴급_상태가_발생하면_가족_보호자에게_알림을_발송한다() {
         // given
-        Member senior = org.mockito.Mockito.mock(Member.class);
-        FamilyMembership membership = org.mockito.Mockito.mock(FamilyMembership.class);
-        Member guardian = org.mockito.Mockito.mock(Member.class);
+        Member senior = mock(Member.class);
+        FamilyMembership membership = mock(FamilyMembership.class);
+        Member guardian = mock(Member.class);
         ArgumentCaptor<FcmSendDto> notificationCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(senior));
@@ -59,20 +64,20 @@ class HeartRateEmergencyNotificationServiceTest {
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), notificationCaptor.capture());
         FcmSendDto notification = notificationCaptor.getValue();
-        org.assertj.core.api.Assertions.assertThat(notification.title()).isEqualTo("시니어님의 심박수 이상이 감지되었습니다");
-        org.assertj.core.api.Assertions.assertThat(notification.content()).isEqualTo("현재 상태를 확인해주세요.");
-        org.assertj.core.api.Assertions.assertThat(notification.fcmCategory()).isEqualTo(FcmCategory.HEART_MESSAGE);
-        org.assertj.core.api.Assertions.assertThat(notification.emergency()).isTrue();
-        org.assertj.core.api.Assertions.assertThat(notification.relatedMemberId()).isEqualTo(1L);
+        assertThat(notification.title()).isEqualTo("시니어님의 심박수 이상이 감지되었습니다");
+        assertThat(notification.content()).isEqualTo("현재 상태를 확인해주세요.");
+        assertThat(notification.fcmCategory()).isEqualTo(FcmCategory.HEART_MESSAGE);
+        assertThat(notification.emergency()).isTrue();
+        assertThat(notification.relatedMemberId()).isEqualTo(1L);
     }
 
     @Test
     @DisplayName("보호자 알림 저장이 실패하면 업무 롤백을 위해 예외를 전파한다")
     void 보호자_알림_저장이_실패하면_예외를_전파한다() {
         // given
-        Member senior = org.mockito.Mockito.mock(Member.class);
+        Member senior = mock(Member.class);
         FamilyMembership firstMembership = guardianMembership(2L);
-        FamilyMembership secondMembership = org.mockito.Mockito.mock(FamilyMembership.class);
+        FamilyMembership secondMembership = mock(FamilyMembership.class);
 
         given(memberRepository.findById(1L)).willReturn(Optional.of(senior));
         given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
@@ -80,20 +85,20 @@ class HeartRateEmergencyNotificationServiceTest {
                 .willReturn(List.of(firstMembership, secondMembership));
         given(senior.getName()).willReturn("시니어");
         given(senior.getProfileImage()).willReturn("profile-image");
-        org.mockito.BDDMockito.willThrow(new RuntimeException("FCM 실패"))
+        willThrow(new RuntimeException("FCM 실패"))
                 .given(fcmService).sendMessageToUser(eq(2L), any());
 
         // when & then
-        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+        assertThatThrownBy(() ->
                 heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L)))
                 .isInstanceOf(RuntimeException.class).hasMessage("FCM 실패");
         then(fcmService).should().sendMessageToUser(eq(2L), any());
-        then(secondMembership).should(org.mockito.Mockito.never()).getGuardian();
+        then(secondMembership).should(never()).getGuardian();
     }
 
     private FamilyMembership guardianMembership(Long guardianId) {
-        FamilyMembership membership = org.mockito.Mockito.mock(FamilyMembership.class);
-        Member guardian = org.mockito.Mockito.mock(Member.class);
+        FamilyMembership membership = mock(FamilyMembership.class);
+        Member guardian = mock(Member.class);
         given(membership.getGuardian()).willReturn(guardian);
         given(guardian.getId()).willReturn(guardianId);
         return membership;

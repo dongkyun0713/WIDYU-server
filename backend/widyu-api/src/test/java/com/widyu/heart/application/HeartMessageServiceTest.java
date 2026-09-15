@@ -1,10 +1,13 @@
 package com.widyu.heart.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.application.FcmService;
@@ -15,12 +18,14 @@ import com.widyu.global.util.MemberUtil;
 import com.widyu.heart.dto.request.HeartMessageRequest;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
+import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,9 +46,9 @@ class HeartMessageServiceTest {
     @DisplayName("가족에게 일반 하트를 보내면 긴급 표시 없이 발신자를 고정한다")
     void 가족에게_일반_하트를_보내면_발신자를_고정한다() {
         // given
-        Member sender = org.mockito.Mockito.mock(Member.class);
-        Member receiver = org.mockito.Mockito.mock(Member.class);
-        com.widyu.member.SeniorProfile profile = org.mockito.Mockito.mock(com.widyu.member.SeniorProfile.class);
+        Member sender = mock(Member.class);
+        Member receiver = mock(Member.class);
+        SeniorProfile profile = mock(SeniorProfile.class);
         given(memberUtil.getCurrentMember()).willReturn(sender);
         given(memberRepository.findById(2L)).willReturn(Optional.of(receiver));
         given(sender.getId()).willReturn(1L);
@@ -53,15 +58,15 @@ class HeartMessageServiceTest {
         given(receiver.getSeniorProfile()).willReturn(profile);
         given(profile.getId()).willReturn(20L);
         given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 20L)).willReturn(true);
-        org.mockito.ArgumentCaptor<FcmSendDto> captor = org.mockito.ArgumentCaptor.forClass(FcmSendDto.class);
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
 
         // when
         heartMessageService.sendHeartMessage(new HeartMessageRequest(2L, "응원해요"));
 
         // then
-        then(fcmService).should().sendMessageToUser(org.mockito.ArgumentMatchers.eq(2L), captor.capture());
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().emergency()).isFalse();
+        then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
+        assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
+        assertThat(captor.getValue().emergency()).isFalse();
     }
 
     @Test

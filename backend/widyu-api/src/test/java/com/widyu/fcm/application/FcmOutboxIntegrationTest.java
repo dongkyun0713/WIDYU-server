@@ -17,7 +17,9 @@ import com.widyu.member.repository.MemberRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -114,7 +116,7 @@ class FcmOutboxIntegrationTest {
             FcmDelivery first = one.get(5, TimeUnit.SECONDS);
             FcmDelivery second = two.get(5, TimeUnit.SECONDS);
             // then
-            assertThat(java.util.stream.Stream.of(first, second).filter(java.util.Objects::nonNull).count()).isEqualTo(1);
+            assertThat(Stream.of(first, second).filter(Objects::nonNull).count()).isEqualTo(1);
             assertThat(outbox.findById(id).orElseThrow().getAttempts()).isEqualTo(1);
         }
     }
