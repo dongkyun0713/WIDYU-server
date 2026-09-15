@@ -41,14 +41,14 @@ import java.util.List;
 public class FcmService {
 
     @Value("${firebase.http.total-timeout:10s}")
-    private Duration httpTimeout = Duration.ofSeconds(10);
+    private Duration httpTimeout;
     @Value("${fcm.delivery.admin-timeout:30s}")
-    private Duration adminTimeout = Duration.ofSeconds(30);
+    private Duration adminTimeout;
 
     @PostConstruct
     void validateTimeouts() {
         if (httpTimeout.isZero() || httpTimeout.isNegative() || adminTimeout.compareTo(httpTimeout) <= 0) {
-            throw new IllegalArgumentException("FCM admin timeout must exceed a positive HTTP timeout");
+            throw new IllegalArgumentException("fcm.delivery.admin-timeout은 양수인 firebase.http.total-timeout보다 커야 합니다.");
         }
     }
 

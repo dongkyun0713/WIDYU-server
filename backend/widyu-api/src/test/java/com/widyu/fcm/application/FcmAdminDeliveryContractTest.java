@@ -30,7 +30,8 @@ class FcmAdminDeliveryContractTest {
     @DisplayName("관리자 예산이 단일 HTTP 제한과 같으면 잘못된 설정으로 거부한다")
     void 관리자_예산이_HTTP와_같으면_거부한다() {
         // given
-        ReflectionTestUtils.setField(fcmService, "adminTimeout", Duration.ofSeconds(10));
+        givenTimeouts(Duration.ofSeconds(10), Duration.ofSeconds(10));
+
         // when / then
         assertThatThrownBy(fcmService::validateTimeouts)
                 .isInstanceOf(IllegalArgumentException.class);
@@ -45,6 +46,7 @@ class FcmAdminDeliveryContractTest {
     void 관리자_테스트는_HTTP_성공_토큰_수만_반환한다() {
         // given
         FcmSendDto dto = new FcmSendDto("제목", "내용", FcmCategory.ALBUM, "", "");
+        givenTimeouts(Duration.ofSeconds(10), Duration.ofSeconds(30));
         List<MemberFcmToken> tokens = List.of(token("ok"), token("retry"), token("invalid"));
         given(memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(1L)).willReturn(tokens);
         given(transport.send(eq("ok"), eq(dto), any(BooleanSupplier.class))).willReturn(FcmTransport.Result.delivered());
@@ -67,6 +69,7 @@ class FcmAdminDeliveryContractTest {
     void 활성_토큰이_없으면_영을_반환한다() {
         // given
         FcmSendDto dto = new FcmSendDto("제목", "내용", FcmCategory.ALBUM, "", "");
+        givenTimeouts(Duration.ofSeconds(10), Duration.ofSeconds(30));
         given(memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(1L)).willReturn(List.of());
 
         // when
@@ -82,8 +85,7 @@ class FcmAdminDeliveryContractTest {
     void 전체_시간_예산이_소진되면_나머지_토큰을_보내지_않는다() {
         // given
         FcmSendDto dto = new FcmSendDto("제목", "내용", FcmCategory.ALBUM, "", "");
-        ReflectionTestUtils.setField(fcmService, "httpTimeout", Duration.ofMillis(1));
-        ReflectionTestUtils.setField(fcmService, "adminTimeout", Duration.ofMillis(100));
+        givenTimeouts(Duration.ofMillis(1), Duration.ofMillis(100));
         given(memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(1L))
                 .willReturn(List.of(token("first"), token("second")));
         given(transport.send(eq("first"), eq(dto), any(BooleanSupplier.class)))
@@ -99,6 +101,11 @@ class FcmAdminDeliveryContractTest {
         assertThat(sent).isEqualTo(1);
         then(transport).should(never()).send(eq("second"), eq(dto), any(BooleanSupplier.class));
         verifyNoInteractions(outboxService);
+    }
+
+    private void givenTimeouts(Duration http, Duration admin) {
+        ReflectionTestUtils.setField(fcmService, "httpTimeout", http);
+        ReflectionTestUtils.setField(fcmService, "adminTimeout", admin);
     }
 
     private MemberFcmToken token(String value) {
