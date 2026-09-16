@@ -2,6 +2,8 @@
 
 기능별 상세 설계 문서. **PR 본문의 오라클**로 사용된다. 새 LLD는 `../templates/lld.md`를 복사해 `LLD-XXXX-<slug>.md`로 만든다.
 
+현재 시스템 흐름은 [Architecture](../architecture/README.md), 선택 이유는 [ADR](../adr/README.md)에서 설명한다. LLD는 ADR이 정한 방향을 구현 단위로 설계하고 API·테이블·실패 처리·인수조건을 관리한다. 인수조건은 구현 단계에서 테스트 시나리오로 쓴다.
+
 LLD는 프로젝트 전체 기능 목록이 아니다. 단순 CRUD나 작은 버그 수정까지 모두 LLD로 만들면 문서가 코드보다 빨리 낡는다.
 LLD는 리뷰어와 구현 도구가 "이 구현이 맞는가"를 판단할 기준이 필요한 기능에 작성한다.
 
@@ -49,6 +51,8 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
+| [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |
 | [LLD-0031](LLD-0031-admin-current-authority.md) | 관리자 인증의 현재 권한·활성 상태 검증 | Review | #605 |
 | [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
 | [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |

@@ -1,5 +1,7 @@
 # LLD-0002: FCM 푸시 알림 발송 구조
 
+> #608 이후 발송 트랜잭션·재시도·고정 수신자·응원 접수 계약은 [LLD-0036](LLD-0036-fcm-durable-delivery.md)을 따른다. 아래 직접 HTTP/재시도 없음 설명은 변경 전 구조를 기록한 것이다.
+
 > Low-Level Design. 이 문서는 해당 기능 구현과 PR 본문의 **오라클(ground truth)** 이다.
 
 | 항목 | 값 |
