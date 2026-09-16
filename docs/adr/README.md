@@ -2,7 +2,7 @@
 
 중요한 아키텍처/기술 의사결정을 기록한다. 새 ADR은 `../templates/adr.md`를 복사해 `ADR-XXXX-<slug>.md`로 만든다.
 
-ADR은 프로젝트 전체 설명서가 아니다. 전체 도메인 구조는 ERD, API 계약은 Swagger, 구현 세부는 LLD가 담당한다.
+현재 흐름과 보장·한계는 [Architecture](../architecture/README.md), 도메인 구조는 ERD, API 계약은 Swagger, 구현 세부는 LLD가 담당한다.
 ADR은 나중에 "왜 이 방식을 선택했는가"를 추적해야 하는 **결정**만 기록한다.
 
 **ADR을 쓰는 기준**: "이 결정을 바꾸면 많은 파일이 바뀐다" 또는 "여러 기능에 반복 적용되는 규칙"이면 ADR 작성.
