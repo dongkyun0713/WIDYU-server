@@ -52,6 +52,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import software.amazon.awssdk.services.s3.S3Client;
+import com.widyu.fcm.application.FcmTransport;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -71,6 +72,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("결제 통합 테스트")
 class PaymentIntegrationTest {
+    @MockBean private FcmTransport fcmTransport;
 
     @Autowired private PaymentService paymentService;
     @Autowired private PaymentTransactionService paymentTransactionService;

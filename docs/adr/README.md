@@ -53,6 +53,7 @@ ADR 커버리지는 100%를 목표로 하지 않는다. 대신 다음 영역은 
 
 | 번호 | 제목 | 상태 | 날짜 |
 | --- | --- | --- | --- |
+| [ADR-0028](ADR-0028-fcm-durable-delivery.md) | 고정 수신자 FCM outbox와 트랜잭션 밖 발송 | Accepted | 2026-09-14 |
 | [ADR-0023](ADR-0023-production-single-container-deployment.md) | 운영 API 단일 컨테이너 교체 배포 | Accepted | 2026-09-09 |
 | [ADR-0025](ADR-0025-pii-at-rest-encryption-policy.md) | 개인정보 저장 시 암호화 정책 | Accepted | 2026-09-12 |
 | [ADR-0024](ADR-0024-development-observability-stack.md) | 개발 서버 오류 관측에 Grafana Loki 사용 | Accepted | 2026-09-09 |

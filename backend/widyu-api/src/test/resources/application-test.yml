@@ -1,3 +1,10 @@
+fcm:
+  delivery:
+    # Test fixtures only. Production policy has no defaults.
+    max-retries: 5
+    normal-ttl: 24h
+    emergency-ttl: 5m
+
 spring:
   config:
     activate:
