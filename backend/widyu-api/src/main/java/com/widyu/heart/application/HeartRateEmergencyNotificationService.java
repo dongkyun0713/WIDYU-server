@@ -14,6 +14,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -27,6 +28,7 @@ public class HeartRateEmergencyNotificationService {
     private final SeniorProfileRepository seniorProfileRepository;
 
     @EventListener
+    @Transactional
     @Timed("heart.emergency.notification")
     public void handleHeartRateEmergency(HeartRateEmergencyEvent event) {
         Member seniorMember = memberRepository.findById(event.memberId()).orElse(null);
@@ -47,6 +49,8 @@ public class HeartRateEmergencyNotificationService {
                 .fcmCategory(FcmCategory.HEART_MESSAGE)
                 .scheme("")
                 .image(seniorMember.getProfileImage())
+                .relatedMemberId(event.memberId())
+                .emergency(true)
                 .build();
 
         for (FamilyMembership membership : memberships) {
@@ -55,10 +59,6 @@ public class HeartRateEmergencyNotificationService {
     }
 
     private void sendNotification(Long guardianId, FcmSendDto notification) {
-        try {
-            fcmService.sendMessageToUser(guardianId, notification);
-        } catch (RuntimeException exception) {
-            log.error("심박 긴급 알림 발송 실패: guardianId={}", guardianId, exception);
-        }
+        fcmService.sendMessageToUser(guardianId, notification);
     }
 }

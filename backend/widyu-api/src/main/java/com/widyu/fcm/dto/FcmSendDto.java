@@ -9,6 +9,15 @@ public record FcmSendDto(
         String content,
         FcmCategory fcmCategory,
         String scheme,
-        String image
+        String image,
+        boolean emergency,
+        Long relatedMemberId
 ) {
+    public FcmSendDto(String title, String content, FcmCategory category, String scheme, String image) {
+        this(title, content, category, scheme, image, false, null);
+    }
+
+    public FcmSendDto withRelatedMember(Long memberId) {
+        return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, memberId);
+    }
 }

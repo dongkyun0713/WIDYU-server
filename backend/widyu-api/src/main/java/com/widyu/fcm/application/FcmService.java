@@ -1,9 +1,5 @@
 package com.widyu.fcm.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.auth.oauth2.GoogleCredentials;
-import com.widyu.fcm.dto.FcmMessageDto;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.request.SendNotificationRequest;
 import com.widyu.fcm.dto.response.FcmCategoryResponse;
@@ -26,19 +22,12 @@ import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.*;
-import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -48,49 +37,17 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class FcmService {
 
-    @Value("${firebase.config-path}")
-    private String firebaseConfigPath;
-
-    private final ResourceLoader resourceLoader;
+    private final FcmDeliveryProperties deliveryProperties;
+    private final FirebaseProperties firebaseProperties;
+    private final FcmOutboxService outboxService;
+    private final FcmTransport transport;
     private final FcmNotificationRepository fcmNotificationRepository;
     private final MemberFcmTokenRepository memberFcmTokenRepository;
-    private final NotificationSettingService notificationSettingService;
     private final AlbumViewRepository albumViewRepository;
     private final MemberRepository memberRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
     private final SeniorProfileRepository seniorProfileRepository;
     private final MemberUtil memberUtil;
-    private final FcmMessagingUrl messagingUrl;
-    private final FcmSendMetrics fcmSendMetrics;
-
-    private String makeMessage(String token, FcmSendDto dto) throws JsonProcessingException {
-        ObjectMapper om = new ObjectMapper();
-
-        FcmMessageDto fcmMessageDto = FcmMessageDto.builder()
-                .message(FcmMessageDto.Message.builder()
-                        .token(token)
-                        .notification(FcmMessageDto.Notification.builder()
-                                .title(dto.title())
-                                .body(dto.content())
-                                .image(dto.image())
-                                .build())
-                        .build())
-                .validateOnly(false)
-                .build();
-
-        return om.writeValueAsString(fcmMessageDto);
-    }
-
-    private String getAccessToken() throws IOException {
-        Resource firebaseConfig = resourceLoader.getResource(firebaseConfigPath);
-        GoogleCredentials googleCredentials = GoogleCredentials
-                .fromStream(firebaseConfig.getInputStream())
-                .createScoped(List.of("https://www.googleapis.com/auth/firebase.messaging"));
-
-        googleCredentials.refreshIfExpired();
-
-        return googleCredentials.getAccessToken().getTokenValue();
-    }
 
     // 카테고리 및 커서 기반 알림 목록 조회
     public FcmNotificationResponses getNotificationsForCurrentUser(String category, Long cursor) {
@@ -150,69 +107,22 @@ public class FcmService {
 
     @Transactional
     public void sendMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
-        fcmSendMetrics.record(() -> sendMessage(memberId, fcmSendDto));
+        outboxService.enqueue(memberId, fcmSendDto);
     }
 
-    private void sendMessage(Long memberId, FcmSendDto fcmSendDto) {
-        try {
-            // 알림 설정 확인
-            if (!notificationSettingService.isNotificationEnabled(memberId, fcmSendDto.fcmCategory())) {
-                log.info("Notification disabled for member {} category {}", memberId, fcmSendDto.fcmCategory());
-                return;
-            }
-
-            List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(memberId);
-
-            for (MemberFcmToken tokenEntity : tokens) {
-                String token = tokenEntity.getToken();
-                String message = makeMessage(token, fcmSendDto);
-
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.setBearerAuth(getAccessToken());
-
-                HttpEntity<String> entity = new HttpEntity<>(message, headers);
-                RestTemplate restTemplate = new RestTemplate();
-                restTemplate.getMessageConverters()
-                        .add(0, new StringHttpMessageConverter(
-                                StandardCharsets.UTF_8));
-
-                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
-
-                if (response.getStatusCode() == HttpStatus.OK) {
-                    fcmNotificationRepository.save(FcmNotification.builder()
-                            .title(fcmSendDto.title())
-                            .body(fcmSendDto.content())
-                            .fcmCategory(fcmSendDto.fcmCategory())
-                            .memberFcmToken(tokenEntity)
-                            .isRead(false)
-                            .image(fcmSendDto.image())
-                            .build());
-                }
-            }
-        } catch (IOException e) {
-            log.error("Failed to send FCM message to user {}: {}", memberId, e.getMessage());
-        }
-    }
-
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int sendTestMessageToUser(Long memberId, FcmSendDto fcmSendDto) {
         int sent = 0;
-        try {
-            List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(memberId);
-            for (MemberFcmToken tokenEntity : tokens) {
-                String message = makeMessage(tokenEntity.getToken(), fcmSendDto);
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.setBearerAuth(getAccessToken());
-                HttpEntity<String> entity = new HttpEntity<>(message, headers);
-                RestTemplate restTemplate = new RestTemplate();
-                restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
-                ResponseEntity<String> response = restTemplate.exchange(messagingUrl.value(), HttpMethod.POST, entity, String.class);
-                if (response.getStatusCode() == HttpStatus.OK) sent++;
+        long deadline = System.nanoTime() + deliveryProperties.adminTimeout().toNanos();
+        List<MemberFcmToken> tokens = memberFcmTokenRepository.findAllByMemberIdAndActiveTrue(memberId);
+        for (MemberFcmToken tokenEntity : tokens) {
+            if (deadline - System.nanoTime() < firebaseProperties.http().totalTimeout().toNanos()) {
+                break;
             }
-        } catch (IOException e) {
-            log.error("Failed to send admin test FCM to user {}: {}", memberId, e.getMessage());
+            if (transport.send(tokenEntity.getToken(), fcmSendDto,
+                    () -> memberFcmTokenRepository.isDeliverable(tokenEntity.getId(), memberId)).success()) {
+                sent++;
+            }
         }
         return sent;
     }
@@ -294,6 +204,7 @@ public class FcmService {
                 .fcmCategory(FcmCategory.ETC)
                 .scheme("")
                 .image(sender.getProfileImage())
+                .relatedMemberId(sender.getId())
                 .build();
 
         // 받는 사람에게 알림 전송

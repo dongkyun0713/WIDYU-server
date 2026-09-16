@@ -30,7 +30,7 @@ public class HealthScheduleNotificationListener {
      * 예: 14:00에 실행 -> 15:00~15:10 사이에 시작하는 일정에 알림
      */
     @Scheduled(cron = "0 0 * * * *")
-    @Transactional(readOnly = true)
+    @Transactional
     public void sendHealthScheduleReminder() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime oneHourLater = now.plusHours(1);

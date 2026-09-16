@@ -71,6 +71,15 @@ class ProductionComposeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GRAFANA_ADMIN_PASSWORD"):
             validator.validate(self.config(GRAFANA_ADMIN_PASSWORD="admin"))
 
+    def test_approved_fcm_defaults_are_forwarded_without_overrides(self):
+        config = self.config(FCM_DELIVERY_MAX_RETRIES="", FCM_DELIVERY_NORMAL_TTL="",
+                             FCM_DELIVERY_EMERGENCY_TTL="")
+        environment = config["services"]["widyu-api"]["environment"]
+        self.assertEqual(environment["FCM_DELIVERY_MAX_RETRIES"], "5")
+        self.assertEqual(environment["FCM_DELIVERY_NORMAL_TTL"], "86400s")
+        self.assertEqual(environment["FCM_DELIVERY_EMERGENCY_TTL"], "300s")
+        validator.validate(config)
+
     def test_sms_and_video_settings_are_required(self):
         for key in ("COOLSMS_API_KEY", "COOLSMS_API_SECRET", "COOLSMS_PHONE",
                     "FFMPEG_PATH", "FFPROBE_PATH"):
