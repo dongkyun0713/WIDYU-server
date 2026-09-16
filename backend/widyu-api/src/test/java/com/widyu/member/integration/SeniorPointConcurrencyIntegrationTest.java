@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
-import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.fcm.application.FcmTransport;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
@@ -60,7 +59,6 @@ class SeniorPointConcurrencyIntegrationTest {
     @Autowired private PointHistoryRepository pointHistoryRepository;
 
     @MockBean private MemberUtil memberUtil;
-    @MockBean private VerificationCodeRepository verificationCodeRepository;
     @MockBean private TemporaryMemberRepository temporaryMemberRepository;
     @MockBean private RefreshTokenRepository refreshTokenRepository;
     @MockBean private S3Client s3Client;
