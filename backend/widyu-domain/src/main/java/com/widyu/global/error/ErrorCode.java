@@ -129,6 +129,12 @@ public enum ErrorCode {
     INVALID_FILE_URL(HttpStatus.BAD_REQUEST, "FILE_4003", "유효하지 않은 파일 URL입니다."),
     FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "FILE_4004", "파일 크기가 너무 큽니다."),
 
+    // 연구 참여 관련
+    STUDY_PARTICIPATION_NOT_FOUND(HttpStatus.NOT_FOUND, "STUDY_4041", "연구 참여 정보를 찾을 수 없습니다."),
+    STUDY_PARTICIPATION_DUPLICATED(HttpStatus.CONFLICT, "STUDY_4090", "이미 등록된 연구 참여입니다."),
+    STUDY_RETENTION_PERIOD_INVALID(HttpStatus.BAD_REQUEST, "STUDY_4000", "보존 기간 순서가 올바르지 않습니다."),
+    STUDY_PARTICIPATION_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "STUDY_4001", "활성 상태의 연구 참여가 아닙니다."),
+
     // 잘못된 요청
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "REQ_4000", "잘못된 요청입니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "REQ_4050", "지원하지 않는 HTTP 메서드입니다."),

@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-07-05 |
+| 코드 동기화 | 2026-09-16 (study 도메인 추가) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -291,6 +291,19 @@ erDiagram
         Status status
     }
 
+    StudyParticipation {
+        Long id PK
+        String studyId
+        String participationId UK
+        Long member_id FK
+        DataPolicy dataPolicy
+        LocalDate identifiedUntil
+        LocalDate pseudonymizedAt
+        LocalDate researchUntil
+        String consentVersion
+        StudyParticipationStatus status
+    }
+
     AdminAuditLog {
         Long id PK
         Long member_id FK
@@ -327,6 +340,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
+    Member ||--o{ StudyParticipation : "연구 참여 (재식별 키, 파기 시 null)"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
@@ -379,6 +393,9 @@ erDiagram
 | `PaymentCancelStatus` | `PENDING`, `COMPLETED`, `ABORTED` |
 | `PointHistoryType` | `EARN`, `USE` |
 | `HeartRateStatus` | `NORMAL`, `CAUTION`, `EMERGENCY`, `ANOMALY`, `UNKNOWN` |
+| `DataPolicy` | `KR_IRB` |
+| `StudyParticipationStatus` | `ACTIVE`, `PSEUDONYMIZED`, `DESTROYED` |
+| `AdminAction` | `ADMIN_LOGIN`, `MEMBER_STATUS_CHANGE`, `FCM_TEST_SEND`, `STUDY_PARTICIPATION_PERIOD_CHANGE` |
 
 ## 주요 인덱스
 
@@ -396,6 +413,7 @@ erDiagram
 | `payment_cancel` | `idx_payment_cancel_recovery` | `(status, next_retry_at)` | 취소 복구 대상 범위 조회 |
 | `payment_cancel` | UK `uk_payment_cancel_pg_idempotency_key` | `(pg_idempotency_key)` | PG 요청 재실행 식별 |
 | `payment_cancel` | UK `uk_payment_cancel_payment_idempotency_key` | `(payment_id, idempotency_key)` | 클라이언트 멱등 키 중복 방지 (ADR-0012) |
+| `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 연구 참여 식별자 중복 방지 (ADR-0026) |
 
 ## 도메인별 조회 기준
 
@@ -416,6 +434,7 @@ erDiagram
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
 | 2026-07-16 | `senior_profile` | `family_id` NOT NULL → NULL 허용 (마지막 방장 탈퇴 시 Family 삭제 후 null 처리) | `ALTER TABLE senior_profile MODIFY COLUMN family_id BIGINT NULL;` |
+| 2026-09-16 | `study_participation` | 신규 테이블. 국내 실증(IRB) 연구 참여·보존 날짜·동의 버전 (LLD-0031, ADR-0026) | LLD-0031 §8 CREATE TABLE 참조 |
 
 ## 코드 동기화 메모
 
