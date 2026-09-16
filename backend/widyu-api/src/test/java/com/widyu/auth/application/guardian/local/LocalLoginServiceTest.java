@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.auth.TemporaryMember;
+import com.widyu.auth.infrastructure.AuthLimitStore;
+import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
@@ -40,6 +42,9 @@ class LocalLoginServiceTest {
     @Mock private LocalAccountRepository localAccountRepository;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private TemporaryMemberUtil temporaryMemberUtil;
+
+    @Mock private AuthLimitStore authLimitStore;
+    @Mock private ClientIpResolver clientIpResolver;
 
     @InjectMocks
     private LocalLoginService localLoginService;
@@ -172,7 +177,7 @@ class LocalLoginServiceTest {
         assertThatThrownBy(() -> localLoginService.signIn(
                 new LocalGuardianSignInRequest("notfound@test.com", "password")))
                 .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_EMAIL);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_PASSWORD);
     }
 
     @Test

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate resolved Compose without printing credentials."""
+import ipaddress
 import json
 import re
 import subprocess
@@ -20,6 +21,7 @@ def validate(config):
         "COOLSMS_VERIFICATION_CODE_LENGTH", "COOLSMS_VERIFICATION_CODE_TTL",
         "FFMPEG_PATH", "FFPROBE_PATH", "MEDICINE_API_SERVICE_KEY",
         "JUSO_CONFM_KEY", "KAKAO_GEOCODING_API_KEY",
+        "AUTH_PROXY_TRUSTEDCIDRS", "AUTH_LIMITS_SMSGLOBALDAY",
     )
     missing = [key for key in required if not str(environment.get(key) or "").strip()]
     if missing:
@@ -32,6 +34,7 @@ def validate(config):
         "MYSQL_PORT", "REDIS_PORT", "JWT_ACCESS_TOKEN_EXPIRATION_TIME",
         "JWT_REFRESH_TOKEN_EXPIRATION_TIME", "JWT_TEMPORARY_TOKEN_EXPIRATION_TIME",
         "COOLSMS_VERIFICATION_CODE_LENGTH", "COOLSMS_VERIFICATION_CODE_TTL",
+        "AUTH_LIMITS_SMSGLOBALDAY",
     ):
         raw_value = str(environment.get(key) or "")
         if not re.fullmatch(r"[0-9]+", raw_value):
@@ -43,6 +46,17 @@ def validate(config):
             raise ValueError(f"{key} exceeds the supported integer range")
         if key.endswith("PORT") and value > 65535:
             raise ValueError(f"{key} must be between 1 and 65535")
+    # Runtime permits an empty trust list and blocks SMS without a budget.
+    # Production deployment requires both inputs to be explicitly configured.
+    for cidr in str(environment["AUTH_PROXY_TRUSTEDCIDRS"]).split(","):
+        parts = cidr.strip().split("/")
+        try:
+            if len(parts) != 2 or not re.fullmatch(r"[0-9]{1,3}", parts[1]) or "%" in parts[0]:
+                raise ValueError("Invalid CIDR")
+            ipaddress.ip_address(parts[0])
+            ipaddress.ip_network(cidr.strip(), strict=False)
+        except ValueError:
+            raise ValueError("AUTH_PROXY_TRUSTEDCIDRS must contain valid IPv4/IPv6 CIDRs") from None
     firebase = config.get("secrets", {}).get("firebase-service-account", {})
     if not str(firebase.get("file") or "").strip():
         raise ValueError("FIREBASE_CREDENTIALS_FILE is required")

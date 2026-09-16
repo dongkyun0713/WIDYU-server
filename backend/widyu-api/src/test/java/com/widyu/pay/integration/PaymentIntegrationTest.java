@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
-import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
@@ -86,7 +85,6 @@ class PaymentIntegrationTest {
 
     @MockBean private PaymentClient paymentClient;
     @MockBean private MemberUtil memberUtil;
-    @MockBean private VerificationCodeRepository verificationCodeRepository;
     @MockBean private TemporaryMemberRepository temporaryMemberRepository;
     @MockBean private RefreshTokenRepository refreshTokenRepository;
     @MockBean private S3Client s3Client;

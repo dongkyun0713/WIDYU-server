@@ -1,6 +1,7 @@
 package com.widyu.global.error;
 
 import com.widyu.global.log.BusinessExceptionLogEntry;
+import com.widyu.auth.exception.AuthRateLimitException;
 import com.widyu.global.log.ExceptionLogEntry;
 import com.widyu.global.response.ApiErrorDebugInfo;
 import com.widyu.global.response.ApiResponseTemplate;
@@ -42,6 +43,15 @@ public class GlobalExceptionHandler {
     @Value("${observability.error-response.include-debug-details:false}")
     private boolean includeDebugDetails;
 
+    @ExceptionHandler(AuthRateLimitException.class)
+    public ResponseEntity<ApiResponseTemplate<Void>> handleAuthRateLimitException(AuthRateLimitException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(exception.getRetryAfterSeconds()))
+                .body(ApiResponseTemplate.<Void>error()
+                        .code(ErrorCode.AUTH_RATE_LIMITED.getCode())
+                        .message(ErrorCode.AUTH_RATE_LIMITED.getMessage()).build());
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponseTemplate<Void>> handleBusinessException(
             final BusinessException ex,
@@ -50,7 +60,10 @@ public class GlobalExceptionHandler {
         doBusinessLog(ex, request);
 
         final ErrorCode errorCode = ex.getErrorCode();
-        final String detail = nullSafe(ex.getMessage(), errorCode.getMessage());
+        String detail = nullSafe(ex.getMessage(), errorCode.getMessage());
+        if (isAuthRequest(request)) {
+            detail = errorCode.getMessage();
+        }
 
         final HttpStatus status = getHttpStatusOrDefault(errorCode);
 
@@ -99,7 +112,7 @@ public class GlobalExceptionHandler {
     protected ResponseEntity<ApiResponseTemplate<Void>> handleHttpMessageNotReadableException(
             final HttpMessageNotReadableException e
     ) {
-        log.warn("Malformed request body: {}", e.getMessage());
+        log.warn("Malformed request body");
 
         return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), "요청 본문을 읽을 수 없습니다. 형식을 확인해주세요.");
     }
@@ -109,7 +122,7 @@ public class GlobalExceptionHandler {
             final MethodArgumentTypeMismatchException e
     ) {
         final String message = String.format("요청 값의 타입이 올바르지 않습니다 (%s)", e.getName());
-        log.warn("Type mismatch for parameter {}: {}", e.getName(), e.getMessage());
+        log.warn("Type mismatch for parameter {}", e.getName());
 
         return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
     }
@@ -240,7 +253,7 @@ public class GlobalExceptionHandler {
             final HttpServletRequest request,
             final HttpStatus status
     ) {
-        if (!includeDebugDetails || !status.is5xxServerError()) {
+        if (isAuthRequest(request) || !includeDebugDetails || !status.is5xxServerError()) {
             return null;
         }
         return ApiErrorDebugInfo.of(exception, request.getRequestURI());
@@ -273,10 +286,14 @@ public class GlobalExceptionHandler {
     }
 
     private void doBusinessLog(final RuntimeException runtimeException, final HttpServletRequest request) {
+        String message = runtimeException.getMessage();
+        if (isAuthRequest(request)) {
+            message = "Authentication request rejected";
+        }
         final BusinessExceptionLogEntry entry = BusinessExceptionLogEntry.builder()
                 .timestamp(OffsetDateTime.now().toString())
                 .exceptionType(runtimeException.getClass().getName())
-                .message(runtimeException.getMessage())
+                .message(message)
                 .requestUri(request.getRequestURI())
                 .build();
         final Marker marker = MarkerFactory.getMarker(BUSINESS_LOG_MARKER);
@@ -284,10 +301,14 @@ public class GlobalExceptionHandler {
     }
 
     private void doSystemLog(final Exception exception, final HttpServletRequest request) {
+        String message = exception.getMessage();
+        if (isAuthRequest(request)) {
+            message = "Authentication request failed";
+        }
         final ExceptionLogEntry entry = ExceptionLogEntry.builder()
                 .timestamp(OffsetDateTime.now().toString())
                 .exceptionType(exception.getClass().getName())
-                .message(exception.getMessage())
+                .message(message)
                 .requestUri(request.getRequestURI())
                 .stackTrace(toStackTraceLog(exception))
                 .build();
@@ -306,5 +327,10 @@ public class GlobalExceptionHandler {
         return Arrays.stream(exception.getStackTrace())
                 .map(StackTraceElement::toString)
                 .collect(Collectors.joining("\n"));
+    }
+
+    private boolean isAuthRequest(HttpServletRequest request) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return path.startsWith("/api/v1/auth/");
     }
 }

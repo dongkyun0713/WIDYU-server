@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: "local | dev | test"
+
+# sms-global-day는 코드 기본값이 없어(AuthLimitProperties) 값이 없으면 SMS가 항상 503이다.
+# 운영 정책은 미승인이므로 prod는 이 문서에 포함하지 않고 AUTH_LIMITS_SMSGLOBALDAY 환경변수만 값으로 쓴다.
+# validate-prod.py가 prod 배포 전 그 입력의 누락·공백을 거부한다.
+# 아래 값은 운영 승인값이 아니라 비운영 프로파일이 기동·동작하도록 두는 개발용 상한이다.
+auth:
+  limits:
+    sms-global-day: ${AUTH_LIMITS_SMSGLOBALDAY:500}

@@ -4,8 +4,8 @@ import com.widyu.auth.PhoneChangeVerified;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.dto.request.SeniorSignUpRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
+import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.repository.PhoneChangeVerifiedRepository;
-import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
@@ -53,7 +53,7 @@ public class GuardianMyPageService {
     private final MemberUtil memberUtil;
     private final S3Service s3Service;
     private final SmsService smsService;
-    private final VerificationCodeRepository verificationCodeRepository;
+    private final AuthLimitStore authLimitStore;
     private final PhoneChangeVerifiedRepository phoneChangeVerifiedRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
     private final SeniorProfileRepository seniorProfileRepository;
@@ -129,15 +129,10 @@ public class GuardianMyPageService {
     public void verifyPhoneChangeCode(SmsCodeRequest request) {
         String newPhone = request.phoneNumber();
 
-        boolean codeMatches = verificationCodeRepository.findById(newPhone)
-                .map(v -> v.getCode().equals(request.code()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_NOT_FOUND));
+        // 발송이 AuthLimitStore에 저장하므로 검증도 같은 저장소를 쓴다. 비교·삭제가 한 Lua에서 원자로 끝나고
+        // 5회 오입력 차단도 함께 적용된다.
+        authLimitStore.consumeCode(newPhone, request.code());
 
-        if (!codeMatches) {
-            throw new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_MISMATCH);
-        }
-
-        verificationCodeRepository.deleteById(newPhone);
         phoneChangeVerifiedRepository.save(PhoneChangeVerified.builder()
                 .phoneNumber(newPhone)
                 .ttl(PHONE_CHANGE_VERIFIED_TTL_SECONDS)

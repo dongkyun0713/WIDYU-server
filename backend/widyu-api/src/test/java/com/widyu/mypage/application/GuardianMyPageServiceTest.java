@@ -10,13 +10,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.auth.PhoneChangeVerified;
-import com.widyu.auth.VerificationCode;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.dto.request.SeniorSignUpRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
+import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.repository.PhoneChangeVerifiedRepository;
-import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.addressbookmark.application.GeocodingService;
@@ -62,7 +62,7 @@ class GuardianMyPageServiceTest {
     @Mock private MemberUtil memberUtil;
     @Mock private S3Service s3Service;
     @Mock private SmsService smsService;
-    @Mock private VerificationCodeRepository verificationCodeRepository;
+    @Mock private AuthLimitStore authLimitStore;
     @Mock private PhoneChangeVerifiedRepository phoneChangeVerifiedRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private SeniorProfileRepository seniorProfileRepository;
@@ -987,53 +987,43 @@ class GuardianMyPageServiceTest {
     // ======================== 보호자 전화번호 변경 - 인증코드 검증 ========================
 
     @Test
-    @DisplayName("올바른 인증코드로 검증하면 인증 완료 상태가 Redis에 저장된다")
+    @DisplayName("올바른 인증코드로 검증하면 발송과 같은 저장소에서 코드를 소비하고 인증 완료 상태를 저장한다")
     void 전화번호_변경_인증코드_검증_성공() {
         // given
-        VerificationCode verificationCode = VerificationCode.builder()
-                .phoneNumber("01099998888")
-                .code("123456")
-                .name("한토마")
-                .ttl(180)
-                .build();
-
-        given(verificationCodeRepository.findById("01099998888")).willReturn(Optional.of(verificationCode));
+        given(authLimitStore.consumeCode("01099998888", "123456")).willReturn("한토마");
 
         // when
         guardianMyPageService.verifyPhoneChangeCode(new SmsCodeRequest("01099998888", "123456"));
 
         // then
-        verify(verificationCodeRepository).deleteById("01099998888");
+        verify(authLimitStore).consumeCode("01099998888", "123456");
         verify(phoneChangeVerifiedRepository).save(any(PhoneChangeVerified.class));
     }
 
     @Test
-    @DisplayName("인증코드가 불일치하면 예외가 발생한다")
+    @DisplayName("인증코드가 불일치하면 예외가 발생하고 인증 완료 상태를 저장하지 않는다")
     void 전화번호_변경_인증코드_불일치() {
         // given
-        VerificationCode verificationCode = VerificationCode.builder()
-                .phoneNumber("01099998888")
-                .code("999999")
-                .name("한토마")
-                .ttl(180)
-                .build();
-
-        given(verificationCodeRepository.findById("01099998888")).willReturn(Optional.of(verificationCode));
+        given(authLimitStore.consumeCode("01099998888", "123456"))
+                .willThrow(new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_MISMATCH));
 
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.verifyPhoneChangeCode(new SmsCodeRequest("01099998888", "123456")))
                 .isInstanceOf(BusinessException.class);
+        verify(phoneChangeVerifiedRepository, never()).save(any(PhoneChangeVerified.class));
     }
 
     @Test
-    @DisplayName("인증코드가 만료되어 없으면 예외가 발생한다")
+    @DisplayName("인증코드가 만료되어 없으면 예외가 발생하고 인증 완료 상태를 저장하지 않는다")
     void 전화번호_변경_인증코드_만료() {
         // given
-        given(verificationCodeRepository.findById("01099998888")).willReturn(Optional.empty());
+        given(authLimitStore.consumeCode("01099998888", "123456"))
+                .willThrow(new BusinessException(ErrorCode.SMS_VERIFICATION_CODE_NOT_FOUND));
 
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.verifyPhoneChangeCode(new SmsCodeRequest("01099998888", "123456")))
                 .isInstanceOf(BusinessException.class);
+        verify(phoneChangeVerifiedRepository, never()).save(any(PhoneChangeVerified.class));
     }
 
     // ======================== 보호자 전화번호 변경 ========================

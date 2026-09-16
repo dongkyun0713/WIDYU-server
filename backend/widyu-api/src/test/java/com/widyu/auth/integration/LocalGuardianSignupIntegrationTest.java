@@ -9,7 +9,6 @@ import com.widyu.auth.application.VerificationCodeService;
 import com.widyu.auth.application.guardian.local.LocalLoginService;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.repository.TemporaryMemberRepository;
-import com.widyu.auth.repository.VerificationCodeRepository;
 import com.widyu.fcm.application.FcmTransport;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -53,9 +52,11 @@ class LocalGuardianSignupIntegrationTest {
     @Autowired private LocalAccountRepository localAccountRepository;
 
     // Redis 레포지토리는 H2 테스트 환경에서 MockBean으로 대체
-    @MockBean private VerificationCodeRepository verificationCodeRepository;
     @MockBean private TemporaryMemberRepository temporaryMemberRepository;
     @MockBean private com.widyu.auth.repository.RefreshTokenRepository refreshTokenRepository;
+    // H2 가입 흐름에서는 제한 인프라를 대체한다. 원자성은 AuthLimitStoreRedisTest에서 실제 Redis로 검증한다.
+    @MockBean private com.widyu.auth.infrastructure.AuthLimitStore authLimitStore;
+    @MockBean private com.widyu.auth.infrastructure.ClientIpResolver clientIpResolver;
     // 외부 서비스 MockBean
     @MockBean private S3Client s3Client;
     @MockBean private SmsService smsService;
