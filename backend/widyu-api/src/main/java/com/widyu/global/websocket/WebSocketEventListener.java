@@ -15,6 +15,7 @@ import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 public class WebSocketEventListener {
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
 
     @EventListener
     public void handleWebSocketConnectListener(SessionConnectedEvent event) {
@@ -24,7 +25,7 @@ public class WebSocketEventListener {
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         log.info("WebSocket 연결 종료 - sessionId: {}", event.getSessionId());
-        // 필요시 cleanup 로직 추가
+        webSocketSessionRegistry.remove(event.getSessionId());
     }
 
     @EventListener
