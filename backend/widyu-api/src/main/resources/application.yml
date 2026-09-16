@@ -9,6 +9,7 @@ spring:
       test: "test, fcm, pay, s3"
 
     include:
+      - auth
       - security
       - coolsms
       - redis
