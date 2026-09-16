@@ -11,9 +11,10 @@ firebase:
 spring:
   config:
     activate:
-      on-profile: "prod"
+      on-profile: "local | dev | prod"
 
 # 2026-09-14 사용자 승인: 최초 시도 후 추가 5회, 일반 24시간·긴급 5분.
+# 정책 값에는 코드 기본값이 없어 실행 프로파일마다 제공해야 한다. test는 application-test.yml이 따로 준다.
 fcm:
   delivery:
     max-retries: ${FCM_DELIVERY_MAX_RETRIES:5}

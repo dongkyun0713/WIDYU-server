@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
@@ -11,13 +13,15 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Import;
 
 class FcmDeliveryPropertiesTest {
-    @Test
-    @DisplayName("운영 설정을 읽으면 승인된 재시도 횟수와 유효기간을 적용한다")
-    void 운영_기본값은_추가5회_일반24시간_긴급5분이다() {
+    @ParameterizedTest
+    @ValueSource(strings = {"local", "dev", "prod"})
+    @DisplayName("배포 프로파일로 기동하면 승인된 재시도 횟수와 유효기간을 적용한다")
+    void 배포_프로파일은_추가5회_일반24시간_긴급5분이다(String profile) {
         // given / when / then
         runner()
                 .withInitializer(new ConfigDataApplicationContextInitializer())
-                .withPropertyValues("spring.config.location=classpath:application-fcm.yml", "spring.profiles.active=prod")
+                .withPropertyValues("spring.config.location=classpath:application-fcm.yml",
+                        "spring.profiles.active=" + profile)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     FcmDeliveryProperties properties = context.getBean(FcmDeliveryProperties.class);
