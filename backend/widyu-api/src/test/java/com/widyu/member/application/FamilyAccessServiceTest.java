@@ -52,6 +52,56 @@ class FamilyAccessServiceTest {
     }
 
     @Test
+    @DisplayName("활성 가족이 실시간 정보에 접근하면 예외 없이 통과한다")
+    void 활성_가족이_실시간_정보에_접근하면_예외없이_통과한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        SeniorProfile seniorProfile = seniorProfile(10L, senior);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(guardian));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+
+        // when & then
+        assertThatCode(() -> familyAccessService.verifyActiveFamilyAccess(1L, 2L))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("정지된 보호자가 실시간 정보에 접근하면 FORBIDDEN 예외가 발생한다")
+    void 정지된_보호자가_실시간_정보에_접근하면_예외가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        guardian.withdraw();
+        Member senior = member(2L, MemberType.SENIOR);
+        seniorProfile(10L, senior);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(guardian));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+
+        // when & then
+        assertThatThrownBy(() -> familyAccessService.verifyActiveFamilyAccess(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("정지된 시니어의 실시간 정보에 접근하면 FORBIDDEN 예외가 발생한다")
+    void 정지된_시니어의_실시간_정보에_접근하면_예외가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        senior.withdraw();
+        seniorProfile(10L, senior);
+        given(memberRepository.findById(1L)).willReturn(Optional.of(guardian));
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+
+        // when & then
+        assertThatThrownBy(() -> familyAccessService.verifyActiveFamilyAccess(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 targetMemberId로 접근하면 BAD_REQUEST 예외를 던진다")
     void 존재하지_않는_대상_회원_접근_시_예외가_발생한다() {
         // given
