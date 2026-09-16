@@ -61,3 +61,29 @@ python3 scripts/docs/index.py       # LLD·ADR 모두
 ```
 
 새 ADR을 추가할 때 이 README는 고치지 않는다. 문서 헤더 표의 `상태`와 `날짜`만 정확히 채우면 목록에 그대로 반영된다.
+| 번호 | 제목 | 상태 | 날짜 |
+| --- | --- | --- | --- |
+| [ADR-0028](ADR-0028-fcm-durable-delivery.md) | 고정 수신자 FCM outbox와 트랜잭션 밖 발송 | Accepted | 2026-09-14 |
+| [ADR-0023](ADR-0023-production-single-container-deployment.md) | 운영 API 단일 컨테이너 교체 배포 | Accepted | 2026-09-09 |
+| [ADR-0025](ADR-0025-pii-at-rest-encryption-policy.md) | 개인정보 저장 시 암호화 정책 | Accepted | 2026-09-12 |
+| [ADR-0024](ADR-0024-development-observability-stack.md) | 개발 서버 오류 관측에 Grafana Loki 사용 | Accepted | 2026-09-09 |
+| [ADR-0001](ADR-0001-multi-module-structure.md) | widyu-api + widyu-domain 멀티모듈 구조 채택 | Accepted | 2025-08-01 |
+| [ADR-0002](ADR-0002-auth-jwt-family-access.md) | 인증/인가 전략 — JWT + @ValidateFamilyAccess AOP | Accepted | 2026-07-05 |
+| [ADR-0003](ADR-0003-db-entity-design.md) | DB/엔티티 설계 기준 (PK, Enum, FK, soft delete) | Accepted | 2026-07-05 |
+| [ADR-0004](ADR-0004-media-upload-strategy.md) | 미디어 업로드 전략 — 서버 직접 S3 업로드 + @Async | Accepted | 2026-07-05 |
+| [ADR-0005](ADR-0005-cursor-pagination.md) | 커서 기반 페이징 전략 | Accepted | 2026-07-05 |
+| [ADR-0006](ADR-0006-medicine-search-fallback-fulltext.md) | 약품 검색 전략 — 자체 DB 우선 조회 + 외부 API fallback + FULLTEXT | Accepted | 2026-07-05 |
+| [ADR-0007](ADR-0007-location-event-visit-verification.md) | 실시간 위치 이벤트 기반 방문인증 처리 | Accepted | 2026-07-10 |
+| [ADR-0008](ADR-0008-heart-rate-ai-transaction-boundary.md) | 심박 AI 판정과 저장 트랜잭션 경계 분리 | Accepted | 2026-07-20 |
+| [ADR-0009](ADR-0009-safe-zone-alert-deduplication.md) | 안전구역 이탈 알림 원자 중복 차단 | Accepted | 2026-07-21 |
+| [ADR-0010](ADR-0010-album-video-failure-compensation.md) | 앨범 영상 처리 실패 보상 삭제 정책 | Accepted | 2026-07-21 |
+| [ADR-0011](ADR-0011-album-notification-side-effect-isolation.md) | 앨범 알림 부수효과 격리 정책 | Accepted | 2026-07-21 |
+| [ADR-0012](ADR-0012-payment-cancel-idempotency.md) | 부분 취소 멱등성 및 직렬화 정책 | Accepted | 2026-07-25 |
+| [ADR-0013](ADR-0013-heart-rate-personalized-ai-contract.md) | 개인화 심박 AI 단건 계약 연동 | Accepted | 2026-07-26 |
+| [ADR-0015](ADR-0015-album-presigned-multipart-upload.md) | 앨범 미디어 Presigned Multipart 직접 업로드 | Accepted | 2026-07-27 |
+| [ADR-0018](ADR-0018-claude-code-sandbox-not-adopted.md) | Claude Code 샌드박스 미도입 — 비밀 파일 차단과 테스트 실행의 트레이드오프 | Accepted | 2026-08-20 |
+| [ADR-0019](ADR-0019-goal-home-query-pipeline.md) | 목표 홈 주간 통계 기간 벌크 조회 | Accepted | 2026-08-20 |
+| [ADR-0020](ADR-0020-family-access-dual-path.md) | 가족 접근 인가 이중 경로를 인정하고 정적 검증으로 강제 | Accepted | 2026-08-20 |
+| [ADR-0021](ADR-0021-branch-guard-pretooluse.md) | 이슈·브랜치 없는 코드 수정을 PreToolUse 훅으로 차단 | Accepted | 2026-08-25 |
+| [ADR-0022](ADR-0022-codex-primary-harness.md) | Codex 주 구현 에이전트와 공통 하네스 | Accepted | 2026-09-07 |
+| [ADR-0026](ADR-0026-irb-two-tier-retention.md) | 국내 실증(IRB) 2층 보존과 제자리 가명화 | Accepted | 2026-09-16 |

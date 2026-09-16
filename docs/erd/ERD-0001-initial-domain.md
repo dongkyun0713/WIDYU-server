@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-07-05 |
+| 코드 동기화 | 2026-09-16 (study 도메인 추가) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -494,6 +494,19 @@ erDiagram
         Status status
     }
 
+    StudyParticipation {
+        Long id PK
+        String studyId
+        String participationId UK
+        Long member_id FK
+        DataPolicy dataPolicy
+        LocalDate identifiedUntil
+        LocalDate pseudonymizedAt
+        LocalDate researchUntil
+        String consentVersion
+        StudyParticipationStatus status
+    }
+
     AdminAuditLog {
         Long id PK
         Long member_id FK
@@ -539,6 +552,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
+    Member ||--o{ StudyParticipation : "연구 참여 (재식별 키, 파기 시 null)"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
@@ -594,6 +608,9 @@ erDiagram
 | `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
+| `DataPolicy` | `KR_IRB` |
+| `StudyParticipationStatus` | `ACTIVE`, `PSEUDONYMIZED`, `DESTROYED` |
+| `AdminAction` | `ADMIN_LOGIN`, `MEMBER_STATUS_CHANGE`, `FCM_TEST_SEND`, `STUDY_PARTICIPATION_PERIOD_CHANGE` |
 
 ## 주요 인덱스
 
@@ -638,6 +655,7 @@ erDiagram
 | `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
+| `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 연구 참여 식별자 중복 방지 (ADR-0026) |
 
 ## 도메인별 조회 기준
 
@@ -669,6 +687,7 @@ erDiagram
 | 2026-09-19 | `sensor_batch` | v2 형식으로 통째 교체 (LLD-0041 v2). `batch_id` 멱등 키, 시계 5값 원본 보존, 시각 4단계. 미배포 테이블이라 DROP 후 재생성 | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-09-18 | `sensor_batch` | 신규 테이블 (LLD-0041 v1, 폐기). 시각은 epoch ms BIGINT | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-07-16 | `senior_profile` | `family_id` NOT NULL → NULL 허용 (마지막 방장 탈퇴 시 Family 삭제 후 null 처리) | `ALTER TABLE senior_profile MODIFY COLUMN family_id BIGINT NULL;` |
+| 2026-09-16 | `study_participation` | 신규 테이블. 국내 실증(IRB) 연구 참여·보존 날짜·동의 버전 (LLD-0031, ADR-0026) | LLD-0031 §8 CREATE TABLE 참조 |
 
 ## 코드 동기화 메모
 
