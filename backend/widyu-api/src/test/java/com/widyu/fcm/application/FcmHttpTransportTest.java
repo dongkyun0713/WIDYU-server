@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,6 +31,36 @@ import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
     @Test
+    @DisplayName("알람 설정 변경 data payload를 플랫폼 FCM payload에 전달한다")
+    void 알람_설정_변경_data_payload를_전달한다() throws Exception {
+        // given
+        ObjectMapper mapper = new ObjectMapper();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper, () -> "loopback-access-token",
+                Duration.ofSeconds(2));
+        FcmSendDto message = FcmSendDto.builder()
+                .title("복약 알람 변경")
+                .content("복약 알람 설정이 변경되었습니다.")
+                .data(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"))
+                .build();
+        try {
+            // when
+            FcmTransport.Result result = transport.send("loopback-token", message);
+
+            // then
+            assertThat(result.success()).isTrue();
+            assertThat(bodies).hasSize(1);
+            assertThat(bodies.get(0).at("/message/data/type").asText())
+                    .isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+            assertThat(bodies.get(0).at("/message/data/revision").asText()).isEqualTo("42");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
     @DisplayName("인증과 preflight 후 발송하면 잔여 TTL과 고정 notificationId를 플랫폼 payload에 전달한다")
     void 인증과_검증_대기를_차감한_TTL과_중복식별자를_전달한다() throws Exception {
         // given
@@ -42,8 +73,8 @@ class FcmHttpTransportTest {
             clock.advance(Duration.ofSeconds(30));
             return "loopback-access-token";
         }, Duration.ofSeconds(2), clock);
-        FcmDelivery first = new FcmDelivery(608L, 1, "loopback-token", message(), start.plusSeconds(300));
-        FcmDelivery retry = new FcmDelivery(608L, 2, "loopback-token", message(), first.expiresAt());
+        FcmDelivery first = new FcmDelivery(608L, 1, "loopback-token", alarmChangedMessage(), start.plusSeconds(300));
+        FcmDelivery retry = new FcmDelivery(608L, 2, "loopback-token", alarmChangedMessage(), first.expiresAt());
         try {
             // when
             assertThat(transport.send(first, () -> {
@@ -61,6 +92,8 @@ class FcmHttpTransportTest {
                         .isEqualTo(Long.toString(first.expiresAt().getEpochSecond()));
                 assertThat(body.at("/message/data/notificationId").isTextual()).isTrue();
                 assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("608");
+                assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+                assertThat(body.at("/message/data/revision").asText()).isEqualTo("42");
                 assertThat(body.at("/message/notification/title").asText()).isEqualTo("알림");
                 assertThat(body.at("/message/token").asText()).isEqualTo("loopback-token");
             }
@@ -340,6 +373,12 @@ class FcmHttpTransportTest {
 
     private static FcmSendDto message() {
         return FcmSendDto.builder().title("알림").content("본문").build();
+    }
+
+    private static FcmSendDto alarmChangedMessage() {
+        return FcmSendDto.builder().title("알림").content("본문")
+                .data(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"))
+                .build();
     }
 
     private static HttpServer payloadServer(ObjectMapper mapper, List<JsonNode> bodies)

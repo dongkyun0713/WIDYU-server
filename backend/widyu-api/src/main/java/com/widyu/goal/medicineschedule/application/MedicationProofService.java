@@ -11,6 +11,7 @@ import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.member.Member;
 import com.widyu.member.SeniorProfile;
+import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
 import java.time.LocalDate;
@@ -37,12 +38,13 @@ public class MedicationProofService {
 
     private final MedicationProofRepository medicationProofRepository;
     private final MedicineScheduleRepository medicineScheduleRepository;
+    private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
     private final S3Service s3Service;
 
     @Transactional
     public MedicationProofResponse verifyMedication(Long scheduleId, List<MultipartFile> images) {
-        Member currentMember = memberUtil.getCurrentMember();
+        Member currentMember = getCurrentMemberForAlarmChange();
 
         MedicineSchedule schedule = medicineScheduleRepository
                 .findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE)
@@ -89,6 +91,7 @@ public class MedicationProofService {
 
         MedicationProof proof = MedicationProof.create(schedule, currentMember, imageUrls);
         saveProof(proof, scheduleId);
+        currentMember.incrementMedicationAlarmRevision();
 
         long earnedPoints = calculateEarnedPoints(currentMember, now.toLocalDate());
 
@@ -105,6 +108,13 @@ public class MedicationProofService {
         long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
                 member, Status.ACTIVE, date);
         return MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
+    }
+
+    private Member getCurrentMemberForAlarmChange() {
+        Long memberId = memberUtil.getCurrentMember().getId();
+        return memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
+                        "존재하지 않는 사용자입니다."));
     }
 
     // 시니어 프로필이 없는 회원도 인증 자체는 성공해야 하므로 잔액은 0으로 내려준다.

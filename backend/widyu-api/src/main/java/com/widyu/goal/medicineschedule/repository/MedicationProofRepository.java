@@ -20,6 +20,12 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
             @Param("date") LocalDate date
     );
 
+    List<MedicationProof> findByMedicineScheduleAndVerifiedAtBetween(
+            MedicineSchedule medicineSchedule,
+            LocalDateTime startDateTime,
+            LocalDateTime endDateTime
+    );
+
     @Query("SELECT mp FROM MedicationProof mp " +
            "WHERE mp.member.id = :memberId " +
            "AND mp.verifiedAt BETWEEN :startDate AND :endDate")
@@ -55,6 +61,14 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
            "AND mp.verifiedAt BETWEEN :startDate AND :endDate")
     List<Long> findVerifiedScheduleIds(
             @Param("scheduleIds") List<Long> scheduleIds,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate
+    );
+
+    @Query("SELECT DISTINCT mp.medicineSchedule.id FROM MedicationProof mp " +
+           "WHERE mp.member.id = :memberId AND mp.verifiedAt BETWEEN :startDate AND :endDate")
+    List<Long> findVerifiedScheduleIdsByMemberAndDate(
+            @Param("memberId") Long memberId,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );

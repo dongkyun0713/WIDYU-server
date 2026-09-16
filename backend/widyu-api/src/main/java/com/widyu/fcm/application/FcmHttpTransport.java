@@ -23,6 +23,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
 
@@ -122,9 +123,14 @@ public class FcmHttpTransport implements FcmTransport {
             }
             // FCM은 최대 28일까지 받고 Android TTL을 초 단위로 내림한다.
             long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
-            message.data(Map.of("notificationId", notificationId.toString()))
+            HashMap<String, String> data = new HashMap<>(dto.data());
+            data.put("notificationId", notificationId.toString());
+            message.data(data)
                     .android(new FcmMessageDto.Android(ttl + "s"))
                     .apns(new FcmMessageDto.Apns(Map.of("apns-expiration", Long.toString(expiresAt.getEpochSecond()))));
+        }
+        if (expiresAt == null && !dto.data().isEmpty()) {
+            message.data(dto.data());
         }
         FcmMessageDto body = FcmMessageDto.builder().validateOnly(false).message(message.build()).build();
         HttpRequest request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofNanos(remaining))

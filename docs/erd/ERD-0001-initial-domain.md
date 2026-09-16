@@ -36,6 +36,7 @@ erDiagram
         MemberRole role
         MemberType type
         Status status
+        Long medicationAlarmRevision
     }
 
     LocalAccount {
@@ -265,6 +266,8 @@ erDiagram
         String body
         String image
         String scheme
+        String dataType
+        Long dataRevision
         FcmCategory fcmCategory
         Boolean emergency
         String state

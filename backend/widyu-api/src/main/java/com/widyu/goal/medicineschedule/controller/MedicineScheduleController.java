@@ -5,6 +5,7 @@ import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.goal.medicineschedule.application.ExternalMedicineService;
 import com.widyu.goal.medicineschedule.application.MedicationProofService;
 import com.widyu.goal.medicineschedule.application.MedicineScheduleService;
+import com.widyu.goal.medicineschedule.application.MedicationAlarmSyncService;
 import com.widyu.goal.medicineschedule.controller.docs.MedicineScheduleDocs;
 import com.widyu.goal.medicineschedule.dto.request.CreateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.dto.request.UpdateMedicineScheduleRequest;
@@ -14,6 +15,7 @@ import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDetailResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleIdResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicationAlarmSyncResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineSearchResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -40,8 +42,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class MedicineScheduleController implements MedicineScheduleDocs {
 
     private final MedicineScheduleService medicineScheduleService;
+    private final MedicationAlarmSyncService medicationAlarmSyncService;
     private final MedicationProofService medicationProofService;
     private final ExternalMedicineService externalMedicineService;
+
+    @Override
+    @GetMapping("/alarm-sync")
+    public ApiResponseTemplate<MedicationAlarmSyncResponse> getAlarmSync() {
+        return ApiResponseTemplate.ok().code("MEDICINE_2010").message("복약 알람 동기화 조회 성공")
+                .body(medicationAlarmSyncService.getCurrentMemberSnapshot());
+    }
 
     @Override
     @GetMapping("/daily")

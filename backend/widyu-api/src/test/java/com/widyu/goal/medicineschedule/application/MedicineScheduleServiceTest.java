@@ -12,10 +12,13 @@ import static org.mockito.Mockito.mock;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.fcm.application.FcmService;
+import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse.ScheduleItem;
+import com.widyu.goal.medicineschedule.dto.request.CreateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
@@ -36,6 +39,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -49,6 +53,7 @@ class MedicineScheduleServiceTest {
     @Mock private MedicationProofRepository medicationProofRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private MemberUtil memberUtil;
+    @Mock private FcmService fcmService;
 
     @InjectMocks private MedicineScheduleService medicineScheduleService;
 
@@ -123,6 +128,16 @@ class MedicineScheduleServiceTest {
         );
     }
 
+    private CreateMedicineScheduleRequest createRequest(String alarmTime) {
+        return new CreateMedicineScheduleRequest(
+                alarmTime,
+                List.of(new CreateMedicineScheduleRequest.CategoryItem(
+                        "아침약",
+                        List.of(new CreateMedicineScheduleRequest.MedicineItem(
+                                "타이레놀", 1.0, null, null, null))))
+        );
+    }
+
     private MedicineSchedule scheduleEffectiveFrom(Long id, Member member, LocalTime alarmTime, LocalDate effectiveFrom) {
         MedicineSchedule schedule = MedicineSchedule.create(member, alarmTime);
         ReflectionTestUtils.setField(schedule, "id", id);
@@ -137,7 +152,7 @@ class MedicineScheduleServiceTest {
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = mock(Member.class);
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
@@ -146,7 +161,14 @@ class MedicineScheduleServiceTest {
                 .willReturn(Optional.of(existing));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
         given(medicineScheduleRepository.save(any(MedicineSchedule.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+                .willAnswer(invocation -> {
+                    MedicineSchedule newSchedule = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(newSchedule, "id", 101L);
+                    return newSchedule;
+                });
+        MedicationProof proof = MedicationProof.create(existing, targetMember, List.of());
+        given(medicationProofRepository.findByMedicineScheduleAndVerifiedAtBetween(any(), any(), any()))
+                .willReturn(List.of(proof));
 
         // when
         medicineScheduleService.updateSchedule(scheduleId, updateRequest("09:00"), memberId);
@@ -154,6 +176,10 @@ class MedicineScheduleServiceTest {
         // then
         assertThat(existing.getEffectiveTo()).isEqualTo(LocalDate.now().minusDays(1));
         then(medicineScheduleRepository).should().save(any(MedicineSchedule.class));
+        assertThat(proof.getMedicineSchedule().getId()).isEqualTo(101L);
+        then(targetMember).should().incrementMedicationAlarmRevision();
+        then(fcmService).should().sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
     }
 
     @Test
@@ -163,7 +189,7 @@ class MedicineScheduleServiceTest {
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = mock(Member.class);
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
@@ -179,6 +205,12 @@ class MedicineScheduleServiceTest {
         assertThat(existing.getEffectiveTo()).isNull();
         assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
         then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
+        then(targetMember).should().incrementMedicationAlarmRevision();
+        ArgumentCaptor<FcmSendDto> messageCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should().sendMessageToUser(org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
+        assertThat(messageCaptor.getValue().data())
+                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsKey("revision");
     }
 
     @Test
@@ -188,7 +220,7 @@ class MedicineScheduleServiceTest {
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = mock(Member.class);
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
@@ -200,6 +232,33 @@ class MedicineScheduleServiceTest {
 
         // then
         assertThat(existing.getEffectiveTo()).isEqualTo(LocalDate.now().minusDays(1));
+        then(targetMember).should().incrementMedicationAlarmRevision();
+        then(fcmService).should().sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("스케줄을 생성하면 revision을 증가시키고 설정 변경 FCM을 보낸다")
+    void 스케줄을_생성하면_revision을_증가시키고_설정_변경_FCM을_보낸다() {
+        // given
+        Long memberId = 1L;
+        Member targetMember = mock(Member.class);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(targetMember.getId()).willReturn(memberId);
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
+            MedicineSchedule schedule = invocation.getArgument(0);
+            ReflectionTestUtils.setField(schedule, "id", 1L);
+            return schedule;
+        });
+
+        // when
+        medicineScheduleService.createSchedule(createRequest("08:00"), memberId);
+
+        // then
+        then(targetMember).should().incrementMedicationAlarmRevision();
+        then(fcmService).should().sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
     }
 
     @Test
@@ -209,7 +268,7 @@ class MedicineScheduleServiceTest {
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = mock(Member.class);
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule closed = scheduleEffectiveFrom(
@@ -230,7 +289,7 @@ class MedicineScheduleServiceTest {
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = mock(Member.class);
-        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule closed = scheduleEffectiveFrom(

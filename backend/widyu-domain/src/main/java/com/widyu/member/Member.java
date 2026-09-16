@@ -73,6 +73,9 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false)
     private Status status;
 
+    @Column(nullable = false)
+    private long medicationAlarmRevision;
+
     @Builder(access = AccessLevel.PRIVATE)
     private Member(final MemberRole role, final MemberType type, final String name, final String phoneNumber,
                    final String profileImage, final Status status) {
@@ -136,6 +139,11 @@ public class Member extends BaseTimeEntity {
 
     public void reactivate() {
         this.status = Status.ACTIVE;
+    }
+
+    public long incrementMedicationAlarmRevision() {
+        medicationAlarmRevision++;
+        return medicationAlarmRevision;
     }
 
     public void maskPersonalInfo() {
