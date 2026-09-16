@@ -10,6 +10,7 @@ import com.widyu.auth.application.guardian.local.LocalLoginService;
 import com.widyu.auth.dto.response.LocalSignupResponse;
 import com.widyu.auth.repository.TemporaryMemberRepository;
 import com.widyu.auth.repository.VerificationCodeRepository;
+import com.widyu.fcm.application.FcmTransport;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.Member;
@@ -44,6 +45,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("로컬 보호자 회원가입 통합 테스트")
 class LocalGuardianSignupIntegrationTest {
+    @MockBean private FcmTransport fcmTransport;
 
     @Autowired private VerificationCodeService verificationCodeService;
     @Autowired private LocalLoginService localLoginService;

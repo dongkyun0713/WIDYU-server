@@ -165,7 +165,7 @@ public class MedicineScheduleNotificationListener {
                     schedule.getMember().getProfileImage()
             );
 
-            fcmService.sendMessageToUser(membership.getGuardian().getId(), dto);
+            fcmService.sendMessageToUser(membership.getGuardian().getId(), dto.withRelatedMember(seniorMemberId));
 
             log.info("보호자 미인증 알림 발송: seniorMemberId={}, guardianId={}, scheduleId={}, alarmTime={}",
                     seniorMemberId, membership.getGuardian().getId(),

@@ -6,6 +6,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
+import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.widyu.heart.HeartRateEmergency;
 import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
@@ -35,6 +37,7 @@ class HeartRatePersistenceServiceTest {
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private HeartRateEmergencyRepository heartRateEmergencyRepository;
     @Mock private MemberRepository memberRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private HeartRatePersistenceService heartRatePersistenceService;
@@ -65,6 +68,7 @@ class HeartRatePersistenceServiceTest {
         then(heartRateResultRepository).should().save(any(HeartRateResult.class));
         then(heartRateEventRepository).should().save(any(HeartRateEvent.class));
         then(heartRateEmergencyRepository).should(never()).save(any());
+        then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
     }
 
     @Test
@@ -92,5 +96,6 @@ class HeartRatePersistenceServiceTest {
         assertThat(emergency.getHeartRate()).isEqualTo(180);
         assertThat(emergency.getMeasuredAt()).isEqualTo(measuredAt);
         assertThat(emergency.getLocation()).isEqualTo("서울시");
+        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId));
     }
 }

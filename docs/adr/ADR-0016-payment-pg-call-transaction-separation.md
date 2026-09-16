@@ -15,7 +15,7 @@
 - PG 호출 성공 후 프로세스가 종료되면 1분 주기 복구 스케줄러와 클라이언트 재요청이 같은 멱등 키로 PG 요청을 재실행하고, 별도 결과 반영 트랜잭션에서 내부 상태를 완료한다.
 - 오류 응답은 HTTP 4xx/5xx가 아니라 Toss `code`로 분류한다. 오류 코드는 영속화하고 PG 조회 뒤 재시도 또는 선점 해제를 결정한다.
 - 승인 선점은 `PaymentOrder.APPROVING`과 `approvalPaymentKey`, `approvalPgIdempotencyKey`, `approvalRequestedAt`으로 표현한다.
-- 취소 선점은 `PaymentCancel.PENDING` 레코드와 `pgIdempotencyKey`로 표현한다. 완료 시에만 포인트 환수와 `Payment` 취소 누적값을 반영한다.
+- 취소 선점은 `PaymentCancel.PENDING` 레코드와 `pgIdempotencyKey`로 표현한다. 포인트는 선점 시 차감해 예약하고 완료 시 `Payment` 취소 누적값을 반영한다. 예약 반환 결정은 [ADR-0012](ADR-0012-payment-cancel-idempotency.md)를 따른다. 현재 전체 흐름은 [Payment Architecture](../architecture/payment.md)에 정리한다.
 
 ## 대안
 

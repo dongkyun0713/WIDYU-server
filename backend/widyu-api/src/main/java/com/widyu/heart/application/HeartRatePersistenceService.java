@@ -1,5 +1,7 @@
 package com.widyu.heart.application;
 
+import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.heart.HeartRateEmergency;
@@ -25,6 +27,7 @@ public class HeartRatePersistenceService {
     private final HeartRateEventRepository heartRateEventRepository;
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final MemberRepository memberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). */
     @Transactional
@@ -48,6 +51,7 @@ public class HeartRatePersistenceService {
         if (isEmergency) {
             heartRateEmergencyRepository.save(HeartRateEmergency.of(
                     member, request.heartRate(), request.measuredAt(), request.location()));
+            eventPublisher.publishEvent(new HeartRateEmergencyEvent(memberId));
         }
 
         return result;

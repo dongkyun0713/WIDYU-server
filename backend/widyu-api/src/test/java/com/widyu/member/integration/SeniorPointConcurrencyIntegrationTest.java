@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
 import com.widyu.auth.repository.VerificationCodeRepository;
+import com.widyu.fcm.application.FcmTransport;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.Member;
@@ -50,6 +51,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 })
 @DisplayName("시니어 포인트 동시성 통합 테스트")
 class SeniorPointConcurrencyIntegrationTest {
+    @MockBean private FcmTransport fcmTransport;
 
     @Autowired private SeniorProfileService seniorProfileService;
     @Autowired private MemberRepository memberRepository;

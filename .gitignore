@@ -56,7 +56,13 @@ src/main/resources/firebase/
 .claude/*
 !.claude/settings.json
 apiDocs/
-docs/architecture/
+docs/architecture/*
+!docs/architecture/README.md
+!docs/architecture/authentication.md
+!docs/architecture/websocket.md
+!docs/architecture/notification.md
+!docs/architecture/payment.md
+!docs/architecture/infrastructure.md
 
 # local artifacts
 dump.rdb

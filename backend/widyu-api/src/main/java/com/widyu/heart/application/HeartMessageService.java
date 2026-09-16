@@ -42,10 +42,11 @@ public class HeartMessageService {
                 .fcmCategory(FcmCategory.HEART_MESSAGE)
                 .scheme("")
                 .image(sender.getProfileImage())
+                .relatedMemberId(sender.getId())
                 .build();
 
         fcmService.sendMessageToUser(receiver.getId(), fcmSendDto);
-        log.info("하트 메시지 전송 완료: senderId={}, receiverId={}", sender.getId(), receiver.getId());
+        log.info("하트 메시지 발송 요청 접수: senderId={}, receiverId={}", sender.getId(), receiver.getId());
     }
 
     private void validateFamilyConnection(Member sender, Member receiver) {

@@ -63,7 +63,7 @@ public class FcmController implements FcmDocs {
 
         return ApiResponseTemplate.ok()
                 .code("FCM_2007")
-                .message("알림이 성공적으로 전송되었습니다.")
-                .body("알림 전송 완료");
+                .message("알림 발송 요청을 접수했습니다")
+                .body("알림 발송 요청을 접수했습니다");
     }
 }
