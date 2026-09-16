@@ -1,5 +1,6 @@
 package com.widyu.member.application;
 
+import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.Member;
@@ -45,29 +46,19 @@ public class FamilyAccessService {
     }
 
     public void verifyFamilyAccess(Long guardianId, Long targetMemberId) {
-        Member targetMember = memberRepository.findById(targetMemberId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
-                        "존재하지 않는 사용자입니다."));
+        Member targetMember = findSeniorMember(targetMemberId);
+        verifyFamilyRelationship(guardianId, targetMember);
+    }
 
-        if (targetMember.getType() != MemberType.SENIOR) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "시니어의 리소스만 접근할 수 있습니다.");
-        }
+    public void verifyActiveFamilyAccess(Long guardianId, Long targetMemberId) {
+        Member guardian = memberRepository.findById(guardianId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN,
+                        "활성 회원만 실시간 정보를 받을 수 있습니다."));
+        Member targetMember = findSeniorMember(targetMemberId);
 
-        if (targetMember.getSeniorProfile() == null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    "시니어 프로필이 없습니다.");
-        }
-
-        boolean isFamily = familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(
-                guardianId,
-                targetMember.getSeniorProfile().getId()
-        );
-
-        if (!isFamily) {
-            throw new BusinessException(ErrorCode.FORBIDDEN,
-                    "가족으로 연결된 시니어만 접근할 수 있습니다.");
-        }
+        verifyActiveMember(guardian);
+        verifyActiveMember(targetMember);
+        verifyFamilyRelationship(guardianId, targetMember);
     }
 
     public void verifyLeaderAccess(Long guardianId, Long targetMemberId) {
@@ -99,5 +90,41 @@ public class FamilyAccessService {
         return familyMembershipRepository.findFamilyIdByGuardianId(member.getId())
                 .or(() -> seniorProfileRepository.findFamilyIdByMemberId(member.getId()))
                 .orElse(null);
+    }
+
+    private Member findSeniorMember(Long targetMemberId) {
+        Member targetMember = memberRepository.findById(targetMemberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
+                        "존재하지 않는 사용자입니다."));
+
+        if (targetMember.getType() != MemberType.SENIOR) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "시니어의 리소스만 접근할 수 있습니다.");
+        }
+
+        if (targetMember.getSeniorProfile() == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "시니어 프로필이 없습니다.");
+        }
+        return targetMember;
+    }
+
+    private void verifyActiveMember(Member member) {
+        if (member.getStatus() != Status.ACTIVE) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "활성 회원만 실시간 정보를 받을 수 있습니다.");
+        }
+    }
+
+    private void verifyFamilyRelationship(Long guardianId, Member targetMember) {
+        boolean isFamily = familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(
+                guardianId,
+                targetMember.getSeniorProfile().getId()
+        );
+
+        if (!isFamily) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "가족으로 연결된 시니어만 접근할 수 있습니다.");
+        }
     }
 }

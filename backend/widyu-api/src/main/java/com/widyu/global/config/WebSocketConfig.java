@@ -1,5 +1,6 @@
 package com.widyu.global.config;
 
+import com.widyu.global.websocket.FamilyTopicOutboundInterceptor;
 import com.widyu.global.websocket.JwtChannelInterceptor;
 import com.widyu.global.websocket.JwtHandshakeInterceptor;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
     private final JwtChannelInterceptor jwtChannelInterceptor;
+    private final FamilyTopicOutboundInterceptor familyTopicOutboundInterceptor;
     private final ThreadPoolTaskExecutor websocketInboundExecutor;
 
     @Override
@@ -41,5 +43,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.taskExecutor(websocketInboundExecutor);
         registration.interceptors(jwtChannelInterceptor);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        registration.interceptors(familyTopicOutboundInterceptor);
     }
 }
