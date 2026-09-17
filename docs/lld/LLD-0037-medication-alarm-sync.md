@@ -45,7 +45,7 @@ FCM data payload: `{ "type": "MEDICATION_SCHEDULE_CHANGED", "revision": "42" }`.
 
 ## 6. 배포 마이그레이션
 
-운영 환경은 Hibernate `validate`를 사용하므로 배포 전에 아래 DDL을 적용한다.
+운영 환경은 Hibernate `validate`를 사용하므로 배포 전에 `scripts/mysql/add_medication_alarm_sync.sql`을 1회 실행한다.
 
 ```sql
 ALTER TABLE member ADD COLUMN medication_alarm_revision BIGINT NOT NULL DEFAULT 0;
