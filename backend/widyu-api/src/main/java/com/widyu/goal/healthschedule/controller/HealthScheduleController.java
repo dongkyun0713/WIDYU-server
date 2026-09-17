@@ -5,7 +5,6 @@ import com.widyu.goal.healthschedule.controller.docs.HealthScheduleDocs;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCompleteRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateForSeniorRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateRequest;
-import com.widyu.goal.healthschedule.dto.request.HealthSchedulePointGetRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleUpdateRequest;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDayResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailResponse;
@@ -133,18 +132,6 @@ public class HealthScheduleController implements HealthScheduleDocs {
                 .code("HLTH_2005")
                 .message("건강 일정 상세 조회가 완료되었습니다.")
                 .body(response);
-    }
-
-    @PostMapping("/points")
-    public ApiResponseTemplate<Void> accumulateHealthSchedulePoints(
-            @RequestBody HealthSchedulePointGetRequest healthSchedulePointGetRequest
-    ) {
-        healthScheduleFacade.accumulateHealthSchedulePoints(healthSchedulePointGetRequest);
-
-        return ApiResponseTemplate.ok()
-                .code("HLTH_2006")
-                .message("건강 일정 포인트 적립이 완료되었습니다.")
-                .build();
     }
 
     @GetMapping("/weekly")

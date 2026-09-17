@@ -2,7 +2,6 @@ package com.widyu.goal.healthschedule.application;
 
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateForSeniorRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateRequest;
-import com.widyu.goal.healthschedule.dto.request.HealthSchedulePointGetRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleUpdateRequest;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDayResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailResponse;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 public class HealthScheduleFacadeImpl implements HealthScheduleFacade {
 
     private final HealthScheduleService healthScheduleService;
-    private final HealthScheduleRewardService healthScheduleRewardService;
     private final HealthScheduleProgressService healthScheduleProgressService;
 
     @Override
@@ -60,11 +58,6 @@ public class HealthScheduleFacadeImpl implements HealthScheduleFacade {
     @Override
     public List<HealthScheduleDetailResponse> getHealthSchedulesByDateForSenior(Long seniorId, LocalDate date) {
         return healthScheduleService.getHealthSchedulesByDateForSenior(seniorId, date);
-    }
-
-    @Override
-    public void accumulateHealthSchedulePoints(HealthSchedulePointGetRequest healthSchedulePointGetRequest) {
-        healthScheduleRewardService.accumulateHealthSchedulePoints(healthSchedulePointGetRequest);
     }
 
     @Override

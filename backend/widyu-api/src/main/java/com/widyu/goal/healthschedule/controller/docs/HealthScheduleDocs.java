@@ -3,7 +3,6 @@ package com.widyu.goal.healthschedule.controller.docs;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCompleteRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateForSeniorRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateRequest;
-import com.widyu.goal.healthschedule.dto.request.HealthSchedulePointGetRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleUpdateRequest;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDayResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailResponse;
@@ -339,42 +338,6 @@ public interface HealthScheduleDocs {
     );
 
     @Operation(
-            summary = "건강 일정 포인트 적립",
-            description = "시니어가 건강 일정을 완료한 후 포인트를 적립합니다. isReward를 true로 변경합니다."
-    )
-    @RequestBody(
-            description = "포인트 적립 요청 정보",
-            required = true,
-            content = @Content(
-                    schema = @Schema(implementation = HealthSchedulePointGetRequest.class),
-                    examples = @ExampleObject(
-                            value = """
-                                    {
-                                      "healthScheduleId": 1
-                                    }
-                                    """
-                    )
-            )
-    )
-    @ApiResponse(
-            responseCode = "200",
-            description = "건강 일정 포인트 적립 성공",
-            content = @Content(
-                    schema = @Schema(implementation = ApiResponseTemplate.class),
-                    examples = @ExampleObject(
-                            value = """
-                                    {
-                                      "code": "HLTH_2006",
-                                      "message": "건강 일정 포인트 적립이 완료되었습니다.",
-                                      "data": null
-                                    }
-                                    """
-                    )
-            )
-    )
-    ApiResponseTemplate<Void> accumulateHealthSchedulePoints(HealthSchedulePointGetRequest healthSchedulePointGetRequest);
-
-    @Operation(
             summary = "일주일치 건강 일정 조회 (로그인 시)",
             description = "시니어가 로그인 시 오늘부터 7일간의 건강 일정을 조회합니다. 병원 위치 정보가 포함됩니다."
     )
@@ -418,6 +381,7 @@ public interface HealthScheduleDocs {
                     시니어는 본인의 일정만, 보호자는 연결된 시니어의 일정만 완료 처리 가능합니다.
                     방문 인증은 일정 당일 00시부터 일정 시간 30분 후까지 가능합니다.
                     클라이언트 좌표를 별도로 받지 않고, 서버에 저장된 최신 시니어 위치가 일정 장소 반경 75m 이내인지 검증합니다.
+                    최초 완료 시 rewardPoint가 1회 적립되며, 재완료 처리해도 중복 적립되지 않습니다.
                     """
     )
     @RequestBody(

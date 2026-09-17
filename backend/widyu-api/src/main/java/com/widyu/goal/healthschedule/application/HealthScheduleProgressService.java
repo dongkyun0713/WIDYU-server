@@ -2,6 +2,7 @@ package com.widyu.goal.healthschedule.application;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.retry.RetryOnPointConflict;
 import com.widyu.global.util.GeoUtils;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.healthschedule.HealthSchedule;
@@ -12,6 +13,7 @@ import com.widyu.location.realtime.repository.SeniorLocationRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.LocalDateTime;
@@ -28,16 +30,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class HealthScheduleProgressService {
 
     private static final double VISIT_COMPLETION_RADIUS_METERS = 75.0;
+    private static final String VISIT_REWARD_DESCRIPTION = "건강 일정 방문";
+    private static final String VISIT_REWARD_OPERATION_KEY_PREFIX = "HEALTH_SCHEDULE_REWARD:";
 
     private final HealthScheduleRepository healthScheduleRepository;
     private final SeniorLocationRepository seniorLocationRepository;
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
+    private final SeniorProfileService seniorProfileService;
     private final MemberUtil memberUtil;
 
     /**
      * 시니어가 건강 일정을 완료 처리
      */
+    @RetryOnPointConflict
     @Transactional
     public void completeSchedule(Long healthScheduleId) {
         Member currentMember = memberUtil.getCurrentMember();
@@ -63,8 +69,8 @@ public class HealthScheduleProgressService {
                     "건강 일정 장소 반경 " + (int) VISIT_COMPLETION_RADIUS_METERS + "m 안에서만 방문 인증할 수 있습니다.");
         }
 
-        // COMPLETED로 변경
-        healthSchedule.complete();
+        // COMPLETED로 변경하고 최초 1회 포인트 적립
+        completeAndReward(healthSchedule);
     }
 
     /**
@@ -85,9 +91,38 @@ public class HealthScheduleProgressService {
             }
 
             if (isArrivedAtSchedule(schedule, latitude, longitude)) {
-                schedule.complete();
+                completeAndReward(schedule);
             }
         }
+    }
+
+    /**
+     * 일정을 COMPLETED로 바꾸고, 아직 적립하지 않았다면 rewardPoint를 1회만 적립한다.
+     * 적립 멱등성은 {@code isReward} 가드와 {@code PointHistory.operationKey} unique 제약이 함께 보장한다.
+     * 소유자가 SENIOR가 아니면(보호자 본인 일정 생성 경로) 적립 없이 완료만 처리해,
+     * SeniorProfile이 없는 회원 때문에 완료까지 롤백되지 않게 한다.
+     */
+    private void completeAndReward(HealthSchedule schedule) {
+        schedule.complete();
+
+        if (schedule.getIsReward()) {
+            return;
+        }
+
+        Member owner = schedule.getMember();
+        if (owner.getType() != MemberType.SENIOR) {
+            log.info("건강 일정 소유자가 시니어가 아니어서 포인트를 적립하지 않습니다: healthScheduleId={}, memberId={}",
+                    schedule.getId(), owner.getId());
+            return;
+        }
+
+        seniorProfileService.addPointsToMember(
+                owner.getId(),
+                schedule.getRewardPoint().longValue(),
+                VISIT_REWARD_DESCRIPTION,
+                VISIT_REWARD_OPERATION_KEY_PREFIX + schedule.getId()
+        );
+        schedule.claimReward();
     }
 
     private void validateHealthScheduleAccess(HealthSchedule healthSchedule, Member currentMember) {

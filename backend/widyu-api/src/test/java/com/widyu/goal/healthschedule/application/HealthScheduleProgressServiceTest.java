@@ -2,8 +2,12 @@ package com.widyu.goal.healthschedule.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
 
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -15,6 +19,7 @@ import com.widyu.location.SeniorLocation;
 import com.widyu.location.realtime.repository.SeniorLocationRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.LocalDateTime;
@@ -31,13 +36,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("HealthScheduleProgressService 지난 일정 마감 배치 단위 테스트")
+@DisplayName("HealthScheduleProgressService 방문 완료·포인트 적립 단위 테스트")
 class HealthScheduleProgressServiceTest {
 
     @Mock private HealthScheduleRepository healthScheduleRepository;
     @Mock private SeniorLocationRepository seniorLocationRepository;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
+    @Mock private SeniorProfileService seniorProfileService;
     @Mock private MemberUtil memberUtil;
 
     @InjectMocks private HealthScheduleProgressService healthScheduleProgressService;
@@ -57,6 +63,18 @@ class HealthScheduleProgressServiceTest {
         Member senior = Member.createMember(MemberType.SENIOR, "부모님", "01011112222");
         ReflectionTestUtils.setField(senior, "id", 1L);
         return senior;
+    }
+
+    private Member guardianMember() {
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "자녀", "01033334444");
+        ReflectionTestUtils.setField(guardian, "id", 2L);
+        return guardian;
+    }
+
+    private HealthSchedule scheduleWithId(Member member, LocalDateTime scheduledAt, Long scheduleId) {
+        HealthSchedule schedule = upcomingScheduleFor(member, scheduledAt);
+        ReflectionTestUtils.setField(schedule, "id", scheduleId);
+        return schedule;
     }
 
     @Test
@@ -201,5 +219,90 @@ class HealthScheduleProgressServiceTest {
 
         // then
         assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.UPCOMING);
+    }
+
+    @Test
+    @DisplayName("수동 완료로 최초 방문 인증하면 rewardPoint를 1회 적립한다")
+    void 수동_완료로_최초_방문_인증하면_포인트를_1회_적립한다() {
+        // given
+        Long scheduleId = 1L;
+        Member senior = seniorMember();
+        HealthSchedule schedule = scheduleWithId(senior, LocalDateTime.now().minusMinutes(5), scheduleId);
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(seniorLocationRepository.findBySeniorId(senior.getId()))
+                .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.5, 127.0)));
+
+        // when
+        healthScheduleProgressService.completeSchedule(scheduleId);
+
+        // then
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        assertThat(schedule.getIsReward()).isTrue();
+        then(seniorProfileService).should()
+                .addPointsToMember(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+    }
+
+    @Test
+    @DisplayName("실시간 위치로 자동 완료해도 rewardPoint를 1회 적립한다")
+    void 자동_완료로_방문_인증하면_포인트를_1회_적립한다() {
+        // given
+        Long scheduleId = 7L;
+        Member senior = seniorMember();
+        HealthSchedule schedule = scheduleWithId(senior, LocalDateTime.now().minusMinutes(5), scheduleId);
+        given(healthScheduleRepository.findByMemberIdAndStatusAndDate(
+                eq(senior.getId()), eq(ProgressStatus.UPCOMING), beforeDateCaptor.capture(), beforeDateCaptor.capture()))
+                .willReturn(List.of(schedule));
+
+        // when
+        healthScheduleProgressService.completeArrivedSchedules(senior.getId(), 37.5, 127.0);
+
+        // then
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        assertThat(schedule.getIsReward()).isTrue();
+        then(seniorProfileService).should()
+                .addPointsToMember(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+    }
+
+    @Test
+    @DisplayName("이미 적립된 일정을 다시 완료 처리하면 포인트를 적립하지 않는다")
+    void 이미_적립된_일정을_다시_완료하면_포인트를_적립하지_않는다() {
+        // given
+        Long scheduleId = 1L;
+        Member senior = seniorMember();
+        HealthSchedule schedule = scheduleWithId(senior, LocalDateTime.now().minusMinutes(5), scheduleId);
+        schedule.claimReward();
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(seniorLocationRepository.findBySeniorId(senior.getId()))
+                .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.5, 127.0)));
+
+        // when
+        healthScheduleProgressService.completeSchedule(scheduleId);
+
+        // then
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        then(seniorProfileService).should(never())
+                .addPointsToMember(anyLong(), anyLong(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("소유자가 보호자인 일정을 완료 처리하면 상태만 바뀌고 포인트를 적립하지 않는다")
+    void 보호자_소유_일정을_완료하면_포인트를_적립하지_않는다() {
+        // given
+        Member guardian = guardianMember();
+        HealthSchedule schedule = scheduleWithId(guardian, LocalDateTime.now().minusMinutes(5), 9L);
+        given(healthScheduleRepository.findByMemberIdAndStatusAndDate(
+                eq(guardian.getId()), eq(ProgressStatus.UPCOMING), beforeDateCaptor.capture(), beforeDateCaptor.capture()))
+                .willReturn(List.of(schedule));
+
+        // when
+        healthScheduleProgressService.completeArrivedSchedules(guardian.getId(), 37.5, 127.0);
+
+        // then
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        assertThat(schedule.getIsReward()).isFalse();
+        then(seniorProfileService).should(never())
+                .addPointsToMember(anyLong(), anyLong(), anyString(), any());
     }
 }
