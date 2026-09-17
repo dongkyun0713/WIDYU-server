@@ -25,6 +25,7 @@ public class MedicationProofService {
 
     public MedicationProofResponse verifyMedication(Long scheduleId, List<MultipartFile> images) {
         Long memberId = memberUtil.getCurrentMember().getId();
+        transactionService.validateBeforeUpload(memberId, scheduleId);
         List<String> imageUrls = uploadProofImages(images, memberId);
         try {
             return transactionService.verifyMedication(memberId, scheduleId, imageUrls);

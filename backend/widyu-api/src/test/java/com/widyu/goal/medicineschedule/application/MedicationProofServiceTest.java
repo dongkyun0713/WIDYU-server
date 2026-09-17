@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.medicineschedule.dto.response.MedicationProofResponse;
@@ -45,7 +46,7 @@ class MedicationProofServiceTest {
         given(s3Service.uploadFile(image, "medication-proof/10/proof.jpg"))
                 .willReturn("https://cdn/proof.jpg");
         given(transactionService.verifyMedication(eq(10L), eq(1L), any()))
-                .willThrow(new BusinessException(com.widyu.global.error.ErrorCode.BAD_REQUEST, "중복 인증"));
+                .willThrow(new BusinessException(ErrorCode.BAD_REQUEST, "중복 인증"));
 
         // when & then
         assertThatThrownBy(() -> medicationProofService.verifyMedication(1L, List.of(image)))
@@ -68,5 +69,22 @@ class MedicationProofServiceTest {
 
         // then
         then(transactionService).should().verifyMedication(10L, 1L, List.of());
+    }
+
+    @Test
+    @DisplayName("사전 검증에 실패하면 이미지를 업로드하지 않는다")
+    void 사전_검증에_실패하면_이미지를_업로드하지_않는다() {
+        // given
+        Member member = mock(Member.class);
+        MultipartFile image = mock(MultipartFile.class);
+        given(member.getId()).willReturn(10L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        org.mockito.BDDMockito.willThrow(new BusinessException(ErrorCode.BAD_REQUEST, "중복 인증"))
+                .given(transactionService).validateBeforeUpload(10L, 1L);
+
+        // when & then
+        assertThatThrownBy(() -> medicationProofService.verifyMedication(1L, List.of(image)))
+                .isInstanceOf(BusinessException.class);
+        then(s3Service).shouldHaveNoInteractions();
     }
 }

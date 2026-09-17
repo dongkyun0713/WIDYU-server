@@ -35,6 +35,21 @@ public class MedicationProofTransactionService {
     private final MedicineScheduleRepository medicineScheduleRepository;
     private final MemberRepository memberRepository;
 
+    public void validateBeforeUpload(Long memberId, Long scheduleId) {
+        Member currentMember = memberRepository.findById(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
+                        "존재하지 않는 사용자입니다."));
+        MedicineSchedule schedule = medicineScheduleRepository
+                .findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
+                        "존재하지 않는 약 복용 스케줄입니다."));
+
+        validateScheduleOwner(schedule, currentMember);
+        LocalDateTime now = LocalDateTime.now();
+        validateScheduleTime(schedule, now);
+        validateNotVerifiedToday(schedule, now);
+    }
+
     @Transactional
     public MedicationProofResponse verifyMedication(Long memberId, Long scheduleId, List<String> imageUrls) {
         Member currentMember = memberRepository.findByIdForUpdate(memberId)
