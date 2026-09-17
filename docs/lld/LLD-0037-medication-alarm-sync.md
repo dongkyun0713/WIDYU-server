@@ -33,7 +33,7 @@ FCM data payload: `{ "type": "MEDICATION_SCHEDULE_CHANGED", "revision": "42" }`.
 
 ## 4. 데이터와 트랜잭션
 
-`Member.medicationAlarmRevision BIGINT NOT NULL DEFAULT 0`을 추가한다. schedule CRUD와 proof 저장은 같은 트랜잭션에서 해당 회원 revision을 증가시킨다. revision을 바꾸는 명령은 회원 행을 `PESSIMISTIC_WRITE`로 잠가 동시 변경을 직렬화한다. 설정 변경 FCM outbox는 revision 증가와 같은 트랜잭션에서 enqueue한다.
+`Member.medicationAlarmRevision BIGINT NOT NULL DEFAULT 0`을 추가한다. schedule CRUD와 proof 저장은 같은 트랜잭션에서 해당 회원 revision을 증가시킨다. revision을 바꾸는 명령은 회원 행을 `PESSIMISTIC_WRITE`로 잠가 동시 변경을 직렬화한다. 복용 인증 이미지는 잠금 트랜잭션 밖에서 업로드하고, 업로드 후의 별도 트랜잭션에서 소유권·시간·중복을 다시 검증한다. 최종 검증이나 저장이 실패하면 업로드한 이미지를 삭제한다. 설정 변경 FCM outbox는 revision 증가와 같은 트랜잭션에서 enqueue한다.
 
 ## 5. 인수조건
 
