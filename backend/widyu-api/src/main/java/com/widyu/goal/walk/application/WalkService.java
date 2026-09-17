@@ -5,6 +5,7 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.retry.RetryOnPointConflict;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.walk.Walk;
 import com.widyu.goal.walk.dto.request.SetGoalRequest;
@@ -34,6 +35,7 @@ public class WalkService {
     private final WalkRepository walkRepository;
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
+    private final SeniorProfileService seniorProfileService;
 
     public WalkMonthlyResponse getMonthlyStats(int year, int month, Long memberId) {
         Member targetMember = getMember(memberId);
@@ -161,7 +163,8 @@ public class WalkService {
         // 목표 달성 시 포인트 지급 (하루 1회만, 목표 초과 후 재연동해도 중복 지급하지 않음)
         boolean achieved = walk.isGoalAchieved();
         if (achieved && !walk.isRewarded() && currentMember.getSeniorProfile() != null) {
-            currentMember.getSeniorProfile().addPoints((long) walk.getPointRewarded());
+            seniorProfileService.addPointsToMember(currentMember.getId(), (long) walk.getPointRewarded(),
+                    "걷기 목표 달성", "WALK_REWARD:" + walk.getId());
             walk.markRewarded();
             log.info("걸음 목표 달성 - 포인트 자동 지급: memberId={}, points={}",
                     currentMember.getId(), walk.getPointRewarded());
