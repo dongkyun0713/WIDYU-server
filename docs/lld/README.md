@@ -51,6 +51,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0040](LLD-0040-health-schedule-visit-reward.md) | 건강 일정 방문 완료 포인트 적립 | Approved | #623 |
 | [LLD-0039](LLD-0039-payment-point-decoupling.md) | 결제와 포인트 적립 분리 | Approved | #624 |
 | [LLD-0037](LLD-0037-medication-alarm-sync.md) | 복약 알람 스냅샷 동기화와 revision FCM | Approved | #619 |
 | [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
