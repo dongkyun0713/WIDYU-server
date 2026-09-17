@@ -4,6 +4,7 @@ import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.goal.medicineschedule.dto.request.CreateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.dto.request.UpdateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.dto.response.MedicationProofResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicationAlarmSyncResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDetailResponse;
@@ -30,6 +31,43 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Medicine Schedule", description = "약 복용 관리 API")
 public interface MedicineScheduleDocs {
+
+    @Operation(
+            summary = "복약 알람 스냅샷 조회",
+            description = """
+                    앱이 OS 로컬 알람을 동기화하기 위한 본인의 오늘 복약 스케줄과 인증 완료 정보를 조회합니다.
+
+                    `revision`은 복약 스케줄 또는 오늘 복용 인증이 바뀔 때 증가합니다.
+                    FCM의 `MEDICATION_SCHEDULE_CHANGED`를 받거나 앱이 포그라운드가 될 때 이 API를 호출하세요.
+                    `completed`의 `scheduleId:yyyy-MM-dd` 항목은 해당 일자의 로컬 알람을 건너뜁니다.
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = MedicationAlarmSyncResponse.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "code": "MEDICINE_2010",
+                                              "message": "복약 알람 동기화 조회 성공",
+                                              "data": {
+                                                "revision": 42,
+                                                "timeZone": "Asia/Seoul",
+                                                "schedules": [{"scheduleId": 15, "alarmTime": "19:27", "doseCount": 2}],
+                                                "completed": ["15:2026-09-16"]
+                                              }
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @ApiResponse(responseCode = "401", description = "인증 실패")
+    })
+    ApiResponseTemplate<MedicationAlarmSyncResponse> getAlarmSync();
 
     @Operation(
             summary = "일자별 약 복용 현황 조회",

@@ -94,4 +94,8 @@ public class MedicationProof extends BaseTimeEntity {
                 .verifiedAt(LocalDateTime.now())
                 .build();
     }
+
+    public void moveTo(MedicineSchedule medicineSchedule) {
+        this.medicineSchedule = medicineSchedule;
+    }
 }

@@ -32,6 +32,8 @@ public class FcmOutboxService {
             FcmOutbox row = FcmOutbox.builder().recipientMember(token.getMember()).memberFcmToken(token)
                     .relatedMemberId(message.relatedMemberId()).familyId(familyId)
                     .title(message.title()).body(message.content()).image(message.image()).scheme(message.scheme())
+                    .dataType(message.data().get("type"))
+                    .dataRevision(parseRevision(message.data().get("revision")))
                     .fcmCategory(message.fcmCategory()).emergency(message.emergency()).state(FcmOutbox.State.PENDING)
                     .availableAt(now).expiresAt(now.plus(properties.ttl(message.emergency()))).build();
             outbox.save(row);
@@ -41,5 +43,12 @@ public class FcmOutboxService {
                 public void afterCommit() { dispatcher.submit(id); }
             });
         }
+    }
+
+    private Long parseRevision(String revision) {
+        if (revision == null) {
+            return null;
+        }
+        return Long.parseLong(revision);
     }
 }

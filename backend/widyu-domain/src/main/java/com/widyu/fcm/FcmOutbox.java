@@ -30,6 +30,9 @@ public class FcmOutbox extends BaseTimeEntity {
     private String body;
     private String image;
     private String scheme;
+    @Column(length = 100)
+    private String dataType;
+    private Long dataRevision;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32)
     private FcmCategory fcmCategory;
     @Column(nullable = false)

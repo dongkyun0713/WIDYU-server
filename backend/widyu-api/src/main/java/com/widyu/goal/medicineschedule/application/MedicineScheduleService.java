@@ -4,6 +4,9 @@ import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.application.FcmService;
+import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.goal.medicineschedule.dto.request.CreateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.dto.request.UpdateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
@@ -48,6 +51,7 @@ public class MedicineScheduleService {
     private final MedicationProofRepository medicationProofRepository;
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
+    private final FcmService fcmService;
 
     public MedicineScheduleDailyResponse getDailySchedules(Long memberId, LocalDate date) {
         Member targetMember = getMember(memberId);
@@ -144,7 +148,7 @@ public class MedicineScheduleService {
 
     @Transactional
     public MedicineScheduleIdResponse createSchedule(CreateMedicineScheduleRequest request, Long memberId) {
-        Member targetMember = getMember(memberId);
+        Member targetMember = getMemberForAlarmChange(memberId);
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
         MedicineSchedule schedule = MedicineSchedule.create(targetMember, alarmTime);
@@ -165,6 +169,7 @@ public class MedicineScheduleService {
         }
 
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(schedule);
+        sendAlarmChanged(targetMember);
         log.info("약 복용 스케줄 생성: memberId={}, scheduleId={}",
                 targetMember.getId(), savedSchedule.getId());
 
@@ -173,7 +178,7 @@ public class MedicineScheduleService {
 
     @Transactional
     public void updateSchedule(Long scheduleId, UpdateMedicineScheduleRequest request, Long memberId) {
-        Member targetMember = getMember(memberId);
+        Member targetMember = getMemberForAlarmChange(memberId);
 
         MedicineSchedule schedule = medicineScheduleRepository
                 .findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE)
@@ -198,6 +203,7 @@ public class MedicineScheduleService {
             schedule.updateAlarmTime(alarmTime);
             schedule.clearCategories();
             addCategories(schedule, request.categories());
+            sendAlarmChanged(targetMember);
             log.info("약 복용 스케줄 당일 수정: scheduleId={}, memberId={}", scheduleId, targetMember.getId());
             return;
         }
@@ -208,6 +214,8 @@ public class MedicineScheduleService {
         MedicineSchedule newSchedule = MedicineSchedule.create(targetMember, alarmTime);
         addCategories(newSchedule, request.categories());
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(newSchedule);
+        moveTodayProofsToNewSchedule(schedule, savedSchedule, today);
+        sendAlarmChanged(targetMember);
 
         log.info("약 복용 스케줄 수정(새 버전 생성): oldScheduleId={}, newScheduleId={}, memberId={}",
                 scheduleId, savedSchedule.getId(), targetMember.getId());
@@ -233,9 +241,21 @@ public class MedicineScheduleService {
         }
     }
 
+    private void moveTodayProofsToNewSchedule(
+            MedicineSchedule previousSchedule,
+            MedicineSchedule newSchedule,
+            LocalDate today
+    ) {
+        List<MedicationProof> proofs = medicationProofRepository.findByMedicineScheduleAndVerifiedAtBetween(
+                previousSchedule, today.atStartOfDay(), today.atTime(LocalTime.MAX));
+        for (MedicationProof proof : proofs) {
+            proof.moveTo(newSchedule);
+        }
+    }
+
     @Transactional
     public void deleteSchedule(Long scheduleId, Long memberId) {
-        Member targetMember = getMember(memberId);
+        Member targetMember = getMemberForAlarmChange(memberId);
 
         MedicineSchedule schedule = medicineScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
@@ -253,6 +273,7 @@ public class MedicineScheduleService {
 
         // 오늘부터 중단하고 과거 날짜에는 그대로 보존한다 (오늘 생성분은 유효 구간이 비어 어디에도 노출되지 않음)
         schedule.closeAsOf(LocalDate.now().minusDays(1));
+        sendAlarmChanged(targetMember);
         log.info("약 복용 스케줄 삭제(오늘부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
     }
 
@@ -279,6 +300,29 @@ public class MedicineScheduleService {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
+    }
+
+    private Member getMemberForAlarmChange(Long memberId) {
+        Long targetMemberId = memberId;
+        if (targetMemberId == null) {
+            targetMemberId = memberUtil.getCurrentMember().getId();
+        }
+
+        return memberRepository.findByIdForUpdate(targetMemberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
+                        "존재하지 않는 사용자입니다."));
+    }
+
+    private void sendAlarmChanged(Member member) {
+        long revision = member.incrementMedicationAlarmRevision();
+        fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
+                .title("복약 알람 변경")
+                .content("복약 알람 설정이 변경되었습니다.")
+                .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
+                .scheme("")
+                .image("")
+                .data(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", Long.toString(revision)))
+                .build());
     }
 
     // 그날 유효했던 스케줄을 모두 인증한 날만 달성일로 센다
