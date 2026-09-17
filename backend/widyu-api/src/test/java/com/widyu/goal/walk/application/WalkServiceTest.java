@@ -4,7 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -16,6 +21,7 @@ import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.member.Family;
 import com.widyu.member.Member;
 import com.widyu.member.SeniorProfile;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.walk.Walk;
 import java.time.LocalDate;
@@ -36,6 +42,7 @@ class WalkServiceTest {
     @Mock private WalkRepository walkRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private MemberUtil memberUtil;
+    @Mock private SeniorProfileService seniorProfileService;
 
     @InjectMocks private WalkService walkService;
 
@@ -78,17 +85,17 @@ class WalkServiceTest {
     @DisplayName("목표를 초과한 뒤 다시 연동하면 걸음 수가 갱신되고 포인트는 중복 지급되지 않는다")
     void 목표_초과_후_재연동하면_걸음수가_갱신되고_포인트는_1회만_지급한다() {
         // given
+        Long memberId = 1L;
         Member member = org.mockito.Mockito.mock(Member.class);
         Family family = org.mockito.Mockito.mock(Family.class);
         SeniorProfile seniorProfile = SeniorProfile.createSeniorProfile(
                 member, family, "주소", "INV1234", LocalDate.of(1950, 1, 1));
+        given(member.getId()).willReturn(memberId);
         given(member.getSeniorProfile()).willReturn(seniorProfile);
         given(memberUtil.getCurrentMember()).willReturn(member);
 
         Walk walk = Walk.createWithGoal(member, LocalDate.now(), 5000);
         given(walkRepository.findByMemberAndWalkDate(any(), any())).willReturn(Optional.of(walk));
-
-        long pointsBefore = seniorProfile.getPoints();
 
         // when
         UpdateStepsResponse first = walkService.updateSteps(new UpdateStepsRequest(6000, LocalDate.now()));
@@ -98,7 +105,9 @@ class WalkServiceTest {
         assertThat(first.achieved()).isTrue();
         assertThat(second.achieved()).isTrue();
         assertThat(walk.getActualSteps()).isEqualTo(8000);
-        assertThat(seniorProfile.getPoints()).isEqualTo(pointsBefore + 25L);
+        assertThat(walk.isRewarded()).isTrue();
+        then(seniorProfileService).should(times(1))
+                .addPointsToMember(eq(memberId), eq(25L), eq("걷기 목표 달성"), startsWith("WALK_REWARD:"));
     }
 
     @Test
@@ -119,6 +128,8 @@ class WalkServiceTest {
         assertThat(response.achieved()).isTrue();
         assertThat(walk.getActualSteps()).isEqualTo(6000);
         assertThat(walk.isRewarded()).isFalse();
+        then(seniorProfileService).should(never())
+                .addPointsToMember(any(), any(), any(), any());
     }
 
     @Test
