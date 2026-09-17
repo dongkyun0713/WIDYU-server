@@ -103,5 +103,6 @@ UPDATE medicine_schedule SET effective_from = DATE(created_at) WHERE effective_f
 - `MedicineSchedule`(widyu-domain): 유효기간 필드·메서드
 - `MedicineScheduleService`: 수정/삭제/일자별/월별
 - `MedicineScheduleRepository`: 유효기간 기반 쿼리
-- `MedicineScheduleNotificationListener`, `MedicineScheduleRewardScheduler`: 그날 유효 스케줄 정합화
+- `MedicineScheduleNotificationListener`: 그날 유효 스케줄 정합화
+- `MedicationProofTransactionService`: 인증 즉시 적립 시 그날 유효 스케줄 수로 보너스 판정 (LLD-0038)
 - Issue #380

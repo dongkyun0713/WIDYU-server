@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
@@ -15,6 +17,7 @@ import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
@@ -22,6 +25,7 @@ import java.time.LocalTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +42,7 @@ class MedicationProofTransactionServiceTest {
     @Mock private MedicationProofRepository medicationProofRepository;
     @Mock private MedicineScheduleRepository medicineScheduleRepository;
     @Mock private MemberRepository memberRepository;
+    @Mock private SeniorProfileService seniorProfileService;
 
     @InjectMocks private MedicationProofTransactionService transactionService;
 
@@ -96,50 +101,63 @@ class MedicationProofTransactionServiceTest {
     }
 
     @Test
-    @DisplayName("남은 일정이 있으면 적립 예정 포인트를 10으로 반환한다")
-    void 남은_일정이_있으면_적립_예정_포인트를_10으로_반환한다() {
+    @DisplayName("남은 일정이 있는 인증을 저장하면 10포인트를 즉시 적립한다")
+    void 남은_일정이_있는_인증을_저장하면_10포인트를_즉시_적립한다() {
         // given
         Member member = lockedMember();
         MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
+        given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
         given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(3L);
+        savedProofHasId(55L);
 
         // when
         var response = transactionService.verifyMedication(10L, 1L, List.of());
 
         // then
         assertThat(response.earnedPoints()).isEqualTo(10L);
+        then(seniorProfileService).should()
+                .addPointsToMember(10L, 10L, "약 복용 인증", "MEDICATION_PROOF:55");
     }
 
     @Test
-    @DisplayName("마지막 남은 일정을 인증하면 적립 예정 포인트를 30으로 반환한다")
-    void 마지막_남은_일정을_인증하면_적립_예정_포인트를_30으로_반환한다() {
+    @DisplayName("마지막 남은 일정을 인증하면 보너스를 더한 30포인트를 한 번에 적립한다")
+    void 마지막_남은_일정을_인증하면_보너스를_더한_30포인트를_한_번에_적립한다() {
         // given
         Member member = lockedMember();
         MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
+        given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
         given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(3L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(3L);
+        savedProofHasId(77L);
 
         // when
         var response = transactionService.verifyMedication(10L, 1L, List.of());
 
         // then
         assertThat(response.earnedPoints()).isEqualTo(30L);
+        then(seniorProfileService).should()
+                .addPointsToMember(10L, 30L, "약 복용 인증", "MEDICATION_PROOF:77");
     }
 
     @Test
-    @DisplayName("시니어 프로필의 현재 포인트를 반환한다")
-    void 시니어_프로필의_현재_포인트를_반환한다() {
+    @DisplayName("적립을 마치면 적립 후 잔액을 현재 포인트로 반환한다")
+    void 적립을_마치면_적립_후_잔액을_현재_포인트로_반환한다() {
         // given
         Member member = lockedMember();
         SeniorProfile seniorProfile = mock(SeniorProfile.class);
         MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
         given(member.getSeniorProfile()).willReturn(seniorProfile);
-        given(seniorProfile.getPoints()).willReturn(120L);
+        AtomicLong balance = new AtomicLong(120L);
+        given(seniorProfile.getPoints()).willAnswer(invocation -> balance.get());
+        willAnswer(invocation -> {
+            balance.set(130L);
+            return null;
+        }).given(seniorProfileService).addPointsToMember(eq(10L), eq(10L), any(), any());
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
         given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
@@ -149,12 +167,12 @@ class MedicationProofTransactionServiceTest {
         var response = transactionService.verifyMedication(10L, 1L, List.of());
 
         // then
-        assertThat(response.currentPoints()).isEqualTo(120L);
+        assertThat(response.currentPoints()).isEqualTo(130L);
     }
 
     @Test
-    @DisplayName("시니어 프로필이 없으면 현재 포인트를 0으로 반환한다")
-    void 시니어_프로필이_없으면_현재_포인트를_0으로_반환한다() {
+    @DisplayName("시니어 프로필이 없으면 적립 없이 현재 포인트를 0으로 반환한다")
+    void 시니어_프로필이_없으면_적립_없이_현재_포인트를_0으로_반환한다() {
         // given
         Member member = lockedMember();
         MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
@@ -169,6 +187,32 @@ class MedicationProofTransactionServiceTest {
 
         // then
         assertThat(response.currentPoints()).isZero();
+        then(seniorProfileService).should(never()).addPointsToMember(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("오늘 이미 인증한 스케줄을 다시 인증하면 적립하지 않는다")
+    void 오늘_이미_인증한_스케줄을_다시_인증하면_적립하지_않는다() {
+        // given
+        Member member = lockedMember();
+        MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
+                .willReturn(Optional.of(schedule));
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(eq(schedule), any(), any()))
+                .willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> transactionService.verifyMedication(10L, 1L, List.of()))
+                .isInstanceOf(BusinessException.class);
+        then(seniorProfileService).should(never()).addPointsToMember(any(), any(), any(), any());
+    }
+
+    private void savedProofHasId(Long proofId) {
+        willAnswer(invocation -> {
+            MedicationProof proof = invocation.getArgument(0);
+            ReflectionTestUtils.setField(proof, "id", proofId);
+            return proof;
+        }).given(medicationProofRepository).saveAndFlush(any(MedicationProof.class));
     }
 
     private Member member() {

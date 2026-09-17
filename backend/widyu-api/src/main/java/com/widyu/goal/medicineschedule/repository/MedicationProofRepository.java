@@ -43,13 +43,6 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
             LocalDateTime endDateTime
     );
 
-    @Query("SELECT DISTINCT mp.member FROM MedicationProof mp " +
-           "WHERE mp.verifiedAt BETWEEN :startDateTime AND :endDateTime")
-    List<Member> findDistinctMembersByVerifiedAtBetween(
-            @Param("startDateTime") LocalDateTime startDateTime,
-            @Param("endDateTime") LocalDateTime endDateTime
-    );
-
     long countByMemberAndVerifiedAtBetween(
             Member member,
             LocalDateTime startDateTime,

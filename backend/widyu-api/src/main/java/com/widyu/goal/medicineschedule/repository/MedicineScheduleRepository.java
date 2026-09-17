@@ -70,7 +70,7 @@ public interface MedicineScheduleRepository extends JpaRepository<MedicineSchedu
             @Param("date") LocalDate date
     );
 
-    // 특정 날짜에 유효했던 스케줄 개수 (포인트 정산 시 그날 기준 총 일정 수)
+    // 특정 날짜에 유효했던 스케줄 개수 (복약 포인트 완주 보너스 판정의 분모)
     @Query("SELECT COUNT(ms) FROM MedicineSchedule ms " +
            "WHERE ms.member = :member AND ms.status = :status " +
            "AND (ms.effectiveFrom IS NULL OR ms.effectiveFrom <= :date) " +
