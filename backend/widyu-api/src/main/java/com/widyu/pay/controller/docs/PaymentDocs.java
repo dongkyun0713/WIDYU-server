@@ -40,13 +40,13 @@ public interface PaymentDocs {
                                           "packageId": "POINT_10000",
                                           "orderName": "포인트 10,000P 충전",
                                           "amount": 10000,
-                                          "pointAmount": 10000
+                                          "pointAmount": 0
                                         },
                                         {
                                           "packageId": "POINT_30000",
                                           "orderName": "포인트 30,000P 충전",
                                           "amount": 30000,
-                                          "pointAmount": 33000
+                                          "pointAmount": 0
                                         }
                                       ]
                                     }
@@ -76,7 +76,7 @@ public interface PaymentDocs {
                                         "packageId": "POINT_10000",
                                         "orderName": "포인트 10,000P 충전",
                                         "amount": 10000,
-                                        "pointAmount": 10000,
+                                        "pointAmount": 0,
                                         "status": "CREATED",
                                         "expiresAt": "2026-07-06T12:10:00+09:00"
                                       }

@@ -51,6 +51,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 
 | 번호 | 제목 | 상태 | Issue |
 | --- | --- | --- | --- |
+| [LLD-0039](LLD-0039-payment-point-decoupling.md) | 결제와 포인트 적립 분리 | Approved | #624 |
 | [LLD-0037](LLD-0037-medication-alarm-sync.md) | 복약 알람 스냅샷 동기화와 revision FCM | Approved | #619 |
 | [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
 | [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |
@@ -63,7 +64,7 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 | [LLD-0027](LLD-0027-development-error-observability.md) | 개발 서버 오류 관측 | Approved | #566 |
 | LLD-0001 | WebSocket 실시간 위치 추적 | Approved | - |
 | LLD-0002 | FCM 푸시 알림 발송 구조 | Approved | - |
-| LLD-0003 | 포인트·결제 플로우 | Approved | - |
+| LLD-0003 | 포인트·결제 플로우 (포인트 서술은 LLD-0039로 갱신) | Approved | - |
 | LLD-0004 | Apple 로그인 authorization code 교환 | Approved | - |
 | LLD-0005 | 약품 검색 DB 우선 조회와 외부 API fallback | Approved | - |
 | LLD-0006 | 앨범 영상 업로드 비동기 처리 파이프라인 | Approved | - |

@@ -13,7 +13,7 @@ public record PaymentPackageResponse(
                 paymentPackage.getId(),
                 paymentPackage.getOrderName(),
                 paymentPackage.getAmount(),
-                paymentPackage.getPointAmount()
+                0
         );
     }
 }
