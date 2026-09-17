@@ -9,6 +9,7 @@ import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.member.Member;
 import com.widyu.member.SeniorProfile;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
@@ -30,10 +31,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class MedicationProofTransactionService {
 
     private static final int ALLOWED_TIME_WINDOW_MINUTES = MedicationStatus.ALLOWED_WINDOW_MINUTES;
+    private static final String POINT_DESCRIPTION = "약 복용 인증";
+    private static final String POINT_OPERATION_KEY_PREFIX = "MEDICATION_PROOF:";
 
     private final MedicationProofRepository medicationProofRepository;
     private final MedicineScheduleRepository medicineScheduleRepository;
     private final MemberRepository memberRepository;
+    private final SeniorProfileService seniorProfileService;
 
     public void validateBeforeUpload(Long memberId, Long scheduleId) {
         Member currentMember = memberRepository.findById(memberId)
@@ -70,6 +74,7 @@ public class MedicationProofTransactionService {
         currentMember.incrementMedicationAlarmRevision();
 
         long earnedPoints = calculateEarnedPoints(currentMember, now.toLocalDate());
+        rewardPoints(currentMember, proof, earnedPoints);
         log.info("약 복용 인증 완료: scheduleId={}, memberId={}, verifiedAt={}, earnedPoints={}",
                 scheduleId, currentMember.getId(), now, earnedPoints);
         return MedicationProofResponse.of(currentPoints(currentMember), earnedPoints);
@@ -116,6 +121,23 @@ public class MedicationProofTransactionService {
         long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
                 member, Status.ACTIVE, date);
         return MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
+    }
+
+    /**
+     * 인증 즉시 적립. 낙관적 락 충돌 시 재시도하지 않는다.
+     * 호출 대상 {@code addPointsToMember}의 {@code @RetryOnPointConflict}는 이 트랜잭션 안에 참여하므로 동작하지 않는다.
+     * 이 트랜잭션 밖에서 이미 S3 업로드가 끝나 재실행이 불가하므로 롤백 후 409로 응답한다(LLD-0003 §8).
+     */
+    private void rewardPoints(Member member, MedicationProof proof, long earnedPoints) {
+        if (earnedPoints <= 0) {
+            return;
+        }
+        if (member.getSeniorProfile() == null) {
+            log.warn("시니어 프로필이 없어 복약 인증 포인트를 적립하지 않습니다: memberId={}", member.getId());
+            return;
+        }
+        seniorProfileService.addPointsToMember(member.getId(), earnedPoints, POINT_DESCRIPTION,
+                POINT_OPERATION_KEY_PREFIX + proof.getId());
     }
 
     private long currentPoints(Member member) {
