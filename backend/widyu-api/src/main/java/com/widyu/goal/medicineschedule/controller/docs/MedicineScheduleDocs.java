@@ -506,11 +506,13 @@ public interface MedicineScheduleDocs {
                     - 당일 중복 인증 불가
 
                     **응답:**
-                    - `currentPoints`: 응답 시점의 보유 포인트입니다. 이번 인증분은 아직 반영되지 않았습니다.
-                      (시니어 프로필이 없는 회원은 0)
-                    - `earnedPoints`: 이번 인증으로 적립될 예정 포인트입니다. 기본 10p이며,
+                    - `currentPoints`: 이번 인증분까지 반영된 보유 포인트입니다.
+                      (시니어 프로필이 없는 회원은 적립 없이 0)
+                    - `earnedPoints`: 이번 인증으로 적립된 포인트입니다. 기본 10p이며,
                       이번 인증으로 그날 유효한 복용 일정을 모두 채우면 보너스 20p를 더해 30p입니다.
-                    - 포인트는 매일 자정 정산 시 실제로 적립됩니다.
+                      (시니어 프로필이 없는 회원은 계산값만 내려가고 실제 적립은 되지 않습니다)
+                    - 포인트는 인증 성공과 같은 트랜잭션에서 즉시 적립됩니다.
+                      포인트 잔액 동시 변경으로 충돌하면 인증 전체가 롤백되고 409를 응답하니 재시도하세요.
 
                     **권한:**
                     - 시니어 본인만 가능
@@ -520,7 +522,8 @@ public interface MedicineScheduleDocs {
             @ApiResponse(responseCode = "200", description = "인증 성공"),
             @ApiResponse(responseCode = "400", description = "시간 범위 초과 또는 이미 인증 완료"),
             @ApiResponse(responseCode = "401", description = "인증 실패"),
-            @ApiResponse(responseCode = "403", description = "권한 없음")
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "409", description = "포인트 잔액 동시 변경 충돌")
     })
     ApiResponseTemplate<MedicationProofResponse> verifyMedication(
             @Parameter(description = "약 복용 스케줄 ID", required = true)
