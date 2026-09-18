@@ -54,8 +54,8 @@
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
 
 ### `sensor` — 원시 센서 배치 (연구 수집)
-- 워치 가속도·자이로, 폰 IMU·위치 원본을 1초 배치로 받아 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}.json`) + `sensor_batch` 인덱스 행 1개 → ADR-0030, LLD-0041
-- **불변식**: 시각은 epoch ms UTC BIGINT(`measured_from_ms`·`measured_to_ms`·`received_at_ms`), 샘플 `t`만 검증하고 내부 스키마는 저장하지 않음. 중복 판별 UK `(member, device_id, session_id, stream_type, seq)` = S3 키 구성. 중복이면 S3 PUT 없이 `DUPLICATE`
+- 워치 가속도·자이로, 폰 IMU·위치 원본을 1초 배치로 받아 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json`, 내용별 불변) + `sensor_batch` 인덱스 행 1개 → ADR-0030, LLD-0041
+- **불변식**: 시각은 epoch ms UTC BIGINT(`measured_from_ms`·`measured_to_ms`·`received_at_ms`), 샘플 `t`만 검증하고 내부 스키마는 저장하지 않음. 중복 판별 UK `(member, device_id, session_id, stream_type, seq)`. 식별자는 소문자만(collation 무관). 중복이면 S3 PUT 없이 `DUPLICATE`
 - 가속도·자이로는 독립 스트림. 자이로 없음 = `WATCH_GYRO` 행 없음. 0으로 채우지 않는다
 - S3 PUT은 수신 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. 서비스에 `@Transactional` 없음
 - **원시 센서값을 어떤 로그 레벨에도 남기지 않는다** (정책 1.6.7). memberId·streamType·seq·sampleCount·result만

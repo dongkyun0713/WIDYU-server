@@ -6,6 +6,7 @@ CREATE TABLE sensor_batch (
     member_id BIGINT NOT NULL,
     stream_type VARCHAR(20) NOT NULL,
     batch_kind VARCHAR(20) NOT NULL,
+    -- 소문자·숫자·._- 만 허용(DTO 검증). collation이 case-insensitive여도 S3 키와 판정이 어긋나지 않는다.
     device_id VARCHAR(64) NOT NULL,
     session_id VARCHAR(64) NOT NULL,
     seq BIGINT NOT NULL,

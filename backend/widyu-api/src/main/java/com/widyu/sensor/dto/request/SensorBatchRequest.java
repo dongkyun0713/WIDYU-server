@@ -20,11 +20,14 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = false)
 public record SensorBatchRequest(
         @NotNull(message = "기기 ID는 필수입니다.")
-        @Pattern(regexp = "^[A-Za-z0-9._-]{1,64}$", message = "기기 ID 형식이 올바르지 않습니다.")
+        // DB collation이 case-insensitive라 watch-A와 watch-a가 UK에서 같지만 S3 키는 달라진다.
+        @Pattern(regexp = "^[a-z0-9._-]{1,64}$",
+                message = "기기 ID는 소문자·숫자·._- 1~64자여야 합니다.")
         String deviceId,
 
         @NotNull(message = "세션 ID는 필수입니다.")
-        @Pattern(regexp = "^[A-Za-z0-9._-]{1,64}$", message = "세션 ID 형식이 올바르지 않습니다.")
+        @Pattern(regexp = "^[a-z0-9._-]{1,64}$",
+                message = "세션 ID는 소문자·숫자·._- 1~64자여야 합니다.")
         String sessionId,
 
         @NotNull(message = "배치 순번은 필수입니다.")

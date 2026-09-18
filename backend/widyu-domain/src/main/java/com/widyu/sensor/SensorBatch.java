@@ -23,6 +23,8 @@ import lombok.NoArgsConstructor;
 /**
  * 원시 센서 배치 1건의 인덱스 행(ADR-0030, LLD-0041 4절).
  * 페이로드는 S3 객체 하나에 있고 이 행이 그 객체의 유일한 목록이다.
+ * {@code s3_key}는 {@code sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json}
+ * 형식이며, 내용 해시가 키에 있어 같은 seq라도 내용이 다르면 다른 객체가 된다.
  */
 @Entity
 @Getter

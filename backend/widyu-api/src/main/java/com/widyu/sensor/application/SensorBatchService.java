@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * 배치 1건을 S3 객체 하나와 인덱스 행 하나로 저장한다(LLD-0041 5.1).
+ * S3 키는 {@code sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json}으로
+ * 내용별 불변이다. 경합에서 진 요청의 객체는 고아로 남지만 참가자 파기는 접두사 단위라 무해하다.
  * S3 호출을 트랜잭션 밖에 두기 위해 {@code @Transactional}을 선언하지 않는다.
  * 원시 센서값은 어떤 로그 레벨에도 남기지 않는다(정책 1.6.7).
  */
@@ -33,6 +35,7 @@ public class SensorBatchService {
 
     private static final int MAX_PAYLOAD_BYTES = 32_768;
     private static final String CONTENT_TYPE = "application/json";
+    private static final int KEY_HASH_LENGTH = 16;
 
     private final SensorBatchRepository sensorBatchRepository;
     private final MemberRepository memberRepository;
@@ -71,8 +74,13 @@ public class SensorBatchService {
             throw new BusinessException(ErrorCode.SENSOR_BATCH_TOO_LARGE);
         }
 
-        String objectKey = "sensor/%d/%s/%s/%s/%d.json".formatted(
-                memberId, request.deviceId(), request.sessionId(), request.streamType(), request.seq());
+        // 키에 내용 해시를 넣어 객체를 내용별 불변으로 만든다. 같은 내용의 재전송은 같은 키라
+        // 덮어써도 내용이 같고, 같은 seq라도 내용이 다르면(LIVE → RETRANSMIT 등) 키가 달라
+        // 동시 요청이 서로의 객체를 덮어쓰지 않는다. INSERT 승자 행은 항상 자기 객체와 일치한다.
+        String sha256 = sha256(payload);
+        String objectKey = "sensor/%d/%s/%s/%s/%d-%s.json".formatted(
+                memberId, request.deviceId(), request.sessionId(), request.streamType(),
+                request.seq(), sha256.substring(0, KEY_HASH_LENGTH));
         s3Service.uploadBytes(objectKey, payload, CONTENT_TYPE);
 
         try {
@@ -91,7 +99,7 @@ public class SensorBatchService {
                     System.currentTimeMillis(),
                     objectKey,
                     payload.length,
-                    sha256(payload)
+                    sha256
             ));
         } catch (DataIntegrityViolationException e) {
             // UK 경합. 같은 키에 같은 배치가 이미 들어갔으므로 중복으로 응답한다.

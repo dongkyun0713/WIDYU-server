@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -94,17 +95,59 @@ class SensorBatchServiceTest {
         assertThat(batch.getMeasuredToMs()).isEqualTo(1758150000143L);
         assertThat(batch.getSampleCount()).isEqualTo(2);
         assertThat(batch.getReceivedAtMs()).isBetween(before, System.currentTimeMillis());
-        assertThat(batch.getS3Key())
-                .isEqualTo("sensor/1/watch-3f2a/s-20260918-01/WATCH_ACCEL/1234.json");
+        String expectedKey = "sensor/1/watch-3f2a/s-20260918-01/WATCH_ACCEL/1234-%s.json"
+                .formatted(sha256Hex(expectedPayload).substring(0, 16));
+        assertThat(batch.getS3Key()).isEqualTo(expectedKey);
         assertThat(batch.getByteSize()).isEqualTo(expectedPayload.length);
         assertThat(batch.getSha256()).isEqualTo(sha256Hex(expectedPayload));
 
         ArgumentCaptor<byte[]> uploaded = ArgumentCaptor.forClass(byte[].class);
-        then(s3Service).should().uploadBytes(
-                eq("sensor/1/watch-3f2a/s-20260918-01/WATCH_ACCEL/1234.json"),
-                uploaded.capture(),
-                eq("application/json"));
+        then(s3Service).should().uploadBytes(eq(expectedKey), uploaded.capture(), eq("application/json"));
         assertThat(uploaded.getValue()).isEqualTo(expectedPayload);
+    }
+
+    @Test
+    @DisplayName("같은 seq라도 내용이 다른 배치를 보내면 서로 다른 키에 올리고 각 행이 자기 객체의 해시를 갖는다")
+    void 같은_seq라도_내용이_다른_배치를_보내면_서로_다른_키에_올리고_각_행이_자기_객체의_해시를_갖는다() {
+        // given
+        Long memberId = 1L;
+        ObjectMapper mapper = new ObjectMapper();
+        List<JsonNode> samples = List.of(accelSample(mapper, 1758150000123L, -12, 980, 45));
+        SensorBatchRequest live = SensorBatchRequest.of(
+                "watch-3f2a", "s-20260918-01", 1234L,
+                SensorStreamType.WATCH_ACCEL, SensorBatchKind.LIVE,
+                GyroMode.CONTINUOUS, true, samples);
+        SensorBatchRequest retransmit = SensorBatchRequest.of(
+                "watch-3f2a", "s-20260918-01", 1234L,
+                SensorStreamType.WATCH_ACCEL, SensorBatchKind.RETRANSMIT,
+                GyroMode.CONTINUOUS, true, samples);
+        given(memberRepository.findById(memberId))
+                .willReturn(Optional.of(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")));
+        given(sensorBatchRepository.existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq(
+                memberId, "watch-3f2a", "s-20260918-01", SensorStreamType.WATCH_ACCEL, 1234L))
+                .willReturn(false);
+
+        // when
+        sensorBatchService.ingest(memberId, live);
+        sensorBatchService.ingest(memberId, retransmit);
+
+        // then
+        ArgumentCaptor<String> uploadedKeys = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<byte[]> uploadedPayloads = ArgumentCaptor.forClass(byte[].class);
+        then(s3Service).should(times(2))
+                .uploadBytes(uploadedKeys.capture(), uploadedPayloads.capture(), eq("application/json"));
+        ArgumentCaptor<SensorBatch> saved = ArgumentCaptor.forClass(SensorBatch.class);
+        then(sensorBatchRepository).should(times(2)).save(saved.capture());
+
+        assertThat(uploadedKeys.getAllValues()).hasSize(2).doesNotHaveDuplicates();
+        for (int i = 0; i < 2; i++) {
+            String uploadedSha = sha256Hex(uploadedPayloads.getAllValues().get(i));
+            SensorBatch batch = saved.getAllValues().get(i);
+            assertThat(batch.getSha256()).isEqualTo(uploadedSha);
+            assertThat(batch.getS3Key())
+                    .isEqualTo(uploadedKeys.getAllValues().get(i))
+                    .endsWith("-%s.json".formatted(uploadedSha.substring(0, 16)));
+        }
     }
 
     @Test

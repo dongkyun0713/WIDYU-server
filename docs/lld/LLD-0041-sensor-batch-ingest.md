@@ -64,8 +64,8 @@ POST /api/v1/sensor/batches
 
 | 필드 | 타입 | 필수 | 제약 |
 | --- | --- | --- | --- |
-| `deviceId` | String | O | `^[A-Za-z0-9._-]{1,64}$` |
-| `sessionId` | String | O | `^[A-Za-z0-9._-]{1,64}$` |
+| `deviceId` | String | O | `^[a-z0-9._-]{1,64}$` (소문자만. DB collation과 S3 키 판정 통일) |
+| `sessionId` | String | O | `^[a-z0-9._-]{1,64}$` (소문자만) |
 | `seq` | Long | O | `>= 0` |
 | `streamType` | enum | O | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `batchKind` | enum | O | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
@@ -131,7 +131,7 @@ ACK 페이로드는 `{seq, result}`이며 `result`에 `REJECTED`(검증 실패, 
 
 enum은 MySQL ENUM이 아니라 VARCHAR로 둔다. 값 추가 시 ALTER가 필요 없다.
 
-S3 키: `sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}.json`, `Content-Type: application/json`.
+S3 키: `sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json`, `Content-Type: application/json`. 내용 해시가 키에 있어 객체는 내용별로 불변이다. 같은 seq에 다른 내용이 동시에 오면 INSERT 승자의 행과 객체만 남고 진 쪽 객체는 고아가 된다(참가자 파기 시 접두사 삭제).
 
 DTO (widyu-api `sensor/dto`): `request/SensorBatchRequest`(record), `response/SensorBatchResultResponse.of(seq, result)`. `SensorBatchResult` enum(`STORED`, `DUPLICATE`, `REJECTED`)은 응답 DTO와 같은 패키지에 둔다.
 
@@ -142,7 +142,7 @@ DTO (widyu-api `sensor/dto`): `request/SensorBatchRequest`(record), `response/Se
 1. 회원 존재 확인 → 없으면 `MEMBER_NOT_FOUND`.
 2. `existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq` → 있으면 `DUPLICATE` 반환. S3 PUT을 하지 않아 원본이 유지된다.
 3. `samples` 순회 1회: 각 원소의 `t`가 정수가 아니면 `SENSOR_SAMPLE_INVALID`. 같은 루프에서 min·max를 구한다.
-4. 요청 DTO를 Boot `ObjectMapper` 빈으로 `writeValueAsBytes` → 길이가 32,768바이트를 넘으면 `SENSOR_BATCH_TOO_LARGE`. `MessageDigest("SHA-256")` + `HexFormat.of()`로 sha256.
+4. 요청 DTO를 Boot `ObjectMapper` 빈으로 `writeValueAsBytes` → 길이가 32,768바이트를 넘으면 `SENSOR_BATCH_TOO_LARGE`. `MessageDigest("SHA-256")` + `HexFormat.of()`로 sha256을 구하고 그 앞 16자를 S3 키에 넣는다.
 5. `received_at_ms = System.currentTimeMillis()`.
 6. `s3Service.uploadBytes(key, bytes, "application/json")` 동기 호출. 실패 시 예외가 그대로 올라간다(인덱스 행 저장 없음).
 7. `sensorBatchRepository.save(SensorBatch.of(...))`. 서비스 메서드에 `@Transactional`을 두지 않아 S3 호출이 트랜잭션 밖에 있다. `DataIntegrityViolationException`(UK 경합)은 `DUPLICATE`로 변환한다.
@@ -173,6 +173,7 @@ WebSocket에서는 위 4xx 조건이 `REJECTED` ACK가 되고, 500 조건은 `/u
 
 - [x] 유효한 배치를 REST로 보내면 `STORED`를 받고, S3에 키 하나와 `sensor_batch` 행 하나가 생기며 행의 `sha256`·`byte_size`가 S3 객체 내용과 일치한다.
 - [x] 같은 `(member, deviceId, sessionId, streamType, seq)` 배치를 다시 보내면 `DUPLICATE`를 받고 S3 업로드가 호출되지 않는다.
+- [x] 같은 식별자에 내용이 다른 두 요청은 서로 다른 S3 키에 올라가고, 저장된 행의 `sha256`은 그 행이 가리키는 객체의 바이트와 일치한다.
 - [x] UK 경합으로 INSERT가 실패하면 예외 대신 `DUPLICATE`를 반환한다.
 - [x] canonical JSON이 32KB를 넘으면 `SENSOR_BATCH_TOO_LARGE`, 샘플에 정수 `t`가 없으면 `SENSOR_SAMPLE_INVALID`로 거부하고 S3·DB에 아무것도 남지 않는다.
 - [x] 모르는 최상위 필드가 있으면 400으로 거부한다(역직렬화 단위 테스트로 검증).
