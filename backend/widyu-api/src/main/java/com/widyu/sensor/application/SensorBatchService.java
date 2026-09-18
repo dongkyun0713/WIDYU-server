@@ -104,7 +104,15 @@ public class SensorBatchService {
                     sha256
             ));
         } catch (DataIntegrityViolationException e) {
-            // UK 경합. 같은 키에 같은 배치가 이미 들어갔으므로 중복으로 응답한다.
+            // UK 경합이면 같은 키 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로 응답하면
+            // 클라이언트가 재전송을 멈춰 인덱스 행이 영영 유실되므로, 행이 확인될 때만 중복으로 본다.
+            boolean storedByOther = sensorBatchRepository
+                    .existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq(
+                            memberId, request.deviceId(), request.sessionId(),
+                            request.streamType(), request.seq());
+            if (!storedByOther) {
+                throw e;
+            }
             return logged(memberId, request, SensorBatchResult.DUPLICATE);
         }
 

@@ -70,7 +70,7 @@ POST /api/v1/sensor/batches
 | `streamType` | enum | O | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `batchKind` | enum | O | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `gyroMode` | enum | O | `CONTINUOUS`, `TRIGGER`. 수집 당시 워치 설정(PT-02). 폰 스트림도 앱이 아는 현재 설정을 그대로 싣는다 |
-| `onBody` | Boolean | X | 워치 착용 여부(1.2.2). 폰 스트림은 null |
+| `onBody` | Boolean | X | 워치 스트림은 착용 여부(1.2.2). 폰 스트림은 앱이 소지 여부를 판단할 수 있을 때만 싣고, 모르면 null. 서버는 스트림별로 강제하지 않는다(PT-05: 폰이 몸에 있는지 판단할 근거를 보존) |
 | `samples` | JSON 배열 | O | 1~1000개. 각 원소에 정수 `t`(epoch ms UTC) 필수 |
 
 샘플 내부 스키마는 스트림별로 다음과 같이 고정하되 서버는 `t`만 검증한다.
@@ -116,7 +116,7 @@ ACK 페이로드는 `{seq, result}`이며 `result`에 `REJECTED`(검증 실패, 
 | `session_id` | VARCHAR(64) | NOT NULL | |
 | `seq` | BIGINT | NOT NULL | 재전송은 원 seq 유지 |
 | `gyro_mode` | VARCHAR(20) | NOT NULL | 수집 당시 모드. 생략과 결측 구분(1.2.6)에 쓰므로 필수 |
-| `on_body` | BOOLEAN | NULL | |
+| `on_body` | BOOLEAN | NULL | 관측하지 못했으면 null(1.2.3) |
 | `measured_from_ms` | BIGINT | NOT NULL | 샘플 `t` 최소 |
 | `measured_to_ms` | BIGINT | NOT NULL | 샘플 `t` 최대 |
 | `sample_count` | INT | NOT NULL | |
@@ -145,7 +145,7 @@ DTO (widyu-api `sensor/dto`): `request/SensorBatchRequest`(record), `response/Se
 4. 요청 DTO를 Boot `ObjectMapper` 빈으로 `writeValueAsBytes` → 길이가 32,768바이트를 넘으면 `SENSOR_BATCH_TOO_LARGE`. `MessageDigest("SHA-256")` + `HexFormat.of()`로 sha256을 구하고 그 앞 16자를 S3 키에 넣는다.
 5. `received_at_ms = System.currentTimeMillis()`.
 6. `s3Service.uploadBytes(key, bytes, "application/json")` 동기 호출. 실패 시 예외가 그대로 올라간다(인덱스 행 저장 없음).
-7. `sensorBatchRepository.save(SensorBatch.of(...))`. 서비스 메서드에 `@Transactional`을 두지 않아 S3 호출이 트랜잭션 밖에 있다. `DataIntegrityViolationException`(UK 경합)은 `DUPLICATE`로 변환한다.
+7. `sensorBatchRepository.save(SensorBatch.of(...))`. 서비스 메서드에 `@Transactional`을 두지 않아 S3 호출이 트랜잭션 밖에 있다. `DataIntegrityViolationException`이 나면 같은 키의 행이 실제로 있는지 다시 조회해 있으면 `DUPLICATE`(UK 경합), 없으면 원래 예외를 다시 던진다(FK·스키마 오류를 중복으로 숨기지 않는다).
 8. `STORED` 반환. 로그는 memberId·streamType·seq·sampleCount·result만 남긴다(1.6.7). 샘플 값·페이로드는 어떤 레벨에도 남기지 않는다.
 
 `S3ServiceImpl.uploadBytes`는 `PutObjectRequest.overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(5)))`와 `RequestBody.fromBytes`를 쓴다. 실패는 `BusinessException(FILE_UPLOAD_FAILED)`로 감싼다.
@@ -174,7 +174,7 @@ WebSocket에서는 위 4xx 조건이 `REJECTED` ACK가 되고, 500 조건은 `/u
 - [x] 유효한 배치를 REST로 보내면 `STORED`를 받고, S3에 키 하나와 `sensor_batch` 행 하나가 생기며 행의 `sha256`·`byte_size`가 S3 객체 내용과 일치한다.
 - [x] 같은 `(member, deviceId, sessionId, streamType, seq)` 배치를 다시 보내면 `DUPLICATE`를 받고 S3 업로드가 호출되지 않는다.
 - [x] 같은 식별자에 내용이 다른 두 요청은 서로 다른 S3 키에 올라가고, 저장된 행의 `sha256`은 그 행이 가리키는 객체의 바이트와 일치한다.
-- [x] UK 경합으로 INSERT가 실패하면 예외 대신 `DUPLICATE`를 반환한다.
+- [x] UK 경합으로 INSERT가 실패하면 예외 대신 `DUPLICATE`를 반환한다. 같은 키 행이 없는 무결성 오류는 그대로 전파한다.
 - [x] canonical JSON이 32KB를 넘으면 `SENSOR_BATCH_TOO_LARGE`, 샘플에 정수 `t`가 없으면 `SENSOR_SAMPLE_INVALID`로 거부하고 S3·DB에 아무것도 남지 않는다.
 - [x] 모르는 최상위 필드가 있으면 400으로 거부한다(역직렬화 단위 테스트로 검증).
 - [x] S3 업로드가 실패하면 `sensor_batch` 행을 저장하지 않는다.

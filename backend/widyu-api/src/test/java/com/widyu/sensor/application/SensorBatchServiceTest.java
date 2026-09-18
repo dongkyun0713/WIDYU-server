@@ -189,7 +189,7 @@ class SensorBatchServiceTest {
                 .willReturn(Optional.of(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")));
         given(sensorBatchRepository.existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq(
                 memberId, "watch-3f2a", "s-20260918-01", SensorStreamType.WATCH_ACCEL, 1234L))
-                .willReturn(false);
+                .willReturn(false, true);
         given(sensorBatchRepository.save(any(SensorBatch.class)))
                 .willThrow(new DataIntegrityViolationException("uk_sensor_batch_seq"));
 
@@ -198,6 +198,30 @@ class SensorBatchServiceTest {
 
         // then
         assertThat(response).isEqualTo(SensorBatchResultResponse.of(1234L, SensorBatchResult.DUPLICATE));
+    }
+
+    @Test
+    @DisplayName("무결성 오류 뒤에도 같은 키 행이 없으면 원래 예외가 전파된다")
+    void 무결성_오류_뒤에도_같은_키_행이_없으면_원래_예외가_전파된다() {
+        // given
+        Long memberId = 1L;
+        ObjectMapper mapper = new ObjectMapper();
+        SensorBatchRequest request = SensorBatchRequest.of(
+                "watch-3f2a", "s-20260918-01", 1234L,
+                SensorStreamType.WATCH_ACCEL, SensorBatchKind.LIVE,
+                GyroMode.CONTINUOUS, true, List.of(accelSample(mapper, 1758150000123L, -12, 980, 45)));
+        given(memberRepository.findById(memberId))
+                .willReturn(Optional.of(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")));
+        // UK 경합이 아니라 FK 오류·스키마 불일치라면 재조회해도 행이 없다.
+        given(sensorBatchRepository.existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq(
+                memberId, "watch-3f2a", "s-20260918-01", SensorStreamType.WATCH_ACCEL, 1234L))
+                .willReturn(false);
+        given(sensorBatchRepository.save(any(SensorBatch.class)))
+                .willThrow(new DataIntegrityViolationException("fk_sensor_batch_member"));
+
+        // when & then
+        assertThatThrownBy(() -> sensorBatchService.ingest(memberId, request))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
