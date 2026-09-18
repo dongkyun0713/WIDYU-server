@@ -49,40 +49,13 @@ LLD가 필요 없는 PR은 PR 본문에 `LLD: N/A - <사유>`를 남긴다.
 | 중간 | 건강/복약/걷기 스케줄 알림 | 스케줄러와 FCM 이벤트 흐름이 결합 |
 | 낮음 | 일반 프로필/마이페이지 | 단순 조회·수정 중심이면 N/A 가능 |
 
-| 번호 | 제목 | 상태 | Issue |
-| --- | --- | --- | --- |
-| [LLD-0040](LLD-0040-health-schedule-visit-reward.md) | 건강 일정 방문 완료 포인트 적립 | Approved | #623 |
-| [LLD-0038](LLD-0038-medication-proof-instant-reward.md) | 복약 인증 즉시 포인트 적립 | Approved | #622 |
-| [LLD-0037](LLD-0037-medication-alarm-sync.md) | 복약 알람 스냅샷 동기화와 revision FCM | Approved | #619 |
-| [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
-| [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |
-| [LLD-0034](LLD-0034-auth-request-limits.md) | 인증·로그인 제한과 민감 로그 정리 | Review | #606 |
-| [LLD-0032](LLD-0032-websocket-destination-allowlist.md) | WebSocket 목적지 allowlist | Approved | #602 |
-| [LLD-0031](LLD-0031-admin-current-authority.md) | 관리자 인증의 현재 권한·활성 상태 검증 | Review | #605 |
-| [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
-| [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |
-| [LLD-0029](LLD-0029-japan-pilot-sensitive-data-safeguards.md) | 일본 실증 민감정보 보호 장치 | Approved | #595 |
-| [LLD-0027](LLD-0027-development-error-observability.md) | 개발 서버 오류 관측 | Approved | #566 |
-| LLD-0001 | WebSocket 실시간 위치 추적 | Approved | - |
-| LLD-0002 | FCM 푸시 알림 발송 구조 | Approved | - |
-| LLD-0003 | 포인트·결제 플로우 | Approved | - |
-| LLD-0004 | Apple 로그인 authorization code 교환 | Approved | - |
-| LLD-0005 | 약품 검색 DB 우선 조회와 외부 API fallback | Approved | - |
-| LLD-0006 | 앨범 영상 업로드 비동기 처리 파이프라인 | Approved | - |
-| LLD-0007 | 약 복용 홈 일자별 조회와 복용 상태 | Approved | #357 |
-| LLD-0008 | 약 복용 스케줄 버전링(수정 시 과거 보존) | Approved | #380 |
-| LLD-0009 | 실시간 위치 기반 건강 일정 방문인증 | Approved | #387 |
-| LLD-0010 | 심박 AI 판정과 저장 트랜잭션 경계 분리 | Approved | #420 |
-| LLD-0011 | 안전구역 이탈 알림 중복 차단 | Approved | #422 |
-| LLD-0012 | 앨범 영상 처리 실패 보상 삭제 | Approved | #424 |
-| LLD-0013 | 앨범 알림 부수효과 격리 | Approved | #426 |
-| LLD-0014 | FCM 토큰 소유자 변경 처리 | Approved | #428 |
-| LLD-0015 | 결제 PG 호출과 내부 반영 경계 검증 | Approved | #430 |
-| LLD-0016 | 결제 승인 멱등성 보강 | Approved | #433 |
-| LLD-0017 | 부분 취소 멱등성 보장 | Approved | - |
-| LLD-0018 | 마이페이지 조회·명령 책임 분리 | Draft | #441 |
-| LLD-0019 | 개인화 심박 이상 감지 AI 연동 | Approved | #446 |
-| LLD-0021 | 앨범 Presigned Multipart 직접 업로드 | Approved | #450 |
-| LLD-0024 | 목표 홈 주간 통계 조회 파이프라인 최적화 | Approved | #489, #491, #492 |
-| LLD-0025 | 임시 토큰 인증 API의 액세스 토큰 필터 분리 | Approved | #522 |
-| [LLD-0026](LLD-0026-codex-primary-harness.md) | Codex 기본 하네스 전환 | Review | #549 |
+## 목록
+
+인덱스 표는 커밋하지 않는다. 여러 PR이 같은 표의 같은 위치에 행을 추가하면 Git이 자동 병합하지 못해 충돌이 반복되고, 손으로 관리하는 동안 목록이 낡아도 드러나지 않는다. 목록은 각 문서 헤더에서 생성해 본다.
+
+```bash
+python3 scripts/docs/index.py lld   # LLD 목록
+python3 scripts/docs/index.py       # LLD·ADR 모두
+```
+
+새 LLD를 추가할 때 이 README는 고치지 않는다. 문서 헤더 표의 `상태`와 `Issue`만 정확히 채우면 목록에 그대로 반영된다.
