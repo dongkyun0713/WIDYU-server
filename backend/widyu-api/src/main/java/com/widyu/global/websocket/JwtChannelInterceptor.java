@@ -35,11 +35,13 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     private static final Set<String> USER_SUBSCRIPTIONS = Set.of(
             "/user/queue/location/ack",
             "/user/queue/heart-rate/result",
+            "/user/queue/sensor/result",
             "/user/queue/errors"
     );
     private static final Set<String> SEND_DESTINATIONS = Set.of(
             "/app/location/update",
-            "/app/heart-rate/send-single"
+            "/app/heart-rate/send-single",
+            "/app/sensor/batches/send"
     );
 
     private final JwtTokenProvider jwtTokenProvider;
