@@ -27,10 +27,8 @@ import org.springframework.retry.annotation.Retryable;
  * 에만 적용한다. (예: {@code SeniorProfileService}의 포인트 증감 메서드가 스케줄러·컨트롤러
  * 에서 직접 호출될 때, {@code WalkService.updateSteps}, {@code AdminPointGrantService.grant})
  *
- * <p><b>결제 경로는 적용 대상이 아니다.</b> {@code PaymentService.confirmPayment}/
- * {@code cancelPayment}는 외부 PG 호출과 포인트 증감을 하나의 트랜잭션으로 묶으므로,
- * 서버 자동 재시도 대신 충돌 시 409로 응답해 클라이언트가 (멱등한) 결제 확인을 다시
- * 호출하도록 한다. (자세한 이유는 해당 호출부 주석 참고)
+ * <p>결제 경로는 포인트를 증감하지 않는다(ADR-0029). 외부 부수효과가 있는 경로
+ * (예: {@code AlbumUnlockService.unlockAlbum}의 동기 FCM 이벤트)는 재시도 없이 409로 응답한다.
  */
 @Documented
 @Target(ElementType.METHOD)

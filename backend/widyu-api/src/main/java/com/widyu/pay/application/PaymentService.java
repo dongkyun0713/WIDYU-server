@@ -64,7 +64,7 @@ public class PaymentService {
                 paymentPackage.getOrderName(),
                 paymentPackage.getId(),
                 paymentPackage.getAmount(),
-                paymentPackage.getPointAmount(),
+                0,
                 ZonedDateTime.now().plusMinutes(PAYMENT_ORDER_EXPIRATION_MINUTES)
         );
         paymentOrderRepository.save(paymentOrder);
@@ -265,7 +265,7 @@ public class PaymentService {
 
     private void validateSeniorMember(Member member) {
         if (member.getType() != MemberType.SENIOR || member.getSeniorProfile() == null) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "시니어 회원만 포인트를 충전할 수 있습니다.");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "시니어 회원만 결제할 수 있습니다.");
         }
     }
 

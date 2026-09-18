@@ -4,13 +4,11 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
-import com.widyu.member.application.SeniorProfileService;
 import com.widyu.pay.Payment;
 import com.widyu.pay.PaymentCancel;
 import com.widyu.pay.PaymentCancelStatus;
 import com.widyu.pay.PaymentOrder;
 import com.widyu.pay.PaymentStatus;
-import com.widyu.pay.PointChargePackage;
 import com.widyu.pay.dto.mapper.PaymentMapper;
 import com.widyu.pay.dto.request.CancelRequest;
 import com.widyu.pay.dto.request.PaymentApproveRequest;
@@ -33,7 +31,6 @@ public class PaymentTransactionService {
     private final PaymentRepository paymentRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentCancelRepository paymentCancelRepository;
-    private final SeniorProfileService seniorProfileService;
 
     @Transactional
     public ApprovalClaim claimApproval(PaymentApproveRequest request, Member currentMember) {
@@ -89,13 +86,6 @@ public class PaymentTransactionService {
         Payment payment = PaymentMapper.toEntity(response, paymentOrder.getMember(), paymentOrder);
         paymentRepository.save(payment);
         paymentOrder.markPaid();
-        PointChargePackage paymentPackage = resolvePackage(paymentOrder.getPackageId());
-        seniorProfileService.addPointsToMember(
-                paymentOrder.getMember().getId(),
-                (long) paymentPackage.getPointAmount(),
-                paymentPackage.getOrderName(),
-                "PAYMENT_APPROVAL:" + paymentOrder.getOrderId()
-        );
         return PaymentConfirmResponse.from(payment);
     }
 
@@ -167,17 +157,17 @@ public class PaymentTransactionService {
 
         CancelRequest effectiveRequest = sanitizeCancelRequest(payment, cancelRequest);
         validatePartialCancellationIdempotencyKey(payment, effectiveRequest);
-        int refundPointAmount = calculateRefundPointAmount(payment, effectiveRequest.cancelAmount());
 
         Integer requestedCancelAmount = null;
         if (cancelRequest != null) {
             requestedCancelAmount = cancelRequest.cancelAmount();
         }
+        // 결제는 포인트를 충전하지 않으므로 환수 포인트도 없다 — cancel_point_amount 컬럼은 호환용으로 남기고 0을 기록한다 (ADR-0029)
         PaymentCancel paymentCancel = PaymentCancel.createPending(
                 payment,
                 effectiveRequest.cancelAmount(),
                 requestedCancelAmount,
-                refundPointAmount,
+                0,
                 effectiveRequest.cancelReason(),
                 currentMember.getId(),
                 effectiveRequest.idempotencyKey(),
@@ -185,7 +175,6 @@ public class PaymentTransactionService {
         );
         payment.addCancellation(paymentCancel);
         paymentRepository.flush();
-        reserveRefundPoints(currentMember.getId(), paymentCancel);
         return CancellationClaim.processing(toCancellationCommand(paymentCancel));
     }
 
@@ -222,9 +211,7 @@ public class PaymentTransactionService {
     public void releaseCancellation(PaymentCancellationCommand command) {
         paymentCancelRepository.findByIdForUpdate(command.cancellationId()).ifPresent(paymentCancel -> {
             if (paymentCancel.isPending() && Objects.equals(paymentCancel.getPgIdempotencyKey(), command.pgIdempotencyKey())) {
-                Payment payment = paymentCancel.getPayment();
-                payment.removeCancellation(paymentCancel);
-                releaseReservedRefundPoints(payment, paymentCancel);
+                paymentCancel.getPayment().removeCancellation(paymentCancel);
             }
         });
     }
@@ -242,9 +229,8 @@ public class PaymentTransactionService {
     public void stopCancellationRecovery(PaymentCancellationCommand command, String errorCode) {
         paymentCancelRepository.findByIdForUpdate(command.cancellationId()).ifPresent(paymentCancel -> {
             if (paymentCancel.isPending() && Objects.equals(paymentCancel.getPgIdempotencyKey(), command.pgIdempotencyKey())) {
-                // 중단 직전 PG 조회에서 취소 미반영이 확인된 경우다 — ABORTED로 종결해 새 취소 요청을 막지 않고 예약 포인트를 돌려준다
+                // 중단 직전 PG 조회에서 취소 미반영이 확인된 경우다 — ABORTED로 종결해 새 취소 요청을 막지 않는다
                 paymentCancel.abort(errorCode, ZonedDateTime.now());
-                releaseReservedRefundPoints(paymentCancel.getPayment(), paymentCancel);
             }
         });
     }
@@ -253,7 +239,7 @@ public class PaymentTransactionService {
     public void holdCancellationForReconciliation(PaymentCancellationCommand command, String errorCode) {
         paymentCancelRepository.findByIdForUpdate(command.cancellationId()).ifPresent(paymentCancel -> {
             if (paymentCancel.isPending() && Objects.equals(paymentCancel.getPgIdempotencyKey(), command.pgIdempotencyKey())) {
-                // PG 누적 취소액 불일치 — 환불이 이미 반영됐을 수 있어 예약 포인트를 유지한 채 수동 정합을 기다린다
+                // PG 누적 취소액 불일치 — 환불이 이미 반영됐을 수 있어 자동 복구를 멈추고 수동 정합을 기다린다
                 paymentCancel.stopRecovery(errorCode, ZonedDateTime.now());
             }
         });
@@ -378,40 +364,6 @@ public class PaymentTransactionService {
         }
     }
 
-    private int calculateRefundPointAmount(Payment payment, int cancelAmount) {
-        PaymentOrder paymentOrder = payment.getPaymentOrder();
-        if (paymentOrder == null) {
-            return cancelAmount;
-        }
-        int nextCanceledAmount = payment.getCanceledAmount() + cancelAmount;
-        int targetCanceledPoints = (int) (((long) paymentOrder.getPointAmount() * nextCanceledAmount) / payment.getAmount());
-        return targetCanceledPoints - payment.getCanceledPointAmount();
-    }
-
-    private void reserveRefundPoints(Long memberId, PaymentCancel paymentCancel) {
-        if (paymentCancel.getCancelPointAmount() <= 0) {
-            return;
-        }
-        seniorProfileService.deductPointsFromMember(
-                memberId,
-                (long) paymentCancel.getCancelPointAmount(),
-                paymentCancel.getCancelReason(),
-                "PAYMENT_CANCEL:" + paymentCancel.getId()
-        );
-    }
-
-    private void releaseReservedRefundPoints(Payment payment, PaymentCancel paymentCancel) {
-        if (paymentCancel.getCancelPointAmount() <= 0) {
-            return;
-        }
-        seniorProfileService.addPointsToMember(
-                payment.getMember().getId(),
-                (long) paymentCancel.getCancelPointAmount(),
-                "결제 취소 중단 포인트 반환",
-                "PAYMENT_CANCEL_RELEASE:" + paymentCancel.getId()
-        );
-    }
-
     private void validatePaymentOwnership(Payment payment, Long memberId) {
         if (!payment.isOwnedBy(memberId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "본인 결제만 접근할 수 있습니다.");
@@ -420,7 +372,7 @@ public class PaymentTransactionService {
 
     private void validateSeniorMember(Member member) {
         if (member.getType() != MemberType.SENIOR || member.getSeniorProfile() == null) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "시니어 회원만 포인트를 충전할 수 있습니다.");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "시니어 회원만 결제할 수 있습니다.");
         }
     }
 
@@ -477,14 +429,6 @@ public class PaymentTransactionService {
     private void validateCancellationRecoveryNotStopped(PaymentCancel paymentCancel) {
         if (paymentCancel.isRecoveryStopped()) {
             throw new BusinessException(ErrorCode.PAYMENT_FAILED, "복구가 중단된 취소 요청입니다. 수동 정합 처리가 필요합니다.");
-        }
-    }
-
-    private PointChargePackage resolvePackage(String packageId) {
-        try {
-            return PointChargePackage.fromId(packageId);
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "지원하지 않는 결제 패키지입니다.");
         }
     }
 

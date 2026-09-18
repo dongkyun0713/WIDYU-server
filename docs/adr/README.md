@@ -53,6 +53,7 @@ ADR 커버리지는 100%를 목표로 하지 않는다. 대신 다음 영역은 
 
 | 번호 | 제목 | 상태 | 날짜 |
 | --- | --- | --- | --- |
+| [ADR-0029](ADR-0029-payment-point-decoupling.md) | 결제는 포인트를 충전·환수하지 않는다 | Accepted | 2026-09-17 |
 | [ADR-0028](ADR-0028-fcm-durable-delivery.md) | 고정 수신자 FCM outbox와 트랜잭션 밖 발송 | Accepted | 2026-09-14 |
 | [ADR-0023](ADR-0023-production-single-container-deployment.md) | 운영 API 단일 컨테이너 교체 배포 | Accepted | 2026-09-09 |
 | [ADR-0025](ADR-0025-pii-at-rest-encryption-policy.md) | 개인정보 저장 시 암호화 정책 | Accepted | 2026-09-12 |
@@ -68,8 +69,9 @@ ADR 커버리지는 100%를 목표로 하지 않는다. 대신 다음 영역은 
 | [ADR-0009](ADR-0009-safe-zone-alert-deduplication.md) | 안전구역 이탈 알림 원자 중복 차단 | Accepted | 2026-07-21 |
 | [ADR-0010](ADR-0010-album-video-failure-compensation.md) | 앨범 영상 처리 실패 보상 삭제 정책 | Accepted | 2026-07-21 |
 | [ADR-0011](ADR-0011-album-notification-side-effect-isolation.md) | 앨범 알림 부수효과 격리 정책 | Accepted | 2026-07-21 |
-| [ADR-0012](ADR-0012-payment-cancel-idempotency.md) | 부분 취소 멱등성 및 직렬화 정책 | Accepted | 2026-07-25 |
+| [ADR-0012](ADR-0012-payment-cancel-idempotency.md) | 부분 취소 멱등성 및 직렬화 정책 (환수 포인트 예약은 ADR-0029가 대체) | Accepted | 2026-07-25 |
 | [ADR-0013](ADR-0013-heart-rate-personalized-ai-contract.md) | 개인화 심박 AI 단건 계약 연동 | Accepted | 2026-07-26 |
+| [ADR-0016](ADR-0016-payment-pg-call-transaction-separation.md) | PG 호출은 DB 트랜잭션 밖에서 수행하고 저장한 PG 멱등 키로 복구한다 | Accepted | 2026-08-08 |
 | [ADR-0015](ADR-0015-album-presigned-multipart-upload.md) | 앨범 미디어 Presigned Multipart 직접 업로드 | Accepted | 2026-07-27 |
 | [ADR-0018](ADR-0018-claude-code-sandbox-not-adopted.md) | Claude Code 샌드박스 미도입 — 비밀 파일 차단과 테스트 실행의 트레이드오프 | Accepted | 2026-08-20 |
 | [ADR-0019](ADR-0019-goal-home-query-pipeline.md) | 목표 홈 주간 통계 기간 벌크 조회 | Accepted | 2026-08-20 |
