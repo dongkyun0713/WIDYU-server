@@ -15,7 +15,6 @@ import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
-import com.widyu.member.PointHistoryType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
@@ -103,7 +102,7 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("결제 승인 시 주문, 결제, 포인트 적립 이력이 함께 저장된다")
+    @DisplayName("결제 승인 시 주문과 결제가 저장되고 포인트는 변하지 않는다")
     void 결제_승인_통합() {
         Member currentMember = createSeniorMember("홍길동", "01012345678", "FAM001", "INV0011");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
@@ -128,15 +127,13 @@ class PaymentIntegrationTest {
         assertThat(paymentOrder.getStatus()).isEqualTo(com.widyu.pay.PaymentOrderStatus.PAID);
         assertThat(payment.getOrderId()).isEqualTo(orderResponse.orderId());
         assertThat(payment.getAmount()).isEqualTo(10000);
-        assertThat(seniorProfile.getPoints()).isEqualTo(10100L);
-        assertThat(pointHistories).hasSize(1);
-        assertThat(pointHistories.get(0).getType()).isEqualTo(PointHistoryType.EARN);
-        assertThat(pointHistories.get(0).getAmount()).isEqualTo(10000L);
-        assertThat(pointHistories.get(0).getDescription()).isEqualTo("포인트 충전 10,000원");
+        assertThat(paymentOrder.getPointAmount()).isZero();
+        assertThat(seniorProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistories).isEmpty();
     }
 
     @Test
-    @DisplayName("PG 승인 응답이 완료 상태가 아니면 결제와 포인트를 반영하지 않고 복구 대상으로 유지한다")
+    @DisplayName("PG 승인 응답이 완료 상태가 아니면 결제를 반영하지 않고 복구 대상으로 유지한다")
     void 미완료_승인_응답_통합() {
         Member currentMember = createSeniorMember("박철수", "01077776666", "FAM004", "INV0044");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
@@ -164,7 +161,7 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("부분 취소 시 취소 이력과 포인트 차감 이력이 함께 반영된다")
+    @DisplayName("부분 취소 시 취소 이력이 반영되고 포인트는 변하지 않는다")
     void 부분_취소_통합() {
         Member currentMember = createSeniorMember("김영희", "01099998888", "FAM002", "INV0022");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
@@ -203,18 +200,16 @@ class PaymentIntegrationTest {
         assertThat(cancelResponse.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
         assertThat(payment.getCanceledAmount()).isEqualTo(3000);
-        assertThat(payment.getCanceledPointAmount()).isEqualTo(3000);
+        assertThat(payment.getCanceledPointAmount()).isZero();
         assertThat(payment.getRemainingAmount()).isEqualTo(7000);
         assertThat(cancelResponse.getCancellations()).hasSize(1);
-        assertThat(seniorProfile.getPoints()).isEqualTo(7100L);
-        assertThat(pointHistories).hasSize(2);
-        assertThat(pointHistories.get(0).getType()).isEqualTo(PointHistoryType.USE);
-        assertThat(pointHistories.get(0).getAmount()).isEqualTo(3000L);
-        assertThat(pointHistories.get(0).getDescription()).isEqualTo("부분 취소");
+        assertThat(cancelResponse.getCancellations().get(0).getCancelPointAmount()).isZero();
+        assertThat(seniorProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistories).isEmpty();
     }
 
     @Test
-    @DisplayName("같은 멱등 키로 부분 취소를 재요청하면 취소와 포인트 환수가 한 번만 반영된다")
+    @DisplayName("같은 멱등 키로 부분 취소를 재요청하면 취소가 한 번만 반영된다")
     void 동일_멱등_키_부분_취소_재요청_통합() {
         Member currentMember = createSeniorMember("김영희", "01099998887", "FAM003", "INV0033");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
@@ -261,8 +256,8 @@ class PaymentIntegrationTest {
         assertThat(duplicatedResponse.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
         assertThat(duplicatedResponse.getCancellations()).hasSize(1);
         assertThat(payment.getCanceledAmount()).isEqualTo(3000);
-        assertThat(seniorProfile.getPoints()).isEqualTo(7100L);
-        assertThat(pointHistories).hasSize(2);
+        assertThat(seniorProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistories).isEmpty();
         verify(paymentClient, times(1)).cancelPayment(
                 org.mockito.ArgumentMatchers.eq("pay_777777"),
                 org.mockito.ArgumentMatchers.eq(PaymentGatewayCancelRequest.from(cancelRequest)),
@@ -271,8 +266,8 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("취소 선점 시 환수 포인트를 예약하고 취소를 중단하면 포인트를 반환한다")
-    void 취소_포인트_예약_및_해제_통합() {
+    @DisplayName("취소 선점 뒤 PG 호출이 실패하고 선점을 해제하면 취소 레코드만 제거되고 포인트는 변하지 않는다")
+    void 취소_선점_해제_통합() {
         Member currentMember = createSeniorMember("이몽룡", "01055554444", "FAM005", "INV0055");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
 
@@ -297,8 +292,8 @@ class PaymentIntegrationTest {
                 new CancelRequest("부분 취소", 3000, "cancel-reserve-1")
         )).isInstanceOf(IllegalStateException.class);
 
-        SeniorProfile reservedProfile = seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow();
-        assertThat(reservedProfile.getPoints()).isEqualTo(7100L);
+        SeniorProfile claimedProfile = seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow();
+        assertThat(claimedProfile.getPoints()).isEqualTo(100L);
 
         Payment payment = paymentRepository.findByPaymentKey("pay_555555").orElseThrow();
         PaymentCancel pendingCancel = paymentCancelRepository.findAll().stream()
@@ -315,13 +310,14 @@ class PaymentIntegrationTest {
         ));
 
         SeniorProfile releasedProfile = seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow();
-        assertThat(releasedProfile.getPoints()).isEqualTo(10100L);
+        assertThat(releasedProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistoryRepository.findAllBySeniorProfileIdOrderByCreatedAtDesc(releasedProfile.getId())).isEmpty();
         assertThat(paymentCancelRepository.findById(pendingCancel.getId())).isEmpty();
     }
 
     @Test
-    @DisplayName("취소 복구를 중단하면 예약한 환수 포인트를 반환한다")
-    void 취소_복구_중단_포인트_반환_통합() {
+    @DisplayName("취소 복구를 중단하면 ABORTED로 종결하고 포인트는 변하지 않는다")
+    void 취소_복구_중단_통합() {
         Member currentMember = createSeniorMember("변학도", "01011110000", "FAM007", "INV0077");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
 
@@ -346,7 +342,7 @@ class PaymentIntegrationTest {
                 new CancelRequest("부분 취소", 3000, "cancel-stop-1")
         )).isInstanceOf(IllegalStateException.class);
         assertThat(seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow().getPoints())
-                .isEqualTo(7100L);
+                .isEqualTo(100L);
 
         Payment payment = paymentRepository.findByPaymentKey("pay_444444").orElseThrow();
         PaymentCancel pendingCancel = paymentCancelRepository.findAll().stream()
@@ -363,7 +359,7 @@ class PaymentIntegrationTest {
         ), "IDEMPOTENCY_KEY_EXPIRED");
 
         assertThat(seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow().getPoints())
-                .isEqualTo(10100L);
+                .isEqualTo(100L);
         PaymentCancel stoppedCancel = paymentCancelRepository.findById(pendingCancel.getId()).orElseThrow();
         assertThat(stoppedCancel.isAborted()).isTrue();
         assertThat(stoppedCancel.getRecoveryStoppedAt()).isNotNull();
@@ -374,7 +370,7 @@ class PaymentIntegrationTest {
                 new CancelRequest("부분 취소", 3000, "cancel-stop-1")
         )).isInstanceOf(BusinessException.class);
         assertThat(seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow().getPoints())
-                .isEqualTo(10100L);
+                .isEqualTo(100L);
 
         given(memberUtil.getCurrentMember()).willReturn(reloadCurrentMember(currentMember.getId()));
         given(paymentClient.cancelPayment(
@@ -393,12 +389,13 @@ class PaymentIntegrationTest {
                 new CancelRequest("부분 취소", 3000, "cancel-stop-2")
         );
         assertThat(newKeyCancelResponse.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
-        assertThat(seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow().getPoints())
-                .isEqualTo(7100L);
+        var stoppedProfile = seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow();
+        assertThat(stoppedProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistoryRepository.findAllBySeniorProfileIdOrderByCreatedAtDesc(stoppedProfile.getId())).isEmpty();
     }
 
     @Test
-    @DisplayName("취소 금액 불일치로 대사 보류하면 예약 포인트를 유지한다")
+    @DisplayName("취소 금액 불일치로 대사 보류하면 복구를 멈추고 포인트는 변하지 않는다")
     void 취소_금액_불일치_대사_보류_통합() {
         Member currentMember = createSeniorMember("방자", "01022221111", "FAM008", "INV0088");
         given(memberUtil.getCurrentMember()).willReturn(currentMember, currentMember);
@@ -437,8 +434,9 @@ class PaymentIntegrationTest {
                 ZonedDateTime.now()
         ), "CANCELED_AMOUNT_MISMATCH");
 
-        assertThat(seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow().getPoints())
-                .isEqualTo(7100L);
+        var heldProfile = seniorProfileRepository.findByMemberId(currentMember.getId()).orElseThrow();
+        assertThat(heldProfile.getPoints()).isEqualTo(100L);
+        assertThat(pointHistoryRepository.findAllBySeniorProfileIdOrderByCreatedAtDesc(heldProfile.getId())).isEmpty();
         PaymentCancel heldCancel = paymentCancelRepository.findById(pendingCancel.getId()).orElseThrow();
         assertThat(heldCancel.getRecoveryStoppedAt()).isNotNull();
     }
@@ -480,7 +478,7 @@ class PaymentIntegrationTest {
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
         assertThat(payment.getCanceledAmount()).isEqualTo(0);
-        assertThat(seniorProfile.getPoints()).isEqualTo(7100L);
+        assertThat(seniorProfile.getPoints()).isEqualTo(100L);
         PaymentCancel pendingCancel = paymentCancelRepository.findAll().stream()
                 .filter(cancellation -> cancellation.getPayment().getId().equals(payment.getId()))
                 .findFirst()

@@ -3,20 +3,18 @@ package com.widyu.pay;
 import java.util.Arrays;
 
 public enum PointChargePackage {
-    POINT_10000("POINT_10000", "포인트 충전 10,000원", 10000, 10000),
-    POINT_30000("POINT_30000", "포인트 충전 30,000원", 30000, 30000),
-    POINT_50000("POINT_50000", "포인트 충전 50,000원", 50000, 50000);
+    POINT_10000("POINT_10000", "포인트 충전 10,000원", 10000),
+    POINT_30000("POINT_30000", "포인트 충전 30,000원", 30000),
+    POINT_50000("POINT_50000", "포인트 충전 50,000원", 50000);
 
     private final String id;
     private final String orderName;
     private final int amount;
-    private final int pointAmount;
 
-    PointChargePackage(String id, String orderName, int amount, int pointAmount) {
+    PointChargePackage(String id, String orderName, int amount) {
         this.id = id;
         this.orderName = orderName;
         this.amount = amount;
-        this.pointAmount = pointAmount;
     }
 
     public String getId() {
@@ -29,10 +27,6 @@ public enum PointChargePackage {
 
     public int getAmount() {
         return amount;
-    }
-
-    public int getPointAmount() {
-        return pointAmount;
     }
 
     public static PointChargePackage fromId(String id) {

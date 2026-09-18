@@ -201,7 +201,7 @@ erDiagram
         String orderName
         String packageId
         Integer amount
-        Integer pointAmount
+        Integer pointAmount "항상 0, 폐기 예정 (ADR-0029)"
         PaymentOrderStatus status
         ZonedDateTime expiresAt
         String approvalPaymentKey

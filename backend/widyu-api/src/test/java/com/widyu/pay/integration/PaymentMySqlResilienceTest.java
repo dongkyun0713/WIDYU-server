@@ -5,15 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
-import com.widyu.album.repository.AlbumUnlockRepository;
 import com.widyu.global.crypto.AesGcmStringConverter;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
-import com.widyu.member.application.FamilyAccessService;
-import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.*;
 import com.widyu.pay.application.PaymentService;
 import com.widyu.pay.application.PaymentTransactionService;
@@ -106,7 +103,7 @@ class PaymentMySqlResilienceTest {
             assertThat(scenario.gateway.postKeys()).hasSize(2);
             assertThat(scenario.gateway.postKeys().stream().distinct()).hasSize(1);
             assertThat(scenario.gateway.operations()).isEqualTo(1);
-            scenario.assertState("PAID", "DONE", 0, 10100, 1, 0);
+            scenario.assertState("PAID", "DONE", 0, 100, 0, 0);
             scenario.approve();
             assertThat(scenario.gateway.postKeys()).hasSize(2);
         }
@@ -125,7 +122,7 @@ class PaymentMySqlResilienceTest {
             assertThat(scenario.gateway.postKeys()).hasSize(3);
             assertThat(scenario.gateway.postKeys().subList(1, 3).stream().distinct()).hasSize(1);
             assertThat(scenario.gateway.operations()).isEqualTo(2);
-            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 7100, 2, 1);
+            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 100, 0, 1);
             scenario.cancel();
             assertThat(scenario.gateway.postKeys()).hasSize(3);
         }
@@ -143,7 +140,7 @@ class PaymentMySqlResilienceTest {
             scenario.assertApprovalPending();
             scenario.recover();
             scenario.approve();
-            scenario.assertState("PAID", "DONE", 0, 10100, 1, 0);
+            scenario.assertState("PAID", "DONE", 0, 100, 0, 0);
             assertThat(scenario.gateway.operations()).isEqualTo(1);
             assertThat(scenario.gateway.postKeys()).hasSize(1);
             assertThat(scenario.gateway.lookups()).isEqualTo(1);
@@ -163,7 +160,7 @@ class PaymentMySqlResilienceTest {
             scenario.assertCancellationPending();
             scenario.recover();
             scenario.cancel();
-            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 7100, 2, 1);
+            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 100, 0, 1);
             assertThat(scenario.gateway.operations()).isEqualTo(2);
             assertThat(scenario.gateway.postKeys()).hasSize(2);
             assertThat(scenario.gateway.lookups()).isEqualTo(1);
@@ -188,7 +185,7 @@ class PaymentMySqlResilienceTest {
             scenario.assertApprovalPending();
             scenario.recover();
             scenario.approve();
-            scenario.assertState("PAID", "DONE", 0, 10100, 1, 0);
+            scenario.assertState("PAID", "DONE", 0, 100, 0, 0);
             assertThat(scenario.gateway.operations()).isEqualTo(1);
             assertThat(scenario.gateway.postKeys()).hasSize(1);
         }
@@ -213,7 +210,7 @@ class PaymentMySqlResilienceTest {
             scenario.assertCancellationPending();
             scenario.recover();
             scenario.cancel();
-            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 7100, 2, 1);
+            scenario.assertState("PAID", "PARTIAL_CANCELED", 3000, 100, 0, 1);
             assertThat(scenario.gateway.operations()).isEqualTo(2);
             assertThat(scenario.gateway.postKeys()).hasSize(2);
         }
@@ -311,7 +308,7 @@ class PaymentMySqlResilienceTest {
 
         void assertCancellationPending() {
             assertThat(gateway.operations()).isEqualTo(2);
-            assertState("PAID", "DONE", 0, 7100, 2, 1);
+            assertState("PAID", "DONE", 0, 100, 0, 1);
             assertThat(jdbc.queryForObject("SELECT c.status FROM payment_cancel c JOIN payment p ON p.id=c.payment_id "
                     + "WHERE p.payment_key=?", String.class, paymentKey)).isEqualTo("PENDING");
         }
@@ -355,11 +352,9 @@ class PaymentMySqlResilienceTest {
             includeFilters = @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
                     PaymentRepository.class, PaymentOrderRepository.class, PaymentCancelRepository.class,
                     MemberRepository.class, SeniorProfileRepository.class, FamilyRepository.class, PointHistoryRepository.class}))
-    @Import({PaymentTransactionService.class, SeniorProfileService.class, AesGcmStringConverter.class,
+    @Import({PaymentTransactionService.class, AesGcmStringConverter.class,
             com.widyu.global.config.QuerydslConfig.class})
     static class Config {
         @Bean MemberUtil memberUtil() { return mock(MemberUtil.class); }
-        @Bean AlbumUnlockRepository albumUnlockRepository() { return mock(AlbumUnlockRepository.class); }
-        @Bean FamilyAccessService familyAccessService() { return mock(FamilyAccessService.class); }
     }
 }

@@ -4,30 +4,30 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Approved |
+| 상태 | Approved (포인트 서술은 2026-09-17 ADR-0029·LLD-0039로 갱신) |
 | Issue | - |
-| 관련 ADR | ADR-0003 (DB 설계 — ENUM, FK 전략) |
+| 관련 ADR | ADR-0003 (DB 설계 — ENUM, FK 전략), ADR-0029 (결제-포인트 분리) |
 | 작성자 | dongkyunKim |
 | 작성일 | 2026-07-05 |
 
 ## 1. 목적 / 배경
 
-시니어가 포인트를 충전하고, 보호자가 포인트로 잠긴 앨범을 잠금해제하는 포인트 경제 시스템이 필요하다.
-포인트 충전은 Toss Payments를 통한 실결제로 이루어지며, 주문 생성 → 결제 승인 → 포인트 적립의 2-step flow를 따른다.
-중복 결제 방지, 부분 취소 비례 포인트 환수 등 결제 무결성을 보장해야 한다.
+시니어가 Toss Payments로 결제 패키지를 주문·승인·취소하는 결제 플로우다. 주문 생성 → 결제 승인의 2-step flow를 따르며 중복 결제 방지, 부분 취소 멱등성 등 결제 무결성을 보장해야 한다.
+
+**결제는 포인트를 충전·환수하지 않는다(ADR-0029, 2026-09-17).** 포인트는 시니어 가입·복약 인증·걷기 목표·건강 일정 방문으로만 적립되고 앨범 잠금해제로만 차감된다. 아래 5-2·5-3의 포인트 단계는 삭제됐으며, 이 문서의 나머지 서술은 결제 상태 전이·멱등 처리의 오라클로 계속 유효하다.
 
 ## 2. 범위
 
 ### In scope
-- 변경 모듈: widyu-api (pay 패키지), widyu-domain (Payment, PaymentOrder, PaymentCancel, PointHistory, SeniorProfile)
-- 포인트 패키지 목록 조회 (`PointChargePackage` enum)
+- 변경 모듈: widyu-api (pay 패키지), widyu-domain (Payment, PaymentOrder, PaymentCancel)
+- 결제 패키지 목록 조회 (`PointChargePackage` enum — 금액만 정의)
 - 주문 생성 (orderId 발급, 15분 만료)
-- 결제 승인 (Toss Payments confirm API → 포인트 적립)
-- 결제 취소 (Toss Payments cancel API → 포인트 비례 환수)
+- 결제 승인 (Toss Payments confirm API)
+- 결제 취소 (Toss Payments cancel API, 부분 취소 멱등)
 - 결제 내역 조회
-- 포인트 적립·차감 기록 (`PointHistory`)
 
 ### Out of scope
+- 포인트 적립·차감 전반 (결제와 무관, ADR-0029)
 - 앨범 잠금해제 포인트 차감 (AlbumService 담당, 50pt 차감)
 - 시니어 가입 시 100pt 지급 (회원가입 서비스 담당)
 - 행정 취소·환불 (관리자 도구 담당)
@@ -38,15 +38,15 @@
 ```http
 GET /api/v1/payment/packages
 ```
-구매 가능한 포인트 패키지 목록.
+구매 가능한 결제 패키지 목록. `pointAmount`는 호환용 필드로 항상 0이다.
 
 ```json
 {
   "isSuccess": true,
   "result": [
-    { "packageId": "POINT_10000", "orderName": "포인트 충전 10,000원", "amount": 10000, "pointAmount": 10000 },
-    { "packageId": "POINT_30000", "orderName": "포인트 충전 30,000원", "amount": 30000, "pointAmount": 30000 },
-    { "packageId": "POINT_50000", "orderName": "포인트 충전 50,000원", "amount": 50000, "pointAmount": 50000 }
+    { "packageId": "POINT_10000", "orderName": "포인트 충전 10,000원", "amount": 10000, "pointAmount": 0 },
+    { "packageId": "POINT_30000", "orderName": "포인트 충전 30,000원", "amount": 30000, "pointAmount": 0 },
+    { "packageId": "POINT_50000", "orderName": "포인트 충전 50,000원", "amount": 50000, "pointAmount": 0 }
   ]
 }
 ```
@@ -69,7 +69,7 @@ Response:
     "orderId": "order_abc123def456gh78",
     "orderName": "포인트 충전 10,000원",
     "amount": 10000,
-    "pointAmount": 10000,
+    "pointAmount": 0,
     "status": "CREATED",
     "expiresAt": "2026-07-05T15:00:00+09:00"
   }
@@ -140,7 +140,7 @@ payment_order
 ├── order_name (String)
 ├── package_id (String)        ← PointChargePackage.id
 ├── amount (int)               ← 결제 금액 (원)
-├── point_amount (int)         ← 적립 예정 포인트
+├── point_amount (int)         ← 항상 0 (호환용, 폐기 예정 — ADR-0029)
 ├── status (ENUM STRING)       ← CREATED / PAID / EXPIRED / CANCELED
 ├── expires_at (ZonedDateTime) ← 생성 시각 + 15분
 └── createdAt, updatedAt
@@ -156,7 +156,7 @@ payment
 ├── order_name (String)
 ├── amount (int)
 ├── canceled_amount (int)          ← 누적 취소 금액
-├── canceled_point_amount (int)    ← 누적 환수 포인트
+├── canceled_point_amount (int)    ← 항상 0 (호환용, 폐기 예정 — ADR-0029)
 ├── status (PaymentStatus ENUM)    ← READY / DONE / PARTIAL_CANCELED / CANCELED
 ├── requested_at, approved_at (ZonedDateTime)
 ├── cancel_reason, canceled_at
@@ -171,41 +171,26 @@ payment_cancel
 ├── id (PK, IDENTITY)
 ├── payment_id (FK, ManyToOne)
 ├── cancel_amount (int)
-├── cancel_point_amount (int)
+├── cancel_point_amount (int)       ← 항상 0 (호환용, 폐기 예정 — ADR-0029)
 ├── cancel_reason (String)
 ├── requested_by_member_id (Long)   ← memberId
 └── canceled_at (ZonedDateTime)
-```
-
-**PointHistory** (`point_history` 테이블):
-```
-point_history
-├── id (PK, IDENTITY)
-├── senior_profile_id (FK)
-├── type (ENUM STRING)   ← EARN / USE
-├── amount (Long)
-├── description (String)
-└── createdAt
 ```
 
 **PaymentOrderStatus** enum: `CREATED, PAID, EXPIRED, CANCELED`
 
 **PaymentStatus** enum: `READY, DONE, PARTIAL_CANCELED, CANCELED`
 
-**PointChargePackage** enum (코드 정의, DB 저장 없음):
+**PointChargePackage** enum (코드 정의, DB 저장 없음, 금액만):
 ```java
 enum PointChargePackage {
-    POINT_10000("POINT_10000", "포인트 충전 10,000원", 10000, 10000),
-    POINT_30000("POINT_30000", "포인트 충전 30,000원", 30000, 30000),
-    POINT_50000("POINT_50000", "포인트 충전 50,000원", 50000, 50000)
+    POINT_10000("POINT_10000", "포인트 충전 10,000원", 10000),
+    POINT_30000("POINT_30000", "포인트 충전 30,000원", 30000),
+    POINT_50000("POINT_50000", "포인트 충전 50,000원", 50000)
 }
 ```
 
-**SeniorProfile** 포인트 필드:
-```
-senior_profile.points  (Long)  ← 현재 보유 포인트
-senior_profile.version (Long)  ← 포인트 잔액 동시성 제어용 낙관적 락 버전 (@Version)
-```
+`PointHistory`·`SeniorProfile.points`는 결제와 무관하다(ADR-0029). 포인트 잔액 낙관적 락은 §8 참고.
 
 ### DTO (widyu-api)
 
@@ -246,9 +231,7 @@ senior_profile.version (Long)  ← 포인트 잔액 동시성 제어용 낙관�
 7. 응답 검증: paymentKey, orderId, amount 일치 (PAYMENT_FAILED)
 8. PaymentMapper.toEntity(rawResponse, member, paymentOrder) → paymentRepository.save()
 9. paymentOrder.markPaid()
-10. SeniorProfileService.addPointsToMember(memberId, pointAmount, orderName)
-    └─ SeniorProfile.points += pointAmount
-    └─ PointHistory(EARN, pointAmount, orderName) 저장
+10. (삭제됨 — ADR-0029) 포인트 적립 없음
 11. DataIntegrityViolationException 캐치 → 중복 저장 처리 (race condition 안전)
 12. PaymentConfirmResponse.from(payment) 반환
 ```
@@ -262,21 +245,19 @@ senior_profile.version (Long)  ← 포인트 잔액 동시성 제어용 낙관�
 2. getCurrentMember() → 소유권 검증 (FORBIDDEN)
 3. isCanceled() → 이미 취소된 경우 기존 응답 반환 (멱등)
 4. sanitizeCancelRequest(): cancelReason 기본값, cancelAmount 전액 처리, 범위 검증
-5. calculateRefundPointAmount(): 취소 금액 비례 포인트 계산
-   환수 포인트 = ⌊(이번 취소 후 누적 취소 금액 / 결제 금액) × 총 포인트⌋ - 기존 환수 포인트
-6. 포인트 잔액 검증: seniorProfile.hasEnoughPoints(refundPointAmount) (BAD_REQUEST)
+5. (삭제됨 — ADR-0029) 환수 포인트 계산 없음
+6. (삭제됨 — ADR-0029) 포인트 잔액 검증·예약 차감 없음
 7. paymentClient.cancelPayment(paymentKey, cancelRequest) (Feign)
 8. 취소 응답 검증: paymentKey 일치 (PAYMENT_FAILED)
-9. PaymentCancel.create(...) → payment.addCancellation(paymentCancel)
-10. payment.cancel(cancelAmount, refundPointAmount, reason, canceledAt)
+9. PaymentCancel.createPending(..., cancelPointAmount = 0, ...) → payment.addCancellation(paymentCancel)
+10. payment.cancel(cancelAmount, 0, reason, canceledAt)
     └─ payment.canceledAmount += cancelAmount
-    └─ payment.canceledPointAmount += refundPointAmount
     └─ 전액 취소 시 status = CANCELED
-11. SeniorProfileService.deductPointsFromMember(memberId, refundPointAmount, reason)
-    └─ SeniorProfile.points -= refundPointAmount
-    └─ PointHistory(USE, refundPointAmount, reason) 저장
+11. (삭제됨 — ADR-0029) 포인트 환수 없음. 취소 해제·중단 시 포인트 반환도 없음
 12. 전액 취소 + PaymentOrder 존재 시: paymentOrder.markCanceled()
 ```
+
+현재 선점·PG 호출·결과 반영 트랜잭션 분리는 ADR-0016·LLD-0022, 포인트 분리 후 각 경로의 동작은 LLD-0039 §5를 따른다.
 
 트랜잭션: `@Transactional`
 
@@ -306,28 +287,24 @@ POST {spring.payment.base-url}/{paymentKey}/cancel  → cancelPayment()
 
 | 상황 | 에러 | 메시지 |
 |------|------|--------|
-| GUARDIAN이 결제 시도 | FORBIDDEN | "시니어 회원만 포인트를 충전할 수 있습니다." |
+| GUARDIAN이 결제 시도 | FORBIDDEN | "시니어 회원만 결제할 수 있습니다." |
 | 주문 없음 | PAYMENT_NOT_FOUND | "주문 정보를 찾을 수 없습니다." |
 | 주문 만료 | BAD_REQUEST | "만료된 주문입니다." |
 | 이미 처리된 주문 | BAD_REQUEST | "이미 처리된 주문입니다." |
 | 본인 주문·결제 아님 | FORBIDDEN | "본인 주문만 결제할 수 있습니다." |
 | PG 응답 불일치 | PAYMENT_FAILED | "PG 응답과 요청 정보가 일치하지 않습니다." |
 | 취소 금액 > 남은 금액 | BAD_REQUEST | "남은 결제 금액보다 크게 취소할 수 없습니다." |
-| 포인트 잔액 부족 (취소) | BAD_REQUEST | "결제 취소에 필요한 포인트가 부족합니다." |
 | orderId 5회 생성 실패 | INTERNAL_SERVER_ERROR | "주문 ID 생성에 실패했습니다." |
 | 결제 없음 (내역 조회) | PAYMENT_NOT_FOUND | - |
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] 시니어만 포인트 패키지를 주문할 수 있다 (보호자 시도 시 403)
+- [x] 시니어만 결제 패키지를 주문할 수 있다 (보호자 시도 시 403)
 - [x] 주문 생성 후 15분이 지나면 결제 승인이 EXPIRED 에러를 반환한다
 - [x] 동일 paymentKey로 중복 결제 승인 요청 시 기존 Payment를 그대로 반환한다 (멱등)
-- [x] 결제 승인 후 SeniorProfile.points에 pointAmount가 정상 추가된다
-- [x] 결제 승인 후 PointHistory(EARN)가 저장된다
-- [x] 부분 취소 시 취소 금액 비례 포인트가 환수된다
+- [x] 결제 승인·취소 후 SeniorProfile.points와 PointHistory가 변하지 않는다 (ADR-0029, LLD-0039)
 - [x] 전액 취소 시 PaymentOrder.status가 CANCELED로 변경된다
-- [x] 취소에 필요한 포인트가 부족하면 BAD_REQUEST가 반환된다
-- [x] 동일 멱등 키의 부분 취소 재전송은 PG 호출과 포인트 환수를 반복하지 않는다
+- [x] 동일 멱등 키의 부분 취소 재전송은 PG 호출을 반복하지 않는다
 - [x] Swagger에 주문·승인·취소·내역 응답이 반영된다
 - [x] `./gradlew :backend:widyu-api:test`가 통과한다
 
@@ -346,7 +323,7 @@ POST {spring.payment.base-url}/{paymentKey}/cancel  → cancelPayment()
   - `WalkService.updateSteps`, `AdminPointGrantService.grant`
 - **재시도 미적용 경로(충돌 시 409 응답 → 클라이언트 재시도):**
   - `AlbumUnlockService.unlockAlbum`: 트랜잭션 내 동기 FCM 이벤트 발행 → 서버 재시도 시 알림 중복 위험
-  - `PaymentService.confirmPayment`/`cancelPayment`: 외부 PG 호출과 포인트 증감을 한 트랜잭션으로 묶음. 상위 트랜잭션 커밋 시점에 충돌이 나 내부 재시도가 동작하지 않으며, PG 호출 재실행·dual-write를 피하기 위해 롤백 후 409로 응답 (결제는 orderId/paymentKey, 취소는 isCanceled 가드로 멱등)
+  - 결제 경로는 포인트를 증감하지 않으므로 낙관적 락 충돌 대상이 아니다 (ADR-0029)
 - 재시도 소진·미적용 경로의 충돌은 `ObjectOptimisticLockingFailureException` → GlobalExceptionHandler가 409(`POINT_CONCURRENT_UPDATE`) 응답
 - **운영 DB 마이그레이션 필요** (`ddl-auto: update`는 기존 행에 NOT NULL 컬럼 backfill을 보장하지 않음):
   ```sql
@@ -370,8 +347,8 @@ Toss의 취소 거래 키를 대사·보정 식별자로 별도 보관할지 검
 
 - `PaymentService.java`: 전체 결제 플로우 구현
 - `PaymentOrder.java` (widyu-domain): CREATED/PAID/EXPIRED/CANCELED 상태 전이
-- `Payment.java` (widyu-domain): DONE/PARTIAL_CANCELED/CANCELED, 취소 금액·포인트 누적
+- `Payment.java` (widyu-domain): DONE/PARTIAL_CANCELED/CANCELED, 취소 금액 누적
 - `PaymentCancel.java` (widyu-domain): 취소 이력
 - `PaymentClient.java`: Toss Payments Feign 클라이언트
-- `SeniorProfileService.java`: addPointsToMember / deductPointsFromMember + PointHistory
+- LLD-0039: 결제와 포인트 적립 분리
 - Toss Payments API 문서: https://docs.tosspayments.com/reference
