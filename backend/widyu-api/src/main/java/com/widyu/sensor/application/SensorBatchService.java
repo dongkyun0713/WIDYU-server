@@ -62,7 +62,9 @@ public class SensorBatchService {
         long measuredToMs = Long.MIN_VALUE;
         for (JsonNode sample : request.samples()) {
             JsonNode measuredAt = sample.get("t");
-            if (measuredAt == null || !measuredAt.isIntegralNumber()) {
+            // canConvertToLong 검사가 없으면 long 범위를 넘는 정수를 asLong()이 조용히 잘라
+            // 엉뚱한 시각으로 저장한다(BigIntegerNode도 isIntegralNumber는 true다).
+            if (measuredAt == null || !measuredAt.isIntegralNumber() || !measuredAt.canConvertToLong()) {
                 throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
             }
             measuredFromMs = Math.min(measuredFromMs, measuredAt.asLong());

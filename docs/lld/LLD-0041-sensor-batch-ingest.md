@@ -141,7 +141,7 @@ DTO (widyu-api `sensor/dto`): `request/SensorBatchRequest`(record), `response/Se
 
 1. 회원 존재 확인 → 없으면 `MEMBER_NOT_FOUND`.
 2. `existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq` → 있으면 `DUPLICATE` 반환. S3 PUT을 하지 않아 원본이 유지된다.
-3. `samples` 순회 1회: 각 원소의 `t`가 정수가 아니면 `SENSOR_SAMPLE_INVALID`. 같은 루프에서 min·max를 구한다.
+3. `samples` 순회 1회: 각 원소의 `t`가 정수가 아니거나 long 범위를 넘으면(`canConvertToLong()`) `SENSOR_SAMPLE_INVALID`. 같은 루프에서 min·max를 구한다.
 4. 요청 DTO를 Boot `ObjectMapper` 빈으로 `writeValueAsBytes` → 길이가 32,768바이트를 넘으면 `SENSOR_BATCH_TOO_LARGE`. `MessageDigest("SHA-256")` + `HexFormat.of()`로 sha256을 구하고 그 앞 16자를 S3 키에 넣는다.
 5. `received_at_ms = System.currentTimeMillis()`.
 6. `s3Service.uploadBytes(key, bytes, "application/json")` 동기 호출. 실패 시 예외가 그대로 올라간다(인덱스 행 저장 없음).
@@ -162,7 +162,7 @@ Facade·이벤트 없음.
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
 | `SENSOR_4000` `SENSOR_BATCH_TOO_LARGE` | 400 | canonical JSON > 32KB |
-| `SENSOR_4001` `SENSOR_SAMPLE_INVALID` | 400 | 샘플에 정수 `t`가 없음 |
+| `SENSOR_4001` `SENSOR_SAMPLE_INVALID` | 400 | 샘플에 정수 `t`가 없거나 long 범위를 넘음 |
 | `MEMBER_4041` | 404 | 회원 없음 |
 | `FILE_5000` `FILE_UPLOAD_FAILED` | 500 | S3 PUT 실패·타임아웃 |
 | 기존 validation 400 | 400 | 필수 필드 누락, 패턴 위반, `samples` 크기 위반, 모르는 최상위 필드 |

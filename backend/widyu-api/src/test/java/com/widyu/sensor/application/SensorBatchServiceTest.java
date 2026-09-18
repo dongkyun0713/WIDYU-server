@@ -253,6 +253,31 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("샘플 측정 시각이 long 범위를 넘으면 예외가 발생하고 아무것도 저장하지 않는다")
+    void 샘플_측정_시각이_long_범위를_넘으면_예외가_발생하고_아무것도_저장하지_않는다() throws Exception {
+        // given
+        Long memberId = 1L;
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode overflowed = mapper.readTree("{\"t\": 9223372036854775808, \"x\": -12, \"y\": 980, \"z\": 45}");
+        SensorBatchRequest request = SensorBatchRequest.of(
+                "watch-3f2a", "s-20260918-01", 1234L,
+                SensorStreamType.WATCH_ACCEL, SensorBatchKind.LIVE,
+                GyroMode.CONTINUOUS, true, List.of(overflowed));
+        given(memberRepository.findById(memberId))
+                .willReturn(Optional.of(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")));
+        given(sensorBatchRepository.existsByMemberIdAndDeviceIdAndSessionIdAndStreamTypeAndSeq(
+                memberId, "watch-3f2a", "s-20260918-01", SensorStreamType.WATCH_ACCEL, 1234L))
+                .willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> sensorBatchService.ingest(memberId, request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SENSOR_SAMPLE_INVALID);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+        then(sensorBatchRepository).should(never()).save(any());
+    }
+
+    @Test
     @DisplayName("S3 업로드가 실패하면 인덱스 행을 저장하지 않는다")
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
