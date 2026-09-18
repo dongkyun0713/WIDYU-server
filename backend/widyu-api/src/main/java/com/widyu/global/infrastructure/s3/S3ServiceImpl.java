@@ -4,6 +4,7 @@ import com.widyu.global.properties.S3Properties;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -41,6 +43,25 @@ public class S3ServiceImpl implements S3Service {
             
         } catch (IOException e) {
             log.error("S3 파일 업로드 실패: filePath={}, error={}", filePath, e.getMessage());
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public void uploadBytes(String objectKey, byte[] bytes, String contentType) {
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(s3Properties.s3().bucketName())
+                    .key(objectKey)
+                    .contentType(contentType)
+                    .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(5)))
+                    .build();
+
+            s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+            log.info("S3 바이트 업로드 성공: objectKey={}, byteSize={}", objectKey, bytes.length);
+        } catch (SdkException e) {
+            log.error("S3 바이트 업로드 실패: objectKey={}, byteSize={}, errorType={}",
+                    objectKey, bytes.length, e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
         }
     }
