@@ -28,6 +28,8 @@ jobs:
           python3 -m unittest discover -s scripts/harness -p 'test_*.py'
           python3 scripts/harness/test-pre-bash-guard.py
           python3 scripts/harness/test-pre-edit-branch-guard.py
+      - name: Docs index tests
+        run: python3 -m unittest discover -s scripts/docs -p 'test_*.py'
       - name: Java rules for changed lines
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
