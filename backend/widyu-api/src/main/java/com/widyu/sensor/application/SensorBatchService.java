@@ -126,7 +126,7 @@ public class SensorBatchService {
         return SensorBatchResultResponse.of(request.seq(), result);
     }
 
-    /** 요청 DTO를 서버 ObjectMapper로 재직렬화한 canonical JSON(ADR-0030 결정 3). */
+    /** 요청 DTO를 서버 ObjectMapper로 재직렬화한 JSON. 필드 순서는 정규화하지 않는다(ADR-0030 결정 3). */
     private byte[] serialize(SensorBatchRequest request) {
         try {
             return objectMapper.writeValueAsBytes(request);

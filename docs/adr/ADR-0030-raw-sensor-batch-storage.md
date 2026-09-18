@@ -20,7 +20,7 @@
 
 1. **배치 1건 = S3 객체 1개 + MySQL `sensor_batch` 인덱스 행 1개.** 페이로드는 S3에, 조회·삭제·귀속에 필요한 메타(스트림 종류, 배치 종류, 식별자, 측정 시각 범위, 수신 시각, 샘플 수, 바이트 수, sha256, 수집 당시 `gyro_mode`, `on_body`)는 MySQL에 둔다. 인덱스 행이 S3 객체의 유일한 목록이므로 삭제·가명화·파기는 인덱스 행을 기준으로 수행한다.
 2. **S3 키 = DB 유니크 키 구성 + 내용 해시.** 키는 `sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json`, UK는 `(member_id, device_id, session_id, stream_type, seq)`다. 객체는 내용별로 불변이라 덮어쓰기가 없고, 인덱스 행은 항상 자기가 가리키는 객체와 일치한다. 같은 내용의 재전송은 같은 키라 멱등이고, 인덱스 행이 이미 있으면 PUT 자체를 하지 않는다. `deviceId`·`sessionId`는 소문자·숫자·`._-`만 허용해 대소문자를 구분하지 않는 DB collation과 S3 키 판정이 어긋나지 않게 한다.
-3. **S3 내용은 요청 DTO를 서버 ObjectMapper로 재직렬화한 canonical JSON이다.** 값은 보존하고 표기는 보존하지 않는다(`37.56650`은 `37.5665`가 된다). 가속도·자이로는 정수라 완전히 일치한다. REST·WebSocket 두 경로가 같은 ObjectMapper를 쓰므로 sha256이 경로와 무관하게 같다. DTO는 `@JsonAnySetter`로 모르는 최상위 필드를 거절해 조용한 손실을 막는다. `@JsonIgnoreProperties(ignoreUnknown = false)`만으로는 Boot 기본값(`FAIL_ON_UNKNOWN_PROPERTIES=false`)이 이겨 조용히 버려진다.
+3. **S3 내용은 요청 DTO를 서버 ObjectMapper로 재직렬화한 JSON이다.** 값은 보존하고 표기는 보존하지 않는다(`37.56650`은 `37.5665`가 된다). 가속도·자이로는 정수라 완전히 일치한다. 샘플 객체의 필드 순서는 입력 순서를 유지하며 정렬하지 않는다. 같은 배치의 중복 판별은 UK가 하므로 필드 순서가 달라도 결과에 영향이 없고, sha256은 인덱스 행이 가리키는 객체의 무결성 대조(K3)에만 쓴다. REST·WebSocket 두 경로가 같은 ObjectMapper를 쓰므로 같은 입력의 sha256은 경로와 무관하게 같다. DTO는 `@JsonAnySetter`로 모르는 최상위 필드를 거절해 조용한 손실을 막는다. `@JsonIgnoreProperties(ignoreUnknown = false)`만으로는 Boot 기본값(`FAIL_ON_UNKNOWN_PROPERTIES=false`)이 이겨 조용히 버려진다.
 4. **시각은 epoch 밀리초 BIGINT로 저장한다.** `measured_from_ms`·`measured_to_ms`·`received_at_ms`가 도메인의 첫 epoch 컬럼이다. 기존 `LocalDateTime` 관례와 다르지만 정책 1.1.2가 스트림 시각을 epoch로 확정했고, 가용 시각과 판정 시각의 비교(1.4.4)가 같은 단위여야 한다.
 5. **가속도와 자이로는 독립 스트림이다.** 자이로가 없는 구간은 `WATCH_GYRO` 행이 없는 것으로 표현하고, 같은 구간 `WATCH_ACCEL` 행의 `gyro_mode`가 `TRIGGER`면 설계된 생략, `CONTINUOUS`면 결측이다.
 6. **S3 PUT은 수신 스레드에서 동기로 한다.** 저장이 끝난 뒤에만 `STORED`를 응답해 클라이언트의 재전송 판단이 정확하게 유지된다. `apiCallTimeout` 5초로 S3 장애 시 스레드 고갈을 막는다.
@@ -44,11 +44,12 @@
 - 저장 지점이 둘이라 S3 PUT 성공 뒤 INSERT 전에 프로세스가 죽으면 인덱스 없는 객체가 남는다. 재전송이 같은 키를 다시 쓰고 INSERT까지 마치므로 자료 손실은 없다.
 - 같은 `seq`에 다른 내용(예: `LIVE`를 `RETRANSMIT`로 다시 보낸 경우)이 동시에 도착하면 INSERT에서 진 쪽의 객체가 고아로 남는다. 인덱스 행과 객체의 불일치는 생기지 않는다. 고아 객체는 참가자 파기를 접두사(`sensor/{memberId}/`) 단위로 지울 때 함께 사라진다.
 - 참가자당 초당 S3 PUT 1회가 WebSocket 인바운드 스레드를 점유한다. 심박·위치 처리가 밀리면 별도 executor 또는 아웃박스로 뺀다.
-- 재직렬화는 소수 표기를 보존하지 않는다. 위치 `lat`·`lon`은 double 값이 보존되지만 원문 문자열은 남지 않는다.
+- 재직렬화는 소수 표기와 필드 순서 정규화를 하지 않는다. 위치 `lat`·`lon`은 double 값이 보존되지만 원문 문자열은 남지 않는다. 필드 순서만 다른 같은 배치가 동시에 오면 객체가 둘 생기고 하나는 고아가 된다.
 
 ## 후속 / 미결정
 - `study_participation_id` FK는 PR #618(연구 참여 등록) 머지 뒤 후속 연구 LLD에서 `heart_rate_event`와 함께 추가한다(ADR-0026 결정 2). 그때까지 `sensor_batch`는 회원에만 귀속된다.
 - 재전송을 이후 착용자에 붙이지 않는 규칙(1.3.4)은 회원을 토큰으로 확정하는 구조에서 K2(측정회차·기기 배정) 없이는 강제할 수 없다.
 - 보강 배치의 원본 참조 필드(1.2.3)는 K1·K2 확정 뒤 ALTER로 추가한다.
+- 실제 MySQL UK 경합과 S3 최종 상태를 재현하는 통합 시나리오는 미실행이다. `paymentMySqlTest`처럼 환경변수로 켜는 수동 측정 태스크로 후속에 추가한다.
 - 무참여 `sensor_batch` 행의 정리 기간과 S3 수명주기 정책은 후속 연구 LLD에서 정한다. 참가자 파기는 인덱스 행 삭제 + `sensor/{memberId}/` 접두사 삭제로 고아 객체까지 지운다.
 - 판정 기록(1.4)과 AI 입력 형식은 2단이다.

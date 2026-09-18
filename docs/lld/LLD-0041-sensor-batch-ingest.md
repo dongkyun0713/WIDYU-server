@@ -19,7 +19,7 @@
 ### In scope
 - 변경 모듈: widyu-api / widyu-domain
 - `SensorBatch` 엔티티, `SensorStreamType`·`SensorBatchKind`·`GyroMode` enum
-- `SensorBatchService.ingest` (중복 판별 → 검증 → canonical JSON → S3 → 인덱스 행)
+- `SensorBatchService.ingest` (중복 판별 → 검증 → 재직렬화 JSON → S3 → 인덱스 행)
 - `S3Service.uploadBytes`
 - REST `POST /api/v1/sensor/batches` (#631)
 - WebSocket `/app/sensor/batches/send` + allowlist (#632)
@@ -122,8 +122,8 @@ ACK 페이로드는 `{seq, result}`이며 `result`에 `REJECTED`(검증 실패, 
 | `sample_count` | INT | NOT NULL | |
 | `received_at_ms` | BIGINT | NOT NULL | 서버 수신 = 가용 시각 |
 | `s3_key` | VARCHAR(255) | NOT NULL | |
-| `byte_size` | INT | NOT NULL | canonical JSON 바이트 수 |
-| `sha256` | CHAR(64) | NOT NULL | canonical JSON 해시, 소문자 hex |
+| `byte_size` | INT | NOT NULL | 재직렬화 JSON 바이트 수 |
+| `sha256` | CHAR(64) | NOT NULL | 재직렬화 JSON 해시, 소문자 hex. 필드 순서는 정규화하지 않음(ADR-0030 결정 3) |
 | `created_at`, `updated_at` | DATETIME(6) | | `BaseTimeEntity` |
 
 - UK `uk_sensor_batch_seq (member_id, device_id, session_id, stream_type, seq)`
@@ -161,7 +161,7 @@ Facade·이벤트 없음.
 
 | 코드 | HTTP | 조건 |
 | --- | --- | --- |
-| `SENSOR_4000` `SENSOR_BATCH_TOO_LARGE` | 400 | canonical JSON > 32KB |
+| `SENSOR_4000` `SENSOR_BATCH_TOO_LARGE` | 400 | 재직렬화 JSON > 32KB |
 | `SENSOR_4001` `SENSOR_SAMPLE_INVALID` | 400 | 샘플에 정수 `t`가 없거나 long 범위를 넘음 |
 | `MEMBER_4041` | 404 | 회원 없음 |
 | `FILE_5000` `FILE_UPLOAD_FAILED` | 500 | S3 PUT 실패·타임아웃 |
@@ -175,7 +175,7 @@ WebSocket에서는 위 4xx 조건이 `REJECTED` ACK가 되고, 500 조건은 `/u
 - [x] 같은 `(member, deviceId, sessionId, streamType, seq)` 배치를 다시 보내면 `DUPLICATE`를 받고 S3 업로드가 호출되지 않는다.
 - [x] 같은 식별자에 내용이 다른 두 요청은 서로 다른 S3 키에 올라가고, 저장된 행의 `sha256`은 그 행이 가리키는 객체의 바이트와 일치한다.
 - [x] UK 경합으로 INSERT가 실패하면 예외 대신 `DUPLICATE`를 반환한다. 같은 키 행이 없는 무결성 오류는 그대로 전파한다.
-- [x] canonical JSON이 32KB를 넘으면 `SENSOR_BATCH_TOO_LARGE`, 샘플에 정수 `t`가 없으면 `SENSOR_SAMPLE_INVALID`로 거부하고 S3·DB에 아무것도 남지 않는다.
+- [x] 재직렬화 JSON이 32KB를 넘으면 `SENSOR_BATCH_TOO_LARGE`, 샘플에 정수 `t`가 없으면 `SENSOR_SAMPLE_INVALID`로 거부하고 S3·DB에 아무것도 남지 않는다.
 - [x] 모르는 최상위 필드가 있으면 400으로 거부한다(역직렬화 단위 테스트로 검증).
 - [x] S3 업로드가 실패하면 `sensor_batch` 행을 저장하지 않는다.
 - [x] `measured_from_ms`·`measured_to_ms`가 샘플 `t`의 최소·최대이고 `received_at_ms`가 서버 시각이다.
