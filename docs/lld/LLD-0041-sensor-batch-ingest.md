@@ -26,8 +26,8 @@
 - 운영 DDL, ERD, `backend/CLAUDE.md`
 
 ### Out of scope
-- `study_participation_id` FK와 연구 귀속: PR #618 머지 뒤 후속 연구 LLD에서 `heart_rate_event`와 함께 추가한다(ADR-0026).
-- `sensor_batch` 정리·가명화·파기 스케줄러, S3 수명주기 정책 (후속 연구 LLD)
+- 연구 참여 귀속: 연구 참여 모델이 폐기돼(2026-09-19) `sensor_batch`는 회원에만 귀속된다.
+- `sensor_batch` 정리 스케줄러와 S3 수명주기 정책 (미정)
 - `gyro_mode` 설정 내려주기 (#633, LLD-0042)
 - 샘플 내부 스키마 검증 (AI 입력 형식 확정 뒤)
 - 재전송 원본 참조 필드, 나노초 원 시각 (합의 대기 K1·K2)
@@ -225,4 +225,4 @@ CREATE TABLE sensor_batch (
 ## 10. 참고
 
 - `apiDocs/BE_김동균_위듀_데이터정책서_v1_B_서버AI입력.md` 1단, 합의 대기 A·B
-- ADR-0030, ADR-0026, LLD-0032(allowlist), LLD-0023(심박 WebSocket 패턴)
+- ADR-0030, LLD-0032(allowlist), LLD-0023(심박 WebSocket 패턴)
