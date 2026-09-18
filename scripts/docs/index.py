@@ -26,12 +26,24 @@ KINDS = {
 MISSING = "-"
 
 
-def read_field(text, name):
+def header_of(text):
+    """첫 `## ` 섹션 앞까지가 문서 헤더다.
+
+    본문에도 표가 많아(인수조건, 에러 코드 등) 검색 범위를 넓히면 헤더에 항목을
+    빠뜨린 문서에서 본문 값을 헤더 값으로 착각한다.
+    """
+    section = re.search(r"^##\s", text, re.M)
+    if not section:
+        return text
+    return text[: section.start()]
+
+
+def read_field(header, name):
     """헤더의 `| 이름 | 값 |` 또는 `- 이름: 값` 중 처음 것을 읽는다.
 
     ADR-0012·ADR-0016은 리스트 형식이고 나머지는 표 형식이라 둘 다 받는다.
-    본문에 같은 이름이 다시 나와도 헤더가 앞서므로 처음 것만 쓴다.
     """
+    text = header
     row = re.search(rf"^\|\s*{re.escape(name)}\s*\|\s*(.*?)\s*\|\s*$", text, re.M)
     if row and row.group(1):
         return row.group(1)
@@ -51,13 +63,13 @@ def read_title(text):
 
 def parse(path, kind):
     prefix, extra = KINDS[kind]
-    text = path.read_text(encoding="utf-8")
+    header = header_of(path.read_text(encoding="utf-8"))
     return {
         "number": re.match(rf"{prefix}-(\d+)", path.name).group(1),
         "file": path.name,
-        "title": read_title(text),
-        "status": read_field(text, "상태"),
-        "extra": read_field(text, extra),
+        "title": read_title(header),
+        "status": read_field(header, "상태"),
+        "extra": read_field(header, extra),
     }
 
 
@@ -69,13 +81,17 @@ def collect(kind, docs_root=DOCS_ROOT):
     return entries
 
 
+def escape_cell(value):
+    """표 안에서 파이프가 열을 쪼개지 않게 막는다. 백슬래시를 먼저 바꾼다."""
+    return value.replace("\\", "\\\\").replace("|", "\\|")
+
+
 def render(kind, entries):
     prefix, extra = KINDS[kind]
     lines = [f"| 번호 | 제목 | 상태 | {extra} |", "| --- | --- | --- | --- |"]
     for e in entries:
-        lines.append(
-            f"| [{prefix}-{e['number']}]({e['file']}) | {e['title']} | {e['status']} | {e['extra']} |"
-        )
+        cells = " | ".join(escape_cell(e[key]) for key in ("title", "status", "extra"))
+        lines.append(f"| [{prefix}-{e['number']}]({e['file']}) | {cells} |")
     return "\n".join(lines)
 
 
@@ -94,7 +110,7 @@ def main(argv):
             print(f"알 수 없는 문서 종류: {kind} (lld 또는 adr)", file=sys.stderr)
             return 2
     for kind in kinds:
-        entries = collect(kind)
+        entries = collect(kind, DOCS_ROOT)
         if len(kinds) > 1:
             print(f"## {KINDS[kind][0]}\n")
         print(render(kind, entries))

@@ -1,9 +1,12 @@
 """scripts/docs/index.py 파서 검증."""
 
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -79,6 +82,30 @@ class ParseTest(unittest.TestCase):
 
             self.assertEqual("Approved", index.collect("lld", root)[0]["status"])
 
+    def test_헤더에_없이_본문에만_있는_값은_읽지_않는다(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "lld", "LLD-0045-body-only.md",
+                  "# LLD-0045: 헤더에 상태가 없는 문서\n\n## 7. 인수조건\n\n"
+                  "| 상태 | 본문 표의 값 |\n| --- | --- |\n")
+
+            entry = index.collect("lld", root)[0]
+
+            self.assertEqual("-", entry["status"])
+
+    def test_파이프가_든_값은_표를_쪼개지_않게_막는다(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "lld", "LLD-0046-pipe.md",
+                  "# LLD-0046: 정렬 | 필터 정책\n\n| 항목 | 값 |\n| --- | --- |\n"
+                  "| 상태 | Approved |\n")
+
+            rendered = index.render("lld", index.collect("lld", root))
+
+            self.assertIn(r"정렬 \| 필터 정책", rendered)
+            # 이스케이프가 없으면 제목의 파이프가 열을 하나 더 만든다
+            self.assertEqual(4, len(rendered.splitlines()[2].split(" | ")))
+
     def test_번호_내림차순으로_정렬한다(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -111,6 +138,33 @@ class ParseTest(unittest.TestCase):
             self.assertIn("| 번호 | 제목 | 상태 | Issue |", rendered)
             self.assertIn("| [LLD-0042](LLD-0042-table.md) | 표 형식 문서 | Approved | #100 |",
                           rendered)
+
+
+class MainTest(unittest.TestCase):
+    def test_표를_출력하고_번호_중복을_경고한다(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "lld", "LLD-0021-a.md", "# LLD-0021: 먼저 쓴 문서\n")
+            write(root, "lld", "LLD-0021-b.md", "# LLD-0021: 나중에 쓴 문서\n")
+            out, err = io.StringIO(), io.StringIO()
+
+            with mock.patch.object(index, "DOCS_ROOT", root):
+                with redirect_stdout(out), redirect_stderr(err):
+                    code = index.main(["lld"])
+
+            self.assertEqual(0, code)
+            self.assertIn("LLD-0021-a.md", out.getvalue())
+            self.assertIn("LLD-0021-b.md", out.getvalue())
+            self.assertIn("[경고]", err.getvalue())
+
+    def test_모르는_종류는_2를_반환한다(self):
+        err = io.StringIO()
+
+        with redirect_stderr(err):
+            code = index.main(["erd"])
+
+        self.assertEqual(2, code)
+        self.assertIn("erd", err.getvalue())
 
 
 class RepositoryDocumentTest(unittest.TestCase):
