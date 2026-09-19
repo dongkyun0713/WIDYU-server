@@ -4,4 +4,6 @@ public enum AdminAction {
     ADMIN_LOGIN,
     MEMBER_STATUS_CHANGE,
     FCM_TEST_SEND,
+    COLLECTION_RUN_OPEN,
+    COLLECTION_RUN_CLOSE,
 }

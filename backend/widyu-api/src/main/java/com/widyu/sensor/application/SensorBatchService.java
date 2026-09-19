@@ -12,6 +12,8 @@ import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
+import com.widyu.run.CollectionRun;
+import com.widyu.run.application.CollectionRunService;
 import com.widyu.sensor.SensorBatch;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
 import com.widyu.sensor.dto.response.SensorBatchResult;
@@ -26,6 +28,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -58,6 +61,7 @@ public class SensorBatchService {
 
     private final SensorBatchRepository sensorBatchRepository;
     private final ClockMappingService clockMappingService;
+    private final CollectionRunService collectionRunService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
     private final Validator validator;
@@ -67,6 +71,7 @@ public class SensorBatchService {
     public SensorBatchService(
             SensorBatchRepository sensorBatchRepository,
             ClockMappingService clockMappingService,
+            CollectionRunService collectionRunService,
             MemberRepository memberRepository,
             S3Service s3Service,
             Validator validator,
@@ -75,6 +80,7 @@ public class SensorBatchService {
     ) {
         this.sensorBatchRepository = sensorBatchRepository;
         this.clockMappingService = clockMappingService;
+        this.collectionRunService = collectionRunService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
         this.validator = validator;
@@ -109,6 +115,9 @@ public class SensorBatchService {
         clockMappingService.register(
                 request.clock(), request.deviceId(), elapsed.minNs(), elapsed.maxNs());
 
+        MeasuredRange measured = measuredRange(request, elapsed);
+        RunAttribution attribution = resolveAttribution(request, memberId, measured.startMs());
+
         if (sensorBatchRepository.existsByBatchId(request.batchId())) {
             return logged(memberId, request, SensorBatchResult.DUPLICATE);
         }
@@ -119,8 +128,8 @@ public class SensorBatchService {
 
         long persistedAtMs = System.currentTimeMillis();
         try {
-            sensorBatchRepository.save(toEntity(member, request, payload, objectKey, elapsed,
-                    serverReceivedAtMs, acceptedAtMs, persistedAtMs));
+            sensorBatchRepository.save(toEntity(member, request, payload, objectKey, measured,
+                    attribution, serverReceivedAtMs, acceptedAtMs, persistedAtMs));
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
@@ -258,22 +267,76 @@ public class SensorBatchService {
         return new ElapsedRange(minNs, maxNs);
     }
 
+    /** 환산한 측정 구간(epoch ms). */
+    private record MeasuredRange(long startMs, long endMs) {}
+
+    /** 이 배치가 붙을 회차와 연구 식별자. 셋 다 null이면 운영 외 자료다. */
+    private record RunAttribution(String runId, String studyId, String participationId) {}
+
+    /** 환산식이 단조라 elapsed 최소·최대를 환산한 값이 곧 epoch 최소·최대다(LLD-0041 4.3). */
+    private MeasuredRange measuredRange(SensorBatchRequest request, ElapsedRange elapsed) {
+        SensorBatchRequest.Clock clock = request.clock();
+        long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
+        return new MeasuredRange(
+                epochMs(elapsed.minNs(), clock, anchorElapsedNs),
+                epochMs(elapsed.maxNs(), clock, anchorElapsedNs));
+    }
+
+    /**
+     * 회차 귀속(LLD-0045 5절). 앱이 실어 보낸 {@code run_id}가 있으면 그대로 쓰고, 재전송이면
+     * 원 회차를 쓴다. 늦게 도착한 자료를 나중 참가자에게 붙이면 안 되기 때문이다(지시서 B4).
+     * 둘 다 없으면 그 시점에 이 기기를 쓰던 열린 회차를 서버가 찾는다.
+     */
+    private RunAttribution resolveAttribution(
+            SensorBatchRequest request, Long memberId, long measuredAtStartMs) {
+        if (request.runId() != null) {
+            return new RunAttribution(request.runId(), request.studyId(), request.participationId());
+        }
+        String originalRunId = originalRunId(request);
+        if (originalRunId != null) {
+            return new RunAttribution(originalRunId, request.studyId(), request.participationId());
+        }
+        Optional<CollectionRun> run =
+                collectionRunService.resolveRun(memberId, request.deviceId(), measuredAtStartMs);
+        if (run.isEmpty()) {
+            return new RunAttribution(null, request.studyId(), request.participationId());
+        }
+        return new RunAttribution(
+                run.get().getRunId(),
+                preferRequestValue(request.studyId(), run.get().getStudyId()),
+                preferRequestValue(request.participationId(), run.get().getParticipationId()));
+    }
+
+    private String originalRunId(SensorBatchRequest request) {
+        SensorBatchRequest.Resend resend = request.resend();
+        if (resend == null || !Boolean.TRUE.equals(resend.isResend())) {
+            return null;
+        }
+        return resend.originalRunId();
+    }
+
+    private String preferRequestValue(String requestValue, String runValue) {
+        if (requestValue != null) {
+            return requestValue;
+        }
+        return runValue;
+    }
+
     private SensorBatch toEntity(
             Member member,
             SensorBatchRequest request,
             byte[] payload,
             String objectKey,
-            ElapsedRange elapsed,
+            MeasuredRange measured,
+            RunAttribution attribution,
             long serverReceivedAtMs,
             long acceptedAtMs,
             long persistedAtMs
     ) {
         SensorBatchRequest.Clock clock = request.clock();
         long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
-
-        // 환산식이 단조라 elapsed 최소·최대를 환산한 값이 곧 epoch 최소·최대다(LLD-0041 4.3).
-        long measuredAtStartMs = epochMs(elapsed.minNs(), clock, anchorElapsedNs);
-        long measuredAtEndMs = epochMs(elapsed.maxNs(), clock, anchorElapsedNs);
+        long measuredAtStartMs = measured.startMs();
+        long measuredAtEndMs = measured.endMs();
 
         SensorBatch.SensorBatchBuilder builder = SensorBatch.builder()
                 .batchId(request.batchId())
@@ -283,9 +346,9 @@ public class SensorBatchService {
                 .deviceId(request.deviceId())
                 .sessionId(request.sessionId())
                 .seq(request.seq())
-                .studyId(request.studyId())
-                .participationId(request.participationId())
-                .runId(request.runId())
+                .studyId(attribution.studyId())
+                .participationId(attribution.participationId())
+                .runId(attribution.runId())
                 .bootId(clock.bootId())
                 .clockMappingId(clock.clockMappingId())
                 .anchorElapsedNs(anchorElapsedNs)

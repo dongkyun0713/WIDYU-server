@@ -141,7 +141,19 @@ public record SensorBatchRequest(
             @NotNull(message = "불확실성은 필수입니다.")
             @PositiveOrZero(message = "불확실성은 0 이상이어야 합니다.")
             Double uncertaintyMs
-    ) {}
+    ) {
+
+        /** 마커 등록(LLD-0045)이 같은 매핑 규칙을 재사용할 때 쓴다. */
+        public static Clock of(
+                String bootId,
+                String clockMappingId,
+                String anchorElapsedNs,
+                Long anchorEpochMs,
+                Double uncertaintyMs
+        ) {
+            return new Clock(bootId, clockMappingId, anchorElapsedNs, anchorEpochMs, uncertaintyMs);
+        }
+    }
 
     /**
      * 가속도·자이로 축. 값 배열 이름만 다르다(가속도 {@code mg}, 자이로 {@code mrads}).

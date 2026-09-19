@@ -66,6 +66,15 @@
 - 본문 상한은 `sensor.max-payload-bytes`(기본 32768, `application-sensor.yml`)
 - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send` → ACK `/user/queue/sensor/result`
 
+### `run` — 측정회차·기기 배정·마커 (연구 운영)
+- 실증은 기기를 여러 참가자가 돌려 쓴다. 회차가 「누가·어떤 기기를·어디에 차고·언제부터 언제까지」를 묶어 자료 귀속의 다리를 놓는다 → LLD-0045, 지시서 B8
+- 운영자는 **관리자 계정**으로 `/api/v1/admin/collection-runs/**`를 호출한다(`ROLE_ADMIN`, 기존 `/api/v1/admin/**` 인가 규칙)
+- **불변식**: 회원당 열린 회차 1개(409), 기기는 한 번에 한 열린 회차에만 배정(409), 닫을 때 미해제 배정을 종료 시각으로 함께 해제, `data_policy=RETAIN`이면 보존 날짜 셋 필수·`identified ≤ pseudonymized ≤ research`
+- **마커는 정답 라벨**이다. 판정 결과 기록(B 1.4)과 같은 자리에 섞지 않는다(정책 1.8.1). `marker_id`로 멱등이며 같은 id에 다른 내용이면 409. 누른 기기의 `clock`도 `ClockMappingService.register`로 같은 규칙으로 등록해 센서와 같은 시간축에 놓는다
+- **배치 귀속**: `run_id`가 오면 그대로, 없으면 `resend.original_run_id`(늦게 온 자료를 나중 참가자에게 붙이지 않기 위해), 그것도 없으면 `resolveRun(member, device, measured_at_start)`으로 열린 회차를 찾는다. 없으면 null(운영 외 자료)
+- `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`
+- 인시던트(본인확인·SOS·사후 판정)는 이 도메인이 아니라 별도 LLD다
+
 ### `location` — 실시간 위치
 - `realtime`(WebSocket), `parentlocation`(REST). 시니어 발신 → family 검증 → 보호자 `/topic/location/{seniorId}` 구독
 - 위치 이력 Redis 저장. → LLD-0001, ADR-0007
