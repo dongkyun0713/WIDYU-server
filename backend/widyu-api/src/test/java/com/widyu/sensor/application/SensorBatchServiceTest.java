@@ -47,8 +47,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 class SensorBatchServiceTest {
 
     private static final Long MEMBER_ID = 1L;
-    private static final String EXPECTED_KEY =
-            "sensor/1/gw-3f2a/imu_watch/01j8zk3v9x2q4m7n8p1r5s6t7u.json";
     private static final Validator VALIDATOR =
             Validation.buildDefaultValidatorFactory().getValidator();
 
@@ -63,8 +61,8 @@ class SensorBatchServiceTest {
         Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
         byte[] payload = batch(ACC, "null").getBytes(UTF_8);
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
         long before = System.currentTimeMillis();
+        String expectedKey = expectedKey(payload);
 
         // when
         SensorBatchResultResponse response = service().ingest(MEMBER_ID, payload);
@@ -75,7 +73,7 @@ class SensorBatchServiceTest {
 
         ArgumentCaptor<byte[]> uploaded = ArgumentCaptor.forClass(byte[].class);
         then(s3Service).should()
-                .uploadBytes(eq(EXPECTED_KEY), uploaded.capture(), eq("application/json"));
+                .uploadBytes(eq(expectedKey), uploaded.capture(), eq("application/json"));
         assertThat(uploaded.getValue()).isEqualTo(payload);
 
         SensorBatch saved = savedBatch();
@@ -83,7 +81,7 @@ class SensorBatchServiceTest {
         assertThat(saved.getMember()).isEqualTo(member);
         assertThat(saved.getStream()).isEqualTo("imu_watch");
         assertThat(saved.getSource()).isEqualTo("watch");
-        assertThat(saved.getS3Key()).isEqualTo(EXPECTED_KEY);
+        assertThat(saved.getS3Key()).isEqualTo(expectedKey);
         assertThat(saved.getByteSize()).isEqualTo(payload.length);
         assertThat(saved.getPayloadSha256()).isEqualTo(sha256Hex(payload));
         assertThat(saved.getQualityStatus()).isEqualTo("OK");
@@ -116,7 +114,6 @@ class SensorBatchServiceTest {
     void 자이로가_null이면_자이로_축_컬럼이_null로_남고_0으로_채워지지_않는다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
 
         // when
         service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
@@ -134,7 +131,6 @@ class SensorBatchServiceTest {
     void 자이로가_함께_오면_두_축의_시각_범위를_합쳐_환산한다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
 
         // when
         service().ingest(MEMBER_ID, batch(ACC, GYRO).getBytes(UTF_8));
@@ -153,10 +149,12 @@ class SensorBatchServiceTest {
     void 같은_batch_id가_이미_있으면_DUPLICATE를_반환하고_S3에_올리지_않는다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(true);
+        byte[] payload = batch(ACC, "null").getBytes(UTF_8);
+        given(sensorBatchRepository.findByBatchId(BATCH_ID))
+                .willReturn(Optional.of(storedBatchWithHash(payload)));
 
         // when
-        SensorBatchResultResponse response = service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
+        SensorBatchResultResponse response = service().ingest(MEMBER_ID, payload);
 
         // then
         assertThat(response)
@@ -166,16 +164,67 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("같은 batch_id에 다른 원문이 이미 있으면 중복으로 승인하지 않는다")
+    void 같은_batch_id에_다른_원문이_이미_있으면_중복으로_승인하지_않는다() {
+        // given
+        givenMemberExists();
+        byte[] payload = batch(ACC, "null").getBytes(UTF_8);
+        given(sensorBatchRepository.findByBatchId(BATCH_ID))
+                .willReturn(Optional.of(storedBatchWithHash("different".getBytes(UTF_8))));
+
+        // when & then
+        assertThatThrownBy(() -> service().ingest(MEMBER_ID, payload))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SENSOR_BATCH_INVALID);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+        then(sensorBatchRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("같은 batch_id의 다른 원문이 경합해도 각 행 후보는 자신이 올린 불변 객체를 가리킨다")
+    void 같은_batch_id의_다른_원문이_경합해도_각_행_후보는_자신이_올린_불변_객체를_가리킨다() {
+        // given
+        givenMemberExists();
+        byte[] first = batch(ACC, "null").getBytes(UTF_8);
+        byte[] second = batch(ACC, "null")
+                .replace("\n}", ",\n  \"future\": true\n}")
+                .getBytes(UTF_8);
+
+        // when
+        service().ingest(MEMBER_ID, first);
+        service().ingest(MEMBER_ID, second);
+
+        // then
+        ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<byte[]> payloads = ArgumentCaptor.forClass(byte[].class);
+        then(s3Service).should(org.mockito.Mockito.times(2))
+                .uploadBytes(keys.capture(), payloads.capture(), eq("application/json"));
+        assertThat(keys.getAllValues()).containsExactly(expectedKey(first), expectedKey(second));
+        assertThat(keys.getAllValues()).doesNotHaveDuplicates();
+
+        ArgumentCaptor<SensorBatch> rows = ArgumentCaptor.forClass(SensorBatch.class);
+        then(sensorBatchRepository).should(org.mockito.Mockito.times(2)).save(rows.capture());
+        assertThat(rows.getAllValues())
+                .extracting(SensorBatch::getPayloadSha256)
+                .containsExactly(sha256Hex(first), sha256Hex(second));
+        assertThat(rows.getAllValues())
+                .extracting(SensorBatch::getS3Key)
+                .containsExactlyElementsOf(keys.getAllValues());
+    }
+
+    @Test
     @DisplayName("저장 중 유니크 키 경합이 나면 재조회로 확인하고 DUPLICATE를 반환한다")
     void 저장_중_유니크_키_경합이_나면_재조회로_확인하고_DUPLICATE를_반환한다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false, true);
+        byte[] payload = batch(ACC, "null").getBytes(UTF_8);
+        given(sensorBatchRepository.findByBatchId(BATCH_ID))
+                .willReturn(Optional.empty(), Optional.of(storedBatchWithHash(payload)));
         given(sensorBatchRepository.save(any(SensorBatch.class)))
                 .willThrow(new DataIntegrityViolationException("uk_sensor_batch_batch_id"));
 
         // when
-        SensorBatchResultResponse response = service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
+        SensorBatchResultResponse response = service().ingest(MEMBER_ID, payload);
 
         // then
         assertThat(response)
@@ -187,7 +236,7 @@ class SensorBatchServiceTest {
     void 무결성_오류_뒤에도_같은_batch_id_행이_없으면_원래_예외가_전파된다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
         given(sensorBatchRepository.save(any(SensorBatch.class)))
                 .willThrow(new DataIntegrityViolationException("fk_sensor_batch_member"));
 
@@ -259,6 +308,37 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("마지막 경과 시각 덧셈이 long 범위를 넘으면 업로드 전에 축 오류로 거부한다")
+    void 마지막_경과_시각_덧셈이_long_범위를_넘으면_업로드_전에_축_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String overflowed = """
+                {
+                    "fs_hz_requested": 50,
+                    "n": 2,
+                    "t0_elapsed_ns": "9223372036854775807",
+                    "dt_ns": [1],
+                    "mg": [[20, -980, 110], [22, -979, 108]]
+                  }""";
+
+        // when & then
+        assertRejected(batch(overflowed, "null"), ErrorCode.SENSOR_SAMPLE_INVALID);
+    }
+
+    @Test
+    @DisplayName("epoch 환산 덧셈이 long 범위를 넘으면 업로드 전에 축 오류로 거부한다")
+    void epoch_환산_덧셈이_long_범위를_넘으면_업로드_전에_축_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String overflowed = batch(ACC, "null")
+                .replace("\"anchor_elapsed_ns\": \"993847100000001\"", "\"anchor_elapsed_ns\": \"0\"")
+                .replace("\"anchor_epoch_ms\": 1760000000000", "\"anchor_epoch_ms\": 9223372036854775807");
+
+        // when & then
+        assertRejected(overflowed, ErrorCode.SENSOR_SAMPLE_INVALID);
+    }
+
+    @Test
     @DisplayName("보강 배치인데 원 배치를 가리키지 않으면 필드 오류로 거부한다")
     void 보강_배치인데_원_배치를_가리키지_않으면_필드_오류로_거부한다() {
         // given
@@ -266,6 +346,32 @@ class SensorBatchServiceTest {
 
         // when & then
         assertRejected(batch(ACC, GYRO, "null", "true", "null", "null"), ErrorCode.SENSOR_BATCH_INVALID);
+    }
+
+    @Test
+    @DisplayName("보강 대상 배열에 문자열이 아닌 값이 있으면 필드 오류로 거부한다")
+    void 보강_대상_배열에_문자열이_아닌_값이_있으면_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+
+        // when & then
+        assertRejected(
+                batch("null", GYRO, "null", "true", "[\"01j8y000000000000000000000\", 1]", "null"),
+                ErrorCode.SENSOR_BATCH_INVALID);
+    }
+
+    @Test
+    @DisplayName("트리거 종류가 저장 길이를 넘으면 필드 오류로 거부한다")
+    void 트리거_종류가_저장_길이를_넘으면_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String trigger = """
+                {"kind": "123456789012345678901", "smv_g": 2.0,
+                 "event_elapsed_ns": "993847112340001", "ts_ms": 1760000000012}""";
+
+        // when & then
+        assertRejected(batch(ACC, "null", trigger, "false", "null", "null"),
+                ErrorCode.SENSOR_BATCH_INVALID);
     }
 
     @Test
@@ -293,10 +399,11 @@ class SensorBatchServiceTest {
     void 재전송_계보_6필드를_갖추면_그대로_컬럼에_저장한다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        String payload = batch(ACC, "null", "null", "false", "null", RESEND)
+                .replace("\"run_id\": null", "\"run_id\": \"run-01\"");
 
         // when
-        service().ingest(MEMBER_ID, batch(ACC, "null", "null", "false", "null", RESEND).getBytes(UTF_8));
+        service().ingest(MEMBER_ID, payload.getBytes(UTF_8));
 
         // then
         SensorBatch saved = savedBatch();
@@ -306,6 +413,46 @@ class SensorBatchServiceTest {
         assertThat(saved.getOriginalRunId()).isEqualTo("run-01");
         assertThat(saved.getOriginalSessionId()).isEqualTo("s-20260919-00");
         assertThat(saved.getResentAtMs()).isEqualTo(1_760_000_180_000L);
+    }
+
+    @Test
+    @DisplayName("재전송 원 회차가 현재 회차와 다르면 필드 오류로 거부한다")
+    void 재전송_원_회차가_현재_회차와_다르면_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String payload = batch(ACC, "null", "null", "false", "null", RESEND)
+                .replace("\"run_id\": null", "\"run_id\": \"run-02\"");
+
+        // when & then
+        assertRejected(payload, ErrorCode.SENSOR_BATCH_INVALID);
+    }
+
+    @Test
+    @DisplayName("재전송 원 회차 키가 빠지면 현재 회차가 null이어도 필드 오류로 거부한다")
+    void 재전송_원_회차_키가_빠지면_현재_회차가_null이어도_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String withoutOriginalRunId = RESEND.replace("\"original_run_id\": \"run-01\",\n", "");
+
+        // when & then
+        assertRejected(
+                batch(ACC, "null", "null", "false", "null", withoutOriginalRunId),
+                ErrorCode.SENSOR_BATCH_INVALID);
+    }
+
+    @Test
+    @DisplayName("현재 회차와 재전송 원 회차가 모두 null이면 명시한 계보를 저장한다")
+    void 현재_회차와_재전송_원_회차가_모두_null이면_명시한_계보를_저장한다() {
+        // given
+        givenMemberExists();
+        String nullRunLineage = RESEND.replace("\"original_run_id\": \"run-01\"", "\"original_run_id\": null");
+
+        // when
+        service().ingest(MEMBER_ID,
+                batch(ACC, "null", "null", "false", "null", nullRunLineage).getBytes(UTF_8));
+
+        // then
+        assertThat(savedBatch().getOriginalRunId()).isNull();
     }
 
     @Test
@@ -364,7 +511,6 @@ class SensorBatchServiceTest {
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
         givenMemberExists();
-        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
         willThrow(new BusinessException(ErrorCode.FILE_UPLOAD_FAILED))
                 .given(s3Service).uploadBytes(anyString(), any(), anyString());
 
@@ -425,5 +571,13 @@ class SensorBatchServiceTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private String expectedKey(byte[] payload) {
+        return "sensor/1/gw-3f2a/imu_watch/%s-%s.json".formatted(BATCH_ID, sha256Hex(payload));
+    }
+
+    private SensorBatch storedBatchWithHash(byte[] payload) {
+        return SensorBatch.builder().payloadSha256(sha256Hex(payload)).build();
     }
 }
