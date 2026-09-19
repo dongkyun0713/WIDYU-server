@@ -57,6 +57,7 @@ public class SensorBatchService {
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
     private final SensorBatchRepository sensorBatchRepository;
+    private final ClockMappingService clockMappingService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
     private final Validator validator;
@@ -65,6 +66,7 @@ public class SensorBatchService {
 
     public SensorBatchService(
             SensorBatchRepository sensorBatchRepository,
+            ClockMappingService clockMappingService,
             MemberRepository memberRepository,
             S3Service s3Service,
             Validator validator,
@@ -72,6 +74,7 @@ public class SensorBatchService {
             ObjectMapper objectMapper
     ) {
         this.sensorBatchRepository = sensorBatchRepository;
+        this.clockMappingService = clockMappingService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
         this.validator = validator;
@@ -100,6 +103,12 @@ public class SensorBatchService {
         validate(request);
         long acceptedAtMs = System.currentTimeMillis();
 
+        // 축 시각 범위는 매핑의 관측 범위와 배치의 환산 시각 양쪽에 쓰므로 한 번만 구한다.
+        ElapsedRange elapsed = elapsedRange(request);
+        // 매핑 대조는 S3 PUT 앞이다. 충돌이면 S3에도 배치 행에도 아무것도 남지 않는다(LLD-0044 5.2).
+        clockMappingService.register(
+                request.clock(), request.deviceId(), elapsed.minNs(), elapsed.maxNs());
+
         if (sensorBatchRepository.existsByBatchId(request.batchId())) {
             return logged(memberId, request, SensorBatchResult.DUPLICATE);
         }
@@ -110,8 +119,8 @@ public class SensorBatchService {
 
         long persistedAtMs = System.currentTimeMillis();
         try {
-            sensorBatchRepository.save(toEntity(
-                    member, request, payload, objectKey, serverReceivedAtMs, acceptedAtMs, persistedAtMs));
+            sensorBatchRepository.save(toEntity(member, request, payload, objectKey, elapsed,
+                    serverReceivedAtMs, acceptedAtMs, persistedAtMs));
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
@@ -235,11 +244,26 @@ public class SensorBatchService {
         return parsed.longValue();
     }
 
+    /** 이 배치가 덮는 축 시각 범위(부팅 기준 ns). 매핑의 관측 범위 근거다. */
+    private record ElapsedRange(long minNs, long maxNs) {}
+
+    private ElapsedRange elapsedRange(SensorBatchRequest request) {
+        long minNs = Long.MAX_VALUE;
+        long maxNs = Long.MIN_VALUE;
+        for (SensorBatchRequest.Axis axis : presentAxes(request)) {
+            long t0ElapsedNs = parseElapsedNs(axis.t0ElapsedNs());
+            minNs = Math.min(minNs, t0ElapsedNs);
+            maxNs = Math.max(maxNs, t0ElapsedNs + sumIntervals(axis));
+        }
+        return new ElapsedRange(minNs, maxNs);
+    }
+
     private SensorBatch toEntity(
             Member member,
             SensorBatchRequest request,
             byte[] payload,
             String objectKey,
+            ElapsedRange elapsed,
             long serverReceivedAtMs,
             long acceptedAtMs,
             long persistedAtMs
@@ -247,14 +271,9 @@ public class SensorBatchService {
         SensorBatchRequest.Clock clock = request.clock();
         long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
 
-        long measuredAtStartMs = Long.MAX_VALUE;
-        long measuredAtEndMs = Long.MIN_VALUE;
-        for (SensorBatchRequest.Axis axis : presentAxes(request)) {
-            long t0ElapsedNs = parseElapsedNs(axis.t0ElapsedNs());
-            long lastElapsedNs = t0ElapsedNs + sumIntervals(axis);
-            measuredAtStartMs = Math.min(measuredAtStartMs, epochMs(t0ElapsedNs, clock, anchorElapsedNs));
-            measuredAtEndMs = Math.max(measuredAtEndMs, epochMs(lastElapsedNs, clock, anchorElapsedNs));
-        }
+        // 환산식이 단조라 elapsed 최소·최대를 환산한 값이 곧 epoch 최소·최대다(LLD-0041 4.3).
+        long measuredAtStartMs = epochMs(elapsed.minNs(), clock, anchorElapsedNs);
+        long measuredAtEndMs = epochMs(elapsed.maxNs(), clock, anchorElapsedNs);
 
         SensorBatch.SensorBatchBuilder builder = SensorBatch.builder()
                 .batchId(request.batchId())
