@@ -1,4 +1,18 @@
-# Raw Sensor Batch Configuration (LLD-0041)
+# Raw Sensor Batch Configuration (LLD-0041, LLD-0046)
 sensor:
   # 원문 바이트 상한. 50Hz 1초 배치가 2KB 안팎이라 32KB면 충격 보강 배치까지 들어간다.
   max-payload-bytes: ${SENSOR_MAX_PAYLOAD_BYTES:32768}
+  # 워치에 내려보내는 수집 설정. collection_mode는 회차 유무로 정하므로 여기 없다.
+  config:
+    gyro-mode: ${SENSOR_GYRO_MODE:continuous}
+    acc-fs-hz: ${SENSOR_ACC_FS_HZ:50}
+    batch-sec: 1
+    impact-threshold-g: 1.8
+    backfill-before-sec: 2
+    backfill-after-sec: 10
+    hr-upload-sec: 1
+    location-move-sec: 5
+    location-keepalive-sec: 60
+    heartbeat-sec: 60
+    # 워치가 설정을 다시 읽을 권고 주기. 실제 주기는 앱 정책이다(FE F9).
+    refresh-sec: 60

@@ -447,6 +447,99 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("설정과 같은 값을 실어 보낸 배치는 불일치로 표시되지 않는다")
+    void 설정과_같은_값을_실어_보낸_배치는_불일치로_표시되지_않는다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+
+        // when
+        service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
+
+        // then
+        assertThat(savedBatch().getConfigMismatch()).isFalse();
+    }
+
+    @Test
+    @DisplayName("표본율이 지시값과 다르면 불일치로 표시하되 배치는 저장한다")
+    void 표본율이_지시값과_다르면_불일치로_표시하되_배치는_저장한다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        String slowerAcc = SensorBatchFixture.acc("3", "[19998417, 20003005]",
+                "[[20, -980, 110], [22, -979, 108], [21, -981, 109]]")
+                .replace("\"fs_hz_requested\": 50", "\"fs_hz_requested\": 25");
+
+        // when
+        SensorBatchResultResponse response = service().ingest(MEMBER_ID, batch(slowerAcc, "null").getBytes(UTF_8));
+
+        // then
+        // 거부하지 않는다. 설정이 적용되지 않은 채 도는 상황을 표시만 한다(지시서 B12).
+        assertThat(response.result()).isEqualTo(SensorBatchResult.STORED);
+        assertThat(savedBatch().getConfigMismatch()).isTrue();
+    }
+
+    @Test
+    @DisplayName("연구 회차에 귀속된 배치가 product로 오면 불일치로 표시한다")
+    void 연구_회차에_귀속된_배치가_product로_오면_불일치로_표시한다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        CollectionRun researchRun = CollectionRun.builder()
+                .runId("run-0f3a")
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .collectionMode("research")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+        given(collectionRunService.resolveRun(eq(MEMBER_ID), eq("gw-3f2a"), anyLong()))
+                .willReturn(Optional.of(researchRun));
+
+        // when
+        service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
+
+        // then
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getCollectionMode()).isEqualTo("product");
+        assertThat(saved.getConfigMismatch()).isTrue();
+    }
+
+    @Test
+    @DisplayName("앱이 실어 보낸 회차가 연구 회차면 research 배치를 불일치로 표시하지 않는다")
+    void 앱이_실어_보낸_회차가_연구_회차면_research_배치를_불일치로_표시하지_않는다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        // 앱이 run_id를 직접 실어 보내면 서버는 귀속 조회를 하지 않으므로 회차 값을 한 번 조회한다.
+        given(collectionRunService.findCollectionMode("run-0f3a")).willReturn(Optional.of("research"));
+
+        // when
+        service().ingest(MEMBER_ID, researchBatchWithRunId("run-0f3a").getBytes(UTF_8));
+
+        // then
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getRunId()).isEqualTo("run-0f3a");
+        assertThat(saved.getCollectionMode()).isEqualTo("research");
+        assertThat(saved.getConfigMismatch()).isFalse();
+    }
+
+    @Test
+    @DisplayName("모르는 회차를 실어 보내면 수집 모드는 대조하지 않는다")
+    void 모르는_회차를_실어_보내면_수집_모드는_대조하지_않는다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.existsByBatchId(BATCH_ID)).willReturn(false);
+        given(collectionRunService.findCollectionMode("run-unknown")).willReturn(Optional.empty());
+
+        // when
+        service().ingest(MEMBER_ID, researchBatchWithRunId("run-unknown").getBytes(UTF_8));
+
+        // then
+        // 기준이 없으므로 research 배치를 product와 견주지 않는다.
+        assertThat(savedBatch().getConfigMismatch()).isFalse();
+    }
+
+    @Test
     @DisplayName("S3 업로드가 실패하면 인덱스 행을 저장하지 않는다")
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
@@ -484,8 +577,14 @@ class SensorBatchServiceTest {
                 memberRepository,
                 s3Service,
                 VALIDATOR,
-                new SensorProperties(32_768),
+                SensorConfigFixture.properties(),
                 new ObjectMapper());
+    }
+
+    private String researchBatchWithRunId(String runId) {
+        return batch(ACC, "null")
+                .replace("\"run_id\": null", "\"run_id\": \"%s\"".formatted(runId))
+                .replace("\"collection_mode\": \"product\"", "\"collection_mode\": \"research\"");
     }
 
     private void givenMemberExists() {

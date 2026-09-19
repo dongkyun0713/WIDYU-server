@@ -193,6 +193,15 @@ public class CollectionRunService {
         return Optional.of(runs.get(0));
     }
 
+    /**
+     * 회차의 수집 모드. 앱이 {@code run_id}를 직접 실어 보냈거나 재전송이라 서버가 회차를 조회하지
+     * 않은 경우, 설정 대조(B12)의 기준값을 얻으려 한 번만 조회한다. 모르는 회차면 비어 있다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> findCollectionMode(String runId) {
+        return collectionRunRepository.findByRunId(runId).map(CollectionRun::getCollectionMode);
+    }
+
     /** B12(서버 결정 수집 모드)가 쓸 조회. */
     @Transactional(readOnly = true)
     public boolean hasOpenRun(Long memberId) {
