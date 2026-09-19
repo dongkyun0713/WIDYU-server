@@ -2,6 +2,7 @@ package com.widyu.heart.repository;
 
 import com.widyu.heart.HeartRateEvent;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -30,4 +31,9 @@ public interface HeartRateEventRepository extends JpaRepository<HeartRateEvent, 
     @Modifying
     @Query("DELETE FROM HeartRateEvent h WHERE h.measuredAt < :before")
     int deleteByMeasuredAtBefore(@Param("before") LocalDateTime before);
+
+    @Modifying
+    @Query("DELETE FROM HeartRateEvent h WHERE h.measuredAt < :before AND h.member.id NOT IN :memberIds")
+    int deleteByMeasuredAtBeforeAndMemberIdNotIn(
+            @Param("before") LocalDateTime before, @Param("memberIds") Collection<Long> memberIds);
 }

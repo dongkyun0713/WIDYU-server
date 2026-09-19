@@ -1,0 +1,5 @@
+# Heart Rate Configuration
+heart:
+  cleanup:
+    # 30일 자동 삭제에서 제외할 회원 ID 목록 (쉼표 구분, 예: 1023,1077). 비어 있으면 제외 없음
+    exempt-member-ids: ${HEART_CLEANUP_EXEMPT_MEMBER_IDS:}
