@@ -30,6 +30,8 @@ CREATE TABLE sensor_batch (
     -- 가속도·자이로는 시간축이 독립이다. 없는 축은 NULL로 둔다(0 치환 금지).
     acc_n INT NULL,
     gyro_n INT NULL,
+    -- 심박 배치의 샘플 수. IMU는 축별 acc_n·gyro_n을 쓰므로 NULL이다(LLD-0047).
+    sample_count INT NULL,
     acc_t0_elapsed_ns BIGINT NULL,
     gyro_t0_elapsed_ns BIGINT NULL,
     acc_fs_hz_requested DOUBLE NULL,
@@ -44,8 +46,9 @@ CREATE TABLE sensor_batch (
     persisted_at_ms BIGINT NOT NULL,
     model_available_at_server_ms BIGINT NOT NULL,
 
-    collection_mode VARCHAR(10) NOT NULL,
-    gyro_mode VARCHAR(20) NOT NULL,
+    -- 심박에는 없는 개념이라 NULL을 허용한다. IMU 필수는 서비스 검증이 보장한다(ADR-0031).
+    collection_mode VARCHAR(10) NULL,
+    gyro_mode VARCHAR(20) NULL,
     on_body BOOLEAN NOT NULL,
     wear_state VARCHAR(20) NULL,
     missing_reason VARCHAR(64) NULL,

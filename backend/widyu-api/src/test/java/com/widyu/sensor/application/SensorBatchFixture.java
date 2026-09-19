@@ -89,6 +89,42 @@ final class SensorBatchFixture {
                 BATCH_ID, DEVICE_ID, SESSION_ID, SEQ, acc, gyro, trigger, gyroBackfill, backfillFor, resend);
     }
 
+    static final String HR_BATCH_ID = "01j8zk3v9x2q4m7n8p1r5s6t7v";
+
+    /** 지시서 부록 B의 심박 배치. 샘플은 ts_ms 엄격 증가다. */
+    static String heartRateBatch(String samples) {
+        return """
+                {
+                  "v": 2,
+                  "stream": "hr",
+                  "batch_id": "%s",
+                  "device_id": "%s",
+                  "session_id": "%s",
+                  "seq": 1041,
+                  "study_id": null,
+                  "participation_id": null,
+                  "run_id": null,
+                  "clock": {
+                    "boot_id": "b7c1",
+                    "clock_mapping_id": "cm-01",
+                    "anchor_elapsed_ns": "993847100000001",
+                    "anchor_epoch_ms": 1760000000000,
+                    "uncertainty_ms": 2.0
+                  },
+                  "samples": %s,
+                  "on_body": true,
+                  "watch_battery_pct": 63,
+                  "resend": null
+                }""".formatted(HR_BATCH_ID, DEVICE_ID, SESSION_ID, samples);
+    }
+
+    static final String HR_SAMPLES = """
+            [
+                    { "bpm": 71, "ts_ms": 1760000000123, "accuracy": "HIGH" },
+                    { "bpm": 72, "ts_ms": 1760000001120, "accuracy": "HIGH" },
+                    { "bpm": 0,  "ts_ms": 1760000002118, "accuracy": "UNRELIABLE" }
+                  ]""";
+
     /** 축 하나의 필드를 바꾼 블록. 구조 위반 케이스에 쓴다. */
     static String acc(String n, String dtNs, String mg) {
         return """

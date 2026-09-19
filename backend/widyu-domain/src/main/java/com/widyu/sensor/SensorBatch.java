@@ -101,6 +101,10 @@ public class SensorBatch extends BaseTimeEntity {
     @Column(name = "gyro_n")
     private Integer gyroN;
 
+    /** 심박 배치의 샘플 수. IMU는 축별 {@code acc_n}·{@code gyro_n}을 쓰므로 null이다. */
+    @Column(name = "sample_count")
+    private Integer sampleCount;
+
     @Column(name = "acc_t0_elapsed_ns")
     private Long accT0ElapsedNs;
 
@@ -135,10 +139,11 @@ public class SensorBatch extends BaseTimeEntity {
     @Column(name = "model_available_at_server_ms", nullable = false)
     private Long modelAvailableAtServerMs;
 
-    @Column(name = "collection_mode", nullable = false, length = 10)
+    // 심박 배치에는 없는 개념이라 NULL을 허용한다. IMU 필수는 서비스 검증이 보장한다(ADR-0031).
+    @Column(name = "collection_mode", length = 10)
     private String collectionMode;
 
-    @Column(name = "gyro_mode", nullable = false, length = 20)
+    @Column(name = "gyro_mode", length = 20)
     private String gyroMode;
 
     @Column(name = "on_body", nullable = false)
@@ -212,7 +217,8 @@ public class SensorBatch extends BaseTimeEntity {
             String deviceId, String sessionId, Long seq,
             String studyId, String participationId, String runId,
             String bootId, String clockMappingId, Long anchorElapsedNs, Long anchorEpochMs, Double uncertaintyMs,
-            Integer accN, Integer gyroN, Long accT0ElapsedNs, Long gyroT0ElapsedNs,
+            Integer accN, Integer gyroN, Integer sampleCount,
+            Long accT0ElapsedNs, Long gyroT0ElapsedNs,
             Double accFsHzRequested, Double gyroFsHzRequested,
             Long measuredAtStartMs, Long measuredAtEndMs,
             Long phoneReceivedAtMs, Long serverReceivedAtMs, Long acceptedAtMs,
@@ -242,6 +248,7 @@ public class SensorBatch extends BaseTimeEntity {
         this.uncertaintyMs = uncertaintyMs;
         this.accN = accN;
         this.gyroN = gyroN;
+        this.sampleCount = sampleCount;
         this.accT0ElapsedNs = accT0ElapsedNs;
         this.gyroT0ElapsedNs = gyroT0ElapsedNs;
         this.accFsHzRequested = accFsHzRequested;

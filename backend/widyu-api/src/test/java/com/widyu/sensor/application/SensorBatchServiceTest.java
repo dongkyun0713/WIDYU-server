@@ -16,6 +16,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -57,6 +59,7 @@ class SensorBatchServiceTest {
 
     @Mock private SensorBatchRepository sensorBatchRepository;
     @Mock private ClockMappingService clockMappingService;
+    @Mock private com.widyu.heart.application.HeartRateBatchService heartRateBatchService;
     @Mock private com.widyu.run.application.CollectionRunService collectionRunService;
     @Mock private MemberRepository memberRepository;
     @Mock private S3Service s3Service;
@@ -540,6 +543,126 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("심박 배치를 저장하면 샘플 저장이 인덱스 행보다 먼저 일어난다")
+    void 심박_배치를_저장하면_샘플_저장이_인덱스_행보다_먼저_일어난다() {
+        // given
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+        given(sensorBatchRepository.existsByBatchId(SensorBatchFixture.HR_BATCH_ID)).willReturn(false);
+        given(heartRateBatchService.storeAndAssess(eq(member), eq(SensorBatchFixture.HR_BATCH_ID), any(), anyLong()))
+                .willReturn(new com.widyu.heart.application.HeartRateBatchService.BatchOutcome(3, 0, 1));
+        byte[] payload = SensorBatchFixture.heartRateBatch(SensorBatchFixture.HR_SAMPLES).getBytes(UTF_8);
+
+        // when
+        SensorBatchResultResponse response = service().ingest(MEMBER_ID, payload);
+
+        // then
+        assertThat(response).isEqualTo(SensorBatchResultResponse.of(
+                SensorBatchFixture.HR_BATCH_ID, 1041L, SensorBatchResult.STORED));
+
+        // 인덱스 행이 먼저 생기면 샘플 저장 실패 시 재전송이 DUPLICATE로 막힌다(ADR-0031 결정 4).
+        InOrder inOrder = inOrder(s3Service, heartRateBatchService, sensorBatchRepository);
+        inOrder.verify(s3Service).uploadBytes(anyString(), any(), anyString());
+        inOrder.verify(heartRateBatchService).storeAndAssess(eq(member), eq(SensorBatchFixture.HR_BATCH_ID), any(), anyLong());
+        inOrder.verify(sensorBatchRepository).save(any(SensorBatch.class));
+
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getStream()).isEqualTo("hr");
+        assertThat(saved.getS3Key())
+                .isEqualTo("sensor/1/gw-3f2a/hr/01j8zk3v9x2q4m7n8p1r5s6t7v.json");
+        assertThat(saved.getSampleCount()).isEqualTo(3);
+        // 심박은 시계 환산 없이 샘플의 ts_ms 최소·최대를 쓴다.
+        assertThat(saved.getMeasuredAtStartMs()).isEqualTo(1_760_000_000_123L);
+        assertThat(saved.getMeasuredAtEndMs()).isEqualTo(1_760_000_002_118L);
+        assertThat(saved.getOnBody()).isTrue();
+        assertThat(saved.getWatchBatteryPct()).isEqualTo(63);
+        // 축·충격·설정 대조는 IMU만의 개념이다.
+        assertThat(saved.getAccN()).isNull();
+        assertThat(saved.getGyroN()).isNull();
+        assertThat(saved.getCollectionMode()).isNull();
+        assertThat(saved.getGyroMode()).isNull();
+        assertThat(saved.getConfigMismatch()).isFalse();
+        // 지연은 서버 수신 시각에서 마지막 잰 시각을 뺀 값이다(정책 1.1.8).
+        assertThat(saved.getServerReceivedAtMs()).isGreaterThan(saved.getMeasuredAtEndMs());
+    }
+
+    @Test
+    @DisplayName("심박 샘플이 61개면 축 오류로 거부한다")
+    void 심박_샘플이_61개면_축_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        StringBuilder samples = new StringBuilder("[");
+        for (int i = 0; i < 61; i++) {
+            samples.append("{\"bpm\": 71, \"ts_ms\": %d, \"accuracy\": \"HIGH\"}"
+                    .formatted(1_760_000_000_000L + i));
+            if (i < 60) {
+                samples.append(",");
+            }
+        }
+        samples.append("]");
+
+        // when & then
+        assertHeartRateRejected(samples.toString(), ErrorCode.SENSOR_SAMPLE_INVALID);
+    }
+
+    @Test
+    @DisplayName("bpm이 0인데 신뢰할 수 있다고 오면 축 오류로 거부한다")
+    void bpm이_0인데_신뢰할_수_있다고_오면_축_오류로_거부한다() {
+        // given
+        givenMemberExists();
+
+        // when & then
+        assertHeartRateRejected(
+                "[{\"bpm\": 0, \"ts_ms\": 1760000000123, \"accuracy\": \"HIGH\"}]",
+                ErrorCode.SENSOR_SAMPLE_INVALID);
+    }
+
+    @Test
+    @DisplayName("심박 샘플 시각이 역행하면 축 오류로 거부한다")
+    void 심박_샘플_시각이_역행하면_축_오류로_거부한다() {
+        // given
+        givenMemberExists();
+
+        // when & then
+        assertHeartRateRejected("""
+                [
+                          { "bpm": 71, "ts_ms": 1760000001120, "accuracy": "HIGH" },
+                          { "bpm": 72, "ts_ms": 1760000000123, "accuracy": "HIGH" }
+                        ]""", ErrorCode.SENSOR_SAMPLE_INVALID);
+    }
+
+    @Test
+    @DisplayName("계약에서 삭제된 location이 실려 오면 필드 오류로 거부한다")
+    void 계약에서_삭제된_location이_실려_오면_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String withLocation = SensorBatchFixture.heartRateBatch(SensorBatchFixture.HR_SAMPLES)
+                .replace("\"on_body\": true", "\"location\": \"서울시\", \"on_body\": true");
+
+        // when & then
+        assertThatThrownBy(() -> service().ingest(MEMBER_ID, withLocation.getBytes(UTF_8)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SENSOR_BATCH_INVALID);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+        then(heartRateBatchService).should(never()).storeAndAssess(any(), anyString(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("모르는 스트림이면 필드 오류로 거부한다")
+    void 모르는_스트림이면_필드_오류로_거부한다() {
+        // given
+        givenMemberExists();
+        String unknownStream = SensorBatchFixture.heartRateBatch(SensorBatchFixture.HR_SAMPLES)
+                .replace("\"stream\": \"hr\"", "\"stream\": \"ecg\"");
+
+        // when & then
+        assertThatThrownBy(() -> service().ingest(MEMBER_ID, unknownStream.getBytes(UTF_8)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SENSOR_BATCH_INVALID);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+    }
+
+    @Test
     @DisplayName("S3 업로드가 실패하면 인덱스 행을 저장하지 않는다")
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
@@ -573,6 +696,7 @@ class SensorBatchServiceTest {
         return new SensorBatchService(
                 sensorBatchRepository,
                 clockMappingService,
+                heartRateBatchService,
                 collectionRunService,
                 memberRepository,
                 s3Service,
@@ -585,6 +709,17 @@ class SensorBatchServiceTest {
         return batch(ACC, "null")
                 .replace("\"run_id\": null", "\"run_id\": \"%s\"".formatted(runId))
                 .replace("\"collection_mode\": \"product\"", "\"collection_mode\": \"research\"");
+    }
+
+    /** 심박 검증 실패는 S3·DB·샘플 저장에 아무것도 남기지 않아야 한다. */
+    private void assertHeartRateRejected(String samples, ErrorCode expected) {
+        byte[] payload = SensorBatchFixture.heartRateBatch(samples).getBytes(UTF_8);
+        assertThatThrownBy(() -> service().ingest(MEMBER_ID, payload))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", expected);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+        then(sensorBatchRepository).should(never()).save(any());
+        then(heartRateBatchService).should(never()).storeAndAssess(any(), anyString(), any(), anyLong());
     }
 
     private void givenMemberExists() {

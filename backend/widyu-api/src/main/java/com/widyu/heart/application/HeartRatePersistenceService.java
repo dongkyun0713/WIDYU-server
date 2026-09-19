@@ -15,6 +15,7 @@ import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.heart.repository.HeartRateResultRepository;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,7 +47,8 @@ public class HeartRatePersistenceService {
         heartRateResultRepository.save(result);
 
         heartRateEventRepository.save(
-                HeartRateEvent.of(member, request.heartRate(), request.measuredAt(), status));
+                // 단건 경로에는 정확도도 배치 원문도 없다.
+                HeartRateEvent.of(member, request.heartRate(), request.measuredAt(), status, null, null));
 
         if (isEmergency) {
             heartRateEmergencyRepository.save(HeartRateEmergency.of(
@@ -55,5 +57,38 @@ public class HeartRatePersistenceService {
         }
 
         return result;
+    }
+
+    /**
+     * 배치 샘플 1건을 저장한다(LLD-0047 5절 6단계). 저장이 판정에 앞서므로 상태가 {@code UNKNOWN}이어도
+     * 그대로 저장한다. 위급이면 기존 단건 경로와 같은 이벤트를 발행해 알림 정책을 공유한다.
+     * 배치에는 주소가 없어 {@code location}은 null이다(ADR-0031 후속).
+     */
+    @Transactional
+    @Timed(value = "heart.persistence", extraTags = {"path", "batch"})
+    public void saveBatchSample(
+            Member member,
+            Integer heartRate,
+            LocalDateTime measuredAt,
+            HeartRateStatus status,
+            boolean isEmergency,
+            String accuracy,
+            String batchId
+    ) {
+        heartRateEventRepository.save(
+                HeartRateEvent.of(member, heartRate, measuredAt, status, accuracy, batchId));
+
+        if (isEmergency) {
+            heartRateEmergencyRepository.save(
+                    HeartRateEmergency.of(member, heartRate, measuredAt, null));
+            eventPublisher.publishEvent(new HeartRateEmergencyEvent(member.getId()));
+        }
+    }
+
+    /** 배치의 마지막 샘플로 최신값(Redis)을 갱신한다. */
+    @Transactional
+    public void updateLatestResult(
+            Long memberId, HeartRateStatus status, Integer heartRate, LocalDateTime measuredAt) {
+        heartRateResultRepository.save(HeartRateResult.of(memberId, status, heartRate, measuredAt));
     }
 }
