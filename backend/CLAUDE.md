@@ -53,13 +53,17 @@
 - 수신한 단건 심박은 AI 판정 후 즉시 최신값에 반영한다.
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
 
-### `sensor` — 원시 센서 배치 (연구 수집)
-- 워치 가속도·자이로, 폰 IMU·위치 원본을 1초 배치로 받아 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{sessionId}/{streamType}/{seq}-{sha256 앞 16자}.json`, 내용별 불변) + `sensor_batch` 인덱스 행 1개 → ADR-0030, LLD-0041
-- **불변식**: 시각은 epoch ms UTC BIGINT(`measured_from_ms`·`measured_to_ms`·`received_at_ms`), 샘플 `t`만 검증하고 내부 스키마는 저장하지 않음. 중복 판별 UK `(member, device_id, session_id, stream_type, seq)`. 식별자는 소문자만(collation 무관). 중복이면 S3 PUT 없이 `DUPLICATE`
-- 가속도·자이로는 독립 스트림. 자이로 없음 = `WATCH_GYRO` 행 없음. 0으로 채우지 않는다
-- S3 PUT은 수신 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. 서비스에 `@Transactional` 없음
-- **원시 센서값을 어떤 로그 레벨에도 남기지 않는다** (정책 1.6.7). memberId·streamType·seq·sampleCount·result만
-- REST `POST /api/v1/sensor/batches`(재전송·보강), WebSocket `/app/sensor/batches/send` → ACK `/user/queue/sensor/result`
+### `sensor` — 원시 IMU 배치 (연구 수집, v2 형식)
+- 워치·폰의 가속도·자이로 배치를 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{stream}/{batch_id}.json`) + `sensor_batch` 인덱스 행 1개 → ADR-0030 v2, LLD-0041 v2
+- **원문 바이트 보존이 최우선**: 컨트롤러가 `@RequestBody byte[]`로 받아 S3에 그대로 올린다. 재직렬화·정렬·압축 금지. `payload_sha256`·`byte_size`도 원문 기준. 꺼냈을 때 앱이 보낸 본문과 바이트 단위로 같아야 한다(지시서 B2)
+- **멱등 키는 앱이 붙인 불변 `batch_id`(ULID)**. UK도 S3 키도 이것. 같은 `batch_id`면 PUT 없이 `DUPLICATE`. 내용이 달라지는 재전송은 새 `batch_id` + `resend` 계보 6필드
+- **불변식**: 나노초 시각(`anchor_elapsed_ns`·`t0_elapsed_ns`)은 **JSON 문자열**로 받는다(number면 `SENSOR_PAYLOAD_INVALID`). `dt_ns`는 길이 n−1·`0 < dt ≤ 4294967295`, 값 배열은 n행 3열. 시계 다섯 값은 원본 그대로 두고 `measured_at_start/end_ms`만 서버가 환산
+- 가속도·자이로는 **한 배치에 오되 시간축이 독립**. `gyro: null`은 null로 저장(0 배열 금지 — AI가 정지로 읽는다). 생략인지 결측인지는 `collection_mode`로 가린다
+- 시각을 단계별로 남긴다: `server_received` → `accepted` → `persisted` = `model_available_at_server`. 하나로 합치지 않고 소급하지 않는다(정책 1.1.5)
+- S3 PUT은 수신 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. 서비스에 `@Transactional` 없음. 무결성 예외는 `existsByBatchId` 재조회로 확인될 때만 `DUPLICATE`
+- **원시 센서값을 어떤 로그 레벨에도 남기지 않는다** (정책 1.6.7). memberId·stream·seq·accN·gyroN·result만
+- 본문 상한은 `sensor.max-payload-bytes`(기본 32768, `application-sensor.yml`)
+- REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send` → ACK `/user/queue/sensor/result`
 
 ### `location` — 실시간 위치
 - `realtime`(WebSocket), `parentlocation`(REST). 시니어 발신 → family 검증 → 보호자 `/topic/location/{seniorId}` 구독

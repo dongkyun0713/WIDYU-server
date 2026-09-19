@@ -125,7 +125,9 @@ public enum ErrorCode {
 
     // 원시 센서 배치 관련
     SENSOR_BATCH_TOO_LARGE(HttpStatus.BAD_REQUEST, "SENSOR_4000", "센서 배치 크기가 허용 범위를 초과했습니다."),
-    SENSOR_SAMPLE_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4001", "센서 샘플에 정수 측정 시각(t)이 없습니다."),
+    SENSOR_SAMPLE_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4001", "센서 축 구조가 올바르지 않습니다."),
+    SENSOR_PAYLOAD_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4002", "센서 배치 본문을 읽을 수 없습니다."),
+    SENSOR_BATCH_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4003", "센서 배치 필드가 올바르지 않습니다."),
 
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),

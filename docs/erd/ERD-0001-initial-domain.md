@@ -196,21 +196,56 @@ erDiagram
 
     SensorBatch {
         Long id PK
+        String batchId UK "앱이 붙인 불변 멱등 키 (ULID)"
         Long member_id FK
-        SensorStreamType streamType
-        SensorBatchKind batchKind
+        String stream "imu_watch / imu_phone"
+        String source "watch / phone"
         String deviceId
         String sessionId
         Long seq
-        GyroMode gyroMode
+        String studyId "받은 값 그대로, null 허용"
+        String participationId "받은 값 그대로, null 허용"
+        String runId "받은 값 그대로, null 허용"
+        String bootId "시계 환산 원본 ①"
+        String clockMappingId "② (FK는 B3 후속)"
+        Long anchorElapsedNs "③ 문자열→long 무손실"
+        Long anchorEpochMs "④"
+        Double uncertaintyMs "⑤"
+        Integer accN "없으면 null"
+        Integer gyroN "없으면 null (0 치환 금지)"
+        Long accT0ElapsedNs
+        Long gyroT0ElapsedNs
+        Double accFsHzRequested
+        Double gyroFsHzRequested
+        Long measuredAtStartMs "서버 환산"
+        Long measuredAtEndMs "서버 환산"
+        Long phoneReceivedAtMs
+        Long serverReceivedAtMs
+        Long acceptedAtMs
+        Long persistedAtMs
+        Long modelAvailableAtServerMs "소급 금지"
+        String collectionMode "product / research"
+        String gyroMode "continuous / trigger"
         Boolean onBody
-        Long measuredFromMs
-        Long measuredToMs
-        Integer sampleCount
-        Long receivedAtMs
+        String wearState
+        String missingReason
+        Integer watchBatteryPct
+        String qualityStatus "이번 PR은 OK 고정"
+        String triggerKind
+        Double triggerSmvG
+        Long triggerEventElapsedNs
+        Long triggerTsMs
+        Boolean gyroBackfill
+        String backfillFor "배열이면 쉼표 결합"
+        Boolean isResend
+        String originalBatchId
+        Long originalSeq
+        String originalRunId
+        String originalSessionId
+        Long resentAtMs
         String s3Key
         Integer byteSize
-        String sha256
+        String payloadSha256 "원문 바이트 해시"
     }
 
     PaymentOrder {
