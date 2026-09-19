@@ -1,11 +1,13 @@
 package com.widyu.global.properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
@@ -42,5 +44,16 @@ class HeartPropertiesTest {
 
         // then
         assertThat(properties.cleanup().exemptMemberIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("숫자가 아닌 회원 ID를 바인딩하면 설정 오류가 발생한다")
+    void 숫자가_아닌_회원_ID를_바인딩하면_설정_오류가_발생한다() {
+        // given
+        String exemptMemberIds = "1023,not-a-number";
+
+        // when & then
+        assertThatThrownBy(() -> bind(exemptMemberIds))
+                .isInstanceOf(BindException.class);
     }
 }

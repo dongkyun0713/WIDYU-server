@@ -29,6 +29,7 @@ class ProductionComposeTest(unittest.TestCase):
                    COOLSMS_VERIFICATION_CODE_LENGTH="6",
                    AUTH_PROXY_TRUSTEDCIDRS="192.0.2.10/32,2001:db8::/64",
                    AUTH_LIMITS_SMSGLOBALDAY="1000",
+                   HEART_CLEANUP_EXEMPT_MEMBER_IDS="1023,1077",
                    COOLSMS_VERIFICATION_CODE_TTL="300")
         env.update(overrides)
         result = subprocess.run([
@@ -118,6 +119,30 @@ class ProductionComposeTest(unittest.TestCase):
                     candidate["services"]["widyu-api"]["environment"][key] = value
                     with self.assertRaisesRegex(ValueError, key):
                         validator.validate(candidate)
+
+    def test_heart_cleanup_exempt_members_are_forwarded_and_required(self):
+        config = self.config()
+        environment = config["services"]["widyu-api"]["environment"]
+        self.assertEqual(environment["HEART_CLEANUP_EXEMPT_MEMBER_IDS"], "1023,1077")
+        validator.validate(config)
+        for value in (None, "", " "):
+            with self.subTest(value=value):
+                candidate = json.loads(json.dumps(config))
+                candidate["services"]["widyu-api"]["environment"]["HEART_CLEANUP_EXEMPT_MEMBER_IDS"] = value
+                with self.assertRaisesRegex(ValueError, "HEART_CLEANUP_EXEMPT_MEMBER_IDS"):
+                    validator.validate(candidate)
+
+    def test_heart_cleanup_exempt_members_must_be_positive_long_ids(self):
+        config = self.config()
+        environment = config["services"]["widyu-api"]["environment"]
+        for value in ("0", "-1", "1.5", "abc", "1,,2", "9223372036854775808"):
+            with self.subTest(value=value):
+                environment["HEART_CLEANUP_EXEMPT_MEMBER_IDS"] = value
+                with self.assertRaisesRegex(ValueError, "HEART_CLEANUP_EXEMPT_MEMBER_IDS"):
+                    validator.validate(config)
+        for value in ("1", "1, 9223372036854775807"):
+            environment["HEART_CLEANUP_EXEMPT_MEMBER_IDS"] = value
+            validator.validate(config)
 
     def test_auth_cidrs_reject_invalid_addresses_and_prefixes(self):
         config = self.config()

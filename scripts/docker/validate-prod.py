@@ -22,6 +22,7 @@ def validate(config):
         "FFMPEG_PATH", "FFPROBE_PATH", "MEDICINE_API_SERVICE_KEY",
         "JUSO_CONFM_KEY", "KAKAO_GEOCODING_API_KEY",
         "AUTH_PROXY_TRUSTEDCIDRS", "AUTH_LIMITS_SMSGLOBALDAY",
+        "HEART_CLEANUP_EXEMPT_MEMBER_IDS",
     )
     missing = [key for key in required if not str(environment.get(key) or "").strip()]
     if missing:
@@ -57,6 +58,14 @@ def validate(config):
             ipaddress.ip_network(cidr.strip(), strict=False)
         except ValueError:
             raise ValueError("AUTH_PROXY_TRUSTEDCIDRS must contain valid IPv4/IPv6 CIDRs") from None
+    heart_exempt_member_ids = str(environment["HEART_CLEANUP_EXEMPT_MEMBER_IDS"])
+    for raw_member_id in heart_exempt_member_ids.split(","):
+        member_id = raw_member_id.strip()
+        if not re.fullmatch(r"[0-9]+", member_id):
+            raise ValueError("HEART_CLEANUP_EXEMPT_MEMBER_IDS must contain positive member IDs")
+        value = int(member_id)
+        if value <= 0 or value > 9223372036854775807:
+            raise ValueError("HEART_CLEANUP_EXEMPT_MEMBER_IDS must contain positive member IDs")
     firebase = config.get("secrets", {}).get("firebase-service-account", {})
     if not str(firebase.get("file") or "").strip():
         raise ValueError("FIREBASE_CREDENTIALS_FILE is required")
