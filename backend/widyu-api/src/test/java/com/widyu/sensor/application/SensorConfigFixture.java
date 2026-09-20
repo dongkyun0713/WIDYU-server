@@ -9,7 +9,7 @@ final class SensorConfigFixture {
     }
 
     static SensorProperties properties() {
-        return new SensorProperties(32_768, config(), export(), fallAi());
+        return new SensorProperties(32_768, config(), export(), fallAi(), heartAi());
     }
 
     static SensorProperties.Config config() {
@@ -36,5 +36,9 @@ final class SensorConfigFixture {
 
     static SensorProperties.FallAi fallAi() {
         return new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1");
+    }
+
+    static SensorProperties.HeartAi heartAi() {
+        return new SensorProperties.HeartAi("widyu-ai-hr", "ver7");
     }
 }

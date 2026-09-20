@@ -28,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("HeartRatePersistenceService 단위 테스트")
@@ -96,6 +97,25 @@ class HeartRatePersistenceServiceTest {
         assertThat(emergency.getHeartRate()).isEqualTo(180);
         assertThat(emergency.getMeasuredAt()).isEqualTo(measuredAt);
         assertThat(emergency.getLocation()).isEqualTo("서울시");
-        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId));
+        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId, null));
+    }
+
+    @Test
+    @DisplayName("배치 위급 샘플을 저장하면 그 판정을 가리키는 알림 신호를 낸다")
+    void 배치_위급_샘플을_저장하면_그_판정을_가리키는_알림_신호를_낸다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        ReflectionTestUtils.setField(member, "id", memberId);
+
+        // when
+        heartRatePersistenceService.saveBatchSample(
+                member, 185, measuredAt, HeartRateStatus.EMERGENCY, true, "HIGH",
+                "01j8zk3v9x2q4m7n8p1r5s6t7v", "dec-01");
+
+        // then
+        // 전송이 성공하면 이 판정의 도달 사실을 채운다(LLD-0053 5.2).
+        then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId, "dec-01"));
     }
 }

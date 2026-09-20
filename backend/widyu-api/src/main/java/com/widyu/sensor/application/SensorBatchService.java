@@ -667,7 +667,7 @@ public class SensorBatchService {
         // 샘플 행이 인덱스 행보다 먼저다. 인덱스가 먼저 생기면 그 뒤 샘플 저장이 실패했을 때
         // 재전송이 DUPLICATE로 막혀 샘플이 영영 비는 구멍이 생긴다(ADR-0031 결정 4).
         HeartRateBatchService.BatchOutcome outcome = heartRateBatchService.storeAndAssess(
-                member, request.batchId(), samples, serverReceivedAtMs);
+                member, request.batchId(), attribution.runId(), samples, serverReceivedAtMs);
 
         long persistedAtMs = System.currentTimeMillis();
         SensorBatch batch = heartRateEntity(member, request, payload, payloadSha256, objectKey, attribution,
