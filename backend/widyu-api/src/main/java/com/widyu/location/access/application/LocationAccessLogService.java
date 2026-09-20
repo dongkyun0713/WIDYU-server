@@ -33,6 +33,11 @@ import org.springframework.transaction.annotation.Transactional;
  * 호출부가 {@code try/catch}로 지킨다 — 프록시가 커밋 시점에 던지는 예외는 이 메서드
  * 안에서 잡을 수 없기 때문이다.
  *
+ * <p>기록 트랜잭션은 시니어 회원 행을 {@code PESSIMISTIC_WRITE}로 먼저 잠근다. 잠그지 않으면
+ * 같은 시니어를 여러 보호자가(또는 한 보호자가 여러 요청으로) 동시에 조회할 때 모두
+ * 「쿨다운 안에 통보한 적 없음」을 읽고 저마다 FCM을 등록한다. 시니어 단위 직렬화라
+ * 열람 빈도(수 초에 1건)에서 부하는 무시할 수 있다.
+ *
  * <p>로그에는 회원 식별자와 경로만 남긴다. 좌표·이름·전화번호는 남기지 않는다(LLD-0029).
  */
 @Slf4j
@@ -63,6 +68,9 @@ public class LocationAccessLogService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        // 쿨다운 확인부터 notified_at 갱신까지를 시니어 단위로 직렬화한다. 회원 행이 없어도
+        // (탈퇴 등) 기록은 남겨야 하므로 결과를 보지 않는다.
+        memberRepository.findByIdForUpdate(seniorMemberId);
         LocationAccessLog accessLog = locationAccessLogRepository.save(
                 LocationAccessLog.of(viewerMemberId, seniorMemberId, path, now));
 

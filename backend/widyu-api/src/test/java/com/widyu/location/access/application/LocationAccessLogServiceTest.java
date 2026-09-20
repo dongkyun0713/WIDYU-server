@@ -30,6 +30,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.Mockito;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -97,6 +99,37 @@ class LocationAccessLogServiceTest {
         assertThat(sent.getValue().emergency()).isFalse();
         assertThat(savedLog().getNotifiedAt()).isNotNull();
         assertThat(savedLog().getPath()).isEqualTo(LocationAccessPath.REST_LAST);
+    }
+
+    @Test
+    @DisplayName("기록할 때 시니어 회원 행을 먼저 잠근 뒤에 쿨다운을 확인한다")
+    void 시니어_행을_잠근_뒤_쿨다운을_확인한다() {
+        // given
+        givenSaveReturnsArgument();
+        given(consentService.isGranted(SENIOR_ID, ConsentKey.LOCATION_NOTICE_BATCHED)).willReturn(false);
+        given(locationAccessLogRepository.existsBySeniorMemberIdAndViewerMemberIdAndNotifiedAtAfter(
+                eq(SENIOR_ID), eq(VIEWER_ID), any(LocalDateTime.class))).willReturn(false);
+        given(memberRepository.findById(VIEWER_ID)).willReturn(Optional.of(guardian()));
+
+        // when
+        locationAccessLogService.record(VIEWER_ID, SENIOR_ID, LocationAccessPath.REST_LAST);
+
+        // then
+        InOrder inOrder = Mockito.inOrder(memberRepository, locationAccessLogRepository);
+        inOrder.verify(memberRepository).findByIdForUpdate(SENIOR_ID);
+        inOrder.verify(locationAccessLogRepository)
+                .existsBySeniorMemberIdAndViewerMemberIdAndNotifiedAtAfter(
+                        eq(SENIOR_ID), eq(VIEWER_ID), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("본인 조회는 잠금도 걸지 않는다")
+    void 본인_조회는_잠금도_걸지_않는다() {
+        // given & when
+        locationAccessLogService.record(SENIOR_ID, SENIOR_ID, LocationAccessPath.REST_LAST);
+
+        // then
+        then(memberRepository).should(never()).findByIdForUpdate(anyLong());
     }
 
     @Test
