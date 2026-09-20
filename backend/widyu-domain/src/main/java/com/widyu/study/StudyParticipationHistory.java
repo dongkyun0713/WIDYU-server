@@ -1,6 +1,10 @@
 package com.widyu.study;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.entity.BaseTimeEntity;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,6 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Set;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,6 +30,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "study_participation_history")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudyParticipationHistory extends BaseTimeEntity {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -65,12 +72,17 @@ public class StudyParticipationHistory extends BaseTimeEntity {
     @Column(name = "deletion_processed_at")
     private LocalDateTime deletionProcessedAt;
 
+    /** 일부 철회로 어떤 항목을 거뒀는지. JSON 배열 문자열이며 전체 철회·철회 전에는 null이다. */
+    @Column(name = "withdrawn_consent_keys", columnDefinition = "TEXT")
+    private String withdrawnConsentKeys;
+
     @Builder
     private StudyParticipationHistory(
             StudyParticipation participation, StudyParticipationHistoryType historyType,
             String dataPolicy, LocalDate identifiedUntil, LocalDate pseudonymizedAt,
             LocalDate researchUntil, StudyParticipationStatus status, LocalDateTime withdrawnAt,
-            WithdrawalScope withdrawalScope, LocalDateTime deletionProcessedAt) {
+            WithdrawalScope withdrawalScope, LocalDateTime deletionProcessedAt,
+            String withdrawnConsentKeys) {
         this.participation = participation;
         this.historyType = historyType;
         this.dataPolicy = dataPolicy;
@@ -81,6 +93,7 @@ public class StudyParticipationHistory extends BaseTimeEntity {
         this.withdrawnAt = withdrawnAt;
         this.withdrawalScope = withdrawalScope;
         this.deletionProcessedAt = deletionProcessedAt;
+        this.withdrawnConsentKeys = withdrawnConsentKeys;
     }
 
     public static StudyParticipationHistory snapshotOf(
@@ -96,6 +109,19 @@ public class StudyParticipationHistory extends BaseTimeEntity {
                 .withdrawnAt(participation.getWithdrawnAt())
                 .withdrawalScope(participation.getWithdrawalScope())
                 .deletionProcessedAt(participation.getDeletionProcessedAt())
+                .withdrawnConsentKeys(toJsonArray(participation.getWithdrawalConsentKeys()))
                 .build();
+    }
+
+    /** 현재 행의 철회 항목을 덮어써도 그때 무엇을 거뒀는지 남도록 이력에 함께 복사한다. */
+    private static String toJsonArray(Set<String> consentKeys) {
+        if (consentKeys == null || consentKeys.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(consentKeys);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
     }
 }

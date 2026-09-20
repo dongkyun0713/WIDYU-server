@@ -59,37 +59,3 @@ python3 scripts/docs/index.py       # LLD·ADR 모두
 ```
 
 새 LLD를 추가할 때 이 README는 고치지 않는다. 문서 헤더 표의 `상태`와 `Issue`만 정확히 채우면 목록에 그대로 반영된다.
-| 번호 | 제목 | 상태 | Issue |
-| --- | --- | --- | --- |
-| [LLD-0036](LLD-0036-fcm-durable-delivery.md) | FCM 영속 발송과 고정 수신자 | Approved (운영 검증 별도) | #608 |
-| [LLD-0035](LLD-0035-payment-failure-measurement.md) | 실제 MySQL 결제 장애 검증 | Review | #604 |
-| [LLD-0032](LLD-0032-websocket-destination-allowlist.md) | WebSocket 목적지 allowlist | Approved | #602 |
-| [LLD-0031](LLD-0031-admin-current-authority.md) | 관리자 인증의 현재 권한·활성 상태 검증 | Review | #605 |
-| [LLD-0031](LLD-0031-study-participation-registration.md) | 국내 실증(IRB) 연구 참여 등록 | Approved | #617 |
-| [LLD-0030](LLD-0030-medication-proof-image-deletion-retry.md) | 복약 인증 사진 S3 삭제 영속 재시도 | Approved | #599 |
-| [LLD-0028](LLD-0028-social-refresh-token-field-encryption.md) | SocialAccount refreshToken 필드 암호화 | Approved | #579 |
-| [LLD-0029](LLD-0029-japan-pilot-sensitive-data-safeguards.md) | 일본 실증 민감정보 보호 장치 | Approved | #595 |
-| [LLD-0027](LLD-0027-development-error-observability.md) | 개발 서버 오류 관측 | Approved | #566 |
-| LLD-0001 | WebSocket 실시간 위치 추적 | Approved | - |
-| LLD-0002 | FCM 푸시 알림 발송 구조 | Approved | - |
-| LLD-0003 | 포인트·결제 플로우 | Approved | - |
-| LLD-0004 | Apple 로그인 authorization code 교환 | Approved | - |
-| LLD-0005 | 약품 검색 DB 우선 조회와 외부 API fallback | Approved | - |
-| LLD-0006 | 앨범 영상 업로드 비동기 처리 파이프라인 | Approved | - |
-| LLD-0007 | 약 복용 홈 일자별 조회와 복용 상태 | Approved | #357 |
-| LLD-0008 | 약 복용 스케줄 버전링(수정 시 과거 보존) | Approved | #380 |
-| LLD-0009 | 실시간 위치 기반 건강 일정 방문인증 | Approved | #387 |
-| LLD-0010 | 심박 AI 판정과 저장 트랜잭션 경계 분리 | Approved | #420 |
-| LLD-0011 | 안전구역 이탈 알림 중복 차단 | Approved | #422 |
-| LLD-0012 | 앨범 영상 처리 실패 보상 삭제 | Approved | #424 |
-| LLD-0013 | 앨범 알림 부수효과 격리 | Approved | #426 |
-| LLD-0014 | FCM 토큰 소유자 변경 처리 | Approved | #428 |
-| LLD-0015 | 결제 PG 호출과 내부 반영 경계 검증 | Approved | #430 |
-| LLD-0016 | 결제 승인 멱등성 보강 | Approved | #433 |
-| LLD-0017 | 부분 취소 멱등성 보장 | Approved | - |
-| LLD-0018 | 마이페이지 조회·명령 책임 분리 | Draft | #441 |
-| LLD-0019 | 개인화 심박 이상 감지 AI 연동 | Approved | #446 |
-| LLD-0021 | 앨범 Presigned Multipart 직접 업로드 | Approved | #450 |
-| LLD-0024 | 목표 홈 주간 통계 조회 파이프라인 최적화 | Approved | #489, #491, #492 |
-| LLD-0025 | 임시 토큰 인증 API의 액세스 토큰 필터 분리 | Approved | #522 |
-| [LLD-0026](LLD-0026-codex-primary-harness.md) | Codex 기본 하네스 전환 | Review | #549 |
