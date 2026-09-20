@@ -76,7 +76,7 @@ class FallAssessmentServiceTest {
 
     private SensorProperties properties(boolean enabled) {
         SensorProperties.Export export = new SensorProperties.Export(
-                5000L, 15, "test-build", java.util.Map.of(), java.util.Map.of(),
+                5000L, 900_000L, 15, "test-build", java.util.Map.of(), java.util.Map.of(),
                 new SensorProperties.Export.Clock("DEVICE_MONOTONIC", "UTC_EPOCH_MS", "ANCHOR_PAIR", "TEST"),
                 "NO_DEVICE", "NO_DATA", "NOT_IMPLEMENTED");
         return new SensorProperties(
