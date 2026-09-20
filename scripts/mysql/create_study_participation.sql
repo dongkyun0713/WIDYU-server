@@ -33,8 +33,13 @@ CREATE TABLE study_participation (
     deletion_processed_at DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
+    -- 같은 연구·회원의 ACTIVE 참여를 DB에서 하나로 묶는다. ACTIVE가 아닌 행은 NULL이라
+    -- UNIQUE 대상에서 빠지므로 철회·종료한 참여는 얼마든지 쌓인다.
+    -- 애플리케이션에는 매핑하지 않는 생성 컬럼이다(ddl-auto: validate는 미매핑 컬럼을 검사하지 않는다).
+    active_key CHAR(1) GENERATED ALWAYS AS (IF(status = 'ACTIVE', '1', NULL)) STORED,
     CONSTRAINT fk_study_participation_member FOREIGN KEY (member_id) REFERENCES member (id),
     CONSTRAINT uk_study_participation_id UNIQUE (participation_id),
+    CONSTRAINT uk_study_participation_active UNIQUE (study_id, member_id, active_key),
     INDEX idx_study_participation_active (study_id, member_id, status)
 );
 
@@ -71,12 +76,18 @@ CREATE TABLE study_participation_history (
     withdrawn_at DATETIME(6) NULL,
     withdrawal_scope VARCHAR(24) NULL,
     deletion_processed_at DATETIME(6) NULL,
+    -- 일부 철회로 거둔 항목의 JSON 배열. 현재 행의 철회 항목을 덮어써도 그때 값이 남는다.
+    withdrawn_consent_keys TEXT NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_study_participation_history_participation
         FOREIGN KEY (study_participation_id) REFERENCES study_participation (study_participation_id),
     INDEX idx_study_participation_history_participation (study_participation_id, created_at)
 );
+
+-- admin_audit_log.action은 VARCHAR(50)이다(AdminAuditLog 엔티티의 @Enumerated(STRING) + length=50).
+-- MySQL ENUM이 아니므로 새 AdminAction 값(STUDY_PARTICIPATION_REGISTER·_WITHDRAW·_DELETION_PROCESSED)에
+-- ALTER TABLE이 필요 없다.
 
 -- 연구 회차가 참조하는 참여 기록. product 회차와 이 기능 이전에 열린 회차는 NULL이다.
 ALTER TABLE collection_run

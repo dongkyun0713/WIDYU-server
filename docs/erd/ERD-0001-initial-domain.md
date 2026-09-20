@@ -552,7 +552,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
-    Member ||--o{ StudyParticipation : "연구 참여 (재식별 키, 파기 시 null)"
+    Member ||--o{ StudyParticipation : "실증 참여 (재식별 키)"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
@@ -659,6 +659,7 @@ erDiagram
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
 | `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 서버 발급 참여 식별자 중복 방지 (LLD-0052) |
 | `study_participation` | `idx_study_participation_active` | `(study_id, member_id, status)` | 같은 연구·회원의 ACTIVE 참여 중복 검사 |
+| `study_participation` | UK `uk_study_participation_active` | `(study_id, member_id, active_key)` | 같은 연구·회원의 ACTIVE 참여 하나를 DB에서 보장. `active_key`는 ACTIVE일 때만 값을 갖는 생성 컬럼이라 철회·종료 참여는 제약 대상에서 빠진다 |
 | `study_participation_history` | `idx_study_participation_history_participation` | `(study_participation_id, created_at)` | 참여 기록의 변경 이력 시각순 조회 |
 
 ## 도메인별 조회 기준
@@ -679,7 +680,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
-| 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052). 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |
+| 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052, ADR-0034). ACTIVE 단일성은 생성 컬럼 `active_key` + UK로, 일부 철회 항목은 이력의 `withdrawn_consent_keys`(JSON)로 남긴다. 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |

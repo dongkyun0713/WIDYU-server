@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | Approved |
 | Issue | #658 |
-| 관련 ADR | ADR-0026 (본 LLD 범위와 충돌하는 자동 삭제 부분은 적용하지 않음) |
+| 관련 ADR | ADR-0034 (ADR-0026을 대체한다) |
 | 작성일 | 2026-09-20 |
 
 ## 1. 목적 / 배경
@@ -84,7 +84,9 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 
 선택 동의는 `study_participation_consent(study_participation_id FK, consent_key, granted)`로 저장한다. 일부 철회의 대상 항목은 `study_participation_withdrawal_item(study_participation_id FK, consent_key)`로 저장한다. 두 테이블은 직접식별자를 갖지 않으며, FK는 외부 식별자 `participation_id`가 아니라 내부 PK `study_participation_id`를 가리킨다.
 
-`study_participation_history`는 등록·보관계획변경·철회·처리완료 시점마다 참여기록의 정책/상태 snapshot과 변경 종류·시각을 저장한다. 현행 행을 덮어써도 과거 보관 계획과 철회 범위가 사라지지 않게 한다.
+같은 `study_id + member_id`의 `ACTIVE` 참여가 하나뿐이라는 규칙은 DB UNIQUE 제약이 보장한다. `ACTIVE`일 때만 값을 갖는 생성 컬럼 `active_key`를 두고 `(study_id, member_id, active_key)`에 UNIQUE를 건다. `ACTIVE`가 아닌 행은 `NULL`이라 제약 대상에서 빠지므로 철회·종료한 참여는 여러 건 쌓인다. 애플리케이션 조회 검사는 빠른 응답용이고, 동시 요청에서 UK에 걸린 쪽도 같은 409로 돌려준다.
+
+`study_participation_history`는 등록·보관계획변경·철회·처리완료 시점마다 참여기록의 정책/상태 snapshot과 변경 종류·시각을 저장한다. 일부 철회로 거둔 항목은 `withdrawn_consent_keys`(JSON 배열 문자열)에 함께 복사해, 현행 행을 덮어써도 과거 보관 계획과 철회 범위가 사라지지 않게 한다.
 
 `collection_run`에는 nullable `study_participation_id` FK를 둔다. 기존 `study_id`, `participation_id`, `consent_version`, 보관 날짜 컬럼은 연구 회차에서 쓰지 않으며 운영 마이그레이션으로 제거한다. 회차 응답·내보내기·자료 귀속의 연구 메타데이터는 FK를 따라 읽는다. 읽는 쪽마다 조건 분기를 두지 않도록 `CollectionRun`의 해당 getter가 참여 기록을 우선 읽고, 참여 기록이 없는 회차(`product` 회차, 이 기능 이전 회차)만 남은 컬럼을 읽는다. 참여 기록은 읽는 쪽의 트랜잭션 경계가 제각각이라 즉시 로딩한다.
 
@@ -108,12 +110,12 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 ### 철회
 
 1. `ACTIVE` 또는 `ENDED` 참여 기록만 철회할 수 있다.
-2. 범위와 항목을 검증하고 상태·철회시각·범위를 갱신한다.
+2. 범위와 항목을 검증하고 상태·철회시각·범위를 갱신한다. 일부 철회의 각 항목은 그 참여가 실제로 받은(값이 `true`인) 선택 동의여야 한다 — 받지 않았거나 이미 거절한 항목은 거둘 것이 없다.
 3. `WITHDRAWN` snapshot을 남긴다. 실제 데이터 삭제는 이 트랜잭션에서 하지 않는다.
 
 ### 관리자 변경 기록
 
-무엇이 어떻게 바뀌었는지는 snapshot이 답하고, 누가·언제 바꿨는지는 기존 관리자 감사 로그(`AdminAuditLogService`)에 남긴다. 등록·보관 계획 수정·철회·삭제 처리 완료가 대상이며, 감사 로그 detail에는 참여·회원·연구 식별자만 담는다. 동의 항목·보관 날짜·이름은 담지 않는다.
+무엇이 어떻게 바뀌었는지는 snapshot이 답하고, 누가·언제 바꿨는지는 기존 관리자 감사 로그(`AdminAuditLogService`)에 남긴다. 감사 로그는 참여 변경과 **같은 트랜잭션**에 저장한다(`logInCurrentTransaction`). 기존 `log()`의 `REQUIRES_NEW`를 쓰면 참여 변경이 롤백돼도 감사 로그만 남아, 실제로 바뀌지 않은 일이 바뀐 것처럼 기록된다. 등록·보관 계획 수정·철회·삭제 처리 완료가 대상이며, 감사 로그 detail에는 참여·회원·연구 식별자만 담는다. 동의 항목·보관 날짜·이름은 담지 않는다.
 
 ## 6. 예외 / 에러 처리
 
@@ -123,6 +125,7 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 | `STUDY_PARTICIPATION_DUPLICATED` | 409 | 같은 연구·회원의 ACTIVE 기록 |
 | `STUDY_RETENTION_PERIOD_INVALID` | 400 | 날짜 일부 누락 또는 순서 역전 |
 | `STUDY_PARTICIPATION_NOT_ACTIVE` | 400 | 연구 회차 개설에 ACTIVE가 아닌 기록 사용 |
+| `STUDY_WITHDRAWAL_CONSENT_INVALID` | 400 | 일부 철회 대상이 비었거나, 받지 않았거나 거절한 동의 항목 |
 | `RUN_RESEARCH_PARTICIPATION_REQUIRED` | 400 | 연구 회차에 참여 식별자 없음 |
 | `RUN_RESEARCH_PARTICIPATION_MISMATCH` | 400 | 대상 회원과 참여 기록이 다름 |
 
@@ -142,7 +145,9 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 
 운영 DB에는 별도 migration SQL로 테이블과 FK를 추가한 뒤, 기존 `collection_run`의 중복 연구 메타데이터는 참여기록을 만들어 연결한 다음 제거한다. 데이터가 없는 개발 환경은 Hibernate가 새 모델을 생성한다. 삭제 DDL은 운영 데이터 백필과 함께 별도 승인 후 실행한다.
 
-`study_participation.status`는 다른 연구 테이블(`collection_run` 등)과 같이 MySQL `ENUM`이 아니라 `VARCHAR(20)`로 만든다. 상태 값이 늘어도 `ALTER TABLE ... MODIFY COLUMN`이 필요 없다.
+`study_participation.status`는 다른 연구 테이블(`collection_run` 등)과 같이 MySQL `ENUM`이 아니라 `VARCHAR(20)`로 만든다. 상태 값이 늘어도 `ALTER TABLE ... MODIFY COLUMN`이 필요 없다. `admin_audit_log.action`도 `VARCHAR(50)`이라 새 `AdminAction` 값에 DDL이 필요 없다.
+
+`active_key`는 MySQL 생성 컬럼이라 애플리케이션이 쓰지 않으며 엔티티에도 매핑하지 않는다. Hibernate의 스키마 검증은 매핑된 컬럼의 존재만 확인하고 DB에만 있는 컬럼은 검사하지 않는다.
 
 ## 9. 미결정 사항 (Open Questions)
 
