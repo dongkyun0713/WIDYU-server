@@ -509,7 +509,10 @@ public class SensorBatchService {
     private RunAttribution resolveAttribution(
             Long memberId, String deviceId, String runId, String studyId, String participationId,
             SensorBatchRequest.Resend resend, long measuredAtStartMs) {
-        String candidateRunId = runId != null ? runId : originalRunId(resend);
+        String candidateRunId = originalRunId(resend);
+        if (runId != null) {
+            candidateRunId = runId;
+        }
         if (candidateRunId != null) {
             return attributionOf(collectionRunService.requireAttributableRun(
                     candidateRunId, memberId, deviceId, measuredAtStartMs));
