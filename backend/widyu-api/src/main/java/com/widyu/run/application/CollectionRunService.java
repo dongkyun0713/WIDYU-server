@@ -22,6 +22,7 @@ import com.widyu.run.repository.RunMarkerRepository;
 import com.widyu.sensor.application.ClockMappingService;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,7 +51,8 @@ public class CollectionRunService {
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
     private final CollectionRunRepository collectionRunRepository;
-    private final CollectionRunInsertService collectionRunInsertService;
+    private final CollectionRunOpenCommandService collectionRunOpenCommandService;
+    private final CollectionRunConflictLookupService collectionRunConflictLookupService;
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     private final RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     private final RunMarkerRepository runMarkerRepository;
@@ -59,7 +61,6 @@ public class CollectionRunService {
     private final ClockMappingService clockMappingService;
     private final AdminAuditLogService adminAuditLogService;
 
-    @Transactional
     public CollectionRunResponse open(CollectionRunOpenRequest request) {
         Member member = memberRepository.findById(request.subjectMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -84,21 +85,27 @@ public class CollectionRunService {
                 .pseudonymizedAt(pseudonymizedAtOf(request))
                 .researchUntil(researchUntilOf(request))
                 .build();
-        CollectionRun run;
-        try {
-            run = collectionRunInsertService.insert(newRun);
-        } catch (DataIntegrityViolationException e) {
-            // (member_id, open_marker) UK 충돌이면 동시에 열린 다른 회차가 생긴 것이다.
-            if (collectionRunRepository.existsByMemberIdAndStatus(member.getId(), CollectionRunStatus.OPEN)) {
-                throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
-            }
-            throw e;
-        }
-
+        List<RunDeviceAssignment> assignments = new ArrayList<>();
         if (request.devices() != null) {
             for (DeviceAssignRequest device : request.devices()) {
-                assignDevice(run, device, startedAtMs);
+                assignments.add(newDeviceAssignment(newRun, device, startedAtMs));
             }
+        }
+
+        CollectionRun run;
+        try {
+            run = collectionRunOpenCommandService.open(newRun, assignments);
+        } catch (DataIntegrityViolationException e) {
+            // 명령 transaction은 이미 롤백됐다. 별도 snapshot에서 UK 승자 행만 409으로 바꾼다.
+            if (collectionRunConflictLookupService.hasOpenRun(member.getId())) {
+                throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
+            }
+            for (RunDeviceAssignment assignment : assignments) {
+                if (collectionRunConflictLookupService.hasActiveDevice(assignment.getDeviceId())) {
+                    throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
+                }
+            }
+            throw e;
         }
 
         adminAuditLogService.log(AdminAction.COLLECTION_RUN_OPEN, "CollectionRun", run.getId(),
@@ -243,6 +250,19 @@ public class CollectionRunService {
     }
 
     private void assignDevice(CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {
+        RunDeviceAssignment assignment = newDeviceAssignment(run, request, defaultAssignedAtMs);
+        try {
+            runDeviceAssignmentInsertService.insert(assignment);
+        } catch (DataIntegrityViolationException e) {
+            if (collectionRunConflictLookupService.hasActiveDevice(request.deviceId())) {
+                throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
+            }
+            throw e;
+        }
+    }
+
+    private RunDeviceAssignment newDeviceAssignment(
+            CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {
         // 기기는 한 번에 한 참가자에게만 간다. 공유하면 자료가 누구 것인지 알 수 없다.
         if (runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 request.deviceId(), CollectionRunStatus.OPEN)) {
@@ -252,7 +272,7 @@ public class CollectionRunService {
         if (assignedAtMs < run.getStartedAtMs()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "배정 시각이 회차 시작 시각보다 앞설 수 없습니다.");
         }
-        RunDeviceAssignment assignment = RunDeviceAssignment.builder()
+        return RunDeviceAssignment.builder()
                 .assignmentId(newId(ASSIGNMENT_ID_PREFIX))
                 .run(run)
                 .deviceId(request.deviceId())
@@ -260,15 +280,6 @@ public class CollectionRunService {
                 .wearSite(request.wearSite())
                 .assignedAtMs(assignedAtMs)
                 .build();
-        try {
-            runDeviceAssignmentInsertService.insert(assignment);
-        } catch (DataIntegrityViolationException e) {
-            if (runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
-                    request.deviceId(), CollectionRunStatus.OPEN)) {
-                throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
-            }
-            throw e;
-        }
     }
 
     private void verifySameMarker(
