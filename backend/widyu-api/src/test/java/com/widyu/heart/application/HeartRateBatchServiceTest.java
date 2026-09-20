@@ -180,7 +180,6 @@ class HeartRateBatchServiceTest {
         // given
         Member member = member();
         givenNoExistingSamples();
-        givenDecisionSaved();
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
         long serverReceivedAtMs = FIRST_TS_MS + 400L;
@@ -190,7 +189,7 @@ class HeartRateBatchServiceTest {
                 member, BATCH_ID, RUN_ID, List.of(sample(185, FIRST_TS_MS, "HIGH")), serverReceivedAtMs);
 
         // then
-        DecisionRecord saved = savedDecision();
+        DecisionRecord saved = decisionPassedToSave();
         assertThat(saved.getDecisionId()).startsWith("dec-");
         assertThat(saved.getMemberId()).isEqualTo(MEMBER_ID);
         assertThat(saved.getRunId()).isEqualTo(RUN_ID);
@@ -214,12 +213,11 @@ class HeartRateBatchServiceTest {
     }
 
     @Test
-    @DisplayName("위급으로 판정된 샘플은 위급 표시와 판정 식별자를 달고 저장된다")
-    void 위급으로_판정된_샘플은_위급_표시와_판정_식별자를_달고_저장된다() {
+    @DisplayName("위급으로 판정하면 판정 행을 심박 저장과 같은 트랜잭션에 넘긴다")
+    void 위급으로_판정하면_판정_행을_심박_저장과_같은_트랜잭션에_넘긴다() {
         // given
         Member member = member();
         givenNoExistingSamples();
-        givenDecisionSaved();
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
 
@@ -229,26 +227,31 @@ class HeartRateBatchServiceTest {
                 System.currentTimeMillis());
 
         // then
-        // 알림이 가리킬 판정이 먼저 있어야 도달 사실을 채울 수 있다(LLD-0053 5.2).
-        String decisionId = savedDecision().getDecisionId();
+        // 판정 행을 먼저 따로 커밋하면 심박 저장이 실패했을 때 알림 없이 판정만 남는다(LLD-0053 5.1).
+        then(decisionRecordPersistenceService).should(never()).save(any());
+        DecisionRecord passed = decisionPassedToSave();
+        assertThat(passed.getDecisionOutput()).isEqualTo("ALERT");
         then(heartRatePersistenceService).should().saveBatchSample(
                 eq(member), eq(185), any(), eq(HeartRateStatus.EMERGENCY), eq(true),
-                eq("HIGH"), eq(BATCH_ID), eq(decisionId));
+                eq("HIGH"), eq(BATCH_ID), eq(passed));
     }
 
     @Test
-    @DisplayName("판정 기록이 예외를 던져도 심박은 그대로 저장한다")
-    void 판정_기록이_예외를_던져도_심박은_그대로_저장한다() {
+    @DisplayName("판정 행 조립이 실패해도 심박은 판정 없이 그대로 저장한다")
+    void 판정_행_조립이_실패해도_심박은_판정_없이_그대로_저장한다() {
         // given
         Member member = member();
         givenNoExistingSamples();
-        willThrow(new IllegalStateException("판정 기록 저장 실패"))
-                .given(decisionRecordPersistenceService).save(any());
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
+        // sensor.heart-ai 설정이 빠진 환경이다. 판정기 이름을 읽다 터진다.
+        SensorProperties withoutHeartAi = new SensorProperties(
+                32_768, null, null,
+                new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
+                null);
 
         // when
-        HeartRateBatchService.BatchOutcome outcome = service().storeAndAssess(
+        HeartRateBatchService.BatchOutcome outcome = service(withoutHeartAi).storeAndAssess(
                 member, BATCH_ID, RUN_ID, List.of(sample(185, FIRST_TS_MS, "HIGH")),
                 System.currentTimeMillis());
 
@@ -265,12 +268,6 @@ class HeartRateBatchServiceTest {
         // given
         Member member = member();
         givenNoExistingSamples();
-        // 무작위 판정 식별자가 우연히 "185"를 품어 검사가 흔들리지 않게 고정한다.
-        willAnswer(invocation -> {
-            DecisionRecord record = invocation.getArgument(0);
-            ReflectionTestUtils.setField(record, "decisionId", "dec-cafe");
-            return record;
-        }).given(decisionRecordPersistenceService).save(any());
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
         Logger logger = (Logger) LoggerFactory.getLogger(HeartRateBatchService.class);
@@ -288,9 +285,11 @@ class HeartRateBatchServiceTest {
 
             // then
             // 사유와 심박 값이 사는 곳은 판정 기록 행뿐이다(정책 1.5.5·1.5.11).
+            // 판정 식별자는 무작위 hex라 우연히 "185"를 품을 수 있다. 검사가 흔들리지 않게 그 부분만 가린다.
+            String decisionId = decisionPassedToSave().getDecisionId();
             assertThat(appender.list).isNotEmpty();
             for (ILoggingEvent event : appender.list) {
-                assertThat(event.getFormattedMessage())
+                assertThat(event.getFormattedMessage().replace(decisionId, "<decision-id>"))
                         .doesNotContain(REASON)
                         .doesNotContain("185")
                         .doesNotContain("EMERGENCY");
@@ -394,9 +393,21 @@ class HeartRateBatchServiceTest {
     }
 
     private HeartRateBatchService service() {
+        return service(properties());
+    }
+
+    private HeartRateBatchService service(SensorProperties sensorProperties) {
         return new HeartRateBatchService(
                 heartRateAnomalyDetector, heartRatePersistenceService, heartRateEventRepository,
-                decisionRecordPersistenceService, properties(), meterRegistry);
+                decisionRecordPersistenceService, sensorProperties, meterRegistry);
+    }
+
+    /** 판정 행은 심박 저장과 한 트랜잭션에 묶이므로 saveBatchSample 인자로 건너간다. */
+    private DecisionRecord decisionPassedToSave() {
+        ArgumentCaptor<DecisionRecord> captor = ArgumentCaptor.forClass(DecisionRecord.class);
+        then(heartRatePersistenceService).should().saveBatchSample(
+                any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), captor.capture());
+        return captor.getValue();
     }
 
     private SensorProperties properties() {

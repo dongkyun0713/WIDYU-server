@@ -86,7 +86,7 @@ public class HeartRateBatchService {
             HeartRateStatus status = HeartRateStatus.UNKNOWN;
             boolean emergency = false;
             boolean assessed = false;
-            String decisionId = null;
+            DecisionRecord decision = null;
             if (aiAvailable && isAiTarget(sample)) {
                 aiCalled = true;
                 try {
@@ -96,8 +96,7 @@ public class HeartRateBatchService {
                     emergency = detected.emergency();
                     assessed = true;
                     aiTargetCount++;
-                    // 알림보다 판정 기록이 앞선다. 알림 도달 사실을 채우려면 그 알림이 가리킬 판정이 먼저 있어야 한다.
-                    decisionId = recordAssessment(member, batchId, runId, sample, detected, serverReceivedAtMs);
+                    decision = alertDecision(member, batchId, runId, sample, detected, serverReceivedAtMs);
                 } catch (RestClientException | BusinessException e) {
                     // 판정 누락이 아니라 판정 불가의 기록이다. 남은 샘플은 AI를 부르지 않는다.
                     aiAvailable = false;
@@ -107,8 +106,14 @@ public class HeartRateBatchService {
                 aiSkipped++;
             }
 
+            // 판정 행은 여기서 심박 이벤트·위급·알림 발행과 한 트랜잭션으로 저장된다. 따로 커밋하면
+            // 뒤이은 심박 저장이 실패했을 때 알림 없이 판정만 남는다(LLD-0053 5.1).
             heartRatePersistenceService.saveBatchSample(
-                    member, sample.bpm(), measuredAt, status, emergency, sample.accuracy(), batchId, decisionId);
+                    member, sample.bpm(), measuredAt, status, emergency, sample.accuracy(), batchId, decision);
+            if (decision != null) {
+                log.info("심박 판정 기록: memberId={}, decisionId={}, output={}, batchId={}",
+                        member.getId(), decision.getDecisionId(), decision.getDecisionOutput(), batchId);
+            }
             stored++;
             lastHeartRate = sample.bpm();
             lastMeasuredAt = measuredAt;
@@ -123,17 +128,34 @@ public class HeartRateBatchService {
         return new BatchOutcome(stored, skipped, aiSkipped);
     }
 
-    /** 위급이면 판정 행 하나, 그 밖이면 건수만 센다(ADR-0035 결정 1). */
-    private String recordAssessment(
+    /**
+     * 위급이면 판정 행 하나를 조립하고, 그 밖이면 건수만 센다(ADR-0035 결정 1).
+     *
+     * <p>저장은 하지 않는다. 심박 저장과 한 트랜잭션에 묶으려고 엔티티만 만들어 넘긴다.
+     * 조립이 실패하면(설정 누락 등) 판정 없이 심박만 저장한다.
+     */
+    private DecisionRecord alertDecision(
             Member member, String batchId, String runId, HeartRateBatchRequest.Sample sample,
             DetectionResult detected, long serverReceivedAtMs) {
         if (!detected.emergency()) {
             meterRegistry.counter("heart.decision", "output", NO_ALERT).increment();
             return null;
         }
+        try {
+            return alertRecord(member, batchId, runId, sample, detected, serverReceivedAtMs);
+        } catch (Exception e) {
+            log.warn("심박 판정 기록 실패: memberId={}, batchId={}, errorType={}",
+                    member.getId(), batchId, e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private DecisionRecord alertRecord(
+            Member member, String batchId, String runId, HeartRateBatchRequest.Sample sample,
+            DetectionResult detected, long serverReceivedAtMs) {
         // 인과성: 기기 시계가 서버보다 앞서면 feature_support_end_ms > input_cutoff_ms가 된다.
         // 낙상과 달리 창을 서버가 정하지 않고 샘플 시각이 곧 창이라, 막지 않고 그대로 적어 검사기가 신고하게 둔다(ADR-0035).
-        return save(DecisionRecord.builder()
+        return DecisionRecord.builder()
                 .decisionId(newDecisionId())
                 .memberId(member.getId())
                 .runId(runId)
@@ -154,7 +176,7 @@ public class HeartRateBatchService {
                 .hrMeasuredAtMs(sample.tsMs())
                 .hrAccuracy(sample.accuracy())
                 .reason(detected.reason())
-                .build(), member.getId(), batchId);
+                .build();
     }
 
     /**
@@ -192,17 +214,18 @@ public class HeartRateBatchService {
                 .build(), member.getId(), batchId);
     }
 
-    /** 판정 기록이 실패해도 심박 저장과 보호자 알림은 그대로 간다(LLD-0053 6절). */
-    private String save(DecisionRecord record, Long memberId, String batchId) {
+    /**
+     * 배치 단위 판정 보류만 이 길로 저장한다. 짝이 될 심박 이벤트도 알림도 없어 묶을 트랜잭션이
+     * 없으므로 자기 트랜잭션(REQUIRES_NEW)에서 끝낸다. 실패해도 심박 저장을 막지 않는다.
+     */
+    private void save(DecisionRecord record, Long memberId, String batchId) {
         try {
             DecisionRecord saved = decisionRecordPersistenceService.save(record);
             log.info("심박 판정 기록: memberId={}, decisionId={}, output={}, batchId={}",
                     memberId, saved.getDecisionId(), saved.getDecisionOutput(), batchId);
-            return saved.getDecisionId();
         } catch (Exception e) {
             log.warn("심박 판정 기록 실패: memberId={}, batchId={}, errorType={}",
                     memberId, batchId, e.getClass().getSimpleName());
-            return null;
         }
     }
 
