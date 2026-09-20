@@ -16,6 +16,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Slf4j
@@ -62,6 +63,36 @@ public class S3ServiceImpl implements S3Service {
         } catch (SdkException e) {
             log.error("S3 바이트 업로드 실패: objectKey={}, byteSize={}, errorType={}",
                     objectKey, bytes.length, e.getClass().getSimpleName());
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public byte[] downloadBytes(String objectKey) {
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(s3Properties.s3().bucketName())
+                    .key(objectKey)
+                    .build();
+            return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
+        } catch (SdkException e) {
+            log.error("S3 객체 읽기 실패: objectKey={}, errorType={}", objectKey, e.getClass().getSimpleName());
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public void uploadLocalFile(String objectKey, java.io.File file, String contentType) {
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(s3Properties.s3().bucketName())
+                    .key(objectKey)
+                    .contentType(contentType)
+                    .build();
+            s3Client.putObject(putObjectRequest, RequestBody.fromFile(file));
+            log.info("S3 파일 업로드 성공: objectKey={}, byteSize={}", objectKey, file.length());
+        } catch (SdkException e) {
+            log.error("S3 파일 업로드 실패: objectKey={}, errorType={}", objectKey, e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
         }
     }

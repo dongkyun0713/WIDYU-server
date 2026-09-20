@@ -338,6 +338,21 @@ erDiagram
         Integer activeMarker "배정 중=1, UK(device_id, active_marker)"
     }
 
+    RunExport {
+        Long id PK
+        String exportId UK "exp-<UUID hex>"
+        String runId "문자열 참조 (FK 없음)"
+        RunExportStatus status "QUEUED / RUNNING / DONE / FAILED"
+        Long requestedAtMs
+        Long startedAtMs
+        Long finishedAtMs
+        String s3Key "exports/{runId}/{exportId}/run_{runId}.zip"
+        Long bytes
+        String sha256
+        String errorType "예외 클래스명만"
+        String serverBuild
+    }
+
     RunMarker {
         Long id PK
         String markerId UK "앱 발급, 멱등"
@@ -503,6 +518,7 @@ erDiagram
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
+    CollectionRun ||..o{ RunExport : "내보내기 잡 (run_id 문자열 참조)"
     Member ||--o{ PaymentOrder : "결제 주문"
     Member ||--o{ Payment : "결제"
     Member ||--o{ MemberFcmToken : "FCM 토큰"
@@ -595,6 +611,9 @@ erDiagram
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
 | `run_marker` | UK `uk_run_marker_id` | `(marker_id)` | 마커 멱등 |
 | `run_marker` | `idx_run_marker_run_time` | `(run_id, ts_ms)` | 회차별 마커 시각순 조회 |
+| `run_export` | UK `uk_run_export_export_id` | `(export_id)` | 내보내기 잡 식별자 |
+| `run_export` | `idx_run_export_run_status` | `(run_id, status)` | 진행 중 잡 재사용 판정 |
+| `run_export` | `idx_run_export_queue` | `(status, requested_at_ms)` | 워커 큐 선점 |
 | `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
 | `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
 | `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
@@ -622,6 +641,7 @@ erDiagram
 |------|--------|-----------|-----|
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
+| 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |
 | 2026-09-20 | `heart_rate_event` | `accuracy`·`batch_id` 컬럼 추가 (LLD-0047). 운영 배포 전 필수 | `scripts/mysql/add_heart_rate_event_accuracy.sql` |
 | 2026-09-20 | `sensor_batch` | `sample_count` 추가, `collection_mode`·`gyro_mode` NULL 허용 (LLD-0047, 심박 배치 수용) | `scripts/mysql/alter_sensor_batch_for_hr.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |

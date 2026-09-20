@@ -16,3 +16,31 @@ sensor:
     heartbeat-sec: 60
     # 워치가 설정을 다시 읽을 권고 주기. 실제 주기는 앱 정책이다(FE F9).
     refresh-sec: 60
+
+  # 회차 내보내기(LLD-0050). 값 집합이 미정인 상수는 여기서 바꾼다.
+  export:
+    poll-delay-ms: ${SENSOR_EXPORT_POLL_DELAY_MS:5000}
+    presign-minutes: 15
+    server-build: ${SENSOR_EXPORT_SERVER_BUILD:unknown}
+    # 기대 샘플 간격(ms). expected_sample_count = 배정 구간 / 간격이며 자료가 없다고 줄이지 않는다(ADR-0032 결정 4).
+    expected-period-ms:
+      imu_watch: 20
+      imu_phone: 20
+      hr: 1000
+      location: 60000
+      heartbeat: 60000
+    # 이 공백을 넘으면 missing_intervals로 신고한다.
+    gap-threshold-ms:
+      imu_watch: 5000
+      imu_phone: 5000
+      hr: 5000
+      location: 120000
+      heartbeat: 120000
+    clock:
+      source-domain: DEVICE_MONOTONIC
+      target-domain: UTC_EPOCH_MS
+      transform: ANCHOR_PAIR
+      evidence-method: APP_REPORTED_ANCHOR
+    absent-reason-role-missing: NO_DEVICE_ASSIGNED
+    absent-reason-no-data: NO_DATA_IN_THIS_RUN
+    absent-reason-not-implemented: NOT_IMPLEMENTED_IN_THIS_RUN

@@ -32,4 +32,7 @@ public interface ClockMappingRepository extends JpaRepository<ClockMapping, Long
             @Param("min") long min,
             @Param("max") long max,
             @Param("now") long now);
+
+    /** 내보내기: 회차 배치가 참조하는 매핑들(LLD-0050 5.4). */
+    java.util.List<ClockMapping> findByClockMappingIdIn(java.util.Collection<String> clockMappingIds);
 }

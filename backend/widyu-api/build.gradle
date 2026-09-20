@@ -110,6 +110,8 @@ tasks.named('test') {
     useJUnitPlatform {
         excludeTags 'payment-mysql'
     }
+    // 내보내기 표본 zip을 남길지(계약검사기 입력). -Dwidyu.export.keep=true 일 때만 만든다.
+    systemProperty 'widyu.export.keep', System.getProperty('widyu.export.keep', 'false')
 }
 
 tasks.register('paymentMySqlTest', Test) {
