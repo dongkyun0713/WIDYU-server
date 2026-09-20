@@ -1,16 +1,13 @@
 package com.widyu.study.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
-/** 보존 기간 변경. IRB 승인 참조와 동의 버전을 함께 받아 이력에 남긴다(정책서 1.5.3). */
+/** IRB 보관 계획 수정(LLD-0052 3절). 아직 확정 전이면 전부 비워 둘 수 있다. */
 public record StudyRetentionChangeRequest(
-        @NotNull(message = "identifiedUntil은 필수입니다.") LocalDate identifiedUntil,
-        @NotNull(message = "pseudonymizedAt은 필수입니다.") LocalDate pseudonymizedAt,
-        @NotNull(message = "researchUntil은 필수입니다.") LocalDate researchUntil,
-        @NotBlank(message = "consentVersion은 필수입니다.") @Size(max = 50) String consentVersion,
-        @NotBlank(message = "irbApprovalRef는 필수입니다.") @Size(max = 100) String irbApprovalRef
+        @Size(max = 50) String dataPolicy,
+        LocalDate identifiedUntil,
+        LocalDate pseudonymizedAt,
+        LocalDate researchUntil
 ) {
 }

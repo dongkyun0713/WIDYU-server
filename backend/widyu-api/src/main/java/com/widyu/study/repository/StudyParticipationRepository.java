@@ -9,7 +9,7 @@ public interface StudyParticipationRepository extends JpaRepository<StudyPartici
 
     Optional<StudyParticipation> findByParticipationId(String participationId);
 
-    boolean existsByParticipationId(String participationId);
-
-    boolean existsByMemberIdAndStatus(Long memberId, StudyParticipationStatus status);
+    /** 같은 연구·회원의 ACTIVE 참여는 하나뿐이다(LLD-0052 5절). */
+    boolean existsByStudyIdAndMemberIdAndStatus(
+            String studyId, Long memberId, StudyParticipationStatus status);
 }

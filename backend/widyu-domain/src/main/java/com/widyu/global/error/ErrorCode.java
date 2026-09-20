@@ -146,6 +146,8 @@ public enum ErrorCode {
     RUN_MARKER_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "RUN_4002", "마커 시각이 회차 구간을 벗어났습니다."),
     RUN_NOT_CLOSED(HttpStatus.BAD_REQUEST, "RUN_4003", "닫힌 측정회차만 내보낼 수 있습니다."),
     RUN_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4042", "내보내기 작업을 찾을 수 없습니다."),
+    RUN_RESEARCH_PARTICIPATION_REQUIRED(HttpStatus.BAD_REQUEST, "RUN_4004", "연구 회차에는 유효한 참여 기록이 필요합니다."),
+    RUN_RESEARCH_PARTICIPATION_MISMATCH(HttpStatus.BAD_REQUEST, "RUN_4005", "참여 기록의 회원과 회차 대상 회원이 다릅니다."),
 
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
