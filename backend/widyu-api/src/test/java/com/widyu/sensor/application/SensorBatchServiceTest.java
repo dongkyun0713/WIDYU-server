@@ -644,6 +644,22 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("자이로 모드가 지시값과 다르면 불일치로 표시하되 배치는 저장한다")
+    void 자이로_모드가_지시값과_다르면_불일치로_표시하되_배치는_저장한다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
+        String triggerMode = batch(ACC, "null").replace("\"gyro_mode\": \"continuous\"", "\"gyro_mode\": \"trigger\"");
+
+        // when
+        SensorBatchResultResponse response = service().ingest(MEMBER_ID, triggerMode.getBytes(UTF_8));
+
+        // then
+        assertThat(response.result()).isEqualTo(SensorBatchResult.STORED);
+        assertThat(savedBatch().getConfigMismatch()).isTrue();
+    }
+
+    @Test
     @DisplayName("연구 회차에 귀속된 배치가 product로 오면 불일치로 표시한다")
     void 연구_회차에_귀속된_배치가_product로_오면_불일치로_표시한다() {
         // given
