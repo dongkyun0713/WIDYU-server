@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 import com.widyu.global.error.BusinessException;
@@ -38,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CollectionRunService 단위 테스트")
@@ -53,6 +55,7 @@ class CollectionRunServiceTest {
     @Mock private RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     @Mock private RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     @Mock private RunMarkerRepository runMarkerRepository;
+    @Mock private RunMarkerInsertService runMarkerInsertService;
     @Mock private MemberRepository memberRepository;
     @Mock private ClockMappingService clockMappingService;
     @Mock private com.widyu.admin.application.AdminAuditLogService adminAuditLogService;
@@ -224,8 +227,9 @@ class CollectionRunServiceTest {
 
         // then
         assertThat(response.runId()).isEqualTo(RUN_ID);
-        then(runMarkerRepository).should(never()).save(any());
-        then(clockMappingService).should(never()).register(any(), anyString(), anyLong(), anyLong());
+        then(runMarkerInsertService).should(never()).insert(any());
+        then(clockMappingService).should().register(
+                any(), eq(request.sourceDeviceId()), anyLong(), anyLong());
     }
 
     @Test
@@ -243,7 +247,7 @@ class CollectionRunServiceTest {
                 collectionRunService.registerMarker(RUN_ID, markerRequest(STARTED_AT_MS + 99_000L)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_MARKER_CONFLICT);
-        then(runMarkerRepository).should(never()).save(any());
+        then(runMarkerInsertService).should(never()).insert(any());
     }
 
     @Test
@@ -263,10 +267,31 @@ class CollectionRunServiceTest {
         then(clockMappingService).should().register(
                 any(), eq("op-1"), eq(55_120_000_001L), eq(55_120_000_001L));
         ArgumentCaptor<RunMarker> saved = ArgumentCaptor.forClass(RunMarker.class);
-        then(runMarkerRepository).should().save(saved.capture());
+        then(runMarkerInsertService).should().insert(saved.capture());
         assertThat(saved.getValue().getMarkerId()).isEqualTo("01j8zmark0000000000000001");
         assertThat(saved.getValue().getLabel()).isEqualTo("sit_to_stand");
         assertThat(saved.getValue().getClockMappingId()).isEqualTo("cm-op-1");
+    }
+
+    @Test
+    @DisplayName("동시에 같은 마커를 등록해도 같은 내용이면 기존 회차를 반환한다")
+    void 동시에_같은_마커를_등록해도_같은_내용이면_기존_회차를_반환한다() {
+        // given
+        CollectionRun run = openRun();
+        RunMarkerRequest request = markerRequest(STARTED_AT_MS + 12_000L);
+        given(collectionRunRepository.findByRunId(RUN_ID)).willReturn(Optional.of(run));
+        given(runMarkerRepository.findByMarkerId(request.markerId()))
+                .willReturn(Optional.empty(), Optional.of(markerOf(run, request)));
+        givenEmptyRunContents(run);
+        willThrow(new DataIntegrityViolationException("marker_id"))
+                .given(runMarkerInsertService).insert(any(RunMarker.class));
+
+        // when
+        CollectionRunResponse response = collectionRunService.registerMarker(RUN_ID, request);
+
+        // then
+        assertThat(response.runId()).isEqualTo(RUN_ID);
+        then(runMarkerInsertService).should().insert(any(RunMarker.class));
     }
 
     @Test
@@ -282,7 +307,7 @@ class CollectionRunServiceTest {
                 collectionRunService.registerMarker(RUN_ID, markerRequest(STARTED_AT_MS - 1L)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_MARKER_OUT_OF_RANGE);
-        then(runMarkerRepository).should(never()).save(any());
+        then(runMarkerInsertService).should(never()).insert(any());
         then(clockMappingService).should(never()).register(any(), anyString(), anyLong(), anyLong());
     }
 
