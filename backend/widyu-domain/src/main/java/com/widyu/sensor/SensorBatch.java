@@ -203,6 +203,10 @@ public class SensorBatch extends BaseTimeEntity {
     @Column(name = "payload_sha256", nullable = false, columnDefinition = "CHAR(64)")
     private String payloadSha256;
 
+    /** 앱이 적용한 설정이 서버 지시값과 다른 배치. 거부하지 않고 표시만 한다(지시서 B12). */
+    @Column(name = "config_mismatch", nullable = false)
+    private Boolean configMismatch;
+
     @Builder
     private SensorBatch(
             String batchId, Member member, String stream, String source,
@@ -220,7 +224,7 @@ public class SensorBatch extends BaseTimeEntity {
             Boolean gyroBackfill, String backfillFor,
             Boolean isResend, String originalBatchId, Long originalSeq,
             String originalRunId, String originalSessionId, Long resentAtMs,
-            String s3Key, Integer byteSize, String payloadSha256
+            String s3Key, Integer byteSize, String payloadSha256, Boolean configMismatch
     ) {
         this.batchId = batchId;
         this.member = member;
@@ -272,5 +276,6 @@ public class SensorBatch extends BaseTimeEntity {
         this.s3Key = s3Key;
         this.byteSize = byteSize;
         this.payloadSha256 = payloadSha256;
+        this.configMismatch = configMismatch;
     }
 }

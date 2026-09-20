@@ -203,11 +203,11 @@ erDiagram
         String deviceId
         String sessionId
         Long seq
-        String studyId "받은 값 그대로, null 허용"
-        String participationId "받은 값 그대로, null 허용"
-        String runId "받은 값 그대로, null 허용"
+        String studyId "서버가 검증한 회차 값, null 허용"
+        String participationId "서버가 검증한 회차 값, null 허용"
+        String runId "회원·기기·측정 시각 검증을 통과한 회차, null 허용"
         String bootId "시계 환산 원본 ①"
-        String clockMappingId "② (FK는 B3 후속)"
+        String clockMappingId "② clock_mapping의 FK 없는 참조"
         Long anchorElapsedNs "③ 문자열→long 무손실"
         Long anchorEpochMs "④"
         Double uncertaintyMs "⑤"
@@ -246,6 +246,7 @@ erDiagram
         String s3Key
         Integer byteSize
         String payloadSha256 "원문 바이트 해시"
+        Boolean configMismatch "앱 적용 설정이 서버 지시값과 다름 (B12)"
     }
 
     CollectionRun {
@@ -555,6 +556,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
 | 2026-09-20 | `collection_run`·`run_device_assignment`·`run_marker` | 신규 테이블 3개 (LLD-0045). 측정회차·기기 배정·마커 | `scripts/mysql/create_collection_run.sql` |
 | 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |
 | 2026-09-19 | `sensor_batch` | v2 형식으로 통째 교체 (LLD-0041 v2). `batch_id` 멱등 키, 시계 5값 원본 보존, 시각 4단계. 미배포 테이블이라 DROP 후 재생성 | `scripts/mysql/create_sensor_batch.sql` |

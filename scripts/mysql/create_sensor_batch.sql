@@ -70,6 +70,8 @@ CREATE TABLE sensor_batch (
     s3_key VARCHAR(255) NOT NULL,
     byte_size INT NOT NULL,
     payload_sha256 CHAR(64) NOT NULL,
+    -- 앱이 적용한 설정이 서버 지시값과 다른 배치(LLD-0046). 거부하지 않고 표시만 한다.
+    config_mismatch BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,

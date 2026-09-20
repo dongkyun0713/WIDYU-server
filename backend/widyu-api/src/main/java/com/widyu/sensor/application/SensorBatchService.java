@@ -54,6 +54,7 @@ public class SensorBatchService {
     private static final String STREAM_WATCH = "imu_watch";
     private static final String SOURCE_WATCH = "watch";
     private static final String SOURCE_PHONE = "phone";
+    private static final String MODE_PRODUCT = "product";
     private static final int FORMAT_VERSION = 2;
     private static final int MAX_SAMPLES = 1000;
     private static final int AXIS_COLUMNS = 3;
@@ -131,6 +132,8 @@ public class SensorBatchService {
             return duplicateOrReject(memberId, request, payloadSha256, existingBatch.get());
         }
 
+        boolean configMismatch = configMismatch(request, memberId, attribution);
+
         String objectKey = "sensor/%d/%s/%s/%s-%s.json".formatted(
                 memberId, request.deviceId(), request.stream(), request.batchId(), payloadSha256);
         s3Service.uploadBytes(objectKey, payload, CONTENT_TYPE);
@@ -138,7 +141,7 @@ public class SensorBatchService {
         long persistedAtMs = System.currentTimeMillis();
         try {
             sensorBatchRepository.save(toEntity(member, request, payload, payloadSha256, objectKey,
-                    attribution, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
+                    attribution, configMismatch, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
@@ -366,8 +369,13 @@ public class SensorBatchService {
     /** 환산한 측정 구간(epoch ms). */
     private record MeasuredRange(long startMs, long endMs) {}
 
-    /** 이 배치가 붙을 회차와 연구 식별자. 셋 다 null이면 운영 외 자료다. */
-    private record RunAttribution(String runId, String studyId, String participationId) {}
+    /**
+     * 이 배치가 붙을 회차와 연구 식별자. 셋 다 null이면 운영 외 자료다.
+     * {@code collectionMode}는 회차를 실제로 조회했을 때만 채워진다. 설정 대조의 기준값이며,
+     * 앱이 실어 보낸 {@code run_id}를 그대로 쓴 경우에는 추가 조회를 하지 않아 null이다.
+     */
+    private record RunAttribution(
+            String runId, String studyId, String participationId, String collectionMode) {}
 
     /** 환산식이 단조라 elapsed 최소·최대를 환산한 값이 곧 epoch 최소·최대다(LLD-0041 4.3). */
     private MeasuredRange measuredRange(SensorBatchRequest request, ElapsedRange elapsed) {
@@ -396,13 +404,60 @@ public class SensorBatchService {
         Optional<CollectionRun> run =
                 collectionRunService.resolveRun(memberId, request.deviceId(), measuredAtStartMs);
         if (run.isEmpty()) {
-            return new RunAttribution(null, request.studyId(), request.participationId());
+            return new RunAttribution(null, request.studyId(), request.participationId(), null);
         }
         return attributionOf(run.get());
     }
 
     private RunAttribution attributionOf(CollectionRun run) {
-        return new RunAttribution(run.getRunId(), run.getStudyId(), run.getParticipationId());
+        return new RunAttribution(
+                run.getRunId(), run.getStudyId(), run.getParticipationId(), run.getCollectionMode());
+    }
+
+    /**
+     * 앱이 적용한 설정을 서버 지시값과 대조한다(지시서 B12 「확인」). 다르면 표시만 하고 거부하지 않는다.
+     * 설정이 적용되지 않은 채 도는 상황을 조용히 넘기지 않는 것이 목적이다.
+     * 로그에는 다른 필드 <b>이름만</b> 남긴다(정책 1.6.7).
+     */
+    private boolean configMismatch(
+            SensorBatchRequest request, Long memberId, RunAttribution attribution) {
+        SensorProperties.Config config = sensorProperties.config();
+        List<String> mismatchedFields = new ArrayList<>();
+
+        Optional<String> baselineMode = baselineCollectionMode(attribution);
+        // 모르는 회차면 기준이 없다. 다른 필드는 그대로 대조하고 수집 모드만 건너뛴다.
+        if (baselineMode.isPresent() && !baselineMode.get().equals(request.collectionMode())) {
+            mismatchedFields.add("collection_mode");
+        }
+        if (!config.gyroMode().equals(request.gyroMode())) {
+            mismatchedFields.add("gyro_mode");
+        }
+        if (request.acc() != null && request.acc().fsHzRequested() != null
+                && Double.compare(request.acc().fsHzRequested(), config.accFsHz()) != 0) {
+            mismatchedFields.add("acc.fs_hz_requested");
+        }
+
+        if (mismatchedFields.isEmpty()) {
+            return false;
+        }
+        log.warn("센서 설정 불일치: memberId={}, batchId={}, fields={}",
+                memberId, request.batchId(), mismatchedFields);
+        return true;
+    }
+
+    /**
+     * 기준 수집 모드. 회차가 없으면 평시이므로 product다. 회차는 정해졌는데 그 값을 모르면
+     * (앱이 {@code run_id}를 실어 보냈거나 재전송이라 서버가 회차를 조회하지 않은 경우)
+     * 배치당 한 번 조회한다. 모르는 회차면 기준이 없어 비워 둔다.
+     */
+    private Optional<String> baselineCollectionMode(RunAttribution attribution) {
+        if (attribution.runId() == null) {
+            return Optional.of(MODE_PRODUCT);
+        }
+        if (attribution.collectionMode() != null) {
+            return Optional.of(attribution.collectionMode());
+        }
+        return collectionRunService.findCollectionMode(attribution.runId());
     }
 
     private String originalRunId(SensorBatchRequest request) {
@@ -420,6 +475,7 @@ public class SensorBatchService {
             String payloadSha256,
             String objectKey,
             RunAttribution attribution,
+            boolean configMismatch,
             long serverReceivedAtMs,
             long acceptedAtMs,
             long persistedAtMs,
@@ -465,7 +521,8 @@ public class SensorBatchService {
                 .isResend(false)
                 .s3Key(objectKey)
                 .byteSize(payload.length)
-                .payloadSha256(payloadSha256);
+                .payloadSha256(payloadSha256)
+                .configMismatch(configMismatch);
 
         // gyro가 null이면 축 컬럼도 null로 둔다. 0으로 채우면 정지 상태로 읽힌다(검사기 D1).
         if (request.acc() != null) {
