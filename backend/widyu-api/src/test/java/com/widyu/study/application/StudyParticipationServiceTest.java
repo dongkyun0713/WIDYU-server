@@ -125,6 +125,35 @@ class StudyParticipationServiceTest {
     }
 
     @Test
+    @DisplayName("보관 정책만 있고 날짜가 없으면 예외가 발생한다")
+    void 보관_정책만_있고_날짜가_없으면_예외가_발생한다() {
+        // given
+        givenExistingMember();
+        StudyParticipationCreateRequest request = createRequest(null, "KR_IRB", null, null, null);
+
+        // when & then
+        assertThatThrownBy(() -> studyParticipationService.register(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
+        then(studyParticipationRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("보관 날짜만 있고 정책이 없으면 예외가 발생한다")
+    void 보관_날짜만_있고_정책이_없으면_예외가_발생한다() {
+        // given
+        givenExistingMember();
+        StudyParticipationCreateRequest request =
+                createRequest(null, null, IDENTIFIED_UNTIL, PSEUDONYMIZED_AT, RESEARCH_UNTIL);
+
+        // when & then
+        assertThatThrownBy(() -> studyParticipationService.register(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
+        then(studyParticipationRepository).should(never()).save(any());
+    }
+
+    @Test
     @DisplayName("보관 날짜 순서가 역전되면 예외가 발생한다")
     void 보관_날짜_순서가_역전되면_예외가_발생한다() {
         // given
@@ -234,7 +263,7 @@ class StudyParticipationServiceTest {
     @DisplayName("다른 회원의 참여 기록으로 연구 회차를 열려고 하면 예외가 발생한다")
     void 다른_회원의_참여_기록으로_연구_회차를_열려고_하면_예외가_발생한다() {
         // given
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(activeParticipation()));
 
         // when & then
@@ -249,7 +278,7 @@ class StudyParticipationServiceTest {
         // given
         StudyParticipation participation = activeParticipation();
         participation.withdraw(WithdrawalScope.ALL, null, java.time.LocalDateTime.now());
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
 
         // when & then

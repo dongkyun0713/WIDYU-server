@@ -131,7 +131,7 @@ public class StudyParticipation extends BaseTimeEntity {
             LocalDate pseudonymizedAt,
             LocalDate researchUntil
     ) {
-        validateRetention(identifiedUntil, pseudonymizedAt, researchUntil);
+        validateRetention(dataPolicy, identifiedUntil, pseudonymizedAt, researchUntil);
         this.studyId = studyId;
         this.participationId = participationId;
         this.member = member;
@@ -176,7 +176,7 @@ public class StudyParticipation extends BaseTimeEntity {
     /** IRB 보관 계획 수정. 이력은 호출자가 snapshot으로 남긴다. */
     public void changeRetention(
             String dataPolicy, LocalDate identifiedUntil, LocalDate pseudonymizedAt, LocalDate researchUntil) {
-        validateRetention(identifiedUntil, pseudonymizedAt, researchUntil);
+        validateRetention(dataPolicy, identifiedUntil, pseudonymizedAt, researchUntil);
         this.dataPolicy = dataPolicy;
         this.identifiedUntil = identifiedUntil;
         this.pseudonymizedAt = pseudonymizedAt;
@@ -225,15 +225,17 @@ public class StudyParticipation extends BaseTimeEntity {
     }
 
     /**
-     * 보관 날짜는 셋 전부이거나 전무다. IRB 승인 전이라 아직 못 정한 상태와,
+     * 보관 계획은 정책과 날짜 셋이 전부이거나 전무다. IRB 승인 전이라 아직 못 정한 상태와,
      * 일부만 정해 빠진 값이 무한 보관으로 읽히는 상태를 구분한다(LLD-0052 3절).
+     * 날짜만 있으면 무슨 규정으로 지우는지 모르고, 정책만 있으면 언제까지인지 모른다.
      */
-    private static void validateRetention(
-            LocalDate identifiedUntil, LocalDate pseudonymizedAt, LocalDate researchUntil) {
-        if (identifiedUntil == null && pseudonymizedAt == null && researchUntil == null) {
+    private static void validateRetention(String dataPolicy, LocalDate identifiedUntil,
+            LocalDate pseudonymizedAt, LocalDate researchUntil) {
+        boolean policyAbsent = dataPolicy == null || dataPolicy.isBlank();
+        if (policyAbsent && identifiedUntil == null && pseudonymizedAt == null && researchUntil == null) {
             return;
         }
-        if (identifiedUntil == null || pseudonymizedAt == null || researchUntil == null) {
+        if (policyAbsent || identifiedUntil == null || pseudonymizedAt == null || researchUntil == null) {
             throw new BusinessException(ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
         }
         if (identifiedUntil.isAfter(pseudonymizedAt) || pseudonymizedAt.isAfter(researchUntil)) {

@@ -62,7 +62,7 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 }
 ```
 
-보관 계획 수정은 날짜 셋과 `dataPolicy`를 모두 선택값으로 받는다. 날짜를 하나라도 입력하면 세 날짜를 모두 입력해야 하며 `identifiedUntil <= pseudonymizedAt <= researchUntil`이어야 한다. 보관 날짜와 정책은 아직 IRB 승인이 없으면 모두 `null`로 둘 수 있다.
+보관 계획 수정은 `dataPolicy`와 날짜 셋을 **함께 넣거나 모두 비운다**. 넷 중 하나라도 있으면 넷이 모두 있어야 하고 `identifiedUntil <= pseudonymizedAt <= researchUntil`이어야 한다. 날짜만 있으면 무슨 규정으로 지우는지 알 수 없고, 정책만 있으면 언제까지인지 알 수 없다. 아직 IRB 승인이 없으면 넷을 모두 `null`로 둔다.
 
 철회 요청은 `scope=ALL` 또는 `SELECTED_CONSENTS`다. 후자는 비어 있지 않은 `consentKeys`가 필요하다. 철회 성공 시 상태는 `WITHDRAWN`, `withdrawnAt`은 서버 시각, `deletionProcessedAt`은 관리자가 후속 수동 삭제를 마친 때에만 별도 수정 API로 채운다. 이 LLD에서는 철회 요청으로 삭제를 수행하지 않는다.
 
@@ -78,7 +78,7 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 | `participation_id` | UK, NOT NULL | 서버 발급 외부 식별자 |
 | `study_id`, `member_id` | NOT NULL | 연구·회원 연결 |
 | `consent_version`, `consented_at` | NOT NULL | 서면 연구동의 판·서명일 |
-| `data_policy`, 날짜 3개 | NULL 허용 | IRB 확정 전 빈 값 허용 |
+| `data_policy`, 날짜 3개 | NULL 허용 | IRB 확정 전 빈 값 허용. 넷이 전부 있거나 전부 비어 있어야 한다 |
 | `status` | NOT NULL | `ACTIVE`, `ENDED`, `WITHDRAWN` |
 | `withdrawn_at`, `withdrawal_scope`, `deletion_processed_at` | NULL 허용 | 철회 및 수동 처리 추적 |
 
@@ -103,8 +103,8 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 ### 연구 회차 개설 게이트
 
 1. `collectionMode`가 `research`이면 `participationId`가 없을 때 거절한다.
-2. 해당 참여 기록을 조회하고 대상 회원과 일치하며 상태가 `ACTIVE`인지 확인한다.
-3. 새 `CollectionRun`은 참여기록 FK만 저장한다. 연구 ID·동의 판·보관 값은 요청값을 신뢰하지 않고 참여기록에서 조회한다.
+2. **회차를 저장하는 트랜잭션 안에서** 참여 기록을 `PESSIMISTIC_WRITE`로 잠그고 읽어, 대상 회원과 일치하며 상태가 `ACTIVE`인지 확인한다. 검사와 저장이 다른 트랜잭션이면 그 사이에 들어온 철회를 놓쳐 `WITHDRAWN` 참여로 연구 회차가 열린다. 검사 메서드는 `MANDATORY` 전파로 호출자 트랜잭션을 요구한다.
+3. 새 `CollectionRun`은 참여기록 FK만 저장한다. 연구 ID·동의 판·보관 값은 요청값을 신뢰하지 않고 참여기록에서 조회한다. FK는 같은 트랜잭션에서 잠금 재조회한 기록을 붙인다.
 4. `product` 회차는 참여 기록 없이 기존처럼 개설한다.
 
 ### 철회
@@ -132,11 +132,11 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [x] 등록 시 서버 발급 `participation_id`, 연구 동의 판·서명일, 선택 동의가 저장·조회된다.
-- [x] 보관 날짜·`dataPolicy`가 모두 비어 있는 참여 기록을 등록할 수 있다.
-- [x] 날짜를 일부만 주거나 순서가 역전되면 거절한다.
+- [x] 보관 날짜와 `dataPolicy`가 **모두** 비어 있는 참여 기록을 등록할 수 있다.
+- [x] `dataPolicy`와 날짜 셋 중 일부만 주거나 순서가 역전되면 거절한다.
 - [x] 같은 연구·회원에게 ACTIVE 참여 기록을 두 번 만들 수 없다.
 - [x] 보관 계획 수정·철회·처리 완료는 각각 불변 변경 이력을 남긴다.
-- [x] 연구 회차는 ACTIVE 참여 기록 없이, 또는 다른 회원의 참여 기록으로 열 수 없다.
+- [x] 연구 회차는 ACTIVE 참여 기록 없이, 또는 다른 회원의 참여 기록으로 열 수 없다. 검사와 저장 사이에 철회가 들어와도 열리지 않는다.
 - [x] 연구 회차의 연구 메타데이터는 요청이 아닌 참여 기록에서 읽고, product 회차는 기존 흐름을 유지한다.
 - [x] 이름·전화번호·건강값·좌표가 참여기록 요청/응답/로그에 없다.
 - [x] `./gradlew compileJava`, 관련 API 테스트, `bash scripts/harness/verify.sh --base <merge-base>`가 통과한다.
