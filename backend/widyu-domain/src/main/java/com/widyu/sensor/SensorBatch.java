@@ -21,8 +21,9 @@ import lombok.NoArgsConstructor;
 /**
  * 원시 센서 배치 1건의 인덱스 행(ADR-0030 v2, LLD-0041 4.2).
  * 페이로드는 S3 객체 하나에 원문 바이트 그대로 있고, 이 행이 그 객체의 유일한 목록이다.
- * {@code s3_key}는 {@code sensor/{memberId}/{deviceId}/{stream}/{batch_id}.json}이며
- * {@code batch_id}가 앱이 붙인 불변 멱등 키다.
+ * {@code s3_key}는 {@code sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{sha256}.json}이며
+ * {@code batch_id}가 앱이 붙인 불변 멱등 키다. 해시는 경합하는 서로 다른 원문이 같은 객체를
+ * 덮어쓰지 않게 하고, 중복 판정 자체는 {@code batch_id}와 저장된 해시를 함께 확인한다.
  *
  * <p>컬럼이 많아 위치 인자 팩토리 대신 빌더를 공개한다. 인접한 Long 컬럼이 많아
  * 순서가 뒤바뀌어도 컴파일러가 잡아주지 못하기 때문이다.
@@ -101,6 +102,10 @@ public class SensorBatch extends BaseTimeEntity {
     @Column(name = "gyro_n")
     private Integer gyroN;
 
+    /** 심박 배치의 샘플 수. IMU는 축별 {@code acc_n}·{@code gyro_n}을 쓰므로 null이다. */
+    @Column(name = "sample_count")
+    private Integer sampleCount;
+
     @Column(name = "acc_t0_elapsed_ns")
     private Long accT0ElapsedNs;
 
@@ -135,10 +140,11 @@ public class SensorBatch extends BaseTimeEntity {
     @Column(name = "model_available_at_server_ms", nullable = false)
     private Long modelAvailableAtServerMs;
 
-    @Column(name = "collection_mode", nullable = false, length = 10)
+    // 심박 배치에는 없는 개념이라 NULL을 허용한다. IMU 필수는 서비스 검증이 보장한다(ADR-0031).
+    @Column(name = "collection_mode", length = 10)
     private String collectionMode;
 
-    @Column(name = "gyro_mode", nullable = false, length = 20)
+    @Column(name = "gyro_mode", length = 20)
     private String gyroMode;
 
     @Column(name = "on_body", nullable = false)
@@ -212,7 +218,8 @@ public class SensorBatch extends BaseTimeEntity {
             String deviceId, String sessionId, Long seq,
             String studyId, String participationId, String runId,
             String bootId, String clockMappingId, Long anchorElapsedNs, Long anchorEpochMs, Double uncertaintyMs,
-            Integer accN, Integer gyroN, Long accT0ElapsedNs, Long gyroT0ElapsedNs,
+            Integer accN, Integer gyroN, Integer sampleCount,
+            Long accT0ElapsedNs, Long gyroT0ElapsedNs,
             Double accFsHzRequested, Double gyroFsHzRequested,
             Long measuredAtStartMs, Long measuredAtEndMs,
             Long phoneReceivedAtMs, Long serverReceivedAtMs, Long acceptedAtMs,
@@ -242,6 +249,7 @@ public class SensorBatch extends BaseTimeEntity {
         this.uncertaintyMs = uncertaintyMs;
         this.accN = accN;
         this.gyroN = gyroN;
+        this.sampleCount = sampleCount;
         this.accT0ElapsedNs = accT0ElapsedNs;
         this.gyroT0ElapsedNs = gyroT0ElapsedNs;
         this.accFsHzRequested = accFsHzRequested;

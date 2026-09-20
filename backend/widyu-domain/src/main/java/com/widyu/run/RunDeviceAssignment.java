@@ -25,8 +25,10 @@ import lombok.NoArgsConstructor;
 @Getter
 @Table(
     name = "run_device_assignment",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_run_device_assignment_id", columnNames = "assignment_id"),
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_run_device_assignment_id", columnNames = "assignment_id"),
+        @UniqueConstraint(name = "uk_run_device_assignment_active", columnNames = {"device_id", "active_marker"})
+    },
     indexes = @Index(
         name = "idx_run_device_assignment_device", columnList = "device_id, unassigned_at_ms")
 )
@@ -60,6 +62,10 @@ public class RunDeviceAssignment extends BaseTimeEntity {
     @Column(name = "unassigned_at_ms")
     private Long unassignedAtMs;
 
+    /** 배정 중인 기기만 1이다. 기기는 동시에 한 회차에만 배정할 수 있다. */
+    @Column(name = "active_marker")
+    private Integer activeMarker;
+
     @Builder
     private RunDeviceAssignment(
             String assignmentId,
@@ -75,10 +81,12 @@ public class RunDeviceAssignment extends BaseTimeEntity {
         this.role = role;
         this.wearSite = wearSite;
         this.assignedAtMs = assignedAtMs;
+        this.activeMarker = 1;
     }
 
     public void unassign(Long unassignedAtMs) {
         this.unassignedAtMs = unassignedAtMs;
+        this.activeMarker = null;
     }
 
     public boolean isAssigned() {

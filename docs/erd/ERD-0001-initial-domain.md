@@ -194,11 +194,21 @@ erDiagram
         String location
     }
 
+    HeartRateEvent {
+        Long id PK
+        Long member_id FK
+        Integer heartRate
+        LocalDateTime measuredAt "Asia/Seoul 환산, UK (member_id, measured_at)"
+        HeartRateStatus status
+        String accuracy "워치 보고 정확도 (단건 경로는 null)"
+        String batchId "배치 원문 참조 (단건 경로는 null)"
+    }
+
     SensorBatch {
         Long id PK
         String batchId UK "앱이 붙인 불변 멱등 키 (ULID)"
         Long member_id FK
-        String stream "imu_watch / imu_phone"
+        String stream "imu_watch / imu_phone / hr"
         String source "watch / phone"
         String deviceId
         String sessionId
@@ -213,6 +223,7 @@ erDiagram
         Double uncertaintyMs "⑤"
         Integer accN "없으면 null"
         Integer gyroN "없으면 null (0 치환 금지)"
+        Integer sampleCount "심박 배치 샘플 수 (IMU는 null)"
         Long accT0ElapsedNs
         Long gyroT0ElapsedNs
         Double accFsHzRequested
@@ -224,8 +235,8 @@ erDiagram
         Long acceptedAtMs
         Long persistedAtMs
         Long modelAvailableAtServerMs "소급 금지"
-        String collectionMode "product / research"
-        String gyroMode "continuous / trigger"
+        String collectionMode "product / research (심박은 null)"
+        String gyroMode "continuous / trigger (심박은 null)"
         Boolean onBody
         String wearState
         String missingReason
@@ -288,6 +299,7 @@ erDiagram
         Long startedAtMs
         Long endedAtMs
         CollectionRunStatus status "OPEN / CLOSED"
+        Integer openMarker "OPEN=1, UK(member_id, open_marker)"
         String dataPolicy "RETAIN 등 (값 집합 미정)"
         LocalDate identifiedUntil
         LocalDate pseudonymizedAt
@@ -306,6 +318,7 @@ erDiagram
         String wearSite "값 집합 S1 미정"
         Long assignedAtMs
         Long unassignedAtMs "null이면 배정 중"
+        Integer activeMarker "배정 중=1, UK(device_id, active_marker)"
     }
 
     RunMarker {
@@ -465,6 +478,7 @@ erDiagram
     Member ||--o{ MedicationProof : "복약 인증"
     Member ||--o{ Walk : "걸음 기록"
     Member ||--o{ HeartRateEmergency : "심박 이상"
+    Member ||--o{ HeartRateEvent : "심박 측정 이력"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
     Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
@@ -556,8 +570,10 @@ erDiagram
 | `clock_mapping` | UK `uk_clock_mapping_id` | `(clock_mapping_id)` | 한 식별자의 다섯 값은 불변. 다르면 409 (LLD-0044) |
 | `clock_mapping` | `idx_clock_mapping_device` | `(device_id)` | 기기별 매핑 조회 |
 | `collection_run` | UK `uk_collection_run_run_id` | `(run_id)` | 서버 발급 회차 식별자 |
+| `collection_run` | UK `uk_collection_run_member_open` | `(member_id, open_marker)` | 열린 회차만 marker=1로 회원당 OPEN 하나를 DB에서 보장 |
 | `collection_run` | `idx_collection_run_member_status` | `(member_id, status)` | 회원의 열린 회차 조회 (B12) |
 | `run_device_assignment` | UK `uk_run_device_assignment_id` | `(assignment_id)` | 배정 식별자 |
+| `run_device_assignment` | UK `uk_run_device_assignment_active` | `(device_id, active_marker)` | 배정 중인 기기만 marker=1로 동시 이중 배정을 DB에서 차단 |
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
 | `run_marker` | UK `uk_run_marker_id` | `(marker_id)` | 마커 멱등 |
 | `run_marker` | `idx_run_marker_run_time` | `(run_id, ts_ms)` | 회차별 마커 시각순 조회 |
@@ -584,6 +600,8 @@ erDiagram
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
+| 2026-09-20 | `heart_rate_event` | `accuracy`·`batch_id` 컬럼 추가 (LLD-0047). 운영 배포 전 필수 | `scripts/mysql/add_heart_rate_event_accuracy.sql` |
+| 2026-09-20 | `sensor_batch` | `sample_count` 추가, `collection_mode`·`gyro_mode` NULL 허용 (LLD-0047, 심박 배치 수용) | `scripts/mysql/alter_sensor_batch_for_hr.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
 | 2026-09-20 | `collection_run`·`run_device_assignment`·`run_marker` | 신규 테이블 3개 (LLD-0045). 측정회차·기기 배정·마커 | `scripts/mysql/create_collection_run.sql` |
 | 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |

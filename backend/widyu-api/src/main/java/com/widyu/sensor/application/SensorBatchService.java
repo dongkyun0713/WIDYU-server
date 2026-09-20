@@ -1,6 +1,7 @@
 package com.widyu.sensor.application;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.cfg.CoercionAction;
@@ -10,11 +11,13 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
+import com.widyu.heart.application.HeartRateBatchService;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.run.CollectionRun;
 import com.widyu.run.application.CollectionRunService;
 import com.widyu.sensor.SensorBatch;
+import com.widyu.sensor.dto.request.HeartRateBatchRequest;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
 import com.widyu.sensor.dto.response.SensorBatchResult;
 import com.widyu.sensor.dto.response.SensorBatchResultResponse;
@@ -28,8 +31,10 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -50,6 +55,13 @@ public class SensorBatchService {
     private static final String CONTENT_TYPE = "application/json";
     private static final String QUALITY_STATUS_OK = "OK";
     private static final String STREAM_WATCH = "imu_watch";
+    private static final String STREAM_PHONE = "imu_phone";
+    private static final String STREAM_HR = "hr";
+    private static final int MAX_HR_SAMPLES = 60;
+    private static final int MAX_BPM = 300;
+    private static final String ACCURACY_UNRELIABLE = "UNRELIABLE";
+    private static final Set<String> ACCURACY_VALUES =
+            Set.of("HIGH", "MEDIUM", "LOW", "UNRELIABLE", "UNKNOWN");
     private static final String SOURCE_WATCH = "watch";
     private static final String SOURCE_PHONE = "phone";
     private static final String MODE_PRODUCT = "product";
@@ -59,9 +71,15 @@ public class SensorBatchService {
     private static final long MAX_DT_NS = 4_294_967_295L;
     private static final long NANOS_PER_MILLI = 1_000_000L;
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
+    private static final int MAX_TRIGGER_KIND_LENGTH = 20;
+    private static final int MAX_BACKFILL_FOR_LENGTH = 255;
+    private static final int MAX_RUN_ID_LENGTH = 64;
+    private static final Pattern BATCH_ID_PATTERN = Pattern.compile("^[a-z0-9]{26}$");
+    private static final Pattern SESSION_ID_PATTERN = Pattern.compile("^[a-z0-9._-]{1,64}$");
 
     private final SensorBatchRepository sensorBatchRepository;
     private final ClockMappingService clockMappingService;
+    private final HeartRateBatchService heartRateBatchService;
     private final CollectionRunService collectionRunService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
@@ -72,6 +90,7 @@ public class SensorBatchService {
     public SensorBatchService(
             SensorBatchRepository sensorBatchRepository,
             ClockMappingService clockMappingService,
+            HeartRateBatchService heartRateBatchService,
             CollectionRunService collectionRunService,
             MemberRepository memberRepository,
             S3Service s3Service,
@@ -81,6 +100,7 @@ public class SensorBatchService {
     ) {
         this.sensorBatchRepository = sensorBatchRepository;
         this.clockMappingService = clockMappingService;
+        this.heartRateBatchService = heartRateBatchService;
         this.collectionRunService = collectionRunService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
@@ -106,9 +126,20 @@ public class SensorBatchService {
             throw new BusinessException(ErrorCode.SENSOR_BATCH_TOO_LARGE);
         }
 
-        SensorBatchRequest request = parse(payload);
-        validate(request);
+        // 심박과 IMU가 같은 endpoint로 온다(ADR-0031 결정 1). stream만 먼저 읽어 DTO를 고른다.
+        JsonNode root = readTree(payload);
+        if (STREAM_HR.equals(streamOf(root))) {
+            return ingestHeartRate(member, memberId, payload, root, serverReceivedAtMs);
+        }
+        return ingestImu(member, memberId, payload, root, serverReceivedAtMs);
+    }
+
+    private SensorBatchResultResponse ingestImu(
+            Member member, Long memberId, byte[] payload, JsonNode root, long serverReceivedAtMs) {
+        SensorBatchRequest request = treeToValue(root, SensorBatchRequest.class);
+        ValidatedBatch validatedBatch = validate(request, root);
         long acceptedAtMs = System.currentTimeMillis();
+        String payloadSha256 = sha256(payload);
 
         // 축 시각 범위는 매핑의 관측 범위와 배치의 환산 시각 양쪽에 쓰므로 한 번만 구한다.
         ElapsedRange elapsed = elapsedRange(request);
@@ -116,45 +147,65 @@ public class SensorBatchService {
         clockMappingService.register(
                 request.clock(), request.deviceId(), elapsed.minNs(), elapsed.maxNs());
 
-        MeasuredRange measured = measuredRange(request, elapsed);
-        RunAttribution attribution = resolveAttribution(request, memberId, measured.startMs());
-
-        if (sensorBatchRepository.existsByBatchId(request.batchId())) {
-            return logged(memberId, request, SensorBatchResult.DUPLICATE);
+        RunAttribution attribution = resolveAttribution(
+                request, memberId, validatedBatch.measuredTimeRange().startMs());
+        Optional<SensorBatch> existingBatch = sensorBatchRepository.findByBatchId(request.batchId());
+        if (existingBatch.isPresent()) {
+            return duplicateOrReject(memberId, request, payloadSha256, existingBatch.get());
         }
 
         boolean configMismatch = configMismatch(request, memberId, attribution);
 
-        String objectKey = "sensor/%d/%s/%s/%s.json".formatted(
-                memberId, request.deviceId(), request.stream(), request.batchId());
+        String objectKey = "sensor/%d/%s/%s/%s-%s.json".formatted(
+                memberId, request.deviceId(), request.stream(), request.batchId(), payloadSha256);
         s3Service.uploadBytes(objectKey, payload, CONTENT_TYPE);
 
         long persistedAtMs = System.currentTimeMillis();
         try {
-            sensorBatchRepository.save(toEntity(member, request, payload, objectKey, measured,
-                    attribution, configMismatch, serverReceivedAtMs, acceptedAtMs, persistedAtMs));
+            sensorBatchRepository.save(toEntity(member, request, payload, payloadSha256, objectKey,
+                    attribution, configMismatch, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
-            if (!sensorBatchRepository.existsByBatchId(request.batchId())) {
+            Optional<SensorBatch> concurrentlyStored = sensorBatchRepository.findByBatchId(request.batchId());
+            if (concurrentlyStored.isEmpty()) {
                 throw e;
             }
-            return logged(memberId, request, SensorBatchResult.DUPLICATE);
+            return duplicateOrReject(memberId, request, payloadSha256, concurrentlyStored.get());
         }
-
         return logged(memberId, request, SensorBatchResult.STORED);
     }
 
-    private SensorBatchRequest parse(byte[] payload) {
+    private JsonNode readTree(byte[] payload) {
         try {
-            return payloadMapper.readValue(payload, SensorBatchRequest.class);
+            return payloadMapper.readTree(payload);
         } catch (IOException e) {
             // 예외 메시지에 샘플 값이 섞일 수 있어 어떤 레벨에도 남기지 않는다(정책 1.6.7).
             throw new BusinessException(ErrorCode.SENSOR_PAYLOAD_INVALID);
         }
     }
 
-    private void validate(SensorBatchRequest request) {
+    private String streamOf(JsonNode root) {
+        JsonNode stream = root.get("stream");
+        if (stream == null || !stream.isTextual()) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        String value = stream.asText();
+        if (!STREAM_HR.equals(value) && !STREAM_WATCH.equals(value) && !STREAM_PHONE.equals(value)) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        return value;
+    }
+
+    private <T> T treeToValue(JsonNode root, Class<T> type) {
+        try {
+            return payloadMapper.treeToValue(root, type);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.SENSOR_PAYLOAD_INVALID);
+        }
+    }
+
+    private ValidatedBatch validate(SensorBatchRequest request, JsonNode root) {
         Set<ConstraintViolation<SensorBatchRequest>> violations = validator.validate(request);
         if (!violations.isEmpty()) {
             throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
@@ -166,7 +217,12 @@ public class SensorBatchService {
             throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
         }
         validateAxisPresence(request);
-        validateResend(request.resend());
+        validateResend(request, root.path("resend"));
+        validateTrigger(request.trigger());
+        String backfillFor = validateBackfillFor(request.backfillFor());
+        if (Boolean.TRUE.equals(request.gyroBackfill()) && backfillFor == null) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
 
         parseElapsedNs(request.clock().anchorElapsedNs());
         if (request.acc() != null) {
@@ -178,6 +234,7 @@ public class SensorBatchService {
         if (request.trigger() != null && request.trigger().eventElapsedNs() != null) {
             parseElapsedNs(request.trigger().eventElapsedNs());
         }
+        return new ValidatedBatch(measuredTimeRange(request), backfillFor);
     }
 
     private boolean sourceMatchesStream(SensorBatchRequest request) {
@@ -190,7 +247,7 @@ public class SensorBatchService {
     /** 보강 배치는 자이로만 싣고 원 배치를 가리켜야 한다. 그 밖의 배치는 가속도가 필수다. */
     private void validateAxisPresence(SensorBatchRequest request) {
         if (Boolean.TRUE.equals(request.gyroBackfill())) {
-            if (request.acc() != null || request.gyro() == null || backfillFor(request) == null) {
+            if (request.acc() != null || request.gyro() == null || request.backfillFor() == null) {
                 throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
             }
             return;
@@ -201,14 +258,88 @@ public class SensorBatchService {
     }
 
     /** 재전송이면 계보 6필드를 갖춰야 한다. {@code original_run_id}는 회차가 없던 배치를 위해 null을 허용한다. */
-    private void validateResend(SensorBatchRequest.Resend resend) {
-        if (resend == null || !Boolean.TRUE.equals(resend.isResend())) {
+    private void validateResend(SensorBatchRequest request, JsonNode resendNode) {
+        SensorBatchRequest.Resend resend = request.resend();
+        if (resend == null) {
             return;
         }
-        if (resend.originalBatchId() == null || resend.originalSeq() == null
-                || resend.originalSessionId() == null || resend.resentAtMs() == null) {
+        if (doesNotMatchWhenPresent(BATCH_ID_PATTERN, resend.originalBatchId())
+                || isNegative(resend.originalSeq())
+                || doesNotMatchWhenPresent(SESSION_ID_PATTERN, resend.originalSessionId())
+                || isNegative(resend.resentAtMs())
+                || exceedsLength(resend.originalRunId(), MAX_RUN_ID_LENGTH)) {
             throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
         }
+        if (!Boolean.TRUE.equals(resend.isResend())) {
+            return;
+        }
+        if (!hasLineageFields(resendNode)
+                || resend.originalBatchId() == null
+                || resend.originalSeq() == null
+                || resend.originalSessionId() == null
+                || resend.resentAtMs() == null
+                || !Objects.equals(request.runId(), resend.originalRunId())) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+    }
+
+    private boolean hasLineageFields(JsonNode resendNode) {
+        return resendNode.isObject()
+                && resendNode.has("is_resend")
+                && resendNode.has("original_batch_id")
+                && resendNode.has("original_seq")
+                && resendNode.has("original_run_id")
+                && resendNode.has("original_session_id")
+                && resendNode.has("resent_at_ms");
+    }
+
+    private void validateTrigger(SensorBatchRequest.Trigger trigger) {
+        if (trigger != null && exceedsLength(trigger.kind(), MAX_TRIGGER_KIND_LENGTH)) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+    }
+
+    private String validateBackfillFor(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        List<String> originalBatchIds = new ArrayList<>();
+        if (node.isTextual()) {
+            originalBatchIds.add(node.textValue());
+        } else if (node.isArray() && !node.isEmpty()) {
+            for (JsonNode element : node) {
+                if (!element.isTextual()) {
+                    throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+                }
+                originalBatchIds.add(element.textValue());
+            }
+        } else {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        if (originalBatchIds.stream().anyMatch(id -> !matches(BATCH_ID_PATTERN, id))) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        String joined = String.join(",", originalBatchIds);
+        if (joined.length() > MAX_BACKFILL_FOR_LENGTH) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        return joined;
+    }
+
+    private boolean matches(Pattern pattern, String value) {
+        return value != null && pattern.matcher(value).matches();
+    }
+
+    private boolean doesNotMatchWhenPresent(Pattern pattern, String value) {
+        return value != null && !matches(pattern, value);
+    }
+
+    private boolean isNegative(Long value) {
+        return value != null && value < 0;
+    }
+
+    private boolean exceedsLength(String value, int maximum) {
+        return value != null && value.length() > maximum;
     }
 
     private void validateAxis(SensorBatchRequest.Axis axis, List<List<Integer>> values) {
@@ -265,7 +396,11 @@ public class SensorBatchService {
         for (SensorBatchRequest.Axis axis : presentAxes(request)) {
             long t0ElapsedNs = parseElapsedNs(axis.t0ElapsedNs());
             minNs = Math.min(minNs, t0ElapsedNs);
-            maxNs = Math.max(maxNs, t0ElapsedNs + sumIntervals(axis));
+            try {
+                maxNs = Math.max(maxNs, Math.addExact(t0ElapsedNs, sumIntervals(axis)));
+            } catch (ArithmeticException e) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
         }
         return new ElapsedRange(minNs, maxNs);
     }
@@ -291,31 +426,31 @@ public class SensorBatchService {
     }
 
     /**
-     * 회차 귀속(LLD-0045 5절). 앱이 실어 보낸 {@code run_id}가 있으면 그대로 쓰고, 재전송이면
-     * 원 회차를 쓴다. 늦게 도착한 자료를 나중 참가자에게 붙이면 안 되기 때문이다(지시서 B4).
-     * 둘 다 없으면 그 시점에 이 기기를 쓰던 열린 회차를 서버가 찾는다.
+     * 회차 귀속(LLD-0045 5절). 앱이 명시한 회차도 회원·기기·측정 시각의 실제 배정과 맞아야 한다.
+     * 재전송은 원 회차를 쓴다. 둘 다 없으면 그 시점에 이 기기를 쓰던 열린 회차를 서버가 찾는다.
      */
     private RunAttribution resolveAttribution(
             SensorBatchRequest request, Long memberId, long measuredAtStartMs) {
         if (request.runId() != null) {
-            return new RunAttribution(
-                    request.runId(), request.studyId(), request.participationId(), null);
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    request.runId(), memberId, request.deviceId(), measuredAtStartMs));
         }
-        String originalRunId = originalRunId(request);
+        String originalRunId = originalRunId(request.resend());
         if (originalRunId != null) {
-            return new RunAttribution(
-                    originalRunId, request.studyId(), request.participationId(), null);
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    originalRunId, memberId, request.deviceId(), measuredAtStartMs));
         }
         Optional<CollectionRun> run =
                 collectionRunService.resolveRun(memberId, request.deviceId(), measuredAtStartMs);
         if (run.isEmpty()) {
             return new RunAttribution(null, request.studyId(), request.participationId(), null);
         }
+        return attributionOf(run.get());
+    }
+
+    private RunAttribution attributionOf(CollectionRun run) {
         return new RunAttribution(
-                run.get().getRunId(),
-                preferRequestValue(request.studyId(), run.get().getStudyId()),
-                preferRequestValue(request.participationId(), run.get().getParticipationId()),
-                run.get().getCollectionMode());
+                run.getRunId(), run.getStudyId(), run.getParticipationId(), run.getCollectionMode());
     }
 
     /**
@@ -364,37 +499,42 @@ public class SensorBatchService {
         return collectionRunService.findCollectionMode(attribution.runId());
     }
 
-    private String originalRunId(SensorBatchRequest request) {
-        SensorBatchRequest.Resend resend = request.resend();
+    private String originalRunId(SensorBatchRequest.Resend resend) {
         if (resend == null || !Boolean.TRUE.equals(resend.isResend())) {
             return null;
         }
         return resend.originalRunId();
     }
 
-    private String preferRequestValue(String requestValue, String runValue) {
-        if (requestValue != null) {
-            return requestValue;
+    private RunAttribution resolveAttribution(
+            Long memberId, String deviceId, String runId, String studyId, String participationId,
+            SensorBatchRequest.Resend resend, long measuredAtStartMs) {
+        String candidateRunId = runId != null ? runId : originalRunId(resend);
+        if (candidateRunId != null) {
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    candidateRunId, memberId, deviceId, measuredAtStartMs));
         }
-        return runValue;
+        return collectionRunService.resolveRun(memberId, deviceId, measuredAtStartMs)
+                .map(this::attributionOf)
+                .orElseGet(() -> new RunAttribution(null, studyId, participationId, null));
     }
 
     private SensorBatch toEntity(
             Member member,
             SensorBatchRequest request,
             byte[] payload,
+            String payloadSha256,
             String objectKey,
-            MeasuredRange measured,
             RunAttribution attribution,
             boolean configMismatch,
             long serverReceivedAtMs,
             long acceptedAtMs,
-            long persistedAtMs
+            long persistedAtMs,
+            ValidatedBatch validatedBatch
     ) {
         SensorBatchRequest.Clock clock = request.clock();
         long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
-        long measuredAtStartMs = measured.startMs();
-        long measuredAtEndMs = measured.endMs();
+        TimeRange measuredTimeRange = validatedBatch.measuredTimeRange();
 
         SensorBatch.SensorBatchBuilder builder = SensorBatch.builder()
                 .batchId(request.batchId())
@@ -412,8 +552,8 @@ public class SensorBatchService {
                 .anchorElapsedNs(anchorElapsedNs)
                 .anchorEpochMs(clock.anchorEpochMs())
                 .uncertaintyMs(clock.uncertaintyMs())
-                .measuredAtStartMs(measuredAtStartMs)
-                .measuredAtEndMs(measuredAtEndMs)
+                .measuredAtStartMs(measuredTimeRange.startMs())
+                .measuredAtEndMs(measuredTimeRange.endMs())
                 .phoneReceivedAtMs(request.phoneReceivedAtMs())
                 .serverReceivedAtMs(serverReceivedAtMs)
                 .acceptedAtMs(acceptedAtMs)
@@ -428,11 +568,11 @@ public class SensorBatchService {
                 .watchBatteryPct(request.watchBatteryPct())
                 .qualityStatus(QUALITY_STATUS_OK)
                 .gyroBackfill(Boolean.TRUE.equals(request.gyroBackfill()))
-                .backfillFor(backfillFor(request))
+                .backfillFor(validatedBatch.backfillFor())
                 .isResend(false)
                 .s3Key(objectKey)
                 .byteSize(payload.length)
-                .payloadSha256(sha256(payload))
+                .payloadSha256(payloadSha256)
                 .configMismatch(configMismatch);
 
         // gyro가 null이면 축 컬럼도 null로 둔다. 0으로 채우면 정지 상태로 읽힌다(검사기 D1).
@@ -454,27 +594,213 @@ public class SensorBatchService {
                 builder.triggerEventElapsedNs(parseElapsedNs(request.trigger().eventElapsedNs()));
             }
         }
-        if (request.resend() != null) {
-            SensorBatchRequest.Resend resend = request.resend();
-            builder.isResend(Boolean.TRUE.equals(resend.isResend()))
-                    .originalBatchId(resend.originalBatchId())
-                    .originalSeq(resend.originalSeq())
-                    .originalRunId(resend.originalRunId())
-                    .originalSessionId(resend.originalSessionId())
-                    .resentAtMs(resend.resentAtMs());
-        }
+        applyResend(builder, request.resend());
         return builder.build();
+    }
+
+    /** 재전송 계보 6필드(지시서 B4). 두 스트림이 같은 규칙을 쓴다. */
+    private void applyResend(SensorBatch.SensorBatchBuilder builder, SensorBatchRequest.Resend resend) {
+        if (resend == null) {
+            return;
+        }
+        builder.isResend(Boolean.TRUE.equals(resend.isResend()))
+                .originalBatchId(resend.originalBatchId())
+                .originalSeq(resend.originalSeq())
+                .originalRunId(resend.originalRunId())
+                .originalSessionId(resend.originalSessionId())
+                .resentAtMs(resend.resentAtMs());
+    }
+
+    // ── 심박 배치(LLD-0047) ──────────────────────────────────────────────
+
+    private SensorBatchResultResponse ingestHeartRate(
+            Member member, Long memberId, byte[] payload, JsonNode root, long serverReceivedAtMs) {
+        HeartRateBatchRequest request = treeToValue(root, HeartRateBatchRequest.class);
+        validateHeartRate(request);
+        long acceptedAtMs = System.currentTimeMillis();
+
+        // 심박은 경과 나노초 축이 없어 관측 범위를 앵커 한 점으로 준다(LLD-0047 5절 3단계).
+        long anchorElapsedNs = parseElapsedNs(request.clock().anchorElapsedNs());
+        clockMappingService.register(
+                request.clock(), request.deviceId(), anchorElapsedNs, anchorElapsedNs);
+
+        // 검증이 ts_ms 엄격 증가를 보장하므로 첫·마지막 샘플이 곧 측정 범위다.
+        List<HeartRateBatchRequest.Sample> samples = request.samples();
+        long measuredAtStartMs = samples.get(0).tsMs();
+        long measuredAtEndMs = samples.get(samples.size() - 1).tsMs();
+
+        RunAttribution attribution = resolveAttribution(memberId, request.deviceId(),
+                request.runId(), request.studyId(), request.participationId(),
+                request.resend(), measuredAtStartMs);
+
+        String payloadSha256 = sha256(payload);
+        Optional<SensorBatch> existingBatch = sensorBatchRepository.findByBatchId(request.batchId());
+        if (existingBatch.isPresent()) {
+            return duplicateOrRejectHeartRate(memberId, request, payloadSha256, existingBatch.get());
+        }
+
+        String objectKey = "sensor/%d/%s/%s/%s-%s.json".formatted(
+                memberId, request.deviceId(), STREAM_HR, request.batchId(), payloadSha256);
+        s3Service.uploadBytes(objectKey, payload, CONTENT_TYPE);
+
+        // 샘플 행이 인덱스 행보다 먼저다. 인덱스가 먼저 생기면 그 뒤 샘플 저장이 실패했을 때
+        // 재전송이 DUPLICATE로 막혀 샘플이 영영 비는 구멍이 생긴다(ADR-0031 결정 4).
+        HeartRateBatchService.BatchOutcome outcome = heartRateBatchService.storeAndAssess(
+                member, request.batchId(), samples, serverReceivedAtMs);
+
+        long persistedAtMs = System.currentTimeMillis();
+        SensorBatch batch = heartRateEntity(member, request, payload, payloadSha256, objectKey, attribution,
+                measuredAtStartMs, measuredAtEndMs, serverReceivedAtMs, acceptedAtMs, persistedAtMs);
+        try {
+            sensorBatchRepository.save(batch);
+        } catch (DataIntegrityViolationException e) {
+            Optional<SensorBatch> concurrentlyStored = sensorBatchRepository.findByBatchId(request.batchId());
+            if (concurrentlyStored.isEmpty()) {
+                throw e;
+            }
+            return duplicateOrRejectHeartRate(memberId, request, payloadSha256, concurrentlyStored.get());
+        }
+        return loggedHeartRate(memberId, request, outcome.aiSkipped(), SensorBatchResult.STORED);
+    }
+
+    private void validateHeartRate(HeartRateBatchRequest request) {
+        Set<ConstraintViolation<HeartRateBatchRequest>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        if (request.v() != FORMAT_VERSION) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        // 계약에서 삭제된 필드다(검사기 E6). 남아 있으면 앱이 옛 형식으로 보내고 있다는 뜻이다.
+        if (isPresent(request.location()) || isPresent(request.context())) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+        validateHeartRateResend(request.runId(), request.resend());
+        parseElapsedNs(request.clock().anchorElapsedNs());
+        validateHeartRateSamples(request.samples());
+    }
+
+    private void validateHeartRateSamples(List<HeartRateBatchRequest.Sample> samples) {
+        if (samples.isEmpty() || samples.size() > MAX_HR_SAMPLES) {
+            throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+        }
+        long previousTsMs = Long.MIN_VALUE;
+        for (HeartRateBatchRequest.Sample sample : samples) {
+            if (sample.bpm() == null || sample.bpm() < 0 || sample.bpm() > MAX_BPM) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
+            // 배치 안에서 엄격 증가여야 한다. 역행·중복 금지(검사기 E2).
+            if (sample.tsMs() == null || sample.tsMs() <= previousTsMs) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
+            if (sample.accuracy() == null || !ACCURACY_VALUES.contains(sample.accuracy())) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
+            // bpm 0은 신뢰할 수 없는 샘플일 때만 허용한다(검사기 E7).
+            if (sample.bpm() == 0 && !ACCURACY_UNRELIABLE.equals(sample.accuracy())) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
+            previousTsMs = sample.tsMs();
+        }
+    }
+
+    private boolean isPresent(JsonNode node) {
+        return node != null && !node.isNull();
+    }
+
+    private void validateHeartRateResend(String runId, SensorBatchRequest.Resend resend) {
+        if (resend == null) {
+            return;
+        }
+        if (doesNotMatchWhenPresent(BATCH_ID_PATTERN, resend.originalBatchId())
+                || isNegative(resend.originalSeq())
+                || doesNotMatchWhenPresent(SESSION_ID_PATTERN, resend.originalSessionId())
+                || isNegative(resend.resentAtMs())
+                || exceedsLength(resend.originalRunId(), MAX_RUN_ID_LENGTH)
+                || (Boolean.TRUE.equals(resend.isResend())
+                && (resend.originalBatchId() == null || resend.originalSeq() == null
+                || resend.originalSessionId() == null || resend.resentAtMs() == null
+                || !Objects.equals(runId, resend.originalRunId())))) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
+        }
+    }
+
+    /** 심박 인덱스 행. 축·충격·설정 대조는 IMU만의 개념이라 비운다(LLD-0047 4절). */
+    private SensorBatch heartRateEntity(
+            Member member,
+            HeartRateBatchRequest request,
+            byte[] payload,
+            String payloadSha256,
+            String objectKey,
+            RunAttribution attribution,
+            long measuredAtStartMs,
+            long measuredAtEndMs,
+            long serverReceivedAtMs,
+            long acceptedAtMs,
+            long persistedAtMs
+    ) {
+        SensorBatchRequest.Clock clock = request.clock();
+        SensorBatch.SensorBatchBuilder builder = SensorBatch.builder()
+                .batchId(request.batchId())
+                .member(member)
+                .stream(STREAM_HR)
+                .source(SOURCE_WATCH)
+                .deviceId(request.deviceId())
+                .sessionId(request.sessionId())
+                .seq(request.seq())
+                .studyId(attribution.studyId())
+                .participationId(attribution.participationId())
+                .runId(attribution.runId())
+                .bootId(clock.bootId())
+                .clockMappingId(clock.clockMappingId())
+                .anchorElapsedNs(parseElapsedNs(clock.anchorElapsedNs()))
+                .anchorEpochMs(clock.anchorEpochMs())
+                .uncertaintyMs(clock.uncertaintyMs())
+                .sampleCount(request.samples().size())
+                // 심박은 샘플마다 벽시계 시각이 실려 와 시계 환산을 하지 않는다.
+                .measuredAtStartMs(measuredAtStartMs)
+                .measuredAtEndMs(measuredAtEndMs)
+                .phoneReceivedAtMs(request.phoneReceivedAtMs())
+                .serverReceivedAtMs(serverReceivedAtMs)
+                .acceptedAtMs(acceptedAtMs)
+                .persistedAtMs(persistedAtMs)
+                .modelAvailableAtServerMs(persistedAtMs)
+                .onBody(request.onBody())
+                .watchBatteryPct(request.watchBatteryPct())
+                .qualityStatus(QUALITY_STATUS_OK)
+                .gyroBackfill(false)
+                .isResend(false)
+                .configMismatch(false)
+                .s3Key(objectKey)
+                .byteSize(payload.length)
+                .payloadSha256(payloadSha256);
+        applyResend(builder, request.resend());
+        return builder.build();
+    }
+
+    private SensorBatchResultResponse loggedHeartRate(
+            Long memberId, HeartRateBatchRequest request, int aiSkipped, SensorBatchResult result) {
+        // 심박 수치·판정 상태·AI 응답은 어떤 레벨에도 남기지 않는다(#639).
+        log.info("심박 배치 수신: memberId={}, stream={}, seq={}, sampleCount={}, aiSkipped={}, result={}",
+                memberId, STREAM_HR, request.seq(), request.samples().size(), aiSkipped, result);
+        return SensorBatchResultResponse.of(request.batchId(), request.seq(), result);
     }
 
     /** 4.3 환산식. 원값이 컬럼에 남으므로 기준점이 바뀌면 다시 환산할 수 있다. */
     private long epochMs(long elapsedNs, SensorBatchRequest.Clock clock, long anchorElapsedNs) {
-        return clock.anchorEpochMs() + Math.floorDiv(elapsedNs - anchorElapsedNs, NANOS_PER_MILLI);
+        try {
+            long elapsedDelta = Math.subtractExact(elapsedNs, anchorElapsedNs);
+            long elapsedDeltaMs = Math.floorDiv(elapsedDelta, NANOS_PER_MILLI);
+            return Math.addExact(clock.anchorEpochMs(), elapsedDeltaMs);
+        } catch (ArithmeticException e) {
+            throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+        }
     }
 
     private long sumIntervals(SensorBatchRequest.Axis axis) {
         long total = 0L;
         for (Long interval : axis.dtNs()) {
-            total += interval;
+            total = Math.addExact(total, interval);
         }
         return total;
     }
@@ -490,23 +816,46 @@ public class SensorBatchService {
         return axes;
     }
 
-    /** 계약이 문자열과 배열을 모두 허용한다(검사기 C13). 배열이면 쉼표로 결합해 한 컬럼에 둔다. */
-    private String backfillFor(SensorBatchRequest request) {
-        JsonNode node = request.backfillFor();
-        if (node == null || node.isNull()) {
-            return null;
+    private TimeRange measuredTimeRange(SensorBatchRequest request) {
+        SensorBatchRequest.Clock clock = request.clock();
+        long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
+        long startMs = Long.MAX_VALUE;
+        long endMs = Long.MIN_VALUE;
+        try {
+            for (SensorBatchRequest.Axis axis : presentAxes(request)) {
+                long t0ElapsedNs = parseElapsedNs(axis.t0ElapsedNs());
+                long lastElapsedNs = Math.addExact(t0ElapsedNs, sumIntervals(axis));
+                startMs = Math.min(startMs, epochMs(t0ElapsedNs, clock, anchorElapsedNs));
+                endMs = Math.max(endMs, epochMs(lastElapsedNs, clock, anchorElapsedNs));
+            }
+        } catch (ArithmeticException e) {
+            throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
         }
-        if (node.isTextual()) {
-            return node.asText();
+        return new TimeRange(startMs, endMs);
+    }
+
+    private SensorBatchResultResponse duplicateOrReject(
+            Long memberId,
+            SensorBatchRequest request,
+            String payloadSha256,
+            SensorBatch existingBatch
+    ) {
+        if (!payloadSha256.equals(existingBatch.getPayloadSha256())) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
         }
-        if (!node.isArray() || node.isEmpty()) {
-            return null;
+        return logged(memberId, request, SensorBatchResult.DUPLICATE);
+    }
+
+    private SensorBatchResultResponse duplicateOrRejectHeartRate(
+            Long memberId,
+            HeartRateBatchRequest request,
+            String payloadSha256,
+            SensorBatch existingBatch
+    ) {
+        if (!payloadSha256.equals(existingBatch.getPayloadSha256())) {
+            throw new BusinessException(ErrorCode.SENSOR_BATCH_INVALID);
         }
-        List<String> originalBatchIds = new ArrayList<>();
-        for (JsonNode element : node) {
-            originalBatchIds.add(element.asText());
-        }
-        return String.join(",", originalBatchIds);
+        return loggedHeartRate(memberId, request, 0, SensorBatchResult.DUPLICATE);
     }
 
     private SensorBatchResultResponse logged(
@@ -531,4 +880,10 @@ public class SensorBatchService {
             throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", e);
         }
     }
+
+    private record ParsedPayload(SensorBatchRequest request, JsonNode root) {}
+
+    private record ValidatedBatch(TimeRange measuredTimeRange, String backfillFor) {}
+
+    private record TimeRange(long startMs, long endMs) {}
 }

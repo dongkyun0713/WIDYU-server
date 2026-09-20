@@ -16,6 +16,8 @@ CREATE TABLE collection_run (
     started_at_ms BIGINT NOT NULL,
     ended_at_ms BIGINT NULL,
     status VARCHAR(10) NOT NULL,
+    -- 열린 회차일 때만 1. (member_id, open_marker) UK로 한 회원의 동시 열린 회차를 막는다.
+    open_marker TINYINT NULL,
     -- 보존 정보(형식서 §6). 실증 기간에는 없어도 회차를 열 수 있다.
     data_policy VARCHAR(20) NULL,
     identified_until DATE NULL,
@@ -29,6 +31,7 @@ CREATE TABLE collection_run (
     updated_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_collection_run_member FOREIGN KEY (member_id) REFERENCES member (id),
     CONSTRAINT uk_collection_run_run_id UNIQUE (run_id),
+    CONSTRAINT uk_collection_run_member_open UNIQUE (member_id, open_marker),
     INDEX idx_collection_run_member_status (member_id, status)
 );
 
@@ -42,10 +45,13 @@ CREATE TABLE run_device_assignment (
     wear_site VARCHAR(30) NULL,
     assigned_at_ms BIGINT NOT NULL,
     unassigned_at_ms BIGINT NULL,
+    -- 배정 중일 때만 1. (device_id, active_marker) UK로 기기 이중 배정을 막는다.
+    active_marker TINYINT NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_run_device_assignment_run FOREIGN KEY (run_id) REFERENCES collection_run (id),
     CONSTRAINT uk_run_device_assignment_id UNIQUE (assignment_id),
+    CONSTRAINT uk_run_device_assignment_active UNIQUE (device_id, active_marker),
     INDEX idx_run_device_assignment_device (device_id, unassigned_at_ms)
 );
 

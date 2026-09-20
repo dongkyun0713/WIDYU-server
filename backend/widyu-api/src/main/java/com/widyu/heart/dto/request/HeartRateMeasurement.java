@@ -15,4 +15,8 @@ public record HeartRateMeasurement(
         @NotNull(message = "측정 시각은 필수입니다.")
         LocalDateTime measuredAt
 ) {
+
+    public static HeartRateMeasurement of(Integer heartRate, LocalDateTime measuredAt) {
+        return new HeartRateMeasurement(heartRate, measuredAt);
+    }
 }
