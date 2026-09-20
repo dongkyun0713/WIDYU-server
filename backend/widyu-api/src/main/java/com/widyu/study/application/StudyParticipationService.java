@@ -73,7 +73,7 @@ public class StudyParticipationService {
     @Transactional
     public StudyParticipationResponse changeRetention(
             String participationId, StudyRetentionChangeRequest request) {
-        StudyParticipation participation = find(participationId);
+        StudyParticipation participation = findForUpdate(participationId);
         participation.changeRetention(
                 request.dataPolicy(),
                 request.identifiedUntil(),
@@ -86,7 +86,7 @@ public class StudyParticipationService {
     /** 철회는 상태·범위만 기록한다. 센서 원문·심박·위치 삭제는 이 범위 밖의 수동 절차다. */
     @Transactional
     public StudyParticipationResponse withdraw(String participationId, StudyWithdrawalRequest request) {
-        StudyParticipation participation = find(participationId);
+        StudyParticipation participation = findForUpdate(participationId);
         participation.withdraw(request.scope(), request.consentKeys(), LocalDateTime.now());
         return record(participation, StudyParticipationHistoryType.WITHDRAWN,
                 AdminAction.STUDY_PARTICIPATION_WITHDRAW);
@@ -94,7 +94,7 @@ public class StudyParticipationService {
 
     @Transactional
     public StudyParticipationResponse markDeletionProcessed(String participationId) {
-        StudyParticipation participation = find(participationId);
+        StudyParticipation participation = findForUpdate(participationId);
         participation.markDeletionProcessed(LocalDateTime.now());
         return record(participation, StudyParticipationHistoryType.DELETION_PROCESSED,
                 AdminAction.STUDY_PARTICIPATION_DELETION_PROCESSED);
@@ -109,9 +109,7 @@ public class StudyParticipationService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public StudyParticipation requireActiveForRun(String participationId, Long memberId) {
-        StudyParticipation participation = studyParticipationRepository
-                .findByParticipationIdForUpdate(participationId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_FOUND));
+        StudyParticipation participation = findForUpdate(participationId);
         if (!participation.getMember().getId().equals(memberId)) {
             throw new BusinessException(ErrorCode.RUN_RESEARCH_PARTICIPATION_MISMATCH);
         }
@@ -151,8 +149,19 @@ public class StudyParticipationService {
         }
     }
 
+    /** 읽기 전용 조회. 상태를 바꾸는 경로는 {@link #findForUpdate}를 쓴다. */
     private StudyParticipation find(String participationId) {
         return studyParticipationRepository.findByParticipationId(participationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_FOUND));
+    }
+
+    /**
+     * 상태를 바꾸거나 상태를 보고 판단하는 경로는 모두 이 조회를 지난다. 잠그지 않고 읽으면
+     * 회차 개설과 철회가 서로의 결정을 못 보고 지나가, 이미 철회된 참여로 회차가 열리거나
+     * 철회가 두 번 기록된다. 잠근 뒤 엔티티가 상태를 다시 검사한다.
+     */
+    private StudyParticipation findForUpdate(String participationId) {
+        return studyParticipationRepository.findByParticipationIdForUpdate(participationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_FOUND));
     }
 

@@ -189,7 +189,7 @@ class StudyParticipationServiceTest {
     void 보관_계획을_수정하면_새_계획을_반영하고_변경_이력을_남긴다() {
         // given
         StudyParticipation participation = activeParticipation();
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
         LocalDate newResearchUntil = RESEARCH_UNTIL.plusYears(1);
 
@@ -210,7 +210,7 @@ class StudyParticipationServiceTest {
     void 전체_철회하면_WITHDRAWN으로_바뀌고_철회_이력을_남긴다() {
         // given
         StudyParticipation participation = activeParticipation();
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
 
         // when
@@ -233,7 +233,7 @@ class StudyParticipationServiceTest {
     void 일부_철회에_동의_항목이_없으면_예외가_발생하고_이력을_남기지_않는다() {
         // given
         StudyParticipation participation = activeParticipation();
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
 
         // when & then
@@ -251,7 +251,7 @@ class StudyParticipationServiceTest {
         // given
         StudyParticipation participation = activeParticipation();
         participation.withdraw(WithdrawalScope.ALL, null, java.time.LocalDateTime.now());
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
 
         // when
@@ -296,7 +296,7 @@ class StudyParticipationServiceTest {
     void 동의하지_않은_항목을_일부_철회하면_예외가_발생한다() {
         // given
         StudyParticipation participation = activeParticipation();
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(participation));
 
         // when & then
@@ -312,7 +312,7 @@ class StudyParticipationServiceTest {
     @DisplayName("일부 철회하면 거둔 동의 항목이 이력에도 남는다")
     void 일부_철회하면_거둔_동의_항목이_이력에도_남는다() {
         // given
-        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+        given(studyParticipationRepository.findByParticipationIdForUpdate(PARTICIPATION_ID))
                 .willReturn(Optional.of(activeParticipation()));
 
         // when
