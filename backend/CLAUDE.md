@@ -29,7 +29,7 @@
 
 ### `fcm` — 푸시 알림
 - `@EventListener` 이벤트 아키텍처. `MemberNotificationSetting`(회원×카테고리 unique)
-- `FcmCategory`: ALL, ALBUM, TARGET, HEALTH_SCHEDULE, WALK, MEDICINE_SCHEDULE, HEART_MESSAGE, SAFE_ZONE
+- `FcmCategory`: ALL, ALBUM, TARGET, HEALTH_SCHEDULE, WALK, MEDICINE_SCHEDULE, HEART_MESSAGE, SAFE_ZONE, INCIDENT_SELF_CHECK
 - 비활성 유저 스케줄 알림(3/5/7일). → LLD-0002·0014
 
 ### `pay` — 결제·포인트
@@ -84,6 +84,20 @@
 - 판정 기록 저장 실패는 심박 저장·보호자 알림을 막지 않는다. WARN(예외 클래스명·batchId)만 남기고 `decision_id` 없이 진행한다
 - 심박 `decider_id`·`decider_version`은 AI 응답에 없어 설정값(`sensor.heart-ai.*`)이다. AI 이미지 태그를 올릴 때 손으로 맞춘다
 
+### `incident` — 위급 알림 뒤의 본인확인·사후 판정 (연구 운영)
+
+- 위급(`ALERT`) 판정 하나가 사건 하나를 연다. `decision_id`가 UK라 같은 판정으로 두 번 열어도 한 건이다 → ADR-0035 결정 4~7, LLD-0054
+- **판정 기록과 나눠 둔다**. `decision_record`는 「무엇을 보고 언제 그렇게 말했는가」이고 `incident`는 「본인이 뭐라고 답했고 보호자가 나중에 뭐라고 판정했는가」다(정책 1.8.1). 사후 판정 `outcome`이 실증의 지도학습 라벨이다
+- **보호자 도달 시각은 여기 저장하지 않는다**. 그건 판정 기록의 `alert_at_ms`가 답한다(형식서 §3.7)
+- 열기는 `HeartRateBatchService`(심박 `HR_ANOMALY`)와 `FallAssessmentService`(낙상 `FALL_SUSPECTED`)의 판정 저장 직후다. 둘 다 `try/catch`라 **사건을 못 열어도 심박 저장·보호자 알림은 그대로 간다**
+- 여는 즉시 시니어 본인에게 확인 푸시(`FcmCategory.INCIDENT_SELF_CHECK`, `scheme=widyu://incident/{incidentRef}`)를 보내고 상태를 `CHECKING`으로 둔다. 제목·본문에 건강값을 담지 않는다
+- **무응답은 서버가 판정한다**(`respond_by_ms = opened_at_ms + 45초`, `sensor.incident.self-check-sec`). `IncidentTimeoutScheduler`가 `sensor.incident.timeout-poll-ms`마다 벌크 UPDATE 한 문장으로 `ESCALATED`로 올린다. 여기서 보호자에게 다시 알리지 않는다 — 판정 시점에 이미 나갔다
+- **마감 뒤 늦게 온 `OK`는 응답만 남기고 상태를 되돌리지 않는다**. 보호자에게 이미 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림을 설명할 자료가 없어진다
+- API 4개: 시니어 응답(`POST /api/v1/incidents/{incidentId}/response`)·보호자 사후 판정(`.../outcome`)·가족 조회(`GET /api/v1/incidents?seniorId=&state=`, `@ValidateFamilyAccess`)·본인 대기 목록(`GET /api/v1/incidents/mine/pending`). 시니어 API는 본인 사건이 아니면 **404**(존재를 드러내지 않는다), 사후 판정은 서비스에서 `FamilyAccessService.verifyFamilyAccess`를 부른다
+- **119는 서버가 신고하지 않는다**. 보호자가 신고 시각을 입력하고 서버는 그 사실만 적는다
+- 응답 DTO에 bpm·판정 사유·좌표를 싣지 않고 로그에는 식별자와 건수만 남긴다
+- 내보내기 `streams/incidents.jsonl`(기기 무관, 형식서 §3.7). 0건이면 파일을 만들지 않고 `streams_absent`에 `NO_DATA_IN_THIS_RUN`으로 신고한다
+
 ### `run` — 측정회차·기기 배정·마커 (연구 운영)
 - 실증은 기기를 여러 참가자가 돌려 쓴다. 회차가 「누가·어떤 기기를·어디에 차고·언제부터 언제까지」를 묶어 자료 귀속의 다리를 놓는다 → LLD-0045, 지시서 B8
 - 운영자는 **관리자 계정**으로 `/api/v1/admin/collection-runs/**`를 호출한다(`ROLE_ADMIN`, 기존 `/api/v1/admin/**` 인가 규칙)
@@ -91,9 +105,9 @@
 - **마커는 정답 라벨**이다. 판정 결과 기록(B 1.4)과 같은 자리에 섞지 않는다(정책 1.8.1). `marker_id`로 멱등이며 같은 id에 다른 내용이면 409. 누른 기기의 `clock`도 `ClockMappingService.register`로 같은 규칙으로 등록해 센서와 같은 시간축에 놓는다
 - **배치 귀속**: `run_id`가 오면 그대로, 없으면 `resend.original_run_id`(늦게 온 자료를 나중 참가자에게 붙이지 않기 위해), 그것도 없으면 `resolveRun(member, device, measured_at_start)`으로 열린 회차를 찾는다. 없으면 null(운영 외 자료)
 - `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`
-- 인시던트(본인확인·SOS·사후 판정)는 이 도메인이 아니라 별도 LLD다
+- 인시던트(본인확인·SOS·사후 판정)는 이 도메인이 아니라 `incident` 절과 LLD-0054다
 - **내보내기(B9)**: 닫힌 회차를 `run_<run_id>.zip` 하나로 꺼낸다. `POST/GET /api/v1/admin/collection-runs/{runId}/exports`로 요청·조회하고, `@Async`가 아니라 `run_export` 큐 + `@Scheduled` 워커가 조립한다(재시작해도 큐가 남는다) → ADR-0032, LLD-0050
-- zip 구성은 형식서(`EXPORT_FORMAT.md`)가 정본이다: `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json`·`streams/<스트림>_<기기>.jsonl`. 원문에 `_server{}` 봉투를 붙여 재직렬화하며, **집계(줄 수·샘플 수·시각 범위·해시)는 쓴 파일을 다시 읽어 센다**. 보존 정보가 없는 회차는 `retention.data_policy: "UNDECIDED"`로 싣는다
+- zip 구성은 형식서(`EXPORT_FORMAT.md`)가 정본이다: `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json`·`streams/<스트림>_<기기>.jsonl`·기기 무관인 `streams/incidents.jsonl`. 원문에 `_server{}` 봉투를 붙여 재직렬화하며, **집계(줄 수·샘플 수·시각 범위·해시)는 쓴 파일을 다시 읽어 센다**. 보존 정보가 없는 회차는 `retention.data_policy: "UNDECIDED"`로 싣는다
 
 ### `device` — 기기 상태 하트비트
 

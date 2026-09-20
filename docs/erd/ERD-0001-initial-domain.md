@@ -371,6 +371,26 @@ erDiagram
         String reason "판정 사유 원문. 로그·응답 DTO 금지 (ADR-0035)"
     }
 
+    Incident {
+        Long id PK
+        String incidentRef UK "외부 식별자. 내보내기의 incident_id"
+        Long memberId
+        String runId
+        String decisionId UK "이 사건을 연 판정. 판정 1 = 사건 1"
+        String kind "HR_ANOMALY / FALL_SUSPECTED"
+        String level "판정 severity 복사"
+        Long openedAtMs
+        Long respondByMs "openedAtMs + 45초 (설정값)"
+        String response "OK / HELP"
+        Long respondedAtMs
+        String responseVia "WATCH / PHONE"
+        String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
+        String outcome "TRUE_EMERGENCY / FALSE_ALARM / UNKNOWN. 실증 학습 라벨"
+        Long resolvedBy "보호자 member_id"
+        Long resolvedAtMs
+        Long emergencyCalledAtMs "보호자가 입력한 119 신고 시각"
+    }
+
     RunMarker {
         Long id PK
         String markerId UK "앱 발급, 멱등"
@@ -535,6 +555,8 @@ erDiagram
     Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
     Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
+    Member ||--o{ Incident : "위급 사건 (본인확인·사후 판정)"
+    DecisionRecord ||--o| Incident : "decision_id 참조 (FK 없음)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
     CollectionRun ||..o{ RunExport : "내보내기 잡 (run_id 문자열 참조)"
@@ -599,6 +621,12 @@ erDiagram
 | `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
+| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED` |
+| `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
+| `IncidentResponseValue` | `OK`, `HELP` |
+| `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
+| `ResponseVia` | `WATCH`, `PHONE` |
+| `FcmCategory` | `ALL`, `ALBUM`, `TARGET`, `HEALTH_SCHEDULE`, `WALK`, `MEDICINE_SCHEDULE`, `HEART_MESSAGE`, `SAFE_ZONE`, `INCIDENT_SELF_CHECK`, `ETC` |
 
 ## 주요 인덱스
 
@@ -637,6 +665,11 @@ erDiagram
 | `decision_record` | `idx_decision_record_run_time` | `(run_id, decision_at_ms)` | 회차 내보내기 판정 시각순 조회 |
 | `decision_record` | `idx_decision_record_member_time` | `(member_id, decision_at_ms)` | 회원별 판정 이력 조회 |
 | `decision_record` | `idx_decision_record_trigger_batch` | `(trigger_batch_id)` | 충격 배치 근거 추적 |
+| `incident` | UK `uk_incident_incident_ref` | `(incident_ref)` | 외부 식별자 |
+| `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 판정 1 = 사건 1. 재시도가 사건을 늘리지 못하게 막는다 |
+| `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
+| `incident` | `idx_incident_run_time` | `(run_id, opened_at_ms)` | 회차 내보내기 |
+| `incident` | `idx_incident_state_deadline` | `(state, respond_by_ms)` | 무응답 스케줄러가 매 폴링마다 타는 경로 |
 | `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
 | `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
 | `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
@@ -662,6 +695,8 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `incident` | 신규 테이블 (LLD-0054). 위급 알림 뒤의 본인확인·무응답 판정·사후 판정 | `scripts/mysql/create_incident.sql` |
+| 2026-09-21 | `fcm_notification`·`fcm_outbox` | `fcm_category`에 `INCIDENT_SELF_CHECK` 추가 (LLD-0054). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_incident_self_check.sql` |
 | 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
 | 2026-09-21 | `fcm_outbox` | `decision_id` 추가 (LLD-0053). 전송 성공 시 그 판정의 알림 도달 사실을 채운다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |

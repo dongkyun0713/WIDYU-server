@@ -40,8 +40,7 @@ public record SensorProperties(
             java.util.Map<String, Long> gapThresholdMs,
             Clock clock,
             String absentReasonRoleMissing,
-            String absentReasonNoData,
-            String absentReasonNotImplemented
+            String absentReasonNoData
     ) {
 
         public record Clock(

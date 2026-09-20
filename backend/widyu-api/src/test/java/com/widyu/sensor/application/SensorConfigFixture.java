@@ -30,8 +30,7 @@ final class SensorConfigFixture {
                 new SensorProperties.Export.Clock(
                         "DEVICE_MONOTONIC", "UTC_EPOCH_MS", "ANCHOR_PAIR", "APP_REPORTED_ANCHOR"),
                 "NO_DEVICE_ASSIGNED",
-                "NO_DATA_IN_THIS_RUN",
-                "NOT_IMPLEMENTED_IN_THIS_RUN");
+                "NO_DATA_IN_THIS_RUN");
     }
 
     static SensorProperties.FallAi fallAi() {

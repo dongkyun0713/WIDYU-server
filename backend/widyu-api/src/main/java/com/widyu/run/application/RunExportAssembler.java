@@ -10,6 +10,8 @@ import com.widyu.decision.DecisionRecord;
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
+import com.widyu.incident.Incident;
+import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.location.raw.LocationFix;
 import com.widyu.location.raw.repository.LocationFixRepository;
 import com.widyu.run.CollectionRun;
@@ -63,6 +65,7 @@ public class RunExportAssembler {
     private static final String STREAM_MEASUREMENTS = "measurements";
     private static final String STREAM_INCIDENTS = "incidents";
     private static final String DECISIONS_FILE = "decisions.jsonl";
+    private static final String INCIDENTS_FILE = "incidents.jsonl";
     private static final List<String> SENSOR_STREAMS =
             List.of(STREAM_IMU_WATCH, STREAM_IMU_PHONE, STREAM_HR);
     private static final String ROLE_WATCH = "watch";
@@ -82,6 +85,7 @@ public class RunExportAssembler {
     private final LocationFixRepository locationFixRepository;
     private final DeviceHeartbeatRepository deviceHeartbeatRepository;
     private final DecisionRecordRepository decisionRecordRepository;
+    private final IncidentRepository incidentRepository;
     private final ClockMappingRepository clockMappingRepository;
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     private final RunMarkerRepository runMarkerRepository;
@@ -114,11 +118,12 @@ public class RunExportAssembler {
         writeLocationStream(run, workDir, accumulators);
         writeHeartbeatStream(run, heartbeats, workDir, accumulators);
         writeDecisions(run, workDir);
+        int incidentCount = writeIncidents(run, workDir);
 
         writeClockMappings(run, workDir);
-        writeQuality(run, assignments, heartbeats, accumulators, workDir);
+        writeQuality(run, assignments, heartbeats, accumulators, incidentCount, workDir);
         writeRunJson(run, assignments, workDir);
-        writeManifest(run, assignments, accumulators, workDir);
+        writeManifest(run, assignments, accumulators, incidentCount, workDir);
     }
 
     /** 판정 기록은 센서 스트림이 아니므로 manifest.files에는 넣지 않는다(LLD-0051 5.3). */
@@ -170,6 +175,65 @@ public class RunExportAssembler {
         putNullableLong(evidence, "hr_measured_at_ms", record.getHrMeasuredAtMs());
         putNullableString(evidence, "hr_accuracy", record.getHrAccuracy());
         putNullableString(evidence, "reason", record.getReason());
+    }
+
+    /**
+     * 사건 기록(형식서 §3.7). 기기가 보낸 자료가 아니라 서버가 만든 기록이라
+     * {@code device_id}·{@code _server{}} 봉투가 없고 파일명에도 기기 접미어가 없다.
+     *
+     * <p>한 건도 없으면 파일을 만들지 않는다. 「파일 없음 + 부재 선언」과 「파일 있음 + 0건」은
+     * 다른 명제이고, 검사기는 뒤쪽을 실패로 본다(형식서 §1).
+     *
+     * @return 쓴 사건 수. 0이면 파일이 없다.
+     */
+    private int writeIncidents(CollectionRun run, Path workDir) throws IOException {
+        List<Incident> incidents = incidentRepository.findByRunIdOrderByOpenedAtMsAsc(run.getRunId());
+        if (incidents.isEmpty()) {
+            return 0;
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(incidentsPath(workDir), StandardCharsets.UTF_8)) {
+            for (Incident incident : incidents) {
+                writer.write(objectMapper.writeValueAsString(toIncidentRecord(run, incident)));
+                writer.write("\n");
+            }
+        }
+        return incidents.size();
+    }
+
+    private ObjectNode toIncidentRecord(CollectionRun run, Incident incident) {
+        ObjectNode node = objectMapper.createObjectNode();
+        // 외부에 내보내는 식별자는 incident_ref다. 내부 PK는 나가지 않는다.
+        node.put("incident_id", incident.getIncidentRef());
+        putNullableString(node, "run_id", incident.getRunId());
+        putNullableString(node, "study_id", run.getStudyId());
+        putNullableString(node, "participation_id", run.getParticipationId());
+        node.put("stream", STREAM_INCIDENTS);
+        node.put("kind", incident.getKind().name());
+        putNullableString(node, "level", incident.getLevel());
+        node.put("opened_at_ms", incident.getOpenedAtMs());
+        node.put("respond_by_ms", incident.getRespondByMs());
+        putNullableString(node, "response", name(incident.getResponse()));
+        putNullableLong(node, "responded_at_ms", incident.getRespondedAtMs());
+        putNullableString(node, "response_via", name(incident.getResponseVia()));
+        node.put("state", incident.getState().name());
+        putNullableString(node, "outcome", name(incident.getOutcome()));
+        putNullableLong(node, "resolved_by", incident.getResolvedBy());
+        putNullableLong(node, "resolved_at_ms", incident.getResolvedAtMs());
+        // 형식서에 없는 두 필드. 사건을 연 판정과 119 신고 시각을 잇는 자리가 달리 없다(LLD-0054 5.5).
+        node.put("decision_id", incident.getDecisionId());
+        putNullableLong(node, "emergency_called_at_ms", incident.getEmergencyCalledAtMs());
+        return node;
+    }
+
+    private String name(Enum<?> value) {
+        if (value == null) {
+            return null;
+        }
+        return value.name();
+    }
+
+    private Path incidentsPath(Path workDir) {
+        return workDir.resolve(STREAMS_DIR).resolve(INCIDENTS_FILE);
     }
 
     // ── 스트림 파일 ────────────────────────────────────────────────
@@ -397,6 +461,7 @@ public class RunExportAssembler {
             List<RunDeviceAssignment> assignments,
             List<DeviceHeartbeat> heartbeats,
             Map<StreamKey, StreamAccumulator> accumulators,
+            int incidentCount,
             Path workDir) throws IOException {
         long endedAtMs = endedAtMs(run);
         ObjectNode quality = objectMapper.createObjectNode();
@@ -439,8 +504,30 @@ public class RunExportAssembler {
             node.put("out_of_order_count", accumulator.outOfOrderCount);
             node.put("resend_count", accumulator.resendCount);
         }
+        addIncidentQuality(perStream, incidentCount);
         quality.put("unknown_duration_s", unknownDurationMs / MILLIS_PER_SECOND);
         writeJson(workDir.resolve("quality.json"), quality);
+    }
+
+    /**
+     * 사건은 기기가 주기로 보내는 스트림이 아니라 일어난 만큼만 생긴다. 기대 표본 수가 곧 실제
+     * 건수이고 그래서 수집률은 늘 1.0이며 결측 구간이 없다. 그래도 집계에 적는다 — 자료가 있는
+     * 스트림이 {@code per_stream}에 없으면 검사기가 신고를 빠뜨린 것으로 본다(I6).
+     */
+    private void addIncidentQuality(ArrayNode perStream, int incidentCount) {
+        if (incidentCount == 0) {
+            return;
+        }
+        ObjectNode node = perStream.addObject();
+        node.put("stream", STREAM_INCIDENTS);
+        node.putNull("device_id");
+        node.put("expected_sample_count", incidentCount);
+        node.put("actual_sample_count", incidentCount);
+        node.put("coverage", 1.0);
+        node.put("gap_count", 0);
+        node.put("duplicate_count", 0);
+        node.put("out_of_order_count", 0);
+        node.put("resend_count", 0);
     }
 
     /** 배치 경계의 공백을 실제 값으로 신고한다. 여유를 붙여 넓게 적으면 검사기가 모순으로 잡는다(D12). */
@@ -585,6 +672,7 @@ public class RunExportAssembler {
             CollectionRun run,
             List<RunDeviceAssignment> assignments,
             Map<StreamKey, StreamAccumulator> accumulators,
+            int incidentCount,
             Path workDir) throws IOException {
         ObjectNode manifest = objectMapper.createObjectNode();
         manifest.put("format_version", FORMAT_VERSION);
@@ -623,16 +711,54 @@ public class RunExportAssembler {
             totalRecords += recordCount;
             totalSamples += sampleCount;
         }
+        if (incidentCount > 0) {
+            List<JsonNode> lines = readLines(incidentsPath(workDir));
+            totalRecords += lines.size();
+            totalSamples += lines.size();
+            addIncidentFile(files, workDir, lines);
+        }
         ObjectNode totals = manifest.putObject("totals");
         totals.put("record_count", totalRecords);
         totals.put("sample_count", totalSamples);
-        manifest.set("streams_absent", streamsAbsent(assignments, accumulators));
+        manifest.set("streams_absent", streamsAbsent(assignments, accumulators, incidentCount));
         writeJson(workDir.resolve("manifest.json"), manifest);
+    }
+
+    /**
+     * 기기 무관 스트림이라 {@code device_id}가 없고 줄 하나가 사건 하나다. 시각 범위는 사건을 연
+     * 시각으로 잰다 — 다른 스트림과 달리 {@code _server{}} 봉투가 없다.
+     */
+    private void addIncidentFile(ArrayNode files, Path workDir, List<JsonNode> lines) throws IOException {
+        Path path = incidentsPath(workDir);
+        ObjectNode file = files.addObject();
+        file.put("path", STREAMS_DIR + "/" + INCIDENTS_FILE);
+        file.put("stream", STREAM_INCIDENTS);
+        file.putNull("device_id");
+        file.put("bytes", Files.size(path));
+        file.put("sha256", sha256(Files.readAllBytes(path)));
+        file.put("record_count", lines.size());
+        file.put("sample_count", lines.size());
+        file.put("first_measured_at_ms", incidentBound(lines, true));
+        file.put("last_measured_at_ms", incidentBound(lines, false));
+    }
+
+    private long incidentBound(List<JsonNode> lines, boolean minimum) {
+        long bound = lines.get(0).get("opened_at_ms").asLong();
+        for (JsonNode line : lines) {
+            long openedAtMs = line.get("opened_at_ms").asLong();
+            if (minimum) {
+                bound = Math.min(bound, openedAtMs);
+                continue;
+            }
+            bound = Math.max(bound, openedAtMs);
+        }
+        return bound;
     }
 
     /** 「없다」와 「없다고 적었다」는 다른 명제다(형식서 §1, 검사기 I10). 기대 쌍은 기기 역할이 만든다. */
     private ArrayNode streamsAbsent(
-            List<RunDeviceAssignment> assignments, Map<StreamKey, StreamAccumulator> accumulators) {
+            List<RunDeviceAssignment> assignments, Map<StreamKey, StreamAccumulator> accumulators,
+            int incidentCount) {
         SensorProperties.Export export = sensorProperties.export();
         ArrayNode absent = objectMapper.createArrayNode();
         boolean hasEcg = false;
@@ -656,9 +782,13 @@ public class RunExportAssembler {
             node.put("stream", STREAM_MEASUREMENTS);
             node.put("reason", export.absentReasonRoleMissing());
         }
-        ObjectNode incidents = absent.addObject();
-        incidents.put("stream", STREAM_INCIDENTS);
-        incidents.put("reason", export.absentReasonNotImplemented());
+        // 사건이 한 건이라도 있으면 파일이 있으니 부재를 선언하지 않는다. 없으면 그 회차에
+        // 위급이 없었다는 뜻이라 「자료 없음」이다 — 더는 미구현이 아니다(LLD-0054 5.5).
+        if (incidentCount == 0) {
+            ObjectNode incidents = absent.addObject();
+            incidents.put("stream", STREAM_INCIDENTS);
+            incidents.put("reason", export.absentReasonNoData());
+        }
         return absent;
     }
 

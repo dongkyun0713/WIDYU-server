@@ -52,7 +52,6 @@ sensor:
       evidence-method: APP_REPORTED_ANCHOR
     absent-reason-role-missing: NO_DEVICE_ASSIGNED
     absent-reason-no-data: NO_DATA_IN_THIS_RUN
-    absent-reason-not-implemented: NOT_IMPLEMENTED_IN_THIS_RUN
 
   # 심박 판정기의 이름과 판. AI 응답에 없어 여기서 적는다. AI 이미지 태그와 손으로 맞춘다(ADR-0035).
   heart-ai:

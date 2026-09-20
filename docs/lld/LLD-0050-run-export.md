@@ -64,7 +64,7 @@ GET /api/v1/admin/collection-runs/{runId}/exports/{exportId}
 
 인덱스 `(run_id, status)`, `(status, requested_at_ms)`.
 
-설정(`application-sensor.yml` `sensor.export.*`): `poll-delay-ms`(5000), `presign-minutes`(15), `expected-period-ms`(`imu_watch: 20`, `imu_phone: 20`, `hr: 1000`, `location: 60000`, `heartbeat: 60000`, 샘플 1개당 기대 간격. 정수라 1/60 같은 반올림이 없다), `gap-threshold-ms`(`imu_*`·`hr`: 5000, `location`·`heartbeat`: 120000), `clock.source-domain`(`DEVICE_MONOTONIC`), `clock.target-domain`(`UTC_EPOCH_MS`), `clock.transform`(`ANCHOR_PAIR`), `clock.evidence-method`(`APP_REPORTED_ANCHOR`), `absent-reason-role-missing`(`NO_DEVICE_ASSIGNED`), `absent-reason-no-data`(`NO_DATA_IN_THIS_RUN`), `absent-reason-not-implemented`(`NOT_IMPLEMENTED_IN_THIS_RUN`).
+설정(`application-sensor.yml` `sensor.export.*`): `poll-delay-ms`(5000), `presign-minutes`(15), `expected-period-ms`(`imu_watch: 20`, `imu_phone: 20`, `hr: 1000`, `location: 60000`, `heartbeat: 60000`, 샘플 1개당 기대 간격. 정수라 1/60 같은 반올림이 없다), `gap-threshold-ms`(`imu_*`·`hr`: 5000, `location`·`heartbeat`: 120000), `clock.source-domain`(`DEVICE_MONOTONIC`), `clock.target-domain`(`UTC_EPOCH_MS`), `clock.transform`(`ANCHOR_PAIR`), `clock.evidence-method`(`APP_REPORTED_ANCHOR`), `absent-reason-role-missing`(`NO_DEVICE_ASSIGNED`), `absent-reason-no-data`(`NO_DATA_IN_THIS_RUN`). (`absent-reason-not-implemented`는 인시던트가 구현되면서 쓰는 곳이 없어져 #662에서 뺐다.)
 
 ## 5. 처리 흐름
 
@@ -123,7 +123,7 @@ GET /api/v1/admin/collection-runs/{runId}/exports/{exportId}
 `format_version: "EXPORT_FORMAT v0.2"`, `run_id`, `study_id`, `participation_id`, `exported_at_ms`, `server_build`, `files[]`(**임시 디렉터리에 쓴 실제 파일을 다시 읽어** `bytes`·`sha256`·`record_count`(줄 수)·`sample_count`·`first/last_measured_at_ms`), `totals{record_count, sample_count}`, `streams_absent[]`.
 - `sample_count` 규칙: `imu_*` = `acc.n` + `gyro.n`(null이면 0) 합, `hr` = `samples` 길이 합, 그 밖 = 줄 수. 파일을 다시 읽어 파싱해 센다.
 - `first/last_measured_at_ms` = 줄들의 **레코드 시작 시각**(`_server.measured_at_start_ms`)의 최소 / **최대**. 끝 시각을 쓰지 않는다. 검사기 I7은 레코드마다 이벤트 시각 하나(위치·하트비트 `ts_ms`, IMU `acc.t0`(보강은 `gyro.t0`) 환산, 심박 첫 샘플 `ts_ms`)를 잡아 min·max를 내며, 그 값이 `measured_at_start_ms`와 같다.
-- `streams_absent[]`: 기대 쌍 = 배정 기기 role별 {`watch`: `imu_watch`·`hr`, `phone`: `location`·`heartbeat`·`imu_phone`, `external_ecg`: `measurements`} × 그 `device_id`. 파일이 없는 쌍마다 `{stream, device_id, reason: absent-reason-no-data}`. 회차에 role이 없는 스트림은 `device_id` 없이 `{stream, reason: absent-reason-role-missing}`(예: ECG 없음 → `measurements`). `incidents`는 `{stream: "incidents", reason: absent-reason-not-implemented}`.
+- `streams_absent[]`: 기대 쌍 = 배정 기기 role별 {`watch`: `imu_watch`·`hr`, `phone`: `location`·`heartbeat`·`imu_phone`, `external_ecg`: `measurements`} × 그 `device_id`. 파일이 없는 쌍마다 `{stream, device_id, reason: absent-reason-no-data}`. 회차에 role이 없는 스트림은 `device_id` 없이 `{stream, reason: absent-reason-role-missing}`(예: ECG 없음 → `measurements`). `incidents`는 #662부터 사건이 0건일 때만 `{stream: "incidents", reason: absent-reason-no-data}`이고, 1건 이상이면 파일과 `manifest.files[]` 항목이 생긴다(LLD-0054 5.5).
 - `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json` 자체는 `files[]`에 넣지 않는다(스트림 파일만).
 
 ### 5.8 다운로드
