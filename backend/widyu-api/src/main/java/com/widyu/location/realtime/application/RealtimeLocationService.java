@@ -1,9 +1,12 @@
 package com.widyu.location.realtime.application;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.GeoUtils;
 import com.widyu.location.SeniorLocation;
+import com.widyu.location.raw.application.LocationFixService;
 import com.widyu.location.realtime.dto.LocationPoint;
 import com.widyu.location.realtime.dto.LocationTrailResponse;
 import com.widyu.location.realtime.dto.LocationUpdateRequest;
@@ -20,6 +23,9 @@ import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.parentlocation.LocationType;
 import com.widyu.parentlocation.ParentLocation;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import org.springframework.scheduling.annotation.Scheduled;
 import java.util.ArrayList;
@@ -27,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +58,12 @@ public class RealtimeLocationService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
     private final SafeZoneAlertService safeZoneAlertService;
+    private final LocationFixService locationFixService;
+    private final Validator validator;
+    // 미지정 필드를 무시하고 페이로드를 읽는 전용 매퍼. 주입받지 않는 이유는 Redis·응답 직렬화와
+    // 설정을 공유하면 안 되기 때문이다(초기화 필드라 생성자 주입 대상에서 빠진다).
+    private final ObjectMapper payloadMapper = new ObjectMapper()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     private static final String LOCATION_TRAIL_KEY_PREFIX = "location:trail:";
     private static final String LOCATION_STAY_KEY_PREFIX = "location:stay:";
@@ -58,6 +71,57 @@ public class RealtimeLocationService {
     private static final long STAY_TTL_SECONDS = 86400; // 24시간
     private static final double STAY_RADIUS_METERS = 30.0; // 30m 이내면 같은 위치
     private static final double SAFE_ZONE_RADIUS_METERS = 75.0; // 안전구역 반경 75m (지름 150m)
+
+    /**
+     * 원문 바이트를 받아 실시간 경로를 돌리고, v2 페이로드면 원본을 남긴다(LLD-0048 5절).
+     * 검증은 브로드캐스트 앞에 둔다 — 잘못된 좌표를 보호자에게 흘리지 않기 위해서다.
+     */
+    @Transactional
+    public LocationUpdateResponse updateAndBroadcast(byte[] payload, Long authenticatedMemberId) {
+        long serverReceivedAtMs = System.currentTimeMillis();
+        LocationUpdateRequest request = parse(payload);
+        validate(request);
+        long acceptedAtMs = System.currentTimeMillis();
+
+        if (!request.isRawFix()) {
+            return updateAndBroadcast(request, authenticatedMemberId);
+        }
+
+        locationFixService.validate(request);
+        LocationUpdateResponse response = updateAndBroadcast(request, authenticatedMemberId);
+        storeQuietly(request, payload, authenticatedMemberId, serverReceivedAtMs, acceptedAtMs);
+        return response;
+    }
+
+    private LocationUpdateRequest parse(byte[] payload) {
+        try {
+            return payloadMapper.readValue(payload, LocationUpdateRequest.class);
+        } catch (IOException e) {
+            // 예외 메시지에 좌표가 섞일 수 있어 어떤 레벨에도 남기지 않는다(LLD-0029).
+            throw new BusinessException(ErrorCode.LOCATION_FIX_INVALID);
+        }
+    }
+
+    private void validate(LocationUpdateRequest request) {
+        Set<ConstraintViolation<LocationUpdateRequest>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new BusinessException(ErrorCode.LOCATION_FIX_INVALID);
+        }
+        // 좌표는 lat/lon과 latitude/longitude 중 실제로 쓸 값이 정해진 뒤에 본다.
+        if (request.resolvedLatitude() == null || request.resolvedLongitude() == null) {
+            throw new BusinessException(ErrorCode.LOCATION_FIX_INVALID);
+        }
+    }
+
+    /** 원본 저장 실패가 ACK를 막지 않는다. 실시간 경로는 이미 끝났고 위치는 60초 뒤 또 온다. */
+    private void storeQuietly(LocationUpdateRequest request, byte[] payload, Long memberId,
+                              long serverReceivedAtMs, long acceptedAtMs) {
+        try {
+            locationFixService.store(memberId, request, payload, serverReceivedAtMs, acceptedAtMs);
+        } catch (Exception e) {
+            log.warn("위치 원본 저장 실패: memberId={}, seq={}", memberId, request.seq());
+        }
+    }
 
     @Transactional
     public LocationUpdateResponse updateAndBroadcast(LocationUpdateRequest request,
@@ -79,15 +143,15 @@ public class RealtimeLocationService {
         // 3. Redis에 최신 위치 저장 (memberId 기준)
         SeniorLocation location = SeniorLocation.of(
                 memberId,
-                request.latitude(),
-                request.longitude()
+                request.resolvedLatitude(),
+                request.resolvedLongitude()
         );
         seniorLocationRepository.save(location);
-        eventPublisher.publishEvent(new SeniorLocationUpdatedEvent(memberId, request.latitude(), request.longitude()));
+        eventPublisher.publishEvent(new SeniorLocationUpdatedEvent(memberId, request.resolvedLatitude(), request.resolvedLongitude()));
 
         // 4. Redis List에 이동 경로 저장 (15분 TTL, memberId 기준)
         String trailKey = LOCATION_TRAIL_KEY_PREFIX + memberId;
-        LocationPoint point = LocationPoint.of(request.latitude(), request.longitude());
+        LocationPoint point = LocationPoint.of(request.resolvedLatitude(), request.resolvedLongitude());
 
         Long listSize = redisTemplate.opsForList().leftPush(trailKey, point);
         redisTemplate.expire(trailKey, TRAIL_TTL_SECONDS, TimeUnit.SECONDS);
@@ -97,15 +161,15 @@ public class RealtimeLocationService {
         // 5. 체류 시간 및 위치 타입 계산 (memberId 기준)
         String stayKey = LOCATION_STAY_KEY_PREFIX + memberId;
         StayInfo stayInfo = calculateStayInfo(
-                stayKey, request.latitude(), request.longitude(), seniorMember);
+                stayKey, request.resolvedLatitude(), request.resolvedLongitude(), seniorMember);
 
         // 6. Response 객체 생성
         LocationUpdateResponse response = LocationUpdateResponse.of(
                 memberId,
                 seniorMember.getName(),
                 seniorMember.getProfileImage(),
-                request.latitude(),
-                request.longitude(),
+                request.resolvedLatitude(),
+                request.resolvedLongitude(),
                 stayInfo.startTime(),
                 stayInfo.locationType(),
                 stayInfo.locationName()

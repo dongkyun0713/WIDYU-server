@@ -249,6 +249,33 @@ erDiagram
         Boolean configMismatch "앱 적용 설정이 서버 지시값과 다름 (B12)"
     }
 
+    LocationFix {
+        Long id PK
+        Long member_id FK "위치 기준 기기는 폰 (B 1.6.5)"
+        String deviceId
+        String sessionId
+        Long seq "(device, session, seq) UK 로 멱등"
+        String studyId "받은 값 그대로, null 허용"
+        String participationId "받은 값 그대로, null 허용"
+        String runId "회차 귀속 (B8 재사용)"
+        Long tsMs "잰 시각"
+        Double lat
+        Double lon
+        Double accuracyM "100m 초과도 저장 (정책 1.6.6)"
+        Double speedMps
+        Double speedAccuracyMps
+        Double headingDeg
+        Double altitudeM
+        String provider "fused / gps 등"
+        Boolean isMock "값 그대로 저장"
+        String reason "move / keepalive / incident"
+        Long serverReceivedAtMs
+        Long acceptedAtMs
+        Long persistedAtMs
+        String payload "원문 바이트 그대로 (TEXT)"
+        String payloadSha256
+    }
+
     CollectionRun {
         Long id PK
         String runId UK "서버 발급 run-<UUID hex>"
@@ -440,6 +467,7 @@ erDiagram
     Member ||--o{ HeartRateEmergency : "심박 이상"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
+    Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
@@ -533,6 +561,9 @@ erDiagram
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
 | `run_marker` | UK `uk_run_marker_id` | `(marker_id)` | 마커 멱등 |
 | `run_marker` | `idx_run_marker_run_time` | `(run_id, ts_ms)` | 회차별 마커 시각순 조회 |
+| `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
+| `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
+| `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
 
 ## 도메인별 조회 기준
 
@@ -552,6 +583,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
 | 2026-09-20 | `collection_run`·`run_device_assignment`·`run_marker` | 신규 테이블 3개 (LLD-0045). 측정회차·기기 배정·마커 | `scripts/mysql/create_collection_run.sql` |
 | 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |

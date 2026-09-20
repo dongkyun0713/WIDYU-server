@@ -3,14 +3,18 @@ package com.widyu.location.realtime.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.location.SeniorLocation;
+import com.widyu.location.raw.application.LocationFixService;
 import com.widyu.location.realtime.dto.LocationPoint;
 import com.widyu.location.realtime.dto.LocationUpdateRequest;
 import com.widyu.location.realtime.dto.LocationUpdateResponse;
@@ -24,6 +28,8 @@ import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.ListOperations;
@@ -54,9 +61,17 @@ class RealtimeLocationServiceTest {
     @Mock private ListOperations<String, Object> listOperations;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private SafeZoneAlertService safeZoneAlertService;
+    @Mock private LocationFixService locationFixService;
+    // 실제 제약(memberId @NotNull)을 그대로 태운다. 목이면 검증이 통째로 비어 버린다.
+    @Spy private Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @InjectMocks
     private RealtimeLocationService realtimeLocationService;
+
+    private static final String RAW_FIX_PAYLOAD = """
+            {"v":2,"memberId":1,"device_id":"ph-9c1","session_id":"s-2026","seq":5120,
+             "lat":37.5551,"lon":126.9707,"accuracy_m":8.5,"speed_mps":0.9,"provider":"fused",
+             "is_mock":false,"ts_ms":1760000000123,"reason":"move"}""";
 
     @Test
     @DisplayName("인증 회원과 요청 회원이 다르면 FORBIDDEN 예외를 던지고 위치를 저장하지 않는다")
@@ -177,6 +192,102 @@ class RealtimeLocationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN)
                 .hasMessageContaining("해당 시니어의 위치를 조회할 권한이 없습니다.");
+    }
+
+    @Test
+    @DisplayName("v2 위치 페이로드를 보내면 기존 실시간 경로를 돌리고 원본 저장을 요청한다")
+    void v2_위치_페이로드를_보내면_실시간_경로를_돌리고_원본_저장을_요청한다() {
+        // given
+        byte[] payload = RAW_FIX_PAYLOAD.getBytes(UTF_8);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        assertThat(response.memberId()).isEqualTo(1L);
+        assertThat(response.latitude()).isEqualTo(37.5551);
+        assertThat(response.longitude()).isEqualTo(126.9707);
+        then(seniorLocationRepository).should().save(any(SeniorLocation.class));
+        then(listOperations).should().leftPush(eq("location:trail:1"), any(LocationPoint.class));
+        then(messagingTemplate).should()
+                .convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+        then(locationFixService).should().validate(any(LocationUpdateRequest.class));
+        then(locationFixService).should()
+                .store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("기존 4필드 페이로드를 보내면 원본을 저장하지 않고 기존대로 브로드캐스트한다")
+    void 기존_4필드_페이로드를_보내면_원본을_저장하지_않는다() {
+        // given
+        byte[] payload = "{\"memberId\":1,\"latitude\":37.5,\"longitude\":127.0}".getBytes(UTF_8);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        assertThat(response.latitude()).isEqualTo(37.5);
+        then(messagingTemplate).should()
+                .convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+        then(locationFixService).should(never())
+                .store(any(), any(LocationUpdateRequest.class), any(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("원본 저장이 실패해도 위치 응답을 그대로 돌려준다")
+    void 원본_저장이_실패해도_위치_응답을_그대로_돌려준다() {
+        // given
+        byte[] payload = RAW_FIX_PAYLOAD.getBytes(UTF_8);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        willThrow(new IllegalStateException("DB 장애"))
+                .given(locationFixService)
+                .store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        assertThat(response.memberId()).isEqualTo(1L);
+        then(messagingTemplate).should()
+                .convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+    }
+
+    @Test
+    @DisplayName("본문을 읽을 수 없으면 LOCATION_FIX_INVALID 예외가 발생한다")
+    void 본문을_읽을_수_없으면_예외가_발생한다() {
+        // given
+        byte[] payload = "not-json".getBytes(UTF_8);
+
+        // when & then
+        assertThatThrownBy(() -> realtimeLocationService.updateAndBroadcast(payload, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LOCATION_FIX_INVALID);
     }
 
     private Member member(Long id) {
