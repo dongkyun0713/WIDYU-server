@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.widyu.admin.application.AdminAccessLogService;
 import com.widyu.admin.application.AdminAuthService;
 import com.widyu.admin.controller.AdminAuthController;
 import com.widyu.admin.repository.AdminAuditLogRepository;
@@ -56,6 +57,8 @@ class AdminCurrentAuthoritySecurityTest {
     @MockBean private AdminAuditLogRepository adminAuditLogRepository;
     @MockBean private AuthLimitStore authLimitStore;
     @MockBean private ClientIpResolver clientIpResolver;
+    // WebMvcConfig가 등록하는 접속기록 인터셉터의 의존성. 슬라이스 테스트에는 서비스 빈이 없다.
+    @MockBean private AdminAccessLogService adminAccessLogService;
 
     @Test
     @DisplayName("일반 회원 refresh를 관리자 쿠키에 넣으면 발급을 거절한다")
