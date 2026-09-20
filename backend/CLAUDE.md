@@ -73,10 +73,22 @@
  - `stream`으로 갈린다: `imu_watch`·`imu_phone`은 축 검증, `hr`는 심박 검증(1~60샘플·`ts_ms` 엄격 증가·`bpm 0`은 `UNRELIABLE`만·`location`/`context` 금지) 후 `HeartRateBatchService`로 넘긴다. 심박 인덱스 행은 축·충격·설정 대조가 null이고 `sample_count`를 쓴다
  - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
 
+### `study` — 실증 참여 기록 (연구 동의·보관 정책의 정본)
+
+- 한 회원의 한 번의 국내 실증 참여를 `study_participation` 한 행으로 남긴다. **실증 참여 여부와 연구 보관 정책의 정본**이며 연구 회차가 이 행을 참조한다 → LLD-0052, 지시서 B 1.5
+- 관리자 전용 `/api/v1/admin/studies/participations/**` (등록·조회·보관 계획 수정·철회·삭제 처리 기록). 이름·전화번호는 요청·응답·로그에 넣지 않는다
+- `participation_id`는 **서버 발급**(`part-` + UUID hex). 같은 `study_id + member_id`의 ACTIVE 참여는 하나만 허용한다(409)
+- **보관 날짜 셋은 전부이거나 전무다**(`identified ≤ pseudonymized ≤ research`). IRB 승인 전이라 못 정한 상태와, 일부만 정해 빠진 값이 무한 보관으로 읽히는 상태를 구분한다
+- 등록·보관 계획 수정·철회·삭제 처리는 **같은 트랜잭션에서 `study_participation_history` snapshot**을 남긴다. 현행 행을 덮어써도 과거 보관 계획과 철회 범위가 사라지지 않는다
+- 변경마다 **관리자 감사 로그**(`AdminAction.STUDY_PARTICIPATION_*`)도 남긴다. snapshot이 "무엇이 바뀌었나", 감사 로그가 "누가 바꿨나"를 답한다. detail에는 식별자만 담는다
+- 철회는 **상태만 바꾼다**. 센서 원문·심박·위치의 실제 삭제는 서버가 하지 않으며, 운영자가 수동 삭제를 마치면 `deletion-processed`로 시각만 기록한다
+
 ### `run` — 측정회차·기기 배정·마커 (연구 운영)
 - 실증은 기기를 여러 참가자가 돌려 쓴다. 회차가 「누가·어떤 기기를·어디에 차고·언제부터 언제까지」를 묶어 자료 귀속의 다리를 놓는다 → LLD-0045, 지시서 B8
 - 운영자는 **관리자 계정**으로 `/api/v1/admin/collection-runs/**`를 호출한다(`ROLE_ADMIN`, 기존 `/api/v1/admin/**` 인가 규칙)
-- **불변식**: 회원당 열린 회차 1개(409), 기기는 한 번에 한 열린 회차에만 배정(409), 닫을 때 미해제 배정을 종료 시각으로 함께 해제, `data_policy=RETAIN`이면 보존 날짜 셋 필수·`identified ≤ pseudonymized ≤ research`
+- **불변식**: 회원당 열린 회차 1개(409), 기기는 한 번에 한 열린 회차에만 배정(409), 닫을 때 미해제 배정을 종료 시각으로 함께 해제, `data_policy=RETAIN`이면 보존 날짜 셋 필수·`identified ≤ pseudonymized ≤ research`(`product` 회차 요청값 검증)
+- **연구 회차 게이트**: `collection_mode=research`(기본값)는 대상 회원의 **ACTIVE 참여 기록 없이 열 수 없다**. `participationId`가 없으면 `RUN_RESEARCH_PARTICIPATION_REQUIRED`, 회원이 다르면 `RUN_RESEARCH_PARTICIPATION_MISMATCH`, ACTIVE가 아니면 `STUDY_PARTICIPATION_NOT_ACTIVE` → LLD-0052
+- 연구 회차는 `study_participation_id` FK만 저장한다. 연구 ID·동의 판·보관 값은 **요청을 믿지 않고 참여 기록에서 읽는다**. `CollectionRun`의 해당 getter가 참여 기록을 우선 읽으므로 응답·내보내기·자료 귀속이 모두 같은 값을 본다. 회차에 남은 중복 컬럼은 `product` 회차와 이 기능 이전 회차에만 쓰이며 운영 백필 후 제거한다
 - **마커는 정답 라벨**이다. 판정 결과 기록(B 1.4)과 같은 자리에 섞지 않는다(정책 1.8.1). `marker_id`로 멱등이며 같은 id에 다른 내용이면 409. 누른 기기의 `clock`도 `ClockMappingService.register`로 같은 규칙으로 등록해 센서와 같은 시간축에 놓는다
 - **배치 귀속**: `run_id`가 오면 그대로, 없으면 `resend.original_run_id`(늦게 온 자료를 나중 참가자에게 붙이지 않기 위해), 그것도 없으면 `resolveRun(member, device, measured_at_start)`으로 열린 회차를 찾는다. 없으면 null(운영 외 자료)
 - `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`

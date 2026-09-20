@@ -4,11 +4,13 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | Approved |
+| 상태 | Superseded by LLD-0052 |
 | Issue | #617 |
 | 관련 ADR | ADR-0026 |
 | 작성자 | Claude |
 | 작성일 | 2026-09-16 |
+
+> **2026-09-21 폐기.** 이 설계는 [LLD-0052](LLD-0052-study-participation-record.md)가 대체한다. 참여 식별자를 서버가 발급하고, 보관 날짜는 IRB 승인 전까지 비워 둘 수 있으며, 변경 이력은 감사 로그가 아니라 `study_participation_history` snapshot으로 남긴다. 아래 내용은 이력용이다.
 
 ## 1. 목적 / 배경
 
