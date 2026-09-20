@@ -188,8 +188,8 @@ public class StudyParticipation extends BaseTimeEntity {
         if (status == StudyParticipationStatus.WITHDRAWN) {
             throw new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_ACTIVE);
         }
-        if (scope == WithdrawalScope.SELECTED_CONSENTS && (consentKeys == null || consentKeys.isEmpty())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "일부 철회에는 철회할 동의 항목이 필요합니다.");
+        if (scope == WithdrawalScope.SELECTED_CONSENTS) {
+            validateWithdrawableConsents(consentKeys);
         }
         this.status = StudyParticipationStatus.WITHDRAWN;
         this.withdrawalScope = scope;
@@ -197,6 +197,19 @@ public class StudyParticipation extends BaseTimeEntity {
         this.withdrawalConsentKeys.clear();
         if (scope == WithdrawalScope.SELECTED_CONSENTS) {
             this.withdrawalConsentKeys.addAll(consentKeys);
+        }
+    }
+
+    /** 받지 않았거나 이미 거절한 동의는 철회할 것이 없다. 철회 항목은 실제 부여된 동의여야 한다. */
+    private void validateWithdrawableConsents(Set<String> consentKeys) {
+        if (consentKeys == null || consentKeys.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.STUDY_WITHDRAWAL_CONSENT_INVALID, "일부 철회에는 철회할 동의 항목이 필요합니다.");
+        }
+        for (String consentKey : consentKeys) {
+            if (!Boolean.TRUE.equals(consents.get(consentKey))) {
+                throw new BusinessException(ErrorCode.STUDY_WITHDRAWAL_CONSENT_INVALID);
+            }
         }
     }
 

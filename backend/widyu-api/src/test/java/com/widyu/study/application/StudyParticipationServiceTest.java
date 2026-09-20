@@ -41,6 +41,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -258,6 +259,57 @@ class StudyParticipationServiceTest {
     }
 
     @Test
+    @DisplayName("동의하지 않은 항목을 일부 철회하면 예외가 발생한다")
+    void 동의하지_않은_항목을_일부_철회하면_예외가_발생한다() {
+        // given
+        StudyParticipation participation = activeParticipation();
+        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+                .willReturn(Optional.of(participation));
+
+        // when & then
+        assertThatThrownBy(() -> studyParticipationService.withdraw(
+                PARTICIPATION_ID, new StudyWithdrawalRequest(WithdrawalScope.SELECTED_CONSENTS, Set.of("ecg"))))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_WITHDRAWAL_CONSENT_INVALID);
+        assertThat(participation.getStatus()).isEqualTo(StudyParticipationStatus.ACTIVE);
+        then(studyParticipationHistoryRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("일부 철회하면 거둔 동의 항목이 이력에도 남는다")
+    void 일부_철회하면_거둔_동의_항목이_이력에도_남는다() {
+        // given
+        given(studyParticipationRepository.findByParticipationId(PARTICIPATION_ID))
+                .willReturn(Optional.of(activeParticipation()));
+
+        // when
+        StudyParticipationResponse response = studyParticipationService.withdraw(
+                PARTICIPATION_ID,
+                new StudyWithdrawalRequest(WithdrawalScope.SELECTED_CONSENTS, Set.of("guardian_location_access")));
+
+        // then
+        assertThat(response.withdrawalConsentKeys()).containsExactly("guardian_location_access");
+        assertThat(savedHistory().getWithdrawnConsentKeys()).isEqualTo("[\"guardian_location_access\"]");
+    }
+
+    @Test
+    @DisplayName("같은 연구·회원의 ACTIVE 참여가 DB 제약에 걸리면 중복 예외로 바꾼다")
+    void 같은_연구_회원의_ACTIVE_참여가_DB_제약에_걸리면_중복_예외로_바꾼다() {
+        // given
+        given(studyParticipationRepository.existsByStudyIdAndMemberIdAndStatus(
+                STUDY_ID, MEMBER_ID, StudyParticipationStatus.ACTIVE)).willReturn(false);
+        givenExistingMember();
+        given(studyParticipationRepository.save(any(StudyParticipation.class)))
+                .willThrow(new DataIntegrityViolationException("uk_study_participation_active"));
+
+        // when & then
+        assertThatThrownBy(() -> studyParticipationService.register(createRequest(null, null, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_PARTICIPATION_DUPLICATED);
+        then(studyParticipationHistoryRepository).should(never()).save(any());
+    }
+
+    @Test
     @DisplayName("없는 참여 식별자를 조회하면 예외가 발생한다")
     void 없는_참여_식별자를_조회하면_예외가_발생한다() {
         // given
@@ -296,14 +348,19 @@ class StudyParticipationServiceTest {
     }
 
     private void thenAudited(AdminAction action) {
-        then(adminAuditLogService).should().log(eq(action), eq("StudyParticipation"), any(), anyString());
+        then(adminAuditLogService).should()
+                .logInCurrentTransaction(eq(action), eq("StudyParticipation"), any(), anyString());
     }
 
     private List<StudyParticipationHistoryType> savedHistoryTypes() {
+        return List.of(savedHistory().getHistoryType());
+    }
+
+    private StudyParticipationHistory savedHistory() {
         ArgumentCaptor<StudyParticipationHistory> saved =
                 ArgumentCaptor.forClass(StudyParticipationHistory.class);
         then(studyParticipationHistoryRepository).should().save(saved.capture());
-        return saved.getAllValues().stream().map(StudyParticipationHistory::getHistoryType).toList();
+        return saved.getValue();
     }
 
     private static Member senior() {
@@ -325,7 +382,8 @@ class StudyParticipationServiceTest {
 
     private static StudyParticipation activeParticipation() {
         return StudyParticipation.of(
-                STUDY_ID, PARTICIPATION_ID, senior(), "IRB-v1", CONSENTED_AT, Map.of(),
+                STUDY_ID, PARTICIPATION_ID, senior(), "IRB-v1", CONSENTED_AT,
+                Map.of("guardian_location_access", true, "ecg", false),
                 "KR_IRB", IDENTIFIED_UNTIL, PSEUDONYMIZED_AT, RESEARCH_UNTIL);
     }
 }

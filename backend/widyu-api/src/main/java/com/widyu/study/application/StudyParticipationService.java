@@ -19,6 +19,7 @@ import com.widyu.study.repository.StudyParticipationRepository;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +49,7 @@ public class StudyParticipationService {
         Member member = memberRepository.findById(request.memberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
-        StudyParticipation participation = studyParticipationRepository.save(StudyParticipation.of(
+        StudyParticipation participation = saveNew(StudyParticipation.of(
                 request.studyId(),
                 newParticipationId(),
                 member,
@@ -121,12 +122,24 @@ public class StudyParticipationService {
             AdminAction action) {
         studyParticipationHistoryRepository.save(
                 StudyParticipationHistory.snapshotOf(participation, historyType));
-        adminAuditLogService.log(action, TARGET_TYPE, participation.getId(),
+        adminAuditLogService.logInCurrentTransaction(action, TARGET_TYPE, participation.getId(),
                 "participationId=%s, memberId=%d, studyId=%s".formatted(
                         participation.getParticipationId(),
                         participation.getMember().getId(),
                         participation.getStudyId()));
         return StudyParticipationResponse.from(participation);
+    }
+
+    /**
+     * 같은 연구·회원의 ACTIVE 참여가 하나뿐인지는 DB UK가 보장한다. 위의 조회 검사는 빠른 응답용이라
+     * 동시 요청에서는 통과할 수 있고, 그때 UK에 걸린 쪽을 같은 409로 돌려준다.
+     */
+    private StudyParticipation saveNew(StudyParticipation participation) {
+        try {
+            return studyParticipationRepository.save(participation);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.STUDY_PARTICIPATION_DUPLICATED);
+        }
     }
 
     private StudyParticipation find(String participationId) {

@@ -15,7 +15,7 @@ public record StudyParticipationCreateRequest(
         @NotNull(message = "memberId는 필수입니다.") Long memberId,
         @NotBlank(message = "consentVersion은 필수입니다.") @Size(max = 50) String consentVersion,
         @NotNull(message = "consentedAt은 필수입니다.") LocalDate consentedAt,
-        Map<@Size(max = 64) String, Boolean> consents,
+        Map<@NotBlank @Size(max = 64) String, @NotNull Boolean> consents,
         @Size(max = 50) String dataPolicy,
         LocalDate identifiedUntil,
         LocalDate pseudonymizedAt,

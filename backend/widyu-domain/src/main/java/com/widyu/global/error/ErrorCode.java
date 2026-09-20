@@ -162,6 +162,7 @@ public enum ErrorCode {
     STUDY_PARTICIPATION_DUPLICATED(HttpStatus.CONFLICT, "STUDY_4090", "이미 등록된 연구 참여입니다."),
     STUDY_RETENTION_PERIOD_INVALID(HttpStatus.BAD_REQUEST, "STUDY_4000", "보존 기간 순서가 올바르지 않습니다."),
     STUDY_PARTICIPATION_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "STUDY_4001", "활성 상태의 연구 참여가 아닙니다."),
+    STUDY_WITHDRAWAL_CONSENT_INVALID(HttpStatus.BAD_REQUEST, "STUDY_4002", "동의한 항목만 철회할 수 있습니다."),
 
     // 잘못된 요청
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "REQ_4000", "잘못된 요청입니다."),
