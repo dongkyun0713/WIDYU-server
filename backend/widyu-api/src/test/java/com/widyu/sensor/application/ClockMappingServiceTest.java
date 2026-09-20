@@ -44,6 +44,7 @@ class ClockMappingServiceTest {
     private static final long OBSERVED_MAX_NS = 993_847_152_341_423L;
 
     @Mock private ClockMappingRepository clockMappingRepository;
+    @Mock private ClockMappingInsertService clockMappingInsertService;
 
     @InjectMocks private ClockMappingService clockMappingService;
 
@@ -59,7 +60,7 @@ class ClockMappingServiceTest {
 
         // then
         ArgumentCaptor<ClockMapping> saved = ArgumentCaptor.forClass(ClockMapping.class);
-        then(clockMappingRepository).should().saveAndFlush(saved.capture());
+        then(clockMappingInsertService).should().insert(saved.capture());
         ClockMapping mapping = saved.getValue();
         assertThat(mapping.getClockMappingId()).isEqualTo(MAPPING_ID);
         assertThat(mapping.getDeviceId()).isEqualTo(DEVICE_ID);
@@ -90,7 +91,7 @@ class ClockMappingServiceTest {
         clockMappingService.register(clock(), DEVICE_ID, laterMinNs, laterMaxNs);
 
         // then
-        then(clockMappingRepository).should(never()).saveAndFlush(any());
+        then(clockMappingInsertService).should(never()).insert(any());
         ArgumentCaptor<Long> now = ArgumentCaptor.forClass(Long.class);
         then(clockMappingRepository).should()
                 .widenObservedRange(eq(MAPPING_ID), eq(laterMinNs), eq(laterMaxNs), now.capture());
@@ -146,8 +147,8 @@ class ClockMappingServiceTest {
         // given
         given(clockMappingRepository.findByClockMappingId(MAPPING_ID))
                 .willReturn(Optional.empty(), Optional.of(registeredMapping()));
-        given(clockMappingRepository.saveAndFlush(any(ClockMapping.class)))
-                .willThrow(new DataIntegrityViolationException("uk_clock_mapping_id"));
+        org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("uk_clock_mapping_id"))
+                .given(clockMappingInsertService).insert(any(ClockMapping.class));
 
         // when & then
         assertThatCode(() ->
@@ -162,8 +163,8 @@ class ClockMappingServiceTest {
     void 경합_뒤에도_매핑_행이_없으면_원래_예외가_전파된다() {
         // given
         given(clockMappingRepository.findByClockMappingId(MAPPING_ID)).willReturn(Optional.empty());
-        given(clockMappingRepository.saveAndFlush(any(ClockMapping.class)))
-                .willThrow(new DataIntegrityViolationException("not_a_unique_key_conflict"));
+        org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("not_a_unique_key_conflict"))
+                .given(clockMappingInsertService).insert(any(ClockMapping.class));
 
         // when & then
         assertThatThrownBy(() ->

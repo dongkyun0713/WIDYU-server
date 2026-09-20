@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ClockMappingService {
 
     private final ClockMappingRepository clockMappingRepository;
+    private final ClockMappingInsertService clockMappingInsertService;
 
     @Transactional
     public void register(
@@ -40,7 +41,7 @@ public class ClockMappingService {
 
         if (registered == null) {
             try {
-                clockMappingRepository.saveAndFlush(
+                clockMappingInsertService.insert(
                         newMapping(clock, deviceId, observedMinElapsedNs, observedMaxElapsedNs, now));
                 // 새로 만든 행의 관측 범위가 곧 이 배치의 범위라 넓힐 것이 없다.
                 return;
