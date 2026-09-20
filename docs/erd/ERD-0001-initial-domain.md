@@ -260,6 +260,7 @@ erDiagram
         Long startedAtMs
         Long endedAtMs
         CollectionRunStatus status "OPEN / CLOSED"
+        Integer openMarker "OPEN=1, UK(member_id, open_marker)"
         String dataPolicy "RETAIN 등 (값 집합 미정)"
         LocalDate identifiedUntil
         LocalDate pseudonymizedAt
@@ -278,6 +279,7 @@ erDiagram
         String wearSite "값 집합 S1 미정"
         Long assignedAtMs
         Long unassignedAtMs "null이면 배정 중"
+        Integer activeMarker "배정 중=1, UK(device_id, active_marker)"
     }
 
     RunMarker {
@@ -527,8 +529,10 @@ erDiagram
 | `clock_mapping` | UK `uk_clock_mapping_id` | `(clock_mapping_id)` | 한 식별자의 다섯 값은 불변. 다르면 409 (LLD-0044) |
 | `clock_mapping` | `idx_clock_mapping_device` | `(device_id)` | 기기별 매핑 조회 |
 | `collection_run` | UK `uk_collection_run_run_id` | `(run_id)` | 서버 발급 회차 식별자 |
+| `collection_run` | UK `uk_collection_run_member_open` | `(member_id, open_marker)` | 열린 회차만 marker=1로 회원당 OPEN 하나를 DB에서 보장 |
 | `collection_run` | `idx_collection_run_member_status` | `(member_id, status)` | 회원의 열린 회차 조회 (B12) |
 | `run_device_assignment` | UK `uk_run_device_assignment_id` | `(assignment_id)` | 배정 식별자 |
+| `run_device_assignment` | UK `uk_run_device_assignment_active` | `(device_id, active_marker)` | 배정 중인 기기만 marker=1로 동시 이중 배정을 DB에서 차단 |
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
 | `run_marker` | UK `uk_run_marker_id` | `(marker_id)` | 마커 멱등 |
 | `run_marker` | `idx_run_marker_run_time` | `(run_id, ts_ms)` | 회차별 마커 시각순 조회 |
