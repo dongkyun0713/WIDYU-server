@@ -77,8 +77,21 @@
 ### 5.3 즉시 모드
 기록 직후, 같은 `(senior, viewer)`로 `notified_at`이 `now − cooldown` 이후인 행이 있으면 FCM을 보내지 않고 `notified_at`도 비워 둔다(요약 대상으로 남긴다 — 다음 다이제스트가 「즉시 모드에서 합쳐진 건」도 알린다). 없으면 시니어에게 FCM 1건(`LOCATION_NOTICE`, 제목 「위치 조회 알림」, 본문 「{보호자 이름}님이 내 위치를 확인했어요」, `relatedMemberId=viewerId`, `emergency=false`) enqueue 후 그 행 `notified_at=now`.
 
+**시니어 단위 직렬화.** 쿨다운 확인과 enqueue는 원자적이지 않다. 같은 시니어를 동시에 조회하면 모두 「최근 통보 없음」을 읽고 저마다 FCM을 등록한다. 그래서 `record`의 `REQUIRES_NEW` 트랜잭션은 **맨 먼저 시니어 `Member` 행을 `PESSIMISTIC_WRITE`로 잠근다**(`MemberRepository.findByIdForUpdate`, 기존 메서드 재사용). 그 뒤 INSERT → 쿨다운 조회 → FCM enqueue → `notified_at` 갱신이 이어진다. 열람 빈도(수 초에 1건)에서 시니어 단위 직렬화의 부하는 무시할 수 있다. 회원 행이 없어도(탈퇴 등) 기록은 남겨야 하므로 잠금 결과는 보지 않고, 잠금 실패도 훅의 `try/catch`가 삼켜 조회를 막지 않는다.
+
 ### 5.4 모아서 모드 — `LocationAccessDigestScheduler` (`@Scheduled(cron="${location-access.digest-cron}")`, `SchedulerConfig` 조건 준수)
-`notified_at IS NULL`인 행을 시니어별로 묶어 각 시니어에게 FCM 1건(「지난 기간 보호자 {n}명이 위치를 {m}회 확인했어요」) enqueue 후 해당 행들 `notified_at=now` 벌크 갱신. 즉시 모드 시니어의 미통보 행(쿨다운으로 합쳐진 것)도 함께 처리한다. 시니어별 try/catch.
+`notified_at IS NULL`인 행을 시니어별로 묶어 각 시니어에게 FCM 1건(「지난 기간 보호자 {n}명이 위치를 {m}회 확인했어요」)을 보낸다. 즉시 모드 시니어의 미통보 행(쿨다운으로 합쳐진 것)도 함께 처리한다. 시니어별 try/catch.
+
+**보내기 전에 선점한다.** 읽고-보내고-갱신하면 인스턴스가 둘 이상일 때 같은 행을 저마다 읽어 시니어가 같은 알림을 여러 번 받는다. 순서를 뒤집어, 시니어마다 먼저 조건부 UPDATE로 집는다.
+
+1. `findSeniorIdsWithUnnotified()` — `notified_at IS NULL`인 시니어 식별자만 읽는다.
+2. `claimUnnotified(seniorId, now)` — `set notified_at = :now where senior_member_id = :seniorId and notified_at is null`. **반환 건수가 0이면 다른 인스턴스가 먼저 집은 것이므로 FCM을 보내지 않는다.**
+3. 집은 뒤 `findBySeniorMemberIdAndNotifiedAt(seniorId, now)`로 **실제로 집은 행만** 다시 읽어 조회자 수 `n`과 횟수 `m`을 센다. 선점 전 목록을 세면 그 사이 늘어난 행까지 세어 숫자가 맞지 않는다. 그 사이 늘어난 행은 `notified_at`이 비어 있으니 다음 회차 몫이다.
+4. FCM 1건 enqueue.
+
+선점은 자기 트랜잭션에서 끝나고 **스케줄러 메서드에는 트랜잭션을 걸지 않는다.** 하나로 묶으면 한 시니어의 실패가 트랜잭션을 rollback-only로 만들어 그날 전체가 함께 무너지고, 시니어별 `try/catch`가 무의미해진다.
+
+트레이드오프: 선점이 먼저이므로 enqueue가 실패한 시니어의 행은 이미 통보된 것으로 표시되어 다시 잡히지 않는다. 중복 통보 대신 드문 누락을 택한 것이며, 열람 기록 자체는 남고 시니어는 언제든 API(5.5)로 전부 볼 수 있다.
 
 ### 5.5 조회
 `GET …/access-logs/mine`: `seniorId = 현재 회원`, 기간 필터·페이지. `viewerName`은 `Member.name`(가족이므로 노출 가능).
