@@ -194,11 +194,21 @@ erDiagram
         String location
     }
 
+    HeartRateEvent {
+        Long id PK
+        Long member_id FK
+        Integer heartRate
+        LocalDateTime measuredAt "Asia/Seoul 환산, UK (member_id, measured_at)"
+        HeartRateStatus status
+        String accuracy "워치 보고 정확도 (단건 경로는 null)"
+        String batchId "배치 원문 참조 (단건 경로는 null)"
+    }
+
     SensorBatch {
         Long id PK
         String batchId UK "앱이 붙인 불변 멱등 키 (ULID)"
         Long member_id FK
-        String stream "imu_watch / imu_phone"
+        String stream "imu_watch / imu_phone / hr"
         String source "watch / phone"
         String deviceId
         String sessionId
@@ -213,6 +223,7 @@ erDiagram
         Double uncertaintyMs "⑤"
         Integer accN "없으면 null"
         Integer gyroN "없으면 null (0 치환 금지)"
+        Integer sampleCount "심박 배치 샘플 수 (IMU는 null)"
         Long accT0ElapsedNs
         Long gyroT0ElapsedNs
         Double accFsHzRequested
@@ -224,8 +235,8 @@ erDiagram
         Long acceptedAtMs
         Long persistedAtMs
         Long modelAvailableAtServerMs "소급 금지"
-        String collectionMode "product / research"
-        String gyroMode "continuous / trigger"
+        String collectionMode "product / research (심박은 null)"
+        String gyroMode "continuous / trigger (심박은 null)"
         Boolean onBody
         String wearState
         String missingReason
@@ -440,6 +451,7 @@ erDiagram
     Member ||--o{ MedicationProof : "복약 인증"
     Member ||--o{ Walk : "걸음 기록"
     Member ||--o{ HeartRateEmergency : "심박 이상"
+    Member ||--o{ HeartRateEvent : "심박 측정 이력"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
@@ -556,6 +568,8 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-20 | `heart_rate_event` | `accuracy`·`batch_id` 컬럼 추가 (LLD-0047). 운영 배포 전 필수 | `scripts/mysql/add_heart_rate_event_accuracy.sql` |
+| 2026-09-20 | `sensor_batch` | `sample_count` 추가, `collection_mode`·`gyro_mode` NULL 허용 (LLD-0047, 심박 배치 수용) | `scripts/mysql/alter_sensor_batch_for_hr.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
 | 2026-09-20 | `collection_run`·`run_device_assignment`·`run_marker` | 신규 테이블 3개 (LLD-0045). 측정회차·기기 배정·마커 | `scripts/mysql/create_collection_run.sql` |
 | 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |

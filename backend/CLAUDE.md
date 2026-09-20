@@ -50,6 +50,9 @@
   - 단건 경로만 지원하며 결과 ACK는 발신 세션에만 전달한다 → ADR-0017, LLD-0023
 - **위급 사이클**: 위험 감지 후 5분 유지, 그 안에 재감지되면 마지막 감지 기준 연장. "마지막 감지 + 5분" == "최근 5분 내 감지 존재"이므로 상태를 저장하지 않고 조회 윈도우로만 판정. **그래프 조회 범위 산정에만 사용**하며, `/emergency/recent`는 사이클과 무관하게 최근 15분 내 기록 유무만 반환
 - **조회 범위 규칙**: 그래프는 응급 화면이므로 events·max·min·firstEmergency가 **진행 중인 사이클 시작 5분 전 ~ 현재**. 사이클 없으면 빈 배열. `emergencyHistory`의 count·events는 전체 기간이지만 `totalDuration`은 현재 사이클 지속 시간(첫 감지~마지막 감지, 분). 갱신(`/graph/refresh`)은 `since` 지정 시 그 이후 신규 이벤트만, 미지정 시 최근 5개
+- **배치 v2(#646)는 sensor 파이프라인을 탄다**: `stream: "hr"`로 같은 endpoint에 오고 원문은 S3, 봉투는 `sensor_batch`, 샘플은 `heart_rate_event`(+`accuracy`·`batch_id`)에 저장된다 → ADR-0031, LLD-0047
+- **저장이 판정에 앞선다**: 값이 이상해도 저장하고(정책 1.2.1) AI가 실패하면 `UNKNOWN`으로 저장한 뒤 그 배치의 남은 샘플은 AI를 건너뛴다(단락). `bpm`이 1~299 밖이거나 `accuracy=UNRELIABLE`이면 저장만 하고 AI를 부르지 않는다
+- 샘플은 `(member_id, measured_at)` UK로 멱등이라 재전송·단건 중복은 스킵된다. `measured_at`은 Asia/Seoul 환산이고 원 시각은 S3 원문과 인덱스 행에 남는다
 - 수신한 단건 심박은 AI 판정 후 즉시 최신값에 반영한다.
 - `heart_rate_event`는 자동 삭제하지 않는다(#650). 보존 기간은 법률 검토 뒤 ADR로 정한다.
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
@@ -67,7 +70,8 @@
 - 시계 매핑은 `clock_mapping` 테이블(기기 단위 UK `clock_mapping_id`). 같은 id에 다른 다섯 값·다른 기기면 409(`SENSOR_4090`). 등록은 S3 PUT 앞, 자기 트랜잭션 → LLD-0044
 - **수집 설정 하달**: `GET /api/v1/sensor/config`가 설정 전체와 호출자 기준 `collectionMode`를 준다. 모드는 **열린 회차 유무**로 정하고(있으면 research) 회차 열기·닫기가 곧 전환 수단이라 변경 API가 없다. 배치가 실어 보낸 `collection_mode`·`gyro_mode`·`fs_hz_requested`가 지시값과 다르면 `config_mismatch=true`로 표시만 하고 **거부하지 않는다** → LLD-0046
 - 본문 상한은 `sensor.max-payload-bytes`(기본 32768, `application-sensor.yml`)
-- REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
+ - `stream`으로 갈린다: `imu_watch`·`imu_phone`은 축 검증, `hr`는 심박 검증(1~60샘플·`ts_ms` 엄격 증가·`bpm 0`은 `UNRELIABLE`만·`location`/`context` 금지) 후 `HeartRateBatchService`로 넘긴다. 심박 인덱스 행은 축·충격·설정 대조가 null이고 `sample_count`를 쓴다
+ - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
 
 ### `run` — 측정회차·기기 배정·마커 (연구 운영)
 - 실증은 기기를 여러 참가자가 돌려 쓴다. 회차가 「누가·어떤 기기를·어디에 차고·언제부터 언제까지」를 묶어 자료 귀속의 다리를 놓는다 → LLD-0045, 지시서 B8

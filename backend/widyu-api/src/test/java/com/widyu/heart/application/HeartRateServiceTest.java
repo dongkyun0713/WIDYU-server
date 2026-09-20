@@ -549,7 +549,7 @@ class HeartRateServiceTest {
 
     private HeartRateEvent heartRateEvent(Integer heartRate, LocalDateTime measuredAt, HeartRateStatus status) {
         Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        return HeartRateEvent.of(member, heartRate, measuredAt, status);
+        return HeartRateEvent.of(member, heartRate, measuredAt, status, null, null);
     }
 
     private HeartRateEmergency heartRateEmergency(Integer heartRate, LocalDateTime measuredAt) {
