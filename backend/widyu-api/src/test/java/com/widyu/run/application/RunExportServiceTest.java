@@ -57,6 +57,8 @@ class RunExportServiceTest {
         assertThat(response.exportId()).startsWith("exp-");
         assertThat(response.runId()).isEqualTo(RUN_ID);
         assertThat(response.fileName()).isEqualTo("run_%s.zip".formatted(RUN_ID));
+        // 같은 회차 요청은 이 잠금 안에서 진행 중 작업을 확인한다.
+        then(collectionRunRepository).should().findByRunIdForUpdate(RUN_ID);
     }
 
     @Test
