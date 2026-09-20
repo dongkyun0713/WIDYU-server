@@ -21,6 +21,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -99,10 +100,18 @@ public class StudyParticipationService {
                 AdminAction.STUDY_PARTICIPATION_DELETION_PROCESSED);
     }
 
-    /** 연구 회차 개설 게이트(LLD-0052 5절). 대상 회원의 ACTIVE 참여 기록만 통과시킨다. */
-    @Transactional(readOnly = true)
+    /**
+     * 연구 회차 개설 게이트(LLD-0052 5절). 대상 회원의 ACTIVE 참여 기록만 통과시킨다.
+     *
+     * <p>회차를 저장하는 트랜잭션 안에서 참여 기록을 잠그고 읽는다. 검사와 저장이 다른
+     * 트랜잭션이면 그 사이에 들어온 철회를 놓쳐 WITHDRAWN 참여로 연구 회차가 열린다.
+     * 호출자 트랜잭션이 없으면 그 보장이 없으므로 {@code MANDATORY}로 막는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
     public StudyParticipation requireActiveForRun(String participationId, Long memberId) {
-        StudyParticipation participation = find(participationId);
+        StudyParticipation participation = studyParticipationRepository
+                .findByParticipationIdForUpdate(participationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_FOUND));
         if (!participation.getMember().getId().equals(memberId)) {
             throw new BusinessException(ErrorCode.RUN_RESEARCH_PARTICIPATION_MISMATCH);
         }

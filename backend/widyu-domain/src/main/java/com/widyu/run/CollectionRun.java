@@ -213,6 +213,14 @@ public class CollectionRun extends BaseTimeEntity {
         return participation.getResearchUntil();
     }
 
+    /**
+     * 회차를 저장하는 트랜잭션 안에서 잠금 재조회한 참여 기록을 단다(LLD-0052 5절).
+     * 개설 검사와 저장이 같은 트랜잭션에 들어가야 그 사이 철회를 놓치지 않는다.
+     */
+    public void attachParticipation(StudyParticipation participation) {
+        this.participation = participation;
+    }
+
     public void close(Long endedAtMs, String qualityNotes, String missingReason) {
         this.endedAtMs = endedAtMs;
         this.qualityNotes = qualityNotes;

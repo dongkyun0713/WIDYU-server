@@ -29,10 +29,7 @@ import com.widyu.run.repository.CollectionRunRepository;
 import com.widyu.run.repository.RunDeviceAssignmentRepository;
 import com.widyu.run.repository.RunMarkerRepository;
 import com.widyu.sensor.application.ClockMappingService;
-import com.widyu.study.StudyParticipation;
-import com.widyu.study.application.StudyParticipationService;
 import java.time.LocalDate;
-import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -52,7 +49,6 @@ class CollectionRunServiceTest {
     private static final String RUN_ID = "run-0f3a";
     private static final String DEVICE_ID = "gw-3f2a";
     private static final long STARTED_AT_MS = 1_760_000_000_000L;
-    private static final String STUDY_ID = "STUDY-2026";
     private static final String PARTICIPATION_ID = "part-0f3a";
     private static final LocalDate RESEARCH_UNTIL = LocalDate.of(2029, 3, 31);
 
@@ -66,7 +62,6 @@ class CollectionRunServiceTest {
     @Mock private MemberRepository memberRepository;
     @Mock private ClockMappingService clockMappingService;
     @Mock private com.widyu.admin.application.AdminAuditLogService adminAuditLogService;
-    @Mock private StudyParticipationService studyParticipationService;
 
     @InjectMocks private CollectionRunService collectionRunService;
 
@@ -78,9 +73,8 @@ class CollectionRunServiceTest {
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
-        given(studyParticipationService.requireActiveForRun(PARTICIPATION_ID, MEMBER_ID))
-                .willReturn(participation());
-        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any())).willAnswer(i -> i.getArgument(0));
+        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any(), any()))
+                .willAnswer(i -> i.getArgument(0));
         given(runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 DEVICE_ID, CollectionRunStatus.OPEN)).willReturn(false);
         CollectionRunOpenRequest request = CollectionRunOpenRequest.of(
@@ -93,21 +87,24 @@ class CollectionRunServiceTest {
 
         // then
         ArgumentCaptor<CollectionRun> savedRun = ArgumentCaptor.forClass(CollectionRun.class);
-        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any());
+        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any(), any());
         CollectionRun run = savedRun.getValue();
         assertThat(run.getRunId()).startsWith("run-").hasSize(36);
         assertThat(run.getStatus()).isEqualTo(CollectionRunStatus.OPEN);
         // 수집 모드 기본값은 research다.
         assertThat(run.getCollectionMode()).isEqualTo("research");
         assertThat(run.getStartedAtMs()).isEqualTo(STARTED_AT_MS);
-        // 연구 메타데이터는 요청이 아니라 참여 기록에서 온다.
-        assertThat(run.getStudyId()).isEqualTo(STUDY_ID);
-        assertThat(run.getParticipationId()).isEqualTo(PARTICIPATION_ID);
-        assertThat(run.getConsentVersion()).isEqualTo("IRB-v1");
-        assertThat(run.getResearchUntil()).isEqualTo(RESEARCH_UNTIL);
+        // 연구 회차는 요청의 연구 메타데이터를 옮겨 적지 않는다. 정본은 참여 기록이다.
+        assertThat(run.getStudyId()).isNull();
+        assertThat(run.getConsentVersion()).isNull();
+        // 참여 기록 FK는 저장 트랜잭션 안에서 잠금 재검증한 뒤 붙으므로 식별자를 넘긴다.
+        ArgumentCaptor<String> handedParticipationId = ArgumentCaptor.forClass(String.class);
+        then(collectionRunOpenCommandService).should()
+                .open(any(), any(), handedParticipationId.capture());
+        assertThat(handedParticipationId.getValue()).isEqualTo(PARTICIPATION_ID);
 
         ArgumentCaptor<List<RunDeviceAssignment>> savedAssignments = ArgumentCaptor.forClass(List.class);
-        then(collectionRunOpenCommandService).should().open(any(), savedAssignments.capture());
+        then(collectionRunOpenCommandService).should().open(any(), savedAssignments.capture(), any());
         RunDeviceAssignment assignment = savedAssignments.getValue().get(0);
         assertThat(assignment.getAssignmentId()).startsWith("asg-").hasSize(36);
         assertThat(assignment.getDeviceId()).isEqualTo(DEVICE_ID);
@@ -129,7 +126,7 @@ class CollectionRunServiceTest {
         assertThatThrownBy(() -> collectionRunService.open(openRequest(null, List.of())))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_ALREADY_OPEN);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
     }
 
     @Test
@@ -147,7 +144,7 @@ class CollectionRunServiceTest {
                 List.of(DeviceAssignRequest.of(DEVICE_ID, "watch", null, null)))))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
     }
 
     @Test
@@ -158,7 +155,7 @@ class CollectionRunServiceTest {
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
         willThrow(new DataIntegrityViolationException("device_id"))
-                .given(collectionRunOpenCommandService).open(any(CollectionRun.class), any());
+                .given(collectionRunOpenCommandService).open(any(CollectionRun.class), any(), any());
         given(collectionRunConflictLookupService.hasOpenRun(MEMBER_ID)).willReturn(false);
         given(collectionRunConflictLookupService.hasActiveDevice(DEVICE_ID)).willReturn(true);
 
@@ -218,26 +215,7 @@ class CollectionRunServiceTest {
         assertThatThrownBy(() -> collectionRunService.open(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_RESEARCH_PARTICIPATION_REQUIRED);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
-    }
-
-    @Test
-    @DisplayName("참여 기록이 게이트를 통과하지 못하면 회차를 저장하지 않는다")
-    void 참여_기록이_게이트를_통과하지_못하면_회차를_저장하지_않는다() {
-        // given
-        given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member()));
-        given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
-                .willReturn(false);
-        willThrow(new BusinessException(ErrorCode.STUDY_PARTICIPATION_NOT_ACTIVE))
-                .given(studyParticipationService).requireActiveForRun(PARTICIPATION_ID, MEMBER_ID);
-        CollectionRunOpenRequest request = CollectionRunOpenRequest.of(
-                MEMBER_ID, null, PARTICIPATION_ID, null, null, "research", STARTED_AT_MS, null, List.of());
-
-        // when & then
-        assertThatThrownBy(() -> collectionRunService.open(request))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_PARTICIPATION_NOT_ACTIVE);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
     }
 
     @Test
@@ -247,7 +225,7 @@ class CollectionRunServiceTest {
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member()));
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
-        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any()))
+        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any(), any()))
                 .willAnswer(i -> i.getArgument(0));
         CollectionRunOpenRequest.RetentionRequest retention = CollectionRunOpenRequest.RetentionRequest.of(
                 "RETAIN", LocalDate.of(2027, 3, 31), LocalDate.of(2027, 3, 31), RESEARCH_UNTIL);
@@ -257,13 +235,16 @@ class CollectionRunServiceTest {
 
         // then
         ArgumentCaptor<CollectionRun> savedRun = ArgumentCaptor.forClass(CollectionRun.class);
-        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any());
+        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any(), any());
         CollectionRun run = savedRun.getValue();
         assertThat(run.getCollectionMode()).isEqualTo("product");
         assertThat(run.getParticipation()).isNull();
         assertThat(run.getDataPolicy()).isEqualTo("RETAIN");
         assertThat(run.getResearchUntil()).isEqualTo(RESEARCH_UNTIL);
-        then(studyParticipationService).shouldHaveNoInteractions();
+        ArgumentCaptor<String> handedParticipationId = ArgumentCaptor.forClass(String.class);
+        then(collectionRunOpenCommandService).should()
+                .open(any(), any(), handedParticipationId.capture());
+        assertThat(handedParticipationId.getValue()).isNull();
     }
 
     @Test
@@ -467,11 +448,6 @@ class CollectionRunServiceTest {
                 MEMBER_ID, null, null, null, null, "product", STARTED_AT_MS, retention, devices);
     }
 
-    private StudyParticipation participation() {
-        return StudyParticipation.of(
-                STUDY_ID, PARTICIPATION_ID, member(), "IRB-v1", LocalDate.of(2026, 9, 20), Map.of(),
-                "KR_IRB", LocalDate.of(2027, 3, 31), LocalDate.of(2027, 3, 31), RESEARCH_UNTIL);
-    }
 
     private CollectionRun openRun() {
         CollectionRun run = CollectionRun.builder()
