@@ -23,6 +23,13 @@ sensor:
     # RUNNING 선점 뒤 프로세스가 죽으면 이 시간이 지난 잡을 다시 QUEUED로 돌린다.
     running-timeout-ms: ${SENSOR_EXPORT_RUNNING_TIMEOUT_MS:900000}
     presign-minutes: 15
+
+  fall-ai:
+    enabled: ${SENSOR_FALL_AI_ENABLED:false}
+    path: ${SENSOR_FALL_AI_PATH:/api/fall}
+    window-before-sec: ${SENSOR_FALL_AI_WINDOW_BEFORE_SEC:2}
+    server-decider-id: ${SENSOR_FALL_AI_SERVER_DECIDER_ID:widyu-server}
+    server-decider-version: ${SENSOR_FALL_AI_SERVER_DECIDER_VERSION:abstain-v1}
     server-build: ${SENSOR_EXPORT_SERVER_BUILD:unknown}
     # 기대 샘플 간격(ms). expected_sample_count = 배정 구간 / 간격이며 자료가 없다고 줄이지 않는다(ADR-0032 결정 4).
     expected-period-ms:

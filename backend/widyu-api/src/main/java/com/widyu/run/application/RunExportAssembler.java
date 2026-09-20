@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.widyu.device.DeviceHeartbeat;
 import com.widyu.device.repository.DeviceHeartbeatRepository;
+import com.widyu.decision.DecisionRecord;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.location.raw.LocationFix;
@@ -60,6 +62,7 @@ public class RunExportAssembler {
     private static final String STREAM_HEARTBEAT = "heartbeat";
     private static final String STREAM_MEASUREMENTS = "measurements";
     private static final String STREAM_INCIDENTS = "incidents";
+    private static final String DECISIONS_FILE = "decisions.jsonl";
     private static final List<String> SENSOR_STREAMS =
             List.of(STREAM_IMU_WATCH, STREAM_IMU_PHONE, STREAM_HR);
     private static final String ROLE_WATCH = "watch";
@@ -78,6 +81,7 @@ public class RunExportAssembler {
     private final SensorBatchRepository sensorBatchRepository;
     private final LocationFixRepository locationFixRepository;
     private final DeviceHeartbeatRepository deviceHeartbeatRepository;
+    private final DecisionRecordRepository decisionRecordRepository;
     private final ClockMappingRepository clockMappingRepository;
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     private final RunMarkerRepository runMarkerRepository;
@@ -109,11 +113,50 @@ public class RunExportAssembler {
         }
         writeLocationStream(run, workDir, accumulators);
         writeHeartbeatStream(run, heartbeats, workDir, accumulators);
+        writeDecisions(run, workDir);
 
         writeClockMappings(run, workDir);
         writeQuality(run, assignments, heartbeats, accumulators, workDir);
         writeRunJson(run, assignments, workDir);
         writeManifest(run, assignments, accumulators, workDir);
+    }
+
+    /** 판정 기록은 센서 스트림이 아니므로 manifest.files에는 넣지 않는다(LLD-0051 5.3). */
+    private void writeDecisions(CollectionRun run, Path workDir) throws IOException {
+        List<DecisionRecord> records = decisionRecordRepository.findByRunIdOrderByDecisionAtMsAsc(run.getRunId());
+        if (records.isEmpty()) {
+            return;
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(workDir.resolve(DECISIONS_FILE), StandardCharsets.UTF_8)) {
+            for (DecisionRecord record : records) {
+                writer.write(objectMapper.writeValueAsString(toDecisionRecord(record)));
+                writer.write("\n");
+            }
+        }
+    }
+
+    private ObjectNode toDecisionRecord(DecisionRecord record) throws IOException {
+        ObjectNode node = objectMapper.createObjectNode();
+        node.put("decision_id", record.getDecisionId());
+        node.put("member_id", record.getMemberId());
+        putNullableString(node, "run_id", record.getRunId());
+        node.set("stream_ids_used", objectMapper.readTree(record.getStreamIdsUsed()));
+        node.put("decision_at_ms", record.getDecisionAtMs());
+        node.put("decision_output", record.getDecisionOutput());
+        node.put("decider_id", record.getDeciderId());
+        node.put("decider_version", record.getDeciderVersion());
+        node.put("input_cutoff_ms", record.getInputCutoffMs());
+        node.put("feature_support_end_ms", record.getFeatureSupportEndMs());
+        node.put("model_available_at_server_max_ms", record.getModelAvailableAtServerMaxMs());
+        node.put("window_start_ms", record.getWindowStartMs());
+        node.put("window_end_ms", record.getWindowEndMs());
+        putNullableString(node, "alert_id", record.getAlertId());
+        putNullableLong(node, "alert_at_ms", record.getAlertAtMs());
+        putNullableString(node, "severity", record.getSeverity());
+        putNullableString(node, "trigger_path", record.getTriggerPath());
+        node.put("alert_delivered", record.getAlertDelivered());
+        node.put("trigger_batch_id", record.getTriggerBatchId());
+        return node;
     }
 
     // ── 스트림 파일 ────────────────────────────────────────────────

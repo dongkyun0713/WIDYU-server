@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.widyu.device.repository.DeviceHeartbeatRepository;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.location.raw.repository.LocationFixRepository;
 import com.widyu.run.CollectionRun;
@@ -50,6 +51,7 @@ class RunExportAssemblerTest {
     @Mock private SensorBatchRepository sensorBatchRepository;
     @Mock private LocationFixRepository locationFixRepository;
     @Mock private DeviceHeartbeatRepository deviceHeartbeatRepository;
+    @Mock private DecisionRecordRepository decisionRecordRepository;
     @Mock private ClockMappingRepository clockMappingRepository;
     @Mock private RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     @Mock private RunMarkerRepository runMarkerRepository;
@@ -323,7 +325,7 @@ class RunExportAssemblerTest {
 
     private RunExportAssembler assembler() {
         return new RunExportAssembler(
-                sensorBatchRepository, locationFixRepository, deviceHeartbeatRepository,
+                sensorBatchRepository, locationFixRepository, deviceHeartbeatRepository, decisionRecordRepository,
                 clockMappingRepository, runDeviceAssignmentRepository, runMarkerRepository,
                 s3Service, MAPPER, RunExportFixture.properties());
     }

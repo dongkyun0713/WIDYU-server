@@ -353,6 +353,20 @@ erDiagram
         String serverBuild
     }
 
+    DecisionRecord {
+        Long id PK
+        String decisionId UK
+        Long memberId
+        String runId
+        String decisionOutput "ALERT / NO_ALERT / ABSTAIN_INSUFFICIENT_INPUT"
+        Long decisionAtMs
+        Long inputCutoffMs
+        Long featureSupportEndMs
+        Long modelAvailableAtServerMaxMs
+        Boolean alertDelivered
+        String triggerBatchId
+    }
+
     RunMarker {
         Long id PK
         String markerId UK "앱 발급, 멱등"
@@ -614,6 +628,10 @@ erDiagram
 | `run_export` | UK `uk_run_export_export_id` | `(export_id)` | 내보내기 잡 식별자 |
 | `run_export` | `idx_run_export_run_status` | `(run_id, status)` | 진행 중 잡 재사용 판정 |
 | `run_export` | `idx_run_export_queue` | `(status, requested_at_ms)` | 워커 큐 선점 |
+| `decision_record` | UK `uk_decision_record_decision_id` | `(decision_id)` | 판정 식별자 |
+| `decision_record` | `idx_decision_record_run_time` | `(run_id, decision_at_ms)` | 회차 내보내기 판정 시각순 조회 |
+| `decision_record` | `idx_decision_record_member_time` | `(member_id, decision_at_ms)` | 회원별 판정 이력 조회 |
+| `decision_record` | `idx_decision_record_trigger_batch` | `(trigger_batch_id)` | 충격 배치 근거 추적 |
 | `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
 | `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
 | `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
@@ -642,6 +660,7 @@ erDiagram
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |
+| 2026-09-20 | `decision_record` | 신규 테이블 (LLD-0051). 낙상 판정의 입력 근거·인과성·결과 | `scripts/mysql/create_decision_record.sql` |
 | 2026-09-20 | `heart_rate_event` | `accuracy`·`batch_id` 컬럼 추가 (LLD-0047). 운영 배포 전 필수 | `scripts/mysql/add_heart_rate_event_accuracy.sql` |
 | 2026-09-20 | `sensor_batch` | `sample_count` 추가, `collection_mode`·`gyro_mode` NULL 허용 (LLD-0047, 심박 배치 수용) | `scripts/mysql/alter_sensor_batch_for_hr.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |

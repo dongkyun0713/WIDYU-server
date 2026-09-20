@@ -58,6 +58,7 @@ class SensorBatchServiceTest {
     @Mock private SensorBatchRepository sensorBatchRepository;
     @Mock private ClockMappingService clockMappingService;
     @Mock private com.widyu.heart.application.HeartRateBatchService heartRateBatchService;
+    @Mock private com.widyu.decision.application.FallAssessmentService fallAssessmentService;
     @Mock private com.widyu.run.application.CollectionRunService collectionRunService;
     @Mock private MemberRepository memberRepository;
     @Mock private S3Service s3Service;
@@ -884,6 +885,7 @@ class SensorBatchServiceTest {
                 sensorBatchRepository,
                 clockMappingService,
                 heartRateBatchService,
+                fallAssessmentService,
                 collectionRunService,
                 memberRepository,
                 s3Service,

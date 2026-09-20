@@ -11,6 +11,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
+import com.widyu.decision.application.FallAssessmentService;
 import com.widyu.heart.application.HeartRateBatchService;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
@@ -80,6 +81,7 @@ public class SensorBatchService {
     private final SensorBatchRepository sensorBatchRepository;
     private final ClockMappingService clockMappingService;
     private final HeartRateBatchService heartRateBatchService;
+    private final FallAssessmentService fallAssessmentService;
     private final CollectionRunService collectionRunService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
@@ -91,6 +93,7 @@ public class SensorBatchService {
             SensorBatchRepository sensorBatchRepository,
             ClockMappingService clockMappingService,
             HeartRateBatchService heartRateBatchService,
+            FallAssessmentService fallAssessmentService,
             CollectionRunService collectionRunService,
             MemberRepository memberRepository,
             S3Service s3Service,
@@ -101,6 +104,7 @@ public class SensorBatchService {
         this.sensorBatchRepository = sensorBatchRepository;
         this.clockMappingService = clockMappingService;
         this.heartRateBatchService = heartRateBatchService;
+        this.fallAssessmentService = fallAssessmentService;
         this.collectionRunService = collectionRunService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
@@ -162,8 +166,10 @@ public class SensorBatchService {
 
         long persistedAtMs = System.currentTimeMillis();
         try {
-            sensorBatchRepository.save(toEntity(member, request, payload, payloadSha256, objectKey,
-                    attribution, configMismatch, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
+            SensorBatch savedBatch = toEntity(member, request, payload, payloadSha256, objectKey,
+                    attribution, configMismatch, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch);
+            sensorBatchRepository.save(savedBatch);
+            assessImpact(savedBatch);
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
@@ -174,6 +180,18 @@ public class SensorBatchService {
             return duplicateOrReject(memberId, request, payloadSha256, concurrentlyStored.get());
         }
         return logged(memberId, request, SensorBatchResult.STORED);
+    }
+
+    private void assessImpact(SensorBatch savedBatch) {
+        if (savedBatch.getTriggerKind() == null) {
+            return;
+        }
+        try {
+            fallAssessmentService.assessAfterImpact(savedBatch);
+        } catch (Exception e) {
+            log.warn("낙상 판정 훅 실패: memberId={}, batchId={}, errorType={}",
+                    savedBatch.getMember().getId(), savedBatch.getBatchId(), e.getClass().getSimpleName());
+        }
     }
 
     private JsonNode readTree(byte[] payload) {

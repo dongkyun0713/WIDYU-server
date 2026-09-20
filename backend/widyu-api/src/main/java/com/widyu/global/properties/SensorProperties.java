@@ -6,7 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record SensorProperties(
         int maxPayloadBytes,
         Config config,
-        Export export
+        Export export,
+        FallAi fallAi
 ) {
 
     /**
@@ -48,4 +49,13 @@ public record SensorProperties(
                 String evidenceMethod
         ) {}
     }
+
+    /** 낙상 모델 입구. 모델 배포 전에는 기본값 false로 어떤 호출도 하지 않는다. */
+    public record FallAi(
+            boolean enabled,
+            String path,
+            int windowBeforeSec,
+            String serverDeciderId,
+            String serverDeciderVersion
+    ) {}
 }
