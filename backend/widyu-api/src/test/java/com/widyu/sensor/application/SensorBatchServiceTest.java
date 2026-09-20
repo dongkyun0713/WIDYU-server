@@ -10,6 +10,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -51,6 +52,7 @@ class SensorBatchServiceTest {
             Validation.buildDefaultValidatorFactory().getValidator();
 
     @Mock private SensorBatchRepository sensorBatchRepository;
+    @Mock private ClockMappingService clockMappingService;
     @Mock private MemberRepository memberRepository;
     @Mock private S3Service s3Service;
 
@@ -507,6 +509,42 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("시계 매핑이 충돌하면 S3 업로드와 배치 저장을 하지 않는다")
+    void 시계_매핑이_충돌하면_S3_업로드와_배치_저장을_하지_않는다() {
+        // given
+        givenMemberExists();
+        willThrow(new BusinessException(ErrorCode.SENSOR_CLOCK_MAPPING_CONFLICT))
+                .given(clockMappingService).register(any(), anyString(), anyLong(), anyLong());
+
+        // when & then
+        assertThatThrownBy(() -> service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SENSOR_CLOCK_MAPPING_CONFLICT);
+        then(s3Service).should(never()).uploadBytes(anyString(), any(), anyString());
+        then(sensorBatchRepository).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("시계 매핑에 넘기는 관측 범위가 두 축 시각의 최소·최대와 같다")
+    void 시계_매핑에_넘기는_관측_범위가_두_축_시각의_최소와_최대와_같다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
+
+        // when
+        service().ingest(MEMBER_ID, batch(ACC, GYRO).getBytes(UTF_8));
+
+        // then
+        ArgumentCaptor<Long> minNs = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> maxNs = ArgumentCaptor.forClass(Long.class);
+        then(clockMappingService).should()
+                .register(any(), eq("gw-3f2a"), minNs.capture(), maxNs.capture());
+        // 자이로 t0가 가장 이르고, 가속도의 마지막 샘플(t0 + dt 합)이 가장 늦다.
+        assertThat(minNs.getValue()).isEqualTo(993_847_110_000_001L);
+        assertThat(maxNs.getValue()).isEqualTo(993_847_152_341_423L);
+    }
+
+    @Test
     @DisplayName("S3 업로드가 실패하면 인덱스 행을 저장하지 않는다")
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
@@ -538,6 +576,7 @@ class SensorBatchServiceTest {
     private SensorBatchService service() {
         return new SensorBatchService(
                 sensorBatchRepository,
+                clockMappingService,
                 memberRepository,
                 s3Service,
                 VALIDATOR,

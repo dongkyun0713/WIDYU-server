@@ -248,6 +248,20 @@ erDiagram
         String payloadSha256 "원문 바이트 해시"
     }
 
+    ClockMapping {
+        Long id PK
+        String clockMappingId UK "앱이 발급한 묶음 식별자"
+        String deviceId "매핑은 기기 단위 (member 없음)"
+        String bootId
+        Long anchorElapsedNs
+        Long anchorEpochMs
+        Double uncertaintyMs
+        Long observedMinElapsedNs "이 매핑을 쓴 배치의 축 시각 최소"
+        Long observedMaxElapsedNs "최대"
+        Long firstSeenAtMs
+        Long lastSeenAtMs
+    }
+
     PaymentOrder {
         Long id PK
         Long member_id FK
@@ -379,6 +393,7 @@ erDiagram
     Member ||--o{ Walk : "걸음 기록"
     Member ||--o{ HeartRateEmergency : "심박 이상"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
+    SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
     Member ||--o{ PaymentOrder : "결제 주문"
     Member ||--o{ Payment : "결제"
     Member ||--o{ MemberFcmToken : "FCM 토큰"
@@ -457,8 +472,12 @@ erDiagram
 | `payment_cancel` | `idx_payment_cancel_recovery` | `(status, next_retry_at)` | 취소 복구 대상 범위 조회 |
 | `payment_cancel` | UK `uk_payment_cancel_pg_idempotency_key` | `(pg_idempotency_key)` | PG 요청 재실행 식별 |
 | `payment_cancel` | UK `uk_payment_cancel_payment_idempotency_key` | `(payment_id, idempotency_key)` | 클라이언트 멱등 키 중복 방지 (ADR-0012) |
-| `sensor_batch` | UK `uk_sensor_batch_seq` | `(member_id, device_id, session_id, stream_type, seq)` | 재전송 멱등 판별. S3 키 구성과 동일 (ADR-0030) |
-| `sensor_batch` | `idx_sensor_batch_member_stream_time` | `(member_id, stream_type, measured_from_ms)` | 스트림별 시각 범위 조회 |
+| `sensor_batch` | UK `uk_sensor_batch_batch_id` | `(batch_id)` | 앱이 붙인 불변 멱등 키. S3 키 구성과 동일 (ADR-0030 v2) |
+| `sensor_batch` | `idx_sensor_batch_member_stream_time` | `(member_id, stream, measured_at_start_ms)` | 스트림별 시각 범위 조회 |
+| `sensor_batch` | `idx_sensor_batch_seq` | `(device_id, session_id, seq)` | 순번 누락 검사 |
+| `sensor_batch` | `idx_sensor_batch_run` | `(run_id)` | 회차별 조회 (B8 후속) |
+| `clock_mapping` | UK `uk_clock_mapping_id` | `(clock_mapping_id)` | 한 식별자의 다섯 값은 불변. 다르면 409 (LLD-0044) |
+| `clock_mapping` | `idx_clock_mapping_device` | `(device_id)` | 기기별 매핑 조회 |
 
 ## 도메인별 조회 기준
 
@@ -478,7 +497,9 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
-| 2026-09-18 | `sensor_batch` | 신규 테이블 (LLD-0041). 시각은 epoch ms BIGINT | `scripts/mysql/create_sensor_batch.sql` |
+| 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |
+| 2026-09-19 | `sensor_batch` | v2 형식으로 통째 교체 (LLD-0041 v2). `batch_id` 멱등 키, 시계 5값 원본 보존, 시각 4단계. 미배포 테이블이라 DROP 후 재생성 | `scripts/mysql/create_sensor_batch.sql` |
+| 2026-09-18 | `sensor_batch` | 신규 테이블 (LLD-0041 v1, 폐기). 시각은 epoch ms BIGINT | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-07-16 | `senior_profile` | `family_id` NOT NULL → NULL 허용 (마지막 방장 탈퇴 시 Family 삭제 후 null 처리) | `ALTER TABLE senior_profile MODIFY COLUMN family_id BIGINT NULL;` |
 
 ## 코드 동기화 메모

@@ -65,6 +65,7 @@ public class SensorBatchService {
     private static final Pattern SESSION_ID_PATTERN = Pattern.compile("^[a-z0-9._-]{1,64}$");
 
     private final SensorBatchRepository sensorBatchRepository;
+    private final ClockMappingService clockMappingService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
     private final Validator validator;
@@ -73,6 +74,7 @@ public class SensorBatchService {
 
     public SensorBatchService(
             SensorBatchRepository sensorBatchRepository,
+            ClockMappingService clockMappingService,
             MemberRepository memberRepository,
             S3Service s3Service,
             Validator validator,
@@ -80,6 +82,7 @@ public class SensorBatchService {
             ObjectMapper objectMapper
     ) {
         this.sensorBatchRepository = sensorBatchRepository;
+        this.clockMappingService = clockMappingService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
         this.validator = validator;
@@ -109,6 +112,12 @@ public class SensorBatchService {
         ValidatedBatch validatedBatch = validate(request, parsedPayload.root());
         long acceptedAtMs = System.currentTimeMillis();
         String payloadSha256 = sha256(payload);
+
+        // 축 시각 범위는 매핑의 관측 범위와 배치의 환산 시각 양쪽에 쓰므로 한 번만 구한다.
+        ElapsedRange elapsed = elapsedRange(request);
+        // 매핑 대조는 S3 PUT 앞이다. 충돌이면 S3에도 배치 행에도 아무것도 남지 않는다(LLD-0044 5.2).
+        clockMappingService.register(
+                request.clock(), request.deviceId(), elapsed.minNs(), elapsed.maxNs());
 
         Optional<SensorBatch> existingBatch = sensorBatchRepository.findByBatchId(request.batchId());
         if (existingBatch.isPresent()) {
@@ -328,6 +337,24 @@ public class SensorBatchService {
             throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
         }
         return parsed.longValue();
+    }
+
+    /** 이 배치가 덮는 축 시각 범위(부팅 기준 ns). 매핑의 관측 범위 근거다. */
+    private record ElapsedRange(long minNs, long maxNs) {}
+
+    private ElapsedRange elapsedRange(SensorBatchRequest request) {
+        long minNs = Long.MAX_VALUE;
+        long maxNs = Long.MIN_VALUE;
+        for (SensorBatchRequest.Axis axis : presentAxes(request)) {
+            long t0ElapsedNs = parseElapsedNs(axis.t0ElapsedNs());
+            minNs = Math.min(minNs, t0ElapsedNs);
+            try {
+                maxNs = Math.max(maxNs, Math.addExact(t0ElapsedNs, sumIntervals(axis)));
+            } catch (ArithmeticException e) {
+                throw new BusinessException(ErrorCode.SENSOR_SAMPLE_INVALID);
+            }
+        }
+        return new ElapsedRange(minNs, maxNs);
     }
 
     private SensorBatch toEntity(

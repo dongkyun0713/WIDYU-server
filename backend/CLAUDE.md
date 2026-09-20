@@ -64,6 +64,7 @@
 - 시각을 단계별로 남긴다: `server_received` → `accepted` → `persisted` = `model_available_at_server`. 하나로 합치지 않고 소급하지 않는다(정책 1.1.5)
 - S3 PUT은 수신 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. 서비스에 `@Transactional` 없음. 무결성 예외는 `findByBatchId` 재조회 후 원문 해시까지 같을 때만 `DUPLICATE`
 - **원시 센서값을 어떤 로그 레벨에도 남기지 않는다** (정책 1.6.7). memberId·stream·seq·accN·gyroN·result만
+- 시계 매핑은 `clock_mapping` 테이블(기기 단위 UK `clock_mapping_id`). 같은 id에 다른 다섯 값·다른 기기면 409(`SENSOR_4090`). 등록은 S3 PUT 앞, 자기 트랜잭션 → LLD-0044
 - 본문 상한은 `sensor.max-payload-bytes`(기본 32768, `application-sensor.yml`)
 - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
 
