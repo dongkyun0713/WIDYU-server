@@ -21,6 +21,7 @@ spring:
       - actuator
       - ai
       - juso
+      - sensor
 
 admin:
   email: ${ADMIN_EMAIL}

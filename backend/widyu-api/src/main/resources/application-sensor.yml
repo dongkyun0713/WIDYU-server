@@ -1,0 +1,4 @@
+# Raw Sensor Batch Configuration (LLD-0041)
+sensor:
+  # 원문 바이트 상한. 50Hz 1초 배치가 2KB 안팎이라 32KB면 충격 보강 배치까지 들어간다.
+  max-payload-bytes: ${SENSOR_MAX_PAYLOAD_BYTES:32768}

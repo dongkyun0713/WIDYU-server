@@ -194,6 +194,60 @@ erDiagram
         String location
     }
 
+    SensorBatch {
+        Long id PK
+        String batchId UK "앱이 붙인 불변 멱등 키 (ULID)"
+        Long member_id FK
+        String stream "imu_watch / imu_phone"
+        String source "watch / phone"
+        String deviceId
+        String sessionId
+        Long seq
+        String studyId "받은 값 그대로, null 허용"
+        String participationId "받은 값 그대로, null 허용"
+        String runId "받은 값 그대로, null 허용"
+        String bootId "시계 환산 원본 ①"
+        String clockMappingId "② (FK는 B3 후속)"
+        Long anchorElapsedNs "③ 문자열→long 무손실"
+        Long anchorEpochMs "④"
+        Double uncertaintyMs "⑤"
+        Integer accN "없으면 null"
+        Integer gyroN "없으면 null (0 치환 금지)"
+        Long accT0ElapsedNs
+        Long gyroT0ElapsedNs
+        Double accFsHzRequested
+        Double gyroFsHzRequested
+        Long measuredAtStartMs "서버 환산"
+        Long measuredAtEndMs "서버 환산"
+        Long phoneReceivedAtMs
+        Long serverReceivedAtMs
+        Long acceptedAtMs
+        Long persistedAtMs
+        Long modelAvailableAtServerMs "소급 금지"
+        String collectionMode "product / research"
+        String gyroMode "continuous / trigger"
+        Boolean onBody
+        String wearState
+        String missingReason
+        Integer watchBatteryPct
+        String qualityStatus "이번 PR은 OK 고정"
+        String triggerKind
+        Double triggerSmvG
+        Long triggerEventElapsedNs
+        Long triggerTsMs
+        Boolean gyroBackfill
+        String backfillFor "배열이면 쉼표 결합"
+        Boolean isResend
+        String originalBatchId
+        Long originalSeq
+        String originalRunId
+        String originalSessionId
+        Long resentAtMs
+        String s3Key
+        Integer byteSize
+        String payloadSha256 "원문 바이트 해시"
+    }
+
     PaymentOrder {
         Long id PK
         Long member_id FK
@@ -324,6 +378,7 @@ erDiagram
     Member ||--o{ MedicationProof : "복약 인증"
     Member ||--o{ Walk : "걸음 기록"
     Member ||--o{ HeartRateEmergency : "심박 이상"
+    Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     Member ||--o{ PaymentOrder : "결제 주문"
     Member ||--o{ Payment : "결제"
     Member ||--o{ MemberFcmToken : "FCM 토큰"
@@ -382,6 +437,9 @@ erDiagram
 | `PaymentCancelStatus` | `PENDING`, `COMPLETED`, `ABORTED` |
 | `PointHistoryType` | `EARN`, `USE` |
 | `HeartRateStatus` | `NORMAL`, `CAUTION`, `EMERGENCY`, `ANOMALY`, `UNKNOWN` |
+| `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
+| `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
+| `GyroMode` | `CONTINUOUS`, `TRIGGER` |
 
 ## 주요 인덱스
 
@@ -399,6 +457,8 @@ erDiagram
 | `payment_cancel` | `idx_payment_cancel_recovery` | `(status, next_retry_at)` | 취소 복구 대상 범위 조회 |
 | `payment_cancel` | UK `uk_payment_cancel_pg_idempotency_key` | `(pg_idempotency_key)` | PG 요청 재실행 식별 |
 | `payment_cancel` | UK `uk_payment_cancel_payment_idempotency_key` | `(payment_id, idempotency_key)` | 클라이언트 멱등 키 중복 방지 (ADR-0012) |
+| `sensor_batch` | UK `uk_sensor_batch_seq` | `(member_id, device_id, session_id, stream_type, seq)` | 재전송 멱등 판별. S3 키 구성과 동일 (ADR-0030) |
+| `sensor_batch` | `idx_sensor_batch_member_stream_time` | `(member_id, stream_type, measured_from_ms)` | 스트림별 시각 범위 조회 |
 
 ## 도메인별 조회 기준
 
@@ -418,6 +478,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-18 | `sensor_batch` | 신규 테이블 (LLD-0041). 시각은 epoch ms BIGINT | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-07-16 | `senior_profile` | `family_id` NOT NULL → NULL 허용 (마지막 방장 탈퇴 시 Family 삭제 후 null 처리) | `ALTER TABLE senior_profile MODIFY COLUMN family_id BIGINT NULL;` |
 
 ## 코드 동기화 메모
