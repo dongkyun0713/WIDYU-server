@@ -29,6 +29,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 한 회원의 한 번의 국내 실증 참여(LLD-0052). 실증 참여 여부와 연구 보관 정책의 정본이며,
@@ -103,6 +105,7 @@ public class StudyParticipation extends BaseTimeEntity {
     private LocalDate researchUntil;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "status", nullable = false, length = 20)
     private StudyParticipationStatus status;
 
@@ -118,6 +121,7 @@ public class StudyParticipation extends BaseTimeEntity {
     private LocalDateTime withdrawnAt;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "withdrawal_scope", length = 24)
     private WithdrawalScope withdrawalScope;
 

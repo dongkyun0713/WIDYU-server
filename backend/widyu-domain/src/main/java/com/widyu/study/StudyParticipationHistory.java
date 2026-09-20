@@ -23,6 +23,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /** 현재 참여 행을 변경해도 동의·보관·철회 상태를 추적할 수 있는 snapshot. */
 @Entity
@@ -43,6 +45,7 @@ public class StudyParticipationHistory extends BaseTimeEntity {
     private StudyParticipation participation;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "history_type", nullable = false, length = 24)
     private StudyParticipationHistoryType historyType;
 
@@ -59,6 +62,7 @@ public class StudyParticipationHistory extends BaseTimeEntity {
     private LocalDate researchUntil;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "status", nullable = false, length = 20)
     private StudyParticipationStatus status;
 
@@ -66,6 +70,7 @@ public class StudyParticipationHistory extends BaseTimeEntity {
     private LocalDateTime withdrawnAt;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "withdrawal_scope", length = 24)
     private WithdrawalScope withdrawalScope;
 

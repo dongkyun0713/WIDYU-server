@@ -7,8 +7,9 @@
 --
 -- #617의 study_participation이 남아 있으면(운영 미배포·데이터 없음) 먼저 DROP 후 실행한다.
 --
--- status는 VARCHAR다. 다른 연구 테이블(collection_run 등)과 같은 방식이라
--- 값이 늘어도 ENUM ALTER가 필요 없다.
+-- status·withdrawal_scope·history_type은 VARCHAR다. 다른 연구 테이블(collection_run 등)과 같은 방식이라
+-- 값이 늘어도 ENUM ALTER가 필요 없다. 엔티티도 @JdbcTypeCode(SqlTypes.VARCHAR)로 고정해
+-- Hibernate가 MySQL에서 native ENUM으로 매핑하지 않게 했다(그러지 않으면 ddl-auto: validate가 어긋난다).
 CREATE TABLE study_participation (
     study_participation_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     -- 서버 발급 `part-` + UUID 하이픈 제거 32자. 클라이언트가 정하지 않는다.
@@ -87,9 +88,8 @@ CREATE TABLE study_participation_history (
     INDEX idx_study_participation_history_participation (study_participation_id, created_at)
 );
 
--- admin_audit_log.action은 VARCHAR(50)이다(AdminAuditLog 엔티티의 @Enumerated(STRING) + length=50).
--- MySQL ENUM이 아니므로 새 AdminAction 값(STUDY_PARTICIPATION_REGISTER·_WITHDRAW·_DELETION_PROCESSED)에
--- ALTER TABLE이 필요 없다.
+-- 새 AdminAction 값은 admin_audit_log.action에 따로 반영한다. 그 테이블은 Hibernate가 만들어
+-- MySQL에서 ENUM일 수 있다 → scripts/mysql/alter_admin_audit_log_action.sql을 함께 실행한다.
 
 -- 연구 회차가 참조하는 참여 기록. product 회차와 이 기능 이전에 열린 회차는 NULL이다.
 ALTER TABLE collection_run

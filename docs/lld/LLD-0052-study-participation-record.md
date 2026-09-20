@@ -147,7 +147,9 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 
 운영 DB에는 별도 migration SQL로 테이블과 FK를 추가한 뒤, 기존 `collection_run`의 중복 연구 메타데이터는 참여기록을 만들어 연결한 다음 제거한다. 데이터가 없는 개발 환경은 Hibernate가 새 모델을 생성한다. 삭제 DDL은 운영 데이터 백필과 함께 별도 승인 후 실행한다.
 
-`study_participation.status`는 다른 연구 테이블(`collection_run` 등)과 같이 MySQL `ENUM`이 아니라 `VARCHAR(20)`로 만든다. 상태 값이 늘어도 `ALTER TABLE ... MODIFY COLUMN`이 필요 없다. `admin_audit_log.action`도 `VARCHAR(50)`이라 새 `AdminAction` 값에 DDL이 필요 없다.
+`study_participation.status`·`withdrawal_scope`와 이력의 `history_type`은 MySQL `ENUM`이 아니라 `VARCHAR`로 만든다. 값이 늘어도 `ALTER TABLE ... MODIFY COLUMN`이 필요 없기 때문이다. 다만 Hibernate 6은 MySQL에서 `@Enumerated(STRING)`을 native `ENUM(...)`으로 매핑하므로, 이 필드들에 `@JdbcTypeCode(SqlTypes.VARCHAR)`를 함께 붙여 생성 스키마와 `ddl-auto: validate`가 DDL의 `VARCHAR`와 어긋나지 않게 한다. 이 고정이 없으면 "값이 늘어도 ALTER가 필요 없다"는 설명 자체가 참이 아니다.
+
+`admin_audit_log.action`은 사정이 다르다. 전용 생성 SQL이 없어 Hibernate가 만든 테이블이고, 같은 이유로 MySQL에서 `ENUM`일 수 있다. 새 `AdminAction` 값 넷을 쓰려면 배포 전에 `scripts/mysql/alter_admin_audit_log_action.sql`로 값 목록을 갱신한다. 감사 로그를 참여 변경과 같은 트랜잭션에 남기므로, 이 DDL을 빠뜨리면 감사 로그 INSERT 실패가 참여 변경까지 롤백시킨다. 운영에서 `SHOW COLUMNS FROM admin_audit_log LIKE 'action'`으로 실제 타입을 먼저 확인하고, `VARCHAR`면 건너뛴다.
 
 `active_key`는 엔티티에 매핑된 일반 컬럼이라 `ddl-auto`가 만드는 dev·테스트 스키마에도 UNIQUE 제약이 함께 생긴다. 운영 DDL과 Hibernate 스키마가 같은 제약을 갖는다.
 
