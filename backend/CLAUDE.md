@@ -81,6 +81,14 @@
 - **배치 귀속**: `run_id`가 오면 그대로, 없으면 `resend.original_run_id`(늦게 온 자료를 나중 참가자에게 붙이지 않기 위해), 그것도 없으면 `resolveRun(member, device, measured_at_start)`으로 열린 회차를 찾는다. 없으면 null(운영 외 자료)
 - `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`
 - 인시던트(본인확인·SOS·사후 판정)는 이 도메인이 아니라 별도 LLD다
+- **내보내기(B9)**: 닫힌 회차를 `run_<run_id>.zip` 하나로 꺼낸다. `POST/GET /api/v1/admin/collection-runs/{runId}/exports`로 요청·조회하고, `@Async`가 아니라 `run_export` 큐 + `@Scheduled` 워커가 조립한다(재시작해도 큐가 남는다) → ADR-0032, LLD-0050
+- zip 구성은 형식서(`EXPORT_FORMAT.md`)가 정본이다: `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json`·`streams/<스트림>_<기기>.jsonl`. 원문에 `_server{}` 봉투를 붙여 재직렬화하며, **집계(줄 수·샘플 수·시각 범위·해시)는 쓴 파일을 다시 읽어 센다**. 보존 정보가 없는 회차는 `retention.data_policy: "UNDECIDED"`로 싣는다
+
+### `device` — 기기 상태 하트비트
+
+- 폰이 60초마다 보내는 기기 상태를 `POST /api/v1/device/heartbeats`로 받아 원문 + 질의용 필드를 `device_heartbeat`에 저장한다. 자료가 비었을 때 **왜 비었는지**(배터리·미착용·앱 종료·네트워크)를 아는 유일한 근거다 → LLD-0049, 지시서 B7
+- **멱등 키는 `(device_id, session_id, ts_ms)`** — 이 스트림에는 `seq`가 없다. 같은 조합이면 `DUPLICATE`, UK 경합은 재조회로 확인될 때만 중복으로 본다. 회차 귀속은 B8의 `resolveRun`을 재사용한다
+- `watch.connected=false`면 나머지 `watch_*`는 **null로 저장한다**(0 치환 금지 — 배터리 0%로 읽힌다). `on_body=false`도 값 그대로 남긴다. **배터리·큐·권한 값을 어떤 로그 레벨에도 남기지 않는다** — memberId·deviceId·result만
 
 ### `location` — 실시간 위치
 - `realtime`(WebSocket), `parentlocation`(REST). 시니어 발신 → family 검증 → 보호자 `/topic/location/{seniorId}` 구독

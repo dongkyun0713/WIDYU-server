@@ -18,6 +18,9 @@ public interface S3DirectUploadService {
 
     String presignPut(String objectKey, String contentType, long contentLength, Duration expiry);
 
+    /** 내보내기 zip 다운로드용 presigned GET(LLD-0050 5.8). */
+    String presignGet(String objectKey, Duration expiry);
+
     String createMultipartUpload(String objectKey, String contentType);
 
     String presignUploadPart(String objectKey, String uploadId, int partNumber, Duration expiry);

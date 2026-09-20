@@ -5,7 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "sensor")
 public record SensorProperties(
         int maxPayloadBytes,
-        Config config
+        Config config,
+        Export export
 ) {
 
     /**
@@ -25,4 +26,26 @@ public record SensorProperties(
             int heartbeatSec,
             int refreshSec
     ) {}
+
+    /** 내보내기 설정(LLD-0050 4절). 값 집합이 미정인 상수(X1·X8·X9)를 여기에 모은다. */
+    public record Export(
+            long pollDelayMs,
+            long runningTimeoutMs,
+            int presignMinutes,
+            String serverBuild,
+            java.util.Map<String, Long> expectedPeriodMs,
+            java.util.Map<String, Long> gapThresholdMs,
+            Clock clock,
+            String absentReasonRoleMissing,
+            String absentReasonNoData,
+            String absentReasonNotImplemented
+    ) {
+
+        public record Clock(
+                String sourceDomain,
+                String targetDomain,
+                String transform,
+                String evidenceMethod
+        ) {}
+    }
 }

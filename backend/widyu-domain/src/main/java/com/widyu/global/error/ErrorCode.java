@@ -133,6 +133,9 @@ public enum ErrorCode {
     // 위치 원본 관련
     LOCATION_FIX_INVALID(HttpStatus.BAD_REQUEST, "LOCATION_4000", "위치 원본 형식이 올바르지 않습니다."),
 
+    // 기기 상태 하트비트 관련
+    HEARTBEAT_INVALID(HttpStatus.BAD_REQUEST, "DEVICE_4000", "하트비트 형식이 올바르지 않습니다."),
+
     // 측정회차 관련
     RUN_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4041", "측정회차를 찾을 수 없습니다."),
     RUN_ALREADY_OPEN(HttpStatus.CONFLICT, "RUN_4090", "이미 열린 측정회차가 있습니다."),
@@ -141,6 +144,8 @@ public enum ErrorCode {
     RUN_NOT_OPEN(HttpStatus.BAD_REQUEST, "RUN_4000", "열린 측정회차가 아닙니다."),
     RUN_RETENTION_INVALID(HttpStatus.BAD_REQUEST, "RUN_4001", "보존 정보가 올바르지 않습니다."),
     RUN_MARKER_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "RUN_4002", "마커 시각이 회차 구간을 벗어났습니다."),
+    RUN_NOT_CLOSED(HttpStatus.BAD_REQUEST, "RUN_4003", "닫힌 측정회차만 내보낼 수 있습니다."),
+    RUN_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4042", "내보내기 작업을 찾을 수 없습니다."),
 
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
