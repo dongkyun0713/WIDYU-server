@@ -213,11 +213,11 @@ erDiagram
         String deviceId
         String sessionId
         Long seq
-        String studyId "받은 값 그대로, null 허용"
-        String participationId "받은 값 그대로, null 허용"
-        String runId "받은 값 그대로, null 허용"
+        String studyId "서버가 검증한 회차 값, null 허용"
+        String participationId "서버가 검증한 회차 값, null 허용"
+        String runId "회원·기기·측정 시각 검증을 통과한 회차, null 허용"
         String bootId "시계 환산 원본 ①"
-        String clockMappingId "② (FK는 B3 후속)"
+        String clockMappingId "② clock_mapping의 FK 없는 참조"
         Long anchorElapsedNs "③ 문자열→long 무손실"
         Long anchorEpochMs "④"
         Double uncertaintyMs "⑤"
