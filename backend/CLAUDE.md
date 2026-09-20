@@ -52,6 +52,7 @@
 - **조회 범위 규칙**: 그래프는 응급 화면이므로 events·max·min·firstEmergency가 **진행 중인 사이클 시작 5분 전 ~ 현재**. 사이클 없으면 빈 배열. `emergencyHistory`의 count·events는 전체 기간이지만 `totalDuration`은 현재 사이클 지속 시간(첫 감지~마지막 감지, 분). 갱신(`/graph/refresh`)은 `since` 지정 시 그 이후 신규 이벤트만, 미지정 시 최근 5개
 - 수신한 단건 심박은 AI 판정 후 즉시 최신값에 반영한다.
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
+- **로그에 bpm 값·AI 응답 본문·판정 사유를 남기지 않는다** (#639, 정책 1.6.7·완료기준 C9-6)
 
 ### `sensor` — 원시 IMU 배치 (연구 수집, v2 형식)
 - 워치·폰의 가속도·자이로 배치를 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{sha256}.json`) + `sensor_batch` 인덱스 행 1개 → ADR-0030 v2, LLD-0041 v2
