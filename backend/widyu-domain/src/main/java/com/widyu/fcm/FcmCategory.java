@@ -9,5 +9,7 @@ public enum FcmCategory {
     MEDICINE_SCHEDULE,
     HEART_MESSAGE,
     SAFE_ZONE,
+    /** 보호자가 내 위치를 봤다는 통보(위치정보법 제19조③④, LLD-0056 5절). 설정으로 끄지 않는다 */
+    LOCATION_NOTICE,
     ETC
 }

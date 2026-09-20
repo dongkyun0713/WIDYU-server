@@ -14,6 +14,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.location.SeniorLocation;
+import com.widyu.location.access.LocationAccessPath;
+import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.location.raw.application.LocationFixService;
 import com.widyu.location.realtime.dto.LocationPoint;
 import com.widyu.location.realtime.dto.LocationUpdateRequest;
@@ -23,6 +25,7 @@ import com.widyu.location.realtime.event.SeniorLocationUpdatedEvent;
 import com.widyu.location.realtime.repository.SeniorLocationRepository;
 import com.widyu.location.parentlocation.repository.ParentLocationRepository;
 import com.widyu.member.Family;
+import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
@@ -62,6 +65,7 @@ class RealtimeLocationServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private SafeZoneAlertService safeZoneAlertService;
     @Mock private LocationFixService locationFixService;
+    @Mock private LocationAccessLogService locationAccessLogService;
     // 실제 제약(memberId @NotNull)을 그대로 태운다. 목이면 검증이 통째로 비어 버린다.
     @Spy private Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
@@ -288,6 +292,99 @@ class RealtimeLocationServiceTest {
         assertThatThrownBy(() -> realtimeLocationService.updateAndBroadcast(payload, 1L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LOCATION_FIX_INVALID);
+    }
+
+    @Test
+    @DisplayName("보호자가 마지막 위치를 조회하면 권한 검증 뒤 REST_LAST 열람 기록을 남긴다")
+    void 마지막_위치_조회는_REST_LAST_기록을_남긴다() {
+        // given
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:2")).willReturn(StayInfo.of(37.5, 127.0, null, null));
+        given(seniorLocationRepository.findBySeniorId(2L)).willReturn(Optional.empty());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.getLastLocation(2L, 1L);
+
+        // then
+        assertThat(response.memberId()).isEqualTo(2L);
+        then(locationAccessLogService).should().record(1L, 2L, LocationAccessPath.REST_LAST);
+    }
+
+    @Test
+    @DisplayName("권한이 없어 위치 조회가 막히면 열람 기록을 남기지 않는다")
+    void 권한이_없으면_열람_기록을_남기지_않는다() {
+        // given
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> realtimeLocationService.getLastLocation(2L, 1L))
+                .isInstanceOf(BusinessException.class);
+        then(locationAccessLogService).should(never())
+                .record(anyLong(), anyLong(), org.mockito.ArgumentMatchers.any(LocationAccessPath.class));
+    }
+
+    @Test
+    @DisplayName("열람 기록이 예외를 던져도 위치 응답은 그대로 돌려준다")
+    void 열람_기록이_실패해도_위치_응답을_돌려준다() {
+        // given
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:2")).willReturn(StayInfo.of(37.5, 127.0, null, null));
+        given(seniorLocationRepository.findBySeniorId(2L)).willReturn(Optional.empty());
+        willThrow(new IllegalStateException("DB 장애"))
+                .given(locationAccessLogService).record(1L, 2L, LocationAccessPath.REST_LAST);
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.getLastLocation(2L, 1L);
+
+        // then
+        assertThat(response.memberId()).isEqualTo(2L);
+        assertThat(response.latitude()).isEqualTo(37.5);
+    }
+
+    @Test
+    @DisplayName("보호자가 이동 경로를 조회하면 REST_TRAIL 열람 기록을 남긴다")
+    void 이동_경로_조회는_REST_TRAIL_기록을_남긴다() {
+        // given
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.range("location:trail:2", 0, -1)).willReturn(java.util.List.of());
+
+        // when
+        realtimeLocationService.getLocationTrail(2L, 1L);
+
+        // then
+        then(locationAccessLogService).should().record(1L, 2L, LocationAccessPath.REST_TRAIL);
+    }
+
+    @Test
+    @DisplayName("보호자가 가족 시니어 목록을 조회하면 목록에 담긴 시니어마다 REST_FAMILY 기록을 남긴다")
+    void 가족_목록_조회는_시니어마다_REST_FAMILY_기록을_남긴다() {
+        // given
+        Member seniorMember = member(2L);
+        SeniorProfile seniorProfile = seniorProfile(10L, seniorMember);
+        FamilyMembership membership =
+                FamilyMembership.createMembership(seniorProfile.getFamily(), member(1L));
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(membership));
+        given(seniorProfileRepository.findAllByFamilyIdWithMember(org.mockito.ArgumentMatchers.any()))
+                .willReturn(java.util.List.of(seniorProfile));
+        given(seniorLocationRepository.findAllById(java.util.List.of(2L)))
+                .willReturn(java.util.List.of(SeniorLocation.of(2L, 37.5, 127.0)));
+
+        // when
+        realtimeLocationService.getTrackedSeniors(1L);
+
+        // then
+        then(locationAccessLogService).should().record(1L, 2L, LocationAccessPath.REST_FAMILY);
     }
 
     private Member member(Long id) {

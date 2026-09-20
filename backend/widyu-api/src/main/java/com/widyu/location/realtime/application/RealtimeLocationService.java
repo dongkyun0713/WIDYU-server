@@ -6,6 +6,8 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.GeoUtils;
 import com.widyu.location.SeniorLocation;
+import com.widyu.location.access.LocationAccessPath;
+import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.location.raw.application.LocationFixService;
 import com.widyu.location.realtime.dto.LocationPoint;
 import com.widyu.location.realtime.dto.LocationTrailResponse;
@@ -59,6 +61,7 @@ public class RealtimeLocationService {
     private final ApplicationEventPublisher eventPublisher;
     private final SafeZoneAlertService safeZoneAlertService;
     private final LocationFixService locationFixService;
+    private final LocationAccessLogService locationAccessLogService;
     private final Validator validator;
     // 미지정 필드를 무시하고 페이로드를 읽는 전용 매퍼. 주입받지 않는 이유는 Redis·응답 직렬화와
     // 설정을 공유하면 안 되기 때문이다(초기화 필드라 생성자 주입 대상에서 빠진다).
@@ -207,6 +210,8 @@ public class RealtimeLocationService {
         seniorLocationRepository.findAllById(seniorMemberIds)
                 .forEach(l -> locationMap.put(l.getSeniorId(), l));
 
+        recordAccessQuietly(guardianId, seniorMemberIds, LocationAccessPath.REST_FAMILY);
+
         return seniors.stream()
                 .map(senior -> {
                     Long memberId = senior.getMember().getId();
@@ -254,6 +259,8 @@ public class RealtimeLocationService {
         if (!familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(guardianId, seniorProfile.getId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "해당 시니어의 위치를 조회할 권한이 없습니다.");
         }
+
+        recordAccessQuietly(guardianId, memberId, LocationAccessPath.REST_LAST);
 
         Member seniorMember = seniorProfile.getMember();
 
@@ -326,6 +333,8 @@ public class RealtimeLocationService {
         if (!familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(guardianId, seniorProfile.getId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "해당 시니어의 위치를 조회할 권한이 없습니다.");
         }
+
+        recordAccessQuietly(guardianId, memberId, LocationAccessPath.REST_TRAIL);
 
         Member seniorMember = seniorProfile.getMember();
 
@@ -490,6 +499,24 @@ public class RealtimeLocationService {
             return null;
         }
         return matchedZone.getName();
+    }
+
+    /**
+     * 위치 열람 사실을 남긴다(LLD-0056 5.1). 기록·통보가 깨져도 위치 조회는 성공해야 하므로
+     * 여기서 모든 예외를 삼킨다. 로그에는 좌표를 남기지 않는다.
+     */
+    private void recordAccessQuietly(Long guardianId, Long seniorMemberId, LocationAccessPath path) {
+        try {
+            locationAccessLogService.record(guardianId, seniorMemberId, path);
+        } catch (Exception e) {
+            log.warn("위치 열람 기록 실패: path={}, cause={}", path, e.getClass().getSimpleName());
+        }
+    }
+
+    private void recordAccessQuietly(Long guardianId, List<Long> seniorMemberIds, LocationAccessPath path) {
+        for (Long seniorMemberId : seniorMemberIds) {
+            recordAccessQuietly(guardianId, seniorMemberId, path);
+        }
     }
 
     /**

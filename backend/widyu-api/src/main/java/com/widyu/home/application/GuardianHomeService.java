@@ -12,6 +12,8 @@ import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.heart.repository.HeartRateResultRepository;
 import com.widyu.home.dto.response.GuardianHomeCardsResponse;
 import com.widyu.home.dto.response.GuardianSeniorListResponse;
+import com.widyu.location.access.LocationAccessPath;
+import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.location.realtime.application.RealtimeLocationService;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
@@ -32,9 +34,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -51,6 +55,7 @@ public class GuardianHomeService {
     private final WalkRepository walkRepository;
     private final HomeAlbumRecommendationService albumRecommendationService;
     private final RealtimeLocationService realtimeLocationService;
+    private final LocationAccessLogService locationAccessLogService;
 
     public GuardianHomeCardsResponse getHomeCards(Long memberId) {
         Member guardian = memberUtil.getCurrentMember();
@@ -60,6 +65,9 @@ public class GuardianHomeService {
 
         Member senior = resolveSenior(memberId, guardian);
         LocalDate today = LocalDate.now();
+
+        // 외출 여부는 좌표가 아니지만 위치에서 파생되므로 열람으로 센다(ADR-0036 결과).
+        recordAccessQuietly(guardian.getId(), senior.getId());
 
         return GuardianHomeCardsResponse.of(
                 realtimeLocationService.getOutingStatus(senior.getId()),
@@ -81,6 +89,16 @@ public class GuardianHomeService {
                 .map(membership -> seniorProfileRepository.findAllByFamilyIdWithMember(membership.getFamily().getId()))
                 .map(GuardianSeniorListResponse::from)
                 .orElseGet(GuardianSeniorListResponse::empty);
+    }
+
+    /** 기록이 깨져도 홈 카드는 그려져야 한다(LLD-0056 5.1). */
+    private void recordAccessQuietly(Long guardianId, Long seniorMemberId) {
+        try {
+            locationAccessLogService.record(guardianId, seniorMemberId, LocationAccessPath.HOME_OUTING);
+        } catch (Exception e) {
+            log.warn("위치 열람 기록 실패: path={}, cause={}",
+                    LocationAccessPath.HOME_OUTING, e.getClass().getSimpleName());
+        }
     }
 
     private Member resolveSenior(Long memberId, Member guardian) {
