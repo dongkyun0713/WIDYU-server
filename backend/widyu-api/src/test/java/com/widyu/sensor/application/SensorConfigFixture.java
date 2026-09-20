@@ -20,6 +20,7 @@ final class SensorConfigFixture {
     static SensorProperties.Export export() {
         return new SensorProperties.Export(
                 5000L,
+                900_000L,
                 15,
                 "test-build",
                 java.util.Map.of("imu_watch", 20L, "imu_phone", 20L, "hr", 1000L,

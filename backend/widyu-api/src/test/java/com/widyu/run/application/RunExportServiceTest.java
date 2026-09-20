@@ -43,7 +43,7 @@ class RunExportServiceTest {
     @DisplayName("닫힌 회차에 요청하면 대기 상태의 잡을 만든다")
     void 닫힌_회차에_요청하면_대기_상태의_잡을_만든다() {
         // given
-        given(collectionRunRepository.findByRunId(RUN_ID))
+        given(collectionRunRepository.findByRunIdForUpdate(RUN_ID))
                 .willReturn(Optional.of(RunExportFixture.closedRun()));
         given(runExportRepository.findByRunIdAndStatusInOrderByIdAsc(any(), any()))
                 .willReturn(List.of());
@@ -70,7 +70,7 @@ class RunExportServiceTest {
                 .startedAtMs(RunExportFixture.STARTED_AT_MS)
                 .status(CollectionRunStatus.OPEN)
                 .build();
-        given(collectionRunRepository.findByRunId(RUN_ID)).willReturn(Optional.of(open));
+        given(collectionRunRepository.findByRunIdForUpdate(RUN_ID)).willReturn(Optional.of(open));
 
         // when & then
         // 자료가 계속 들어오는 중이라 목록을 확정할 수 없다.
@@ -84,7 +84,7 @@ class RunExportServiceTest {
     @DisplayName("진행 중인 잡이 있으면 새로 만들지 않고 그것을 돌려준다")
     void 진행_중인_잡이_있으면_새로_만들지_않고_그것을_돌려준다() {
         // given
-        given(collectionRunRepository.findByRunId(RUN_ID))
+        given(collectionRunRepository.findByRunIdForUpdate(RUN_ID))
                 .willReturn(Optional.of(RunExportFixture.closedRun()));
         given(runExportRepository.findByRunIdAndStatusInOrderByIdAsc(any(), any()))
                 .willReturn(List.of(queuedExport()));

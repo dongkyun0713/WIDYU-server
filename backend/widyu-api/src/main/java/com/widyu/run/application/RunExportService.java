@@ -36,7 +36,7 @@ public class RunExportService {
 
     @Transactional
     public RunExportResponse request(String runId) {
-        CollectionRun run = collectionRunRepository.findByRunId(runId)
+        CollectionRun run = collectionRunRepository.findByRunIdForUpdate(runId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RUN_NOT_FOUND));
         if (run.isOpen()) {
             throw new BusinessException(ErrorCode.RUN_NOT_CLOSED);

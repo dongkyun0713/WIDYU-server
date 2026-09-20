@@ -72,7 +72,7 @@ GET /api/v1/admin/collection-runs/{runId}/exports/{exportId}
 회차 조회(`CLOSED` 검사) → 진행 중 잡 있으면 반환 → `run_export` `QUEUED` INSERT → 응답.
 
 ### 5.2 워커 (`RunExportWorker`, `@Scheduled(fixedDelayString = "${sensor.export.poll-delay-ms}")`)
-1. `claim()` (`REQUIRES_NEW`, **별도 빈 `RunExportTransactions`** — 같은 클래스 안 자기호출은 프록시를 타지 않아 새 트랜잭션이 열리지 않는다. `FcmOutboxTransactions`와 같은 분리): `QUEUED` 중 가장 오래된 1건을 `UPDATE … SET status=RUNNING, started_at_ms=now WHERE id=? AND status=QUEUED`로 선점. 0건이면 종료.
+1. 요청은 `collection_run` 행을 비관 잠금해 같은 회차의 진행 중 잡 조회와 `QUEUED` INSERT를 직렬화한다. `claim()` (`REQUIRES_NEW`, **별도 빈 `RunExportTransactions`** — 같은 클래스 안 자기호출은 프록시를 타지 않아 새 트랜잭션이 열리지 않는다. `FcmOutboxTransactions`와 같은 분리): 먼저 `running-timeout-ms`(기본 15분)를 지난 `RUNNING`을 `QUEUED`로 되돌리고, `QUEUED` 중 가장 오래된 1건을 `UPDATE … SET status=RUNNING, started_at_ms=now WHERE id=? AND status=QUEUED`로 선점한다. 0건이면 종료. 따라서 선점 뒤 프로세스가 종료돼도 다음 폴링에서 재처리한다.
 2. `RunExportAssembler.build(run)`가 임시 디렉터리(`Files.createTempDirectory`)에 파일을 쓴다(5.3~5.7). 각 단계의 DB 읽기는 `readOnly` 트랜잭션, 워커 자체는 트랜잭션 없음.
 3. zip(`java.util.zip`, 경로는 `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json`·`streams/…`) → sha256·bytes → S3 `uploadLocalFile(key, file, "application/zip")` → `finish()` (`RunExportTransactions`, `REQUIRES_NEW`): `DONE`·`s3_key`·`bytes`·`sha256`·`finished_at_ms`.
 4. 예외 → `fail()` (`RunExportTransactions`, `REQUIRES_NEW`): `FAILED`·`error_type`·`finished_at_ms`. 로그는 exportId·runId·예외 클래스명. 임시 디렉터리는 `finally`에서 삭제.
@@ -143,6 +143,7 @@ GET /api/v1/admin/collection-runs/{runId}/exports/{exportId}
 
 - [x] 닫힌 회차에 요청하면 `QUEUED`가 만들어지고 워커가 `RUNNING → DONE`으로 옮기며 S3에 zip이 있다. 열린 회차는 `RUN_NOT_CLOSED`.
 - [x] 진행 중 잡이 있으면 같은 `exportId`를 돌려준다.
+- [x] 같은 회차의 동시 요청은 하나의 `QUEUED`/`RUNNING` 잡만 만들며, timeout을 지난 `RUNNING` 잡은 다음 폴링에서 다시 선점할 수 있다.
 - [x] **통합 테스트(S3·리포지토리 mock + 현실 분량 합성 자료)**: 180초 닫힌 회차, 워치 1대(`imu_watch` 1초 배치 180건 × 50샘플, 그중 1건은 충격+자이로 보강, `hr` 3초 배치 60건 × 3샘플)·폰 1대(`location` 5초 간격 36건·`heartbeat` 60초 간격 3건)·마커 1개·매핑 1개(워치)를 내보내면 zip 안에 `manifest.json`·`run.json`·`clock_mappings.json`·`quality.json`·스트림 파일 4개가 있고, `manifest.files[]`의 `bytes`·`sha256`·`record_count`·`sample_count`가 파일을 다시 읽어 센 값과 같다.
 - [x] 스트림 파일 각 줄에서 `_server`·`member_id`·`boot_id`·`clock_mapping_id`(·위치/하트비트의 `stream`·`batch_id`)를 제거하고 파싱한 JSON이 원문 파싱 JSON과 같다(값 동일성).
 - [x] `imu_watch` 줄의 `_server.is_backfill`·`backfill_for`가 배열 정규화되고, 재전송 배치는 `resend` 6필드가 채워진다.

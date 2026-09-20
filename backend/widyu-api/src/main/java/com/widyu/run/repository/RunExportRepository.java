@@ -34,4 +34,15 @@ public interface RunExportRepository extends JpaRepository<RunExport, Long> {
                AND e.status = com.widyu.run.RunExportStatus.QUEUED
             """)
     int claim(@Param("id") Long id, @Param("startedAtMs") long startedAtMs);
+
+    /** 프로세스 종료로 멈춘 선점은 다음 폴링에서 다시 처리한다. */
+    @Modifying
+    @Query("""
+            UPDATE RunExport e
+               SET e.status = com.widyu.run.RunExportStatus.QUEUED,
+                   e.startedAtMs = null
+             WHERE e.status = com.widyu.run.RunExportStatus.RUNNING
+               AND e.startedAtMs < :expiredBeforeMs
+            """)
+    int requeueExpiredRunning(@Param("expiredBeforeMs") long expiredBeforeMs);
 }

@@ -316,6 +316,7 @@ final class RunExportFixture {
                         "continuous", 50, 1, 1.8, 2, 10, 1, 5, 60, 60, 60),
                 new com.widyu.global.properties.SensorProperties.Export(
                         5000L,
+                        900_000L,
                         15,
                         "test-build",
                         java.util.Map.of("imu_watch", 20L, "imu_phone", 20L, "hr", 1000L,

@@ -2,6 +2,7 @@ package com.widyu.run.application;
 
 import com.widyu.run.RunExport;
 import com.widyu.run.RunExportStatus;
+import com.widyu.global.properties.SensorProperties;
 import com.widyu.run.repository.RunExportRepository;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -19,16 +20,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class RunExportTransactions {
 
     private final RunExportRepository runExportRepository;
+    private final SensorProperties sensorProperties;
 
     /** {@code QUEUED} 한 건을 선점한다. 조건부 UPDATE라 워커가 여럿이어도 하나만 집는다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<RunExport> claim() {
+        long now = System.currentTimeMillis();
+        long expiredBeforeMs = now - sensorProperties.export().runningTimeoutMs();
+        runExportRepository.requeueExpiredRunning(expiredBeforeMs);
         Optional<RunExport> queued = runExportRepository
                 .findFirstByStatusOrderByRequestedAtMsAscIdAsc(RunExportStatus.QUEUED);
         if (queued.isEmpty()) {
             return Optional.empty();
         }
-        if (runExportRepository.claim(queued.get().getId(), System.currentTimeMillis()) == 0) {
+        if (runExportRepository.claim(queued.get().getId(), now) == 0) {
             return Optional.empty();
         }
         return runExportRepository.findById(queued.get().getId());

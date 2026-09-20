@@ -30,6 +30,7 @@ public record SensorProperties(
     /** 내보내기 설정(LLD-0050 4절). 값 집합이 미정인 상수(X1·X8·X9)를 여기에 모은다. */
     public record Export(
             long pollDelayMs,
+            long runningTimeoutMs,
             int presignMinutes,
             String serverBuild,
             java.util.Map<String, Long> expectedPeriodMs,
