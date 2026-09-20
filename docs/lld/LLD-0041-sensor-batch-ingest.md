@@ -246,7 +246,7 @@ WebSocket: 4xx → `REJECTED` ACK(식별자 파싱 가능 시), 500·파싱 불�
 - [ ] `server_received_at_ms ≤ accepted_at_ms ≤ persisted_at_ms = model_available_at_server_ms`이고 `measured_at_end_ms ≤ server_received_at_ms`인 정상 배치에서 그 순서가 유지된다(C5·C6).
 - [ ] `collection_mode`·`gyro_mode`·`on_body`가 없으면 `SENSOR_BATCH_INVALID`(C10·L4).
 - [ ] 로그에 샘플 값이 없다.
-- [ ] (#632) WebSocket으로 같은 배치를 보내면 REST와 같은 행·객체가 생기고 ACK를 발신 세션만 받는다. 검증 실패는 `REJECTED`.
+- [x] (#632) WebSocket으로 같은 배치를 보내면 REST와 같은 행·객체가 생기고 ACK를 발신 세션만 받는다. 검증 실패는 `REJECTED`.
 - [ ] Swagger 반영, `./gradlew compileJava`로 `QSensorBatch` 재생성, `bash scripts/harness/run-module-tests.sh` 통과.
 
 ## 8. 영향 범위 / 마이그레이션
