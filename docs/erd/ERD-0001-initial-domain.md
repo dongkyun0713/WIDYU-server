@@ -249,6 +249,39 @@ erDiagram
         Boolean configMismatch "앱 적용 설정이 서버 지시값과 다름 (B12)"
     }
 
+    DeviceHeartbeat {
+        Long id PK
+        Long member_id FK
+        String deviceId "폰"
+        String sessionId
+        Long tsMs "(device, session, ts_ms) UK 로 멱등"
+        String studyId "받은 값 그대로, null 허용"
+        String participationId "받은 값 그대로, null 허용"
+        String runId "회차 귀속 (B8 재사용)"
+        Integer phoneBatteryPct
+        Boolean phoneCharging
+        String phoneOs "기기 모델·OS 자리 (S1)"
+        String phoneAppVer
+        Boolean socketConnected
+        String locationPermission
+        Boolean backgroundRestricted
+        Integer phoneQueueDepth
+        Boolean watchConnected
+        String watchDeviceId "끊기면 null (0 치환 금지)"
+        Integer watchBatteryPct "끊기면 null"
+        String watchAppVer
+        String hrSession "RUNNING / STOPPED 등"
+        Boolean watchOnBody "미착용 근거"
+        Long lastHrTsMs
+        Long lastImuTsMs "워치·폰 시계 오프셋 기준 (검사기 B6)"
+        Integer watchQueueDepth
+        Long serverReceivedAtMs
+        Long acceptedAtMs
+        Long persistedAtMs
+        String payload "원문 바이트 그대로 (TEXT)"
+        String payloadSha256
+    }
+
     CollectionRun {
         Long id PK
         String runId UK "서버 발급 run-<UUID hex>"
@@ -440,6 +473,7 @@ erDiagram
     Member ||--o{ HeartRateEmergency : "심박 이상"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
+    Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
@@ -533,6 +567,9 @@ erDiagram
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
 | `run_marker` | UK `uk_run_marker_id` | `(marker_id)` | 마커 멱등 |
 | `run_marker` | `idx_run_marker_run_time` | `(run_id, ts_ms)` | 회차별 마커 시각순 조회 |
+| `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq가 없는 스트림의 멱등 키 (LLD-0049) |
+| `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회·자료 공백 대조 |
+| `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 기기 상태 조회 |
 
 ## 도메인별 조회 기준
 
@@ -552,6 +589,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 기기 상태 하트비트 — 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
 | 2026-09-20 | `collection_run`·`run_device_assignment`·`run_marker` | 신규 테이블 3개 (LLD-0045). 측정회차·기기 배정·마커 | `scripts/mysql/create_collection_run.sql` |
 | 2026-09-19 | `clock_mapping` | 신규 테이블 (LLD-0044). 시계 환산 기준점 묶음. `sensor_batch`에 FK는 두지 않음 | `scripts/mysql/create_clock_mapping.sql` |

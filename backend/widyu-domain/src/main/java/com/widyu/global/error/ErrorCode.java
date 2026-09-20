@@ -130,6 +130,9 @@ public enum ErrorCode {
     SENSOR_BATCH_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4003", "센서 배치 필드가 올바르지 않습니다."),
     SENSOR_CLOCK_MAPPING_CONFLICT(HttpStatus.CONFLICT, "SENSOR_4090", "시계 환산 기준점 묶음이 등록된 값과 다릅니다."),
 
+    // 기기 상태 하트비트 관련
+    HEARTBEAT_INVALID(HttpStatus.BAD_REQUEST, "DEVICE_4000", "하트비트 형식이 올바르지 않습니다."),
+
     // 측정회차 관련
     RUN_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4041", "측정회차를 찾을 수 없습니다."),
     RUN_ALREADY_OPEN(HttpStatus.CONFLICT, "RUN_4090", "이미 열린 측정회차가 있습니다."),
