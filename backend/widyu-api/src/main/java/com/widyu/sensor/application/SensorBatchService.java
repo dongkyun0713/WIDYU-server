@@ -12,6 +12,8 @@ import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
+import com.widyu.run.CollectionRun;
+import com.widyu.run.application.CollectionRunService;
 import com.widyu.sensor.SensorBatch;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
 import com.widyu.sensor.dto.response.SensorBatchResult;
@@ -66,6 +68,7 @@ public class SensorBatchService {
 
     private final SensorBatchRepository sensorBatchRepository;
     private final ClockMappingService clockMappingService;
+    private final CollectionRunService collectionRunService;
     private final MemberRepository memberRepository;
     private final S3Service s3Service;
     private final Validator validator;
@@ -75,6 +78,7 @@ public class SensorBatchService {
     public SensorBatchService(
             SensorBatchRepository sensorBatchRepository,
             ClockMappingService clockMappingService,
+            CollectionRunService collectionRunService,
             MemberRepository memberRepository,
             S3Service s3Service,
             Validator validator,
@@ -83,6 +87,7 @@ public class SensorBatchService {
     ) {
         this.sensorBatchRepository = sensorBatchRepository;
         this.clockMappingService = clockMappingService;
+        this.collectionRunService = collectionRunService;
         this.memberRepository = memberRepository;
         this.s3Service = s3Service;
         this.validator = validator;
@@ -119,6 +124,8 @@ public class SensorBatchService {
         clockMappingService.register(
                 request.clock(), request.deviceId(), elapsed.minNs(), elapsed.maxNs());
 
+        RunAttribution attribution = resolveAttribution(
+                request, memberId, validatedBatch.measuredTimeRange().startMs());
         Optional<SensorBatch> existingBatch = sensorBatchRepository.findByBatchId(request.batchId());
         if (existingBatch.isPresent()) {
             return duplicateOrReject(memberId, request, payloadSha256, existingBatch.get());
@@ -130,9 +137,8 @@ public class SensorBatchService {
 
         long persistedAtMs = System.currentTimeMillis();
         try {
-            sensorBatchRepository.save(toEntity(
-                    member, request, payload, payloadSha256, objectKey,
-                    serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
+            sensorBatchRepository.save(toEntity(member, request, payload, payloadSha256, objectKey,
+                    attribution, serverReceivedAtMs, acceptedAtMs, persistedAtMs, validatedBatch));
         } catch (DataIntegrityViolationException e) {
             // UK 경합이면 같은 batch_id 행이 이미 있다. FK 오류나 스키마 불일치까지 DUPLICATE로
             // 응답하면 클라이언트가 재전송을 멈춰 그 배치가 유실되므로, 행이 확인될 때만 중복으로 본다.
@@ -357,12 +363,63 @@ public class SensorBatchService {
         return new ElapsedRange(minNs, maxNs);
     }
 
+    /** 환산한 측정 구간(epoch ms). */
+    private record MeasuredRange(long startMs, long endMs) {}
+
+    /** 이 배치가 붙을 회차와 연구 식별자. 셋 다 null이면 운영 외 자료다. */
+    private record RunAttribution(String runId, String studyId, String participationId) {}
+
+    /** 환산식이 단조라 elapsed 최소·최대를 환산한 값이 곧 epoch 최소·최대다(LLD-0041 4.3). */
+    private MeasuredRange measuredRange(SensorBatchRequest request, ElapsedRange elapsed) {
+        SensorBatchRequest.Clock clock = request.clock();
+        long anchorElapsedNs = parseElapsedNs(clock.anchorElapsedNs());
+        return new MeasuredRange(
+                epochMs(elapsed.minNs(), clock, anchorElapsedNs),
+                epochMs(elapsed.maxNs(), clock, anchorElapsedNs));
+    }
+
+    /**
+     * 회차 귀속(LLD-0045 5절). 앱이 명시한 회차도 회원·기기·측정 시각의 실제 배정과 맞아야 한다.
+     * 재전송은 원 회차를 쓴다. 둘 다 없으면 그 시점에 이 기기를 쓰던 열린 회차를 서버가 찾는다.
+     */
+    private RunAttribution resolveAttribution(
+            SensorBatchRequest request, Long memberId, long measuredAtStartMs) {
+        if (request.runId() != null) {
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    request.runId(), memberId, request.deviceId(), measuredAtStartMs));
+        }
+        String originalRunId = originalRunId(request);
+        if (originalRunId != null) {
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    originalRunId, memberId, request.deviceId(), measuredAtStartMs));
+        }
+        Optional<CollectionRun> run =
+                collectionRunService.resolveRun(memberId, request.deviceId(), measuredAtStartMs);
+        if (run.isEmpty()) {
+            return new RunAttribution(null, request.studyId(), request.participationId());
+        }
+        return attributionOf(run.get());
+    }
+
+    private RunAttribution attributionOf(CollectionRun run) {
+        return new RunAttribution(run.getRunId(), run.getStudyId(), run.getParticipationId());
+    }
+
+    private String originalRunId(SensorBatchRequest request) {
+        SensorBatchRequest.Resend resend = request.resend();
+        if (resend == null || !Boolean.TRUE.equals(resend.isResend())) {
+            return null;
+        }
+        return resend.originalRunId();
+    }
+
     private SensorBatch toEntity(
             Member member,
             SensorBatchRequest request,
             byte[] payload,
             String payloadSha256,
             String objectKey,
+            RunAttribution attribution,
             long serverReceivedAtMs,
             long acceptedAtMs,
             long persistedAtMs,
@@ -380,9 +437,9 @@ public class SensorBatchService {
                 .deviceId(request.deviceId())
                 .sessionId(request.sessionId())
                 .seq(request.seq())
-                .studyId(request.studyId())
-                .participationId(request.participationId())
-                .runId(request.runId())
+                .studyId(attribution.studyId())
+                .participationId(attribution.participationId())
+                .runId(attribution.runId())
                 .bootId(clock.bootId())
                 .clockMappingId(clock.clockMappingId())
                 .anchorElapsedNs(anchorElapsedNs)

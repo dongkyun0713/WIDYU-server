@@ -26,6 +26,8 @@ import com.widyu.global.properties.SensorProperties;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
+import com.widyu.run.CollectionRun;
+import com.widyu.run.CollectionRunStatus;
 import com.widyu.sensor.SensorBatch;
 import com.widyu.sensor.dto.response.SensorBatchResult;
 import com.widyu.sensor.dto.response.SensorBatchResultResponse;
@@ -53,6 +55,7 @@ class SensorBatchServiceTest {
 
     @Mock private SensorBatchRepository sensorBatchRepository;
     @Mock private ClockMappingService clockMappingService;
+    @Mock private com.widyu.run.application.CollectionRunService collectionRunService;
     @Mock private MemberRepository memberRepository;
     @Mock private S3Service s3Service;
 
@@ -401,6 +404,8 @@ class SensorBatchServiceTest {
     void 재전송_계보_6필드를_갖추면_그대로_컬럼에_저장한다() {
         // given
         givenMemberExists();
+        given(collectionRunService.requireAttributableRun(eq("run-01"), eq(MEMBER_ID), eq("gw-3f2a"), anyLong()))
+                .willReturn(attributableRun("run-01"));
         String payload = batch(ACC, "null", "null", "false", "null", RESEND)
                 .replace("\"run_id\": null", "\"run_id\": \"run-01\"");
 
@@ -545,6 +550,67 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("run_id가 없는 배치는 그 시점에 열려 있던 회차로 귀속된다")
+    void run_id가_없는_배치는_그_시점에_열려_있던_회차로_귀속된다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
+        CollectionRun run = CollectionRun.builder()
+                .runId("run-0f3a")
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .studyId("STUDY-2026")
+                .participationId("P-001")
+                .collectionMode("research")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+        given(collectionRunService.resolveRun(eq(MEMBER_ID), eq("gw-3f2a"), anyLong()))
+                .willReturn(Optional.of(run));
+
+        // when
+        service().ingest(MEMBER_ID, batch(ACC, "null").getBytes(UTF_8));
+
+        // then
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getRunId()).isEqualTo("run-0f3a");
+        assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
+        assertThat(saved.getParticipationId()).isEqualTo("P-001");
+    }
+
+    @Test
+    @DisplayName("재전송 배치는 원 회차를 우선해 귀속하고 열린 회차를 찾지 않는다")
+    void 재전송_배치는_원_회차를_우선해_귀속하고_열린_회차를_찾지_않는다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
+        given(collectionRunService.requireAttributableRun(eq("run-01"), eq(MEMBER_ID), eq("gw-3f2a"), anyLong()))
+                .willReturn(attributableRun("run-01"));
+
+        // when
+        String payload = batch(ACC, "null", "null", "false", "null", RESEND)
+                .replace("\"run_id\": null", "\"run_id\": \"run-01\"");
+        service().ingest(MEMBER_ID, payload.getBytes(UTF_8));
+
+        // then
+        // 늦게 도착한 자료를 나중 참가자·나중 회차에 붙이면 안 된다(지시서 B4).
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getRunId()).isEqualTo("run-01");
+        then(collectionRunService).should(never()).resolveRun(anyLong(), anyString(), anyLong());
+    }
+
+    private CollectionRun attributableRun(String runId) {
+        return CollectionRun.builder()
+                .runId(runId)
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .studyId("STUDY-2026")
+                .participationId("P-001")
+                .collectionMode("research")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+    }
+
+    @Test
     @DisplayName("S3 업로드가 실패하면 인덱스 행을 저장하지 않는다")
     void S3_업로드가_실패하면_인덱스_행을_저장하지_않는다() {
         // given
@@ -577,6 +643,7 @@ class SensorBatchServiceTest {
         return new SensorBatchService(
                 sensorBatchRepository,
                 clockMappingService,
+                collectionRunService,
                 memberRepository,
                 s3Service,
                 VALIDATOR,
