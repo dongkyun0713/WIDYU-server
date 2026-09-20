@@ -144,6 +144,11 @@ public class DecisionRecord extends BaseTimeEntity {
      *
      * <p>보호자가 여럿이면 전송 성공도 여럿이지만 「언제 알림이 갔는가」는 첫 성공 하나다.
      * 그래서 식별자와 시각은 비어 있을 때만 채우고 도달 여부만 거듭 참으로 둔다.
+     *
+     * <p><b>outbox 완료 경로는 이 메서드를 쓰지 않는다.</b> 보호자별 완료 트랜잭션이 동시에 돌면
+     * 읽고 나서 쓰는 사이에 서로를 덮으므로, 그쪽은 조건을 UPDATE 문에 넣은
+     * {@code DecisionRecordRepository.markDeliveredIfFirst}로 간다. 이 메서드는 단일 트랜잭션 안에서
+     * 도달을 적는 경우와 도메인 규칙 자체를 검증하는 자리에 남겨 둔다.
      */
     public void markDelivered(String alertId, long alertAtMs) {
         this.alertDelivered = true;
