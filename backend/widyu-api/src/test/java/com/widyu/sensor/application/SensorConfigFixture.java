@@ -9,7 +9,7 @@ final class SensorConfigFixture {
     }
 
     static SensorProperties properties() {
-        return new SensorProperties(32_768, config(), export());
+        return new SensorProperties(32_768, config(), export(), fallAi());
     }
 
     static SensorProperties.Config config() {
@@ -32,5 +32,9 @@ final class SensorConfigFixture {
                 "NO_DEVICE_ASSIGNED",
                 "NO_DATA_IN_THIS_RUN",
                 "NOT_IMPLEMENTED_IN_THIS_RUN");
+    }
+
+    static SensorProperties.FallAi fallAi() {
+        return new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1");
     }
 }

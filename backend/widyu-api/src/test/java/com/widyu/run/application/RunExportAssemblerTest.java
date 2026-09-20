@@ -14,7 +14,9 @@ import static org.mockito.BDDMockito.given;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.widyu.decision.DecisionRecord;
 import com.widyu.device.repository.DeviceHeartbeatRepository;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.location.raw.repository.LocationFixRepository;
 import com.widyu.run.CollectionRun;
@@ -40,6 +42,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RunExportAssembler 단위 테스트")
@@ -50,6 +53,7 @@ class RunExportAssemblerTest {
     @Mock private SensorBatchRepository sensorBatchRepository;
     @Mock private LocationFixRepository locationFixRepository;
     @Mock private DeviceHeartbeatRepository deviceHeartbeatRepository;
+    @Mock private DecisionRecordRepository decisionRecordRepository;
     @Mock private ClockMappingRepository clockMappingRepository;
     @Mock private RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     @Mock private RunMarkerRepository runMarkerRepository;
@@ -78,6 +82,28 @@ class RunExportAssemblerTest {
                 "heartbeat_%s.jsonl".formatted(PHONE_DEVICE));
 
         keepZipIfRequested();
+    }
+
+    @Test
+    @DisplayName("판정 기록은 streams 밖 decisions.jsonl에 계약 필드 그대로 기록된다")
+    void 판정_기록은_결정_파일에_기록된다() throws IOException {
+        // given
+        CollectionRun run = givenSyntheticRun();
+
+        // when
+        assembler().build(run, workDir);
+
+        // then
+        List<JsonNode> decisions = readLines(workDir.resolve("decisions.jsonl"));
+        assertThat(decisions).hasSize(2);
+        assertThat(decisions.get(0).get("decision_id").asText()).isEqualTo("dec-01");
+        assertThat(decisions.get(0).get("stream_ids_used")).containsExactly(
+                MAPPER.getNodeFactory().textNode("01j8zimu000000000000000001"));
+        assertThat(decisions.get(0).get("decision_output").asText()).isEqualTo("ALERT");
+        assertThat(decisions.get(0).get("alert_delivered").asBoolean()).isTrue();
+        assertThat(decisions.get(1).get("decision_output").asText())
+                .isEqualTo("ABSTAIN_INSUFFICIENT_INPUT");
+        assertThat(decisions.get(1).get("alert_at_ms").isNull()).isTrue();
     }
 
     @Test
@@ -315,15 +341,60 @@ class RunExportAssemblerTest {
                 .willReturn(synthetic.locationFixes());
         given(deviceHeartbeatRepository.findByRunIdOrderByTsMsAsc(RUN_ID))
                 .willReturn(synthetic.heartbeats());
+        given(decisionRecordRepository.findByRunIdOrderByDecisionAtMsAsc(RUN_ID))
+                .willReturn(syntheticDecisions());
         given(s3Service.downloadBytes(any())).willAnswer(invocation ->
                 synthetic.payloadsByS3Key().get(invocation.<String>getArgument(0))
                         .getBytes(StandardCharsets.UTF_8));
         return run;
     }
 
+    private List<DecisionRecord> syntheticDecisions() {
+        DecisionRecord alert = DecisionRecord.builder()
+                .decisionId("dec-01")
+                .memberId(RunExportFixture.MEMBER_ID)
+                .runId(RUN_ID)
+                .streamIdsUsed("[\"01j8zimu000000000000000001\"]")
+                .decisionAtMs(STARTED_AT_MS + 10_500L)
+                .decisionOutput("ALERT")
+                .deciderId("fall-ai")
+                .deciderVersion("2026.09")
+                .inputCutoffMs(STARTED_AT_MS + 10_400L)
+                .featureSupportEndMs(STARTED_AT_MS + 10_300L)
+                .modelAvailableAtServerMaxMs(STARTED_AT_MS + 10_350L)
+                .windowStartMs(STARTED_AT_MS)
+                .windowEndMs(STARTED_AT_MS + 10_000L)
+                .severity("HIGH")
+                .triggerPath("IMPACT")
+                .triggerBatchId("01j8zimu000000000000000001")
+                .build();
+        ReflectionTestUtils.setField(alert, "alertId", "alert-01");
+        ReflectionTestUtils.setField(alert, "alertAtMs", STARTED_AT_MS + 10_550L);
+        ReflectionTestUtils.setField(alert, "alertDelivered", true);
+
+        DecisionRecord abstain = DecisionRecord.builder()
+                .decisionId("dec-02")
+                .memberId(RunExportFixture.MEMBER_ID)
+                .runId(RUN_ID)
+                .streamIdsUsed("[]")
+                .decisionAtMs(STARTED_AT_MS + 20_000L)
+                .decisionOutput("ABSTAIN_INSUFFICIENT_INPUT")
+                .deciderId("fall-ai")
+                .deciderVersion("2026.09")
+                .inputCutoffMs(STARTED_AT_MS + 19_900L)
+                .featureSupportEndMs(STARTED_AT_MS + 19_800L)
+                .modelAvailableAtServerMaxMs(STARTED_AT_MS + 19_850L)
+                .windowStartMs(STARTED_AT_MS + 10_000L)
+                .windowEndMs(STARTED_AT_MS + 20_000L)
+                .triggerPath("IMPACT")
+                .triggerBatchId("01j8zimu000000000000000002")
+                .build();
+        return List.of(alert, abstain);
+    }
+
     private RunExportAssembler assembler() {
         return new RunExportAssembler(
-                sensorBatchRepository, locationFixRepository, deviceHeartbeatRepository,
+                sensorBatchRepository, locationFixRepository, deviceHeartbeatRepository, decisionRecordRepository,
                 clockMappingRepository, runDeviceAssignmentRepository, runMarkerRepository,
                 s3Service, MAPPER, RunExportFixture.properties());
     }
