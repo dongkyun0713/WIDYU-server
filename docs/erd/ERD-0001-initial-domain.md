@@ -488,6 +488,15 @@ erDiagram
         ConsentSource source "APP / ADMIN (지금은 APP만)"
     }
 
+    LocationAccessLog {
+        Long location_access_log_id PK
+        Long viewer_member_id FK "위치를 본 보호자"
+        Long senior_member_id FK "위치가 조회된 시니어"
+        LocationAccessPath path "REST_LAST / REST_TRAIL / REST_FAMILY / WS_SUBSCRIBE / HOME_OUTING"
+        LocalDateTime accessedAt "서버 시각. 행이 불변이라 updated_at 없음"
+        LocalDateTime notifiedAt "통보 FCM enqueue 시각. NULL이면 미통보"
+    }
+
     MemberNotificationSetting {
         Long id PK
         Long member_id FK
@@ -652,6 +661,8 @@ erDiagram
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
 | `consent_record` | `idx_consent_record_member_key_time` | `(member_id, consent_key, recorded_at)` | 항목별 최신 행 조회. UK를 두지 않는다 — 같은 항목에 행이 여러 개인 것이 이력이다 (LLD-0055) |
+| `location_access_log` | `idx_location_access_log_senior_time` | `(senior_member_id, accessed_at)` | 시니어가 자기 열람 기록을 기간으로 조회 (LLD-0056) |
+| `location_access_log` | `idx_location_access_log_senior_notified` | `(senior_member_id, notified_at)` | 즉시 통보 쿨다운 판단과 다이제스트 대상(`notified_at IS NULL`) 조회 (LLD-0056) |
 
 ## 도메인별 조회 기준
 
@@ -666,6 +677,11 @@ erDiagram
 ### 위치 (SeniorLocation)
 - Redis `senior_location:{seniorId}` 키로 저장, TTL 5분
 - WebSocket 연결 시 실시간 업데이트, 구독 해제 시 자연 만료
+
+### 위치 열람 기록 (LocationAccessLog)
+- 보호자 읽기 경로 5곳에서 추가 전용으로 쌓는다. 좌표는 담지 않는다
+- 시니어 조회: `senior_member_id` + `accessed_at` 기간, `accessed_at DESC` 페이지
+- 통보 대상: `notified_at IS NULL` 전체를 시니어별로 묶어 하루 한 번 요약
 
 ## 스키마 마이그레이션 이력
 
