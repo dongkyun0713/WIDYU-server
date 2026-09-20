@@ -69,9 +69,9 @@ Content-Type: application/json
   },
   "acc": {
     "fs_hz_requested": 50,
-    "n": 50,
+    "n": 2,
     "t0_elapsed_ns": "993847112340001",
-    "dt_ns": [19998417, 20003005],
+    "dt_ns": [19998417],
     "mg": [[20, -980, 110], [22, -979, 108]]
   },
   "gyro": null,
@@ -109,10 +109,10 @@ Content-Type: application/json
 | `acc.dt_ns` | int[] | O | 길이 **n−1**, 각 `0 < dt ≤ 4294967295` |
 | `acc.mg` | int[][] | O | 정확히 **n행 × 3열** |
 | `gyro` | object \| null | O(키) | 같은 모양, 값 배열 이름은 `mrads`. **null은 null로 저장** |
-| `trigger` | object \| null | O(키) | `{kind, smv_g, event_elapsed_ns(string), ts_ms}` |
+| `trigger` | object \| null | O(키) | `{kind, smv_g, event_elapsed_ns(string), ts_ms}`, `kind`은 20자 이하 |
 | `gyro_backfill` | bool | X | 기본 false. true면 `backfill_for` 필수, `acc`는 null, `gyro`는 필수 |
-| `backfill_for` | string \| string[] \| null | X | 원 배치 `batch_id` |
-| `resend` | object \| null | X | `{is_resend, original_batch_id, original_seq, original_run_id, original_session_id, resent_at_ms}`. `is_resend=true`면 **6필드 전부 필수**(`original_run_id`는 null 허용) |
+| `backfill_for` | string \| string[] \| null | X | 원 배치 `batch_id`. 각 값은 소문자 ULID이고 쉼표 결합 결과는 255자 이하 |
+| `resend` | object \| null | X | `{is_resend, original_batch_id, original_seq, original_run_id, original_session_id, resent_at_ms}`. `is_resend=true`면 **6키 전부 필수**(`original_run_id` 값은 null 허용)이고 `original_run_id == run_id` |
 | `collection_mode` | string | O | `product` \| `research` |
 | `gyro_mode` | string | O | `continuous` \| `trigger` |
 | `on_body` | bool | O | |
@@ -141,7 +141,7 @@ Content-Type: application/json
 
 ### 4.1 S3
 
-키 `sensor/{memberId}/{deviceId}/{stream}/{batch_id}.json`, `Content-Type: application/json`. 내용은 **받은 원문 바이트 그대로**(재직렬화·정렬·압축 없음). `batch_id`가 불변이라 같은 배치의 재전송은 같은 키다. 재전송으로 내용이 달라지는 경우(`resend` 블록이 붙음)는 새 `batch_id`가 온다(지시서 B4 `original_batch_id`).
+키 `sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{payload_sha256}.json`, `Content-Type: application/json`. 내용은 **받은 원문 바이트 그대로**(재직렬화·정렬·압축 없음)다. `batch_id`는 멱등 키이고 해시 접미사는 동시 요청의 서로 다른 원문이 같은 객체를 덮어쓰지 못하게 한다. 같은 `batch_id`와 같은 해시만 중복으로 인정한다. 내용이 달라지는 정상 재전송은 새 `batch_id`를 발급하고 `original_batch_id`로 연결한다.
 
 ### 4.2 `sensor_batch` (엔티티 `com.widyu.sensor.SensorBatch`, widyu-domain, `BaseTimeEntity`)
 
@@ -197,7 +197,7 @@ v1 컬럼 `stream_type`·`batch_kind`·`received_at_ms`·`measured_from_ms`·`me
 
 ### 4.3 시각 환산
 
-`epoch_ms(elapsed_ns) = anchor_epoch_ms + floor((elapsed_ns − anchor_elapsed_ns) / 1_000_000)`. 마지막 샘플 `elapsed_ns = t0_elapsed_ns + Σ dt_ns`. `measured_at_start_ms = epoch_ms(t0)`, `measured_at_end_ms = epoch_ms(last)` (acc·gyro 중 min·max). `long` 산술로 충분하다(ns 차이는 부팅 이후 시간이라 2^63 안). 환산값은 조회·내보내기 봉투용이고 원값(`anchor_*`, `t0_*`)은 별도 컬럼에 남으므로 기준점이 바뀌면 다시 환산할 수 있다.
+`epoch_ms(elapsed_ns) = anchor_epoch_ms + floor((elapsed_ns − anchor_elapsed_ns) / 1_000_000)`. 마지막 샘플 `elapsed_ns = t0_elapsed_ns + Σ dt_ns`. `measured_at_start_ms = epoch_ms(t0)`, `measured_at_end_ms = epoch_ms(last)` (acc·gyro 중 min·max). 모든 덧셈·뺄셈은 exact arithmetic으로 검사하고 범위를 넘으면 S3 PUT 전에 `SENSOR_SAMPLE_INVALID`로 거부한다. 환산값은 조회·내보내기 봉투용이고 원값(`anchor_*`, `t0_*`)은 별도 컬럼에 남으므로 기준점이 바뀌면 다시 환산할 수 있다.
 
 ### 4.4 DTO
 
@@ -210,10 +210,10 @@ widyu-api `sensor/dto/request/SensorBatchRequest`(record, Jackson `@JsonProperty
 1. `server_received_at_ms = now`. 회원 존재 확인 → `MEMBER_NOT_FOUND`.
 2. 원문 바이트 길이 > `sensor.max-payload-bytes`(기본 32,768) → `SENSOR_BATCH_TOO_LARGE`.
 3. `ObjectMapper.readValue(payload, SensorBatchRequest)`. JSON 문법 오류·타입 불일치(예: `anchor_elapsed_ns`가 number) → `SENSOR_PAYLOAD_INVALID`. `FAIL_ON_UNKNOWN_PROPERTIES`는 끈다(원문이 보관되므로 손실 없음).
-4. Bean Validation(`Validator.validate`) + 구조 검증: `stream`↔`source` 일치, `acc`/`gyro` 각각 `dt_ns.length == n−1`·`mg|mrads` n×3·`dt_ns > 0`·`≤ 4294967295`, `*_elapsed_ns` 10진 정수 문자열이며 long 범위, `gyro_backfill`이면 `acc == null && gyro != null && backfill_for != null`, `resend.is_resend`면 6필드, `acc`·`gyro` 둘 다 null이면 거부. 실패 → `SENSOR_SAMPLE_INVALID`(축·샘플) 또는 `SENSOR_BATCH_INVALID`(그 밖). `accepted_at_ms = now`.
-5. `existsByBatchId` → 있으면 `DUPLICATE` 반환(S3 PUT 없음).
-6. sha256(원문) → 키 생성 → `s3Service.uploadBytes(key, payload, "application/json")` 동기, `apiCallTimeout` 5초. 실패 → 예외.
-7. 4.3 환산, `persisted_at_ms = model_available_at_server_ms = now`. `repository.save()`. `DataIntegrityViolationException` → `existsByBatchId` 재조회 → 있으면 `DUPLICATE`, 없으면 재throw. 서비스에 `@Transactional` 없음(S3는 트랜잭션 밖).
+4. Bean Validation(`Validator.validate`) + 구조 검증: `stream`↔`source` 일치, `acc`/`gyro` 각각 `dt_ns.length == n−1`·`mg|mrads` n×3·`dt_ns > 0`·`≤ 4294967295`, `*_elapsed_ns`와 파생 시각의 long 범위, 선택 메타데이터의 타입·길이·저장 컬럼 범위, `gyro_backfill` 조건, `resend.is_resend`면 6키와 `original_run_id == run_id`, `acc`·`gyro` 둘 다 null이면 거부. 실패 → `SENSOR_SAMPLE_INVALID`(축·시각) 또는 `SENSOR_BATCH_INVALID`(그 밖). `accepted_at_ms = now`.
+5. 원문 sha256을 계산하고 `findByBatchId`를 조회한다. 기존 행과 해시가 같으면 `DUPLICATE`, 다르면 계약 위반으로 거부한다(S3 PUT 없음).
+6. 원문 해시를 포함한 불변 키를 생성하고 `s3Service.uploadBytes(key, payload, "application/json")`을 동기 호출한다. `apiCallTimeout`은 5초이고 실패하면 예외다.
+7. `persisted_at_ms = model_available_at_server_ms = now`로 두고 `repository.save()`한다. `DataIntegrityViolationException`이면 `findByBatchId`로 재조회해 같은 해시일 때만 `DUPLICATE`, 다른 해시면 거부하고 행이 없으면 원래 예외를 전파한다. 서비스에 `@Transactional`은 없다(S3는 트랜잭션 밖).
 8. `STORED`. 로그는 memberId·stream·seq·acc_n·gyro_n·result만. **샘플 값·페이로드·바이트는 어떤 로그 레벨에도 남기지 않는다**(1.6.7, 완료기준 C9-6).
 
 ### 5.2 수신 경로
@@ -237,16 +237,16 @@ WebSocket: 4xx → `REJECTED` ACK(식별자 파싱 가능 시), 500·파싱 불�
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [ ] 부록 A 예시 배치를 REST로 보내면 `STORED`, S3 객체의 바이트가 보낸 원문과 **바이트 단위로 같고** `payload_sha256`·`byte_size`가 그 원문 기준이다(C9-1).
-- [ ] 같은 `batch_id`를 다시 보내면 `DUPLICATE`이고 S3 업로드가 호출되지 않는다. UK 경합 시 재조회 뒤 있을 때만 `DUPLICATE`.
+- [ ] 같은 `batch_id`와 같은 원문을 다시 보내면 `DUPLICATE`이고 S3 업로드가 호출되지 않는다. 같은 `batch_id`에 원문이 다르면 거부하며, 동시 요청에서도 저장 행의 sha256과 그 행이 가리키는 S3 객체가 일치한다.
 - [ ] `anchor_elapsed_ns`·`t0_elapsed_ns`가 JSON number로 오면 `SENSOR_PAYLOAD_INVALID`, `dt_ns` 길이가 `n−1`이 아니거나 `mg`가 n×3이 아니면 `SENSOR_SAMPLE_INVALID`, `dt_ns`에 0 또는 uint32 초과가 있으면 `SENSOR_SAMPLE_INVALID`(검사기 A1·A3·A9·A13).
 - [ ] `gyro: null`이 그대로 저장되고(`gyro_n` null) 0 배열로 바뀌지 않는다(D1).
 - [ ] `gyro_backfill=true`인데 `backfill_for`가 없거나 `acc`가 있으면 `SENSOR_BATCH_INVALID`.
-- [ ] `resend.is_resend=true`인데 6필드 중 하나가 빠지면 `SENSOR_BATCH_INVALID`; 갖추면 6필드가 컬럼에 그대로 저장된다(C12).
+- [ ] `resend.is_resend=true`인데 6키 중 하나가 빠지거나 `original_run_id != run_id`이면 `SENSOR_BATCH_INVALID`; 갖추면 6필드가 컬럼에 그대로 저장된다(C12).
 - [ ] 다섯 시계 값이 원본 그대로 컬럼에 남고, `measured_at_start/end_ms`가 4.3 식으로 환산된 값이다(1.1.7).
 - [ ] `server_received_at_ms ≤ accepted_at_ms ≤ persisted_at_ms = model_available_at_server_ms`이고 `measured_at_end_ms ≤ server_received_at_ms`인 정상 배치에서 그 순서가 유지된다(C5·C6).
 - [ ] `collection_mode`·`gyro_mode`·`on_body`가 없으면 `SENSOR_BATCH_INVALID`(C10·L4).
 - [ ] 로그에 샘플 값이 없다.
-- [ ] (#632) WebSocket으로 같은 배치를 보내면 REST와 같은 행·객체가 생기고 ACK를 발신 세션만 받는다. 검증 실패는 `REJECTED`.
+- [x] (#632) WebSocket으로 같은 배치를 보내면 REST와 같은 행·객체가 생기고 ACK를 발신 세션만 받는다. 검증 실패는 `REJECTED`.
 - [ ] Swagger 반영, `./gradlew compileJava`로 `QSensorBatch` 재생성, `bash scripts/harness/run-module-tests.sh` 통과.
 
 ## 8. 영향 범위 / 마이그레이션

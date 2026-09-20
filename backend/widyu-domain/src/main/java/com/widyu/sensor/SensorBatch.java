@@ -21,8 +21,9 @@ import lombok.NoArgsConstructor;
 /**
  * 원시 센서 배치 1건의 인덱스 행(ADR-0030 v2, LLD-0041 4.2).
  * 페이로드는 S3 객체 하나에 원문 바이트 그대로 있고, 이 행이 그 객체의 유일한 목록이다.
- * {@code s3_key}는 {@code sensor/{memberId}/{deviceId}/{stream}/{batch_id}.json}이며
- * {@code batch_id}가 앱이 붙인 불변 멱등 키다.
+ * {@code s3_key}는 {@code sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{sha256}.json}이며
+ * {@code batch_id}가 앱이 붙인 불변 멱등 키다. 해시는 경합하는 서로 다른 원문이 같은 객체를
+ * 덮어쓰지 않게 하고, 중복 판정 자체는 {@code batch_id}와 저장된 해시를 함께 확인한다.
  *
  * <p>컬럼이 많아 위치 인자 팩토리 대신 빌더를 공개한다. 인접한 Long 컬럼이 많아
  * 순서가 뒤바뀌어도 컴파일러가 잡아주지 못하기 때문이다.

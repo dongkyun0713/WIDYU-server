@@ -29,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 /**
  * 측정회차·기기 배정·마커(LLD-0045 5절, 작업지시서 B8).
@@ -49,7 +50,9 @@ public class CollectionRunService {
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
     private final CollectionRunRepository collectionRunRepository;
+    private final CollectionRunInsertService collectionRunInsertService;
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
+    private final RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     private final RunMarkerRepository runMarkerRepository;
     private final MemberRepository memberRepository;
     private final ClockMappingService clockMappingService;
@@ -65,7 +68,7 @@ public class CollectionRunService {
         validateRetention(request.retention());
 
         long startedAtMs = orNow(request.startedAtMs());
-        CollectionRun run = collectionRunRepository.save(CollectionRun.builder()
+        CollectionRun newRun = CollectionRun.builder()
                 .runId(newId(RUN_ID_PREFIX))
                 .member(member)
                 .studyId(request.studyId())
@@ -79,7 +82,17 @@ public class CollectionRunService {
                 .identifiedUntil(identifiedUntilOf(request))
                 .pseudonymizedAt(pseudonymizedAtOf(request))
                 .researchUntil(researchUntilOf(request))
-                .build());
+                .build();
+        CollectionRun run;
+        try {
+            run = collectionRunInsertService.insert(newRun);
+        } catch (DataIntegrityViolationException e) {
+            // (member_id, open_marker) UK 충돌이면 동시에 열린 다른 회차가 생긴 것이다.
+            if (collectionRunRepository.existsByMemberIdAndStatus(member.getId(), CollectionRunStatus.OPEN)) {
+                throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
+            }
+            throw e;
+        }
 
         if (request.devices() != null) {
             for (DeviceAssignRequest device : request.devices()) {
@@ -137,6 +150,9 @@ public class CollectionRunService {
         long unassignedAtMs = unassignedAtMsOf(request);
         if (unassignedAtMs < assignment.getAssignedAtMs()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "해제 시각이 배정 시각보다 앞설 수 없습니다.");
+        }
+        if (!assignment.isAssigned()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "이미 해제된 기기 배정입니다.");
         }
         assignment.unassign(unassignedAtMs);
         return response(run);
@@ -202,6 +218,19 @@ public class CollectionRunService {
         return collectionRunRepository.findByRunId(runId).map(CollectionRun::getCollectionMode);
     }
 
+    /** 클라이언트가 명시한 회차도 회원·기기·측정 시각의 실제 배정과 일치해야 한다. */
+    @Transactional(readOnly = true)
+    public CollectionRun requireAttributableRun(
+            String runId, Long memberId, String deviceId, long measuredAtStartMs) {
+        CollectionRun run = findRun(runId);
+        if (!run.getMember().getId().equals(memberId)
+                || !runDeviceAssignmentRepository.existsAssignmentAt(
+                        run.getId(), memberId, deviceId, measuredAtStartMs)) {
+            throw new BusinessException(ErrorCode.RUN_NOT_FOUND);
+        }
+        return run;
+    }
+
     /** B12(서버 결정 수집 모드)가 쓸 조회. */
     @Transactional(readOnly = true)
     public boolean hasOpenRun(Long memberId) {
@@ -214,14 +243,27 @@ public class CollectionRunService {
                 request.deviceId(), CollectionRunStatus.OPEN)) {
             throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
         }
-        runDeviceAssignmentRepository.save(RunDeviceAssignment.builder()
+        long assignedAtMs = orDefault(request.assignedAtMs(), defaultAssignedAtMs);
+        if (assignedAtMs < run.getStartedAtMs()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "배정 시각이 회차 시작 시각보다 앞설 수 없습니다.");
+        }
+        RunDeviceAssignment assignment = RunDeviceAssignment.builder()
                 .assignmentId(newId(ASSIGNMENT_ID_PREFIX))
                 .run(run)
                 .deviceId(request.deviceId())
                 .role(request.role())
                 .wearSite(request.wearSite())
-                .assignedAtMs(orDefault(request.assignedAtMs(), defaultAssignedAtMs))
-                .build());
+                .assignedAtMs(assignedAtMs)
+                .build();
+        try {
+            runDeviceAssignmentInsertService.insert(assignment);
+        } catch (DataIntegrityViolationException e) {
+            if (runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
+                    request.deviceId(), CollectionRunStatus.OPEN)) {
+                throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
+            }
+            throw e;
+        }
     }
 
     private void verifySameMarker(
