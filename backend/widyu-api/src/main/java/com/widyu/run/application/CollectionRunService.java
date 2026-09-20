@@ -54,6 +54,7 @@ public class CollectionRunService {
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     private final RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     private final RunMarkerRepository runMarkerRepository;
+    private final RunMarkerInsertService runMarkerInsertService;
     private final MemberRepository memberRepository;
     private final ClockMappingService clockMappingService;
     private final AdminAuditLogService adminAuditLogService;
@@ -169,6 +170,7 @@ public class CollectionRunService {
         Optional<RunMarker> registered = runMarkerRepository.findByMarkerId(request.markerId());
         if (registered.isPresent()) {
             verifySameMarker(registered.get(), run, request, sourceElapsedNs);
+            registerMarkerClock(request, sourceElapsedNs);
             // 멱등: 같은 내용이면 행을 늘리지 않는다.
             return response(run);
         }
@@ -177,11 +179,8 @@ public class CollectionRunService {
             throw new BusinessException(ErrorCode.RUN_MARKER_OUT_OF_RANGE);
         }
 
-        // 누른 기기의 시계도 센서 배치와 같은 규칙으로 등록한다(정책 1.8.3).
-        clockMappingService.register(
-                markerClock(request), request.sourceDeviceId(), sourceElapsedNs, sourceElapsedNs);
-
-        runMarkerRepository.save(RunMarker.builder()
+        registerMarkerClock(request, sourceElapsedNs);
+        RunMarker marker = RunMarker.builder()
                 .markerId(request.markerId())
                 .run(run)
                 .kind(request.kind())
@@ -191,8 +190,23 @@ public class CollectionRunService {
                 .source(request.source())
                 .sourceDeviceId(request.sourceDeviceId())
                 .clockMappingId(request.clock().clockMappingId())
-                .build());
+                .build();
+        try {
+            runMarkerInsertService.insert(marker);
+        } catch (DataIntegrityViolationException e) {
+            Optional<RunMarker> concurrentMarker = runMarkerRepository.findByMarkerId(request.markerId());
+            if (concurrentMarker.isEmpty()) {
+                throw e;
+            }
+            verifySameMarker(concurrentMarker.get(), run, request, sourceElapsedNs);
+        }
         return response(run);
+    }
+
+    /** 누른 기기의 시계도 센서 배치와 같은 규칙으로 등록한다(정책 1.8.3). */
+    private void registerMarkerClock(RunMarkerRequest request, long sourceElapsedNs) {
+        clockMappingService.register(
+                markerClock(request), request.sourceDeviceId(), sourceElapsedNs, sourceElapsedNs);
     }
 
     /**

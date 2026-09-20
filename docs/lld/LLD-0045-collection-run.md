@@ -120,7 +120,7 @@ POST   /api/v1/admin/collection-runs/{runId}/markers          마커 등록 (멱
 - **열기**: 회원 존재 → 회원의 OPEN 회차 없음 → 각 기기의 다른 OPEN 회차 미배정 → retention 검증 → `run_id` 발급 → 저장. `open_marker`·`active_marker` UK 충돌은 각각 409으로 변환한다. 제약 위반을 독립 `REQUIRES_NEW` 삽입에서 감지해 바깥 트랜잭션이 rollback-only가 되지 않게 한다.
 - **닫기**: OPEN만. `ended_at_ms`(기본 now, `≥ started`) 기록, 미해제 배정은 같은 시각으로 해제, `status=CLOSED`.
 - **배정/해제**: OPEN 회차만. 배정 시각 `≥ run.started`, 해제 시각 `≥ assigned`; 이미 해제한 배정은 다시 해제할 수 없다.
-- **마커**: OPEN 또는 CLOSED 모두 허용(현장에서 늦게 올릴 수 있다). `markerId` 중복 → 내용 비교. `clock`을 `ClockMappingService.register(clock, sourceDeviceId, sourceElapsedNs, sourceElapsedNs)`. 시각 범위 검사.
+- **마커**: OPEN 또는 CLOSED 모두 허용(현장에서 늦게 올릴 수 있다). `markerId` 중복 → 내용 비교 뒤에도 요청 clock을 다시 `ClockMappingService.register(clock, sourceDeviceId, sourceElapsedNs, sourceElapsedNs)`로 대조한다. 신규 insert의 `marker_id` UK 경합은 독립 transaction에서 감지한 뒤 다시 조회·동일 내용 비교로 멱등 복구한다. 시각 범위 검사.
 - **배치 귀속** (`SensorBatchService.ingest`, 검증 뒤·S3 앞): `request.run_id` 또는 재전송의 `original_run_id`가 있으면, 그 회차가 요청 회원 소유이고 해당 기기가 `measured_at_start_ms`에 실제 배정됐는지 확인한다. 실패하면 404이고 클라이언트의 연구 식별자는 신뢰하지 않는다. 통과하면 서버 회차의 `run_id`·`study_id`·`participation_id`를 저장한다. 둘 다 없으면 회원의 OPEN 회차 중 그 `device_id`가 배정된 것을 찾아 같은 값을 채운다. 없으면 null 유지(운영 외 자료).
 - **B12용**: `existsByMemberIdAndStatus(memberId, OPEN)`.
 
