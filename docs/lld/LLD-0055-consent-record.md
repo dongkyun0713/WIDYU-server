@@ -65,6 +65,8 @@
 
 인덱스 `(member_id, consent_key, recorded_at DESC)`. `BaseTimeEntity` 대신 `recorded_at` 하나만(불변 행이라 updated_at 무의미).
 
+`consent_key`·`source`는 **VARCHAR로 고정**한다(엔티티에 `@JdbcTypeCode(SqlTypes.VARCHAR)`). Hibernate 6은 MySQL에서 `@Enumerated(STRING)`을 native `ENUM(...)`으로 매핑해 운영 `ddl-auto: validate`와 어긋난다. VARCHAR면 항목 값이 늘어도 `ALTER TABLE`이 필요 없다.
+
 ## 5. 처리 흐름
 
 - **제출**(`submit`): 요청 `consents` 각 항목마다 행 1개 INSERT(`granted` 요청값, `version` 요청값, `source=APP`). 같은 값이라도 기록한다(「언제 다시 동의했는지」도 사실). 한 트랜잭션. 응답은 최신 상태.

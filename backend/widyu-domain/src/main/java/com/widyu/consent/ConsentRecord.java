@@ -13,12 +13,18 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 한 회원이 한 항목에 대해 한 번 밝힌 의사(동의 또는 철회) 1건(ADR-0036 결정 1, LLD-0055 4절).
  *
  * <p><b>추가 전용</b>이다. UPDATE·DELETE가 없으므로 이 테이블이 곧 이력이고 현재 상태는
  * 항목별 최신 행이다. 철회도 지우는 것이 아니라 {@code granted=false} 행을 새로 남긴다.
+ *
+ * <p>enum 두 컬럼은 {@code @JdbcTypeCode(SqlTypes.VARCHAR)}로 못박는다. Hibernate 6은 MySQL에서
+ * {@code @Enumerated(STRING)}을 native {@code ENUM(...)}으로 매핑하는데, 운영 DDL은 VARCHAR라
+ * 그대로 두면 {@code ddl-auto: validate}가 어긋난다. VARCHAR면 값이 늘어도 ALTER가 필요 없다.
  *
  * <p>{@code BaseTimeEntity}를 상속하지 않는다. 행이 불변이라 {@code updated_at}이 의미가 없고,
  * 「언제 밝힌 의사인가」는 {@code recorded_at} 하나로 충분하다.
@@ -43,6 +49,7 @@ public class ConsentRecord {
     private Long memberId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "consent_key", nullable = false, length = 40)
     private ConsentKey consentKey;
 
@@ -58,6 +65,7 @@ public class ConsentRecord {
     private LocalDateTime recordedAt;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "source", nullable = false, length = 16)
     private ConsentSource source;
 
