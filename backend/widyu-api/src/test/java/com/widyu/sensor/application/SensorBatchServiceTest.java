@@ -136,6 +136,27 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("충격 배치의 판정 훅이 실패해도 배치 저장 결과는 STORED다")
+    void 충격_배치의_판정_훅이_실패해도_배치_저장_결과는_STORED다() {
+        // given
+        givenMemberExists();
+        String trigger = """
+                {"kind":"impact","smv_g":3.0,"event_elapsed_ns":"993847112340001","ts_ms":1760000000012}
+                """;
+        willThrow(new IllegalStateException("AI unavailable"))
+                .given(fallAssessmentService).assessAfterImpact(any(SensorBatch.class));
+
+        // when
+        SensorBatchResultResponse response = service().ingest(
+                MEMBER_ID, batch(ACC, "null", trigger, "false", "null", "null").getBytes(UTF_8));
+
+        // then
+        assertThat(response).isEqualTo(SensorBatchResultResponse.of(BATCH_ID, SEQ, SensorBatchResult.STORED));
+        then(sensorBatchRepository).should().save(any(SensorBatch.class));
+        then(fallAssessmentService).should().assessAfterImpact(any(SensorBatch.class));
+    }
+
+    @Test
     @DisplayName("자이로가 함께 오면 두 축의 시각 범위를 합쳐 환산한다")
     void 자이로가_함께_오면_두_축의_시각_범위를_합쳐_환산한다() {
         // given
