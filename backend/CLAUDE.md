@@ -82,6 +82,12 @@
 - `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`
 - 인시던트(본인확인·SOS·사후 판정)는 이 도메인이 아니라 별도 LLD다
 
+### `device` — 기기 상태 하트비트
+
+- 폰이 60초마다 보내는 기기 상태를 `POST /api/v1/device/heartbeats`로 받아 원문 + 질의용 필드를 `device_heartbeat`에 저장한다. 자료가 비었을 때 **왜 비었는지**(배터리·미착용·앱 종료·네트워크)를 아는 유일한 근거다 → LLD-0049, 지시서 B7
+- **멱등 키는 `(device_id, session_id, ts_ms)`** — 이 스트림에는 `seq`가 없다. 같은 조합이면 `DUPLICATE`, UK 경합은 재조회로 확인될 때만 중복으로 본다. 회차 귀속은 B8의 `resolveRun`을 재사용한다
+- `watch.connected=false`면 나머지 `watch_*`는 **null로 저장한다**(0 치환 금지 — 배터리 0%로 읽힌다). `on_body=false`도 값 그대로 남긴다. **배터리·큐·권한 값을 어떤 로그 레벨에도 남기지 않는다** — memberId·deviceId·result만
+
 ### `location` — 실시간 위치
 - `realtime`(WebSocket), `parentlocation`(REST). 시니어 발신 → family 검증 → 보호자 `/topic/location/{seniorId}` 구독
 - 위치 이력 Redis 저장. → LLD-0001, ADR-0007

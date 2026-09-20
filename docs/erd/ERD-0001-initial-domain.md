@@ -260,6 +260,23 @@ erDiagram
         Boolean configMismatch "앱 적용 설정이 서버 지시값과 다름 (B12)"
     }
 
+    DeviceHeartbeat {
+        Long id PK
+        Long member_id FK
+        String deviceId
+        String sessionId
+        Long tsMs "(device, session, ts_ms) UK"
+        String runId
+        Integer phoneBatteryPct
+        Boolean socketConnected
+        Boolean watchConnected
+        Boolean watchOnBody
+        Long lastImuTsMs
+        Long serverReceivedAtMs
+        Long acceptedAtMs
+        Long persistedAtMs
+    }
+
     LocationFix {
         Long id PK
         Long member_id FK "위치 기준 기기는 폰 (B 1.6.5)"
@@ -482,6 +499,7 @@ erDiagram
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
     Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
+    Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
@@ -580,6 +598,9 @@ erDiagram
 | `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
 | `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
 | `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
+| `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
+| `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
+| `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
 
 ## 도메인별 조회 기준
 
@@ -600,6 +621,7 @@ erDiagram
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
+| 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `heart_rate_event` | `accuracy`·`batch_id` 컬럼 추가 (LLD-0047). 운영 배포 전 필수 | `scripts/mysql/add_heart_rate_event_accuracy.sql` |
 | 2026-09-20 | `sensor_batch` | `sample_count` 추가, `collection_mode`·`gyro_mode` NULL 허용 (LLD-0047, 심박 배치 수용) | `scripts/mysql/alter_sensor_batch_for_hr.sql` |
 | 2026-09-20 | `sensor_batch` | `config_mismatch` 컬럼 추가 (LLD-0046). 앱 적용 설정과 서버 지시값 불일치 표시 | `scripts/mysql/add_sensor_batch_config_mismatch.sql` |
