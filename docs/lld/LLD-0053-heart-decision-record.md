@@ -70,7 +70,7 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 샘플 루프(기존 순서 유지: 정렬 → 중복 skip → AI 대상 판정 → detect → 저장):
 1. AI 대상이고 `detect` 성공 → `aiTargetCount++`. 결과가 `emergency`면 **먼저** `DecisionRecordPersistenceService.save`(REQUIRES_NEW)로 `ALERT` 행을 만들고 그 `decision_id`를 `saveBatchSample(..., decisionId)`에 넘긴다. 아니면 메트릭 `heart.decision{output=NO_ALERT}` 증가.
 2. `detect`가 실패(aiAvailable=false)하면 기록 없음(기존대로 UNKNOWN 저장).
-3. 루프 뒤 `samples`가 비어 있지 않고 `aiTargetCount == 0`이고 AI가 한 번도 호출되지 않았다면 → `ABSTAIN_INSUFFICIENT_INPUT` 행 1개(배치 단위). AI 호출 실패로 대상이 0이 된 경우는 제외한다.
+3. 루프 뒤 **중복 skip을 뺀 저장 샘플이 1개 이상**이고 `aiTargetCount == 0`이고 AI가 한 번도 호출되지 않았다면 → `ABSTAIN_INSUFFICIENT_INPUT` 행 1개(배치 단위). AI 호출 실패로 대상이 0이 된 경우는 제외한다. **중복 skip된 샘플은 세지 않는다** — 이미 판정한 시각이 다시 온 것이라 입력 부족이 아니다. 그래서 전부 중복인 재전송 배치는 아무 행도 남기지 않는다(남기면 재전송 횟수만큼 없던 「판정 불가」가 쌓여 사후 분석이 오염된다).
 
 `ALERT` 행 값:
 
@@ -113,6 +113,7 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 - [ ] 배치에 위급 샘플 1개가 있으면 `ALERT` 행 1개가 저장되고 필수 10필드·`hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason`·`severity`가 채워진다. `stream_ids_used`는 `[batchId]`, `run_id`는 인자값.
 - [ ] 같은 배치의 정상 샘플은 행을 만들지 않고 메트릭만 는다.
 - [ ] 배치의 모든 샘플이 `UNRELIABLE`이면 `ABSTAIN_INSUFFICIENT_INPUT` 행 1개, AI 호출 0회.
+- [ ] 배치의 모든 샘플이 중복으로 skip되면 판정 행이 없다(재전송은 입력 부족이 아니다).
 - [ ] AI 호출이 실패하면 판정 행이 없고 심박은 `UNKNOWN`으로 저장된다(기존 동작).
 - [ ] `HeartRateEmergencyEvent`에 `decisionId`가 실리고 outbox 행 `decision_id`에 저장된다.
 - [ ] outbox 전송 성공 시 해당 판정의 `alert_delivered=true`, `alert_id="fcm-<id>"`, `alert_at_ms`가 채워진다. 두 번째 성공은 값을 덮지 않는다. 전송 실패 시 `false` 유지.

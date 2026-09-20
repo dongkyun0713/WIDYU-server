@@ -357,7 +357,6 @@ class HeartRateBatchServiceTest {
     void 저장한_샘플이_없으면_최신값을_갱신하지_않는다() {
         // given
         Member member = member();
-        givenDecisionSaved();
         given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
                 .willReturn(true);
 
@@ -370,6 +369,28 @@ class HeartRateBatchServiceTest {
         assertThat(outcome.stored()).isZero();
         then(heartRatePersistenceService).should(never())
                 .updateLatestResult(anyLong(), any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("전부 중복인 재전송 배치는 판정 행을 남기지 않는다")
+    void 전부_중복인_재전송_배치는_판정_행을_남기지_않는다() {
+        // given
+        Member member = member();
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
+                .willReturn(true);
+
+        // when
+        HeartRateBatchService.BatchOutcome outcome = service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(
+                        sample(71, FIRST_TS_MS, "HIGH"),
+                        sample(72, FIRST_TS_MS + 997, "UNRELIABLE")),
+                System.currentTimeMillis());
+
+        // then
+        // 이미 판정한 시각이 다시 온 것이라 입력 부족이 아니다. 재전송 횟수만큼 없던 「판정 불가」가 쌓이면 안 된다.
+        assertThat(outcome.skipped()).isEqualTo(2);
+        then(decisionRecordPersistenceService).should(never()).save(any());
+        then(heartRateAnomalyDetector).should(never()).detect(anyLong(), any(), anyString());
     }
 
     private HeartRateBatchService service() {

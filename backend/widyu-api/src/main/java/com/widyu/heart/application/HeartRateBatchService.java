@@ -119,7 +119,7 @@ public class HeartRateBatchService {
             heartRatePersistenceService.updateLatestResult(
                     member.getId(), lastStatus, lastHeartRate, lastMeasuredAt);
         }
-        recordAbstain(member, batchId, runId, samples, aiTargetCount, aiCalled, serverReceivedAtMs);
+        recordAbstain(member, batchId, runId, samples, stored, aiTargetCount, aiCalled, serverReceivedAtMs);
         return new BatchOutcome(stored, skipped, aiSkipped);
     }
 
@@ -159,12 +159,16 @@ public class HeartRateBatchService {
 
     /**
      * AI에 넘길 샘플이 하나도 없던 배치는 「판정하지 않음」을 배치 단위로 한 줄 남긴다.
-     * AI 호출이 실패해서 대상이 0이 된 경우는 입력 부족이 아니라 판정기 장애라 제외한다(ADR-0033 결정 2).
+     *
+     * <p>세 가지를 제외한다. AI 호출이 실패해서 대상이 0이 된 경우는 입력 부족이 아니라 판정기
+     * 장애다(ADR-0033 결정 2). 중복으로 건너뛴 샘플도 세지 않는다 — 이미 판정한 시각이 다시 온
+     * 것이라 입력이 부족한 것이 아니다. 그래서 <b>전부 중복인 재전송 배치는 아무 행도 남기지 않는다</b>.
+     * 남겼다면 재전송 횟수만큼 없던 「판정 불가」가 쌓여 사후 분석이 오염된다.
      */
     private void recordAbstain(
             Member member, String batchId, String runId, List<HeartRateBatchRequest.Sample> samples,
-            int aiTargetCount, boolean aiCalled, long serverReceivedAtMs) {
-        if (samples.isEmpty() || aiTargetCount > 0 || aiCalled) {
+            int assessableCount, int aiTargetCount, boolean aiCalled, long serverReceivedAtMs) {
+        if (assessableCount == 0 || aiTargetCount > 0 || aiCalled) {
             return;
         }
         List<HeartRateBatchRequest.Sample> sorted = sortedByMeasuredTime(samples);
