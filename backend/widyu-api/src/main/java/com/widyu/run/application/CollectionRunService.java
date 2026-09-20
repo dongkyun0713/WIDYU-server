@@ -22,6 +22,7 @@ import com.widyu.run.repository.RunMarkerRepository;
 import com.widyu.sensor.application.ClockMappingService;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 /**
  * 측정회차·기기 배정·마커(LLD-0045 5절, 작업지시서 B8).
@@ -49,13 +51,16 @@ public class CollectionRunService {
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
     private final CollectionRunRepository collectionRunRepository;
+    private final CollectionRunOpenCommandService collectionRunOpenCommandService;
+    private final CollectionRunConflictLookupService collectionRunConflictLookupService;
     private final RunDeviceAssignmentRepository runDeviceAssignmentRepository;
+    private final RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     private final RunMarkerRepository runMarkerRepository;
+    private final RunMarkerInsertService runMarkerInsertService;
     private final MemberRepository memberRepository;
     private final ClockMappingService clockMappingService;
     private final AdminAuditLogService adminAuditLogService;
 
-    @Transactional
     public CollectionRunResponse open(CollectionRunOpenRequest request) {
         Member member = memberRepository.findById(request.subjectMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
@@ -65,7 +70,7 @@ public class CollectionRunService {
         validateRetention(request.retention());
 
         long startedAtMs = orNow(request.startedAtMs());
-        CollectionRun run = collectionRunRepository.save(CollectionRun.builder()
+        CollectionRun newRun = CollectionRun.builder()
                 .runId(newId(RUN_ID_PREFIX))
                 .member(member)
                 .studyId(request.studyId())
@@ -79,12 +84,28 @@ public class CollectionRunService {
                 .identifiedUntil(identifiedUntilOf(request))
                 .pseudonymizedAt(pseudonymizedAtOf(request))
                 .researchUntil(researchUntilOf(request))
-                .build());
-
+                .build();
+        List<RunDeviceAssignment> assignments = new ArrayList<>();
         if (request.devices() != null) {
             for (DeviceAssignRequest device : request.devices()) {
-                assignDevice(run, device, startedAtMs);
+                assignments.add(newDeviceAssignment(newRun, device, startedAtMs));
             }
+        }
+
+        CollectionRun run;
+        try {
+            run = collectionRunOpenCommandService.open(newRun, assignments);
+        } catch (DataIntegrityViolationException e) {
+            // 명령 transaction은 이미 롤백됐다. 별도 snapshot에서 UK 승자 행만 409으로 바꾼다.
+            if (collectionRunConflictLookupService.hasOpenRun(member.getId())) {
+                throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
+            }
+            for (RunDeviceAssignment assignment : assignments) {
+                if (collectionRunConflictLookupService.hasActiveDevice(assignment.getDeviceId())) {
+                    throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
+                }
+            }
+            throw e;
         }
 
         adminAuditLogService.log(AdminAction.COLLECTION_RUN_OPEN, "CollectionRun", run.getId(),
@@ -138,6 +159,9 @@ public class CollectionRunService {
         if (unassignedAtMs < assignment.getAssignedAtMs()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "해제 시각이 배정 시각보다 앞설 수 없습니다.");
         }
+        if (!assignment.isAssigned()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "이미 해제된 기기 배정입니다.");
+        }
         assignment.unassign(unassignedAtMs);
         return response(run);
     }
@@ -153,6 +177,7 @@ public class CollectionRunService {
         Optional<RunMarker> registered = runMarkerRepository.findByMarkerId(request.markerId());
         if (registered.isPresent()) {
             verifySameMarker(registered.get(), run, request, sourceElapsedNs);
+            registerMarkerClock(request, sourceElapsedNs);
             // 멱등: 같은 내용이면 행을 늘리지 않는다.
             return response(run);
         }
@@ -161,11 +186,8 @@ public class CollectionRunService {
             throw new BusinessException(ErrorCode.RUN_MARKER_OUT_OF_RANGE);
         }
 
-        // 누른 기기의 시계도 센서 배치와 같은 규칙으로 등록한다(정책 1.8.3).
-        clockMappingService.register(
-                markerClock(request), request.sourceDeviceId(), sourceElapsedNs, sourceElapsedNs);
-
-        runMarkerRepository.save(RunMarker.builder()
+        registerMarkerClock(request, sourceElapsedNs);
+        RunMarker marker = RunMarker.builder()
                 .markerId(request.markerId())
                 .run(run)
                 .kind(request.kind())
@@ -175,8 +197,23 @@ public class CollectionRunService {
                 .source(request.source())
                 .sourceDeviceId(request.sourceDeviceId())
                 .clockMappingId(request.clock().clockMappingId())
-                .build());
+                .build();
+        try {
+            runMarkerInsertService.insert(marker);
+        } catch (DataIntegrityViolationException e) {
+            Optional<RunMarker> concurrentMarker = runMarkerRepository.findByMarkerId(request.markerId());
+            if (concurrentMarker.isEmpty()) {
+                throw e;
+            }
+            verifySameMarker(concurrentMarker.get(), run, request, sourceElapsedNs);
+        }
         return response(run);
+    }
+
+    /** 누른 기기의 시계도 센서 배치와 같은 규칙으로 등록한다(정책 1.8.3). */
+    private void registerMarkerClock(RunMarkerRequest request, long sourceElapsedNs) {
+        clockMappingService.register(
+                markerClock(request), request.sourceDeviceId(), sourceElapsedNs, sourceElapsedNs);
     }
 
     /**
@@ -202,6 +239,19 @@ public class CollectionRunService {
         return collectionRunRepository.findByRunId(runId).map(CollectionRun::getCollectionMode);
     }
 
+    /** 클라이언트가 명시한 회차도 회원·기기·측정 시각의 실제 배정과 일치해야 한다. */
+    @Transactional(readOnly = true)
+    public CollectionRun requireAttributableRun(
+            String runId, Long memberId, String deviceId, long measuredAtStartMs) {
+        CollectionRun run = findRun(runId);
+        if (!run.getMember().getId().equals(memberId)
+                || !runDeviceAssignmentRepository.existsAssignmentAt(
+                        run.getId(), memberId, deviceId, measuredAtStartMs)) {
+            throw new BusinessException(ErrorCode.RUN_NOT_FOUND);
+        }
+        return run;
+    }
+
     /** B12(서버 결정 수집 모드)가 쓸 조회. */
     @Transactional(readOnly = true)
     public boolean hasOpenRun(Long memberId) {
@@ -209,19 +259,36 @@ public class CollectionRunService {
     }
 
     private void assignDevice(CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {
+        RunDeviceAssignment assignment = newDeviceAssignment(run, request, defaultAssignedAtMs);
+        try {
+            runDeviceAssignmentInsertService.insert(assignment);
+        } catch (DataIntegrityViolationException e) {
+            if (collectionRunConflictLookupService.hasActiveDevice(request.deviceId())) {
+                throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
+            }
+            throw e;
+        }
+    }
+
+    private RunDeviceAssignment newDeviceAssignment(
+            CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {
         // 기기는 한 번에 한 참가자에게만 간다. 공유하면 자료가 누구 것인지 알 수 없다.
         if (runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 request.deviceId(), CollectionRunStatus.OPEN)) {
             throw new BusinessException(ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
         }
-        runDeviceAssignmentRepository.save(RunDeviceAssignment.builder()
+        long assignedAtMs = orDefault(request.assignedAtMs(), defaultAssignedAtMs);
+        if (assignedAtMs < run.getStartedAtMs()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "배정 시각이 회차 시작 시각보다 앞설 수 없습니다.");
+        }
+        return RunDeviceAssignment.builder()
                 .assignmentId(newId(ASSIGNMENT_ID_PREFIX))
                 .run(run)
                 .deviceId(request.deviceId())
                 .role(request.role())
                 .wearSite(request.wearSite())
-                .assignedAtMs(orDefault(request.assignedAtMs(), defaultAssignedAtMs))
-                .build());
+                .assignedAtMs(assignedAtMs)
+                .build();
     }
 
     private void verifySameMarker(

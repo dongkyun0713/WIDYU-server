@@ -40,4 +40,20 @@ public interface RunDeviceAssignmentRepository extends JpaRepository<RunDeviceAs
             @Param("memberId") Long memberId,
             @Param("deviceId") String deviceId,
             @Param("atMs") long atMs);
+
+    /** 명시한 회차가 해당 회원·기기의 그 시각 배정을 실제로 보유하는지 확인한다. */
+    @Query("""
+            SELECT CASE WHEN COUNT(a) > 0 THEN true ELSE false END
+              FROM RunDeviceAssignment a
+             WHERE a.run.id = :runDbId
+               AND a.run.member.id = :memberId
+               AND a.deviceId = :deviceId
+               AND a.assignedAtMs <= :atMs
+               AND (a.unassignedAtMs IS NULL OR a.unassignedAtMs > :atMs)
+            """)
+    boolean existsAssignmentAt(
+            @Param("runDbId") Long runDbId,
+            @Param("memberId") Long memberId,
+            @Param("deviceId") String deviceId,
+            @Param("atMs") long atMs);
 }

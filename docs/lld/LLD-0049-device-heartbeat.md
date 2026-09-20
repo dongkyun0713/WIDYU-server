@@ -66,7 +66,7 @@ UK `(device_id, session_id, ts_ms)`. 인덱스 `(member_id, ts_ms)`, `(run_id)`.
 `DeviceHeartbeatService.ingest(memberId, byte[] payload)`:
 1. `server_received_at_ms = now`. 회원 존재 확인.
 2. 파싱(`FAIL_ON_UNKNOWN_PROPERTIES` off) → 실패 `HEARTBEAT_INVALID`. Bean Validation + 3절 제약 → 실패 `HEARTBEAT_INVALID`. `accepted_at_ms`. `v != 1`은 Bean Validation이 아니라 서비스에서 거부한다(SensorBatchService의 형식 버전 대조와 같은 방식).
-3. 회차 귀속: `request.runId`가 있으면 그대로, 없으면 `collectionRunService.resolveRun(memberId, deviceId, tsMs)`.
+3. 회차 귀속: `request.runId`가 있으면 회원 소유·기기 배정 구간을 `requireAttributableRun`으로 검증하고 회차의 `study_id`·`participation_id`를 쓴다. 없으면 `collectionRunService.resolveRun(memberId, deviceId, tsMs)`로 찾고, 찾은 회차 메타데이터를 쓴다. 본문 연구 식별자는 회차 밖 자료일 때만 보존한다.
 4. `existsByDeviceIdAndSessionIdAndTsMs` → `DUPLICATE`.
 5. sha256(원문) → `persisted_at_ms` → INSERT. 서비스에 `@Transactional`을 선언하지 않는다 — INSERT는 리포지토리 자체 트랜잭션에서 돈다(SensorBatchService와 같은 이유: 같은 클래스 안의 호출은 프록시를 타지 않아 애노테이션이 무효다). UK 경합 `DataIntegrityViolationException` → 재조회 후 있으면 `DUPLICATE`, 없으면 재throw.
 6. `STORED`. 로그는 memberId·deviceId·result만(배터리·큐 값 등은 남기지 않는다).
@@ -84,6 +84,7 @@ UK `(device_id, session_id, ts_ms)`. 인덱스 `(member_id, ts_ms)`, `(run_id)`.
 - [x] `watch.connected=false`·`on_body=false`가 값 그대로 남는다(자료 공백 설명 근거).
 - [x] `phone.battery_pct` 누락은 400.
 - [x] 열린 회차·배정 폰이면 `run_id`가 채워진다.
+- [x] 본문 `run_id`는 회원 소유·기기 배정 구간이 맞을 때만 저장하며, 회차가 있으면 연구 식별자는 서버 회차 메타데이터가 정본이다.
 - [x] 원문 바이트가 `payload`에 그대로 있고 `payload_sha256`이 그 바이트의 해시다.
 - [x] `./gradlew compileJava`(QDeviceHeartbeat), `bash scripts/harness/run-module-tests.sh` 통과.
 

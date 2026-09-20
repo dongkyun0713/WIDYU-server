@@ -42,4 +42,12 @@ final class DeviceHeartbeatFixture {
                   "study_id": null, "participation_id": null, "run_id": null,
                   "phone": %s, "watch": %s }""".formatted(TS_MS, DEVICE_ID, SESSION_ID, phone, watch);
     }
+
+    static String heartbeatWithRun(String phone, String watch, String runId, String studyId, String participationId) {
+        return """
+                { "v": 1, "ts_ms": %d, "device_id": "%s", "session_id": "%s",
+                  "study_id": "%s", "participation_id": "%s", "run_id": "%s",
+                  "phone": %s, "watch": %s }""".formatted(
+                TS_MS, DEVICE_ID, SESSION_ID, studyId, participationId, runId, phone, watch);
+    }
 }

@@ -33,7 +33,10 @@ import lombok.NoArgsConstructor;
 @Getter
 @Table(
     name = "collection_run",
-    uniqueConstraints = @UniqueConstraint(name = "uk_collection_run_run_id", columnNames = "run_id"),
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_collection_run_run_id", columnNames = "run_id"),
+        @UniqueConstraint(name = "uk_collection_run_member_open", columnNames = {"member_id", "open_marker"})
+    },
     indexes = @Index(name = "idx_collection_run_member_status", columnList = "member_id, status")
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -76,6 +79,10 @@ public class CollectionRun extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 10)
     private CollectionRunStatus status;
+
+    /** 열린 회차만 1이다. 회원별 열린 회차 하나를 DB 제약으로 보장한다. */
+    @Column(name = "open_marker")
+    private Integer openMarker;
 
     @Column(name = "data_policy", length = 20)
     private String dataPolicy;
@@ -126,6 +133,9 @@ public class CollectionRun extends BaseTimeEntity {
         this.collectionMode = collectionMode;
         this.startedAtMs = startedAtMs;
         this.status = status;
+        if (CollectionRunStatus.OPEN == status) {
+            this.openMarker = 1;
+        }
         this.dataPolicy = dataPolicy;
         this.identifiedUntil = identifiedUntil;
         this.pseudonymizedAt = pseudonymizedAt;
@@ -139,6 +149,7 @@ public class CollectionRun extends BaseTimeEntity {
         this.qualityNotes = qualityNotes;
         this.missingReason = missingReason;
         this.status = CollectionRunStatus.CLOSED;
+        this.openMarker = null;
     }
 
     public boolean isOpen() {
