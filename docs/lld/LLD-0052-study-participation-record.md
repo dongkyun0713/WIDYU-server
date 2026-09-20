@@ -84,7 +84,9 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 
 선택 동의는 `study_participation_consent(study_participation_id FK, consent_key, granted)`로 저장한다. 일부 철회의 대상 항목은 `study_participation_withdrawal_item(study_participation_id FK, consent_key)`로 저장한다. 두 테이블은 직접식별자를 갖지 않으며, FK는 외부 식별자 `participation_id`가 아니라 내부 PK `study_participation_id`를 가리킨다.
 
-같은 `study_id + member_id`의 `ACTIVE` 참여가 하나뿐이라는 규칙은 DB UNIQUE 제약이 보장한다. `ACTIVE`일 때만 값을 갖는 생성 컬럼 `active_key`를 두고 `(study_id, member_id, active_key)`에 UNIQUE를 건다. `ACTIVE`가 아닌 행은 `NULL`이라 제약 대상에서 빠지므로 철회·종료한 참여는 여러 건 쌓인다. 애플리케이션 조회 검사는 빠른 응답용이고, 동시 요청에서 UK에 걸린 쪽도 같은 409로 돌려준다.
+같은 `study_id + member_id`의 `ACTIVE` 참여가 하나뿐이라는 규칙은 DB UNIQUE 제약이 보장한다. `ACTIVE`일 때만 `'1'`이고 그 외에는 `NULL`인 `active_key` 컬럼을 두고 `(study_id, member_id, active_key)`에 UNIQUE를 건다. `ACTIVE`가 아닌 행은 제약 대상에서 빠지므로 철회·종료한 참여는 여러 건 쌓인다. 회차의 `open_marker`와 같은 방식이다.
+
+`active_key`는 **엔티티가 상태와 함께 채우는 일반 컬럼**이다. MySQL 생성 컬럼으로 두면 운영 스크립트로 만든 스키마에만 제약이 생기고, `ddl-auto`로 스키마를 만드는 dev·테스트 환경에는 제약이 없어 그 환경에서만 ACTIVE 중복이 샌다. 상태를 바꾸는 경로가 모두 한 메서드를 지나게 해 표식이 상태와 어긋나지 않도록 한다. 애플리케이션 조회 검사는 빠른 응답용이고, 동시 요청에서 UK에 걸린 쪽도 같은 409로 돌려준다.
 
 `study_participation_history`는 등록·보관계획변경·철회·처리완료 시점마다 참여기록의 정책/상태 snapshot과 변경 종류·시각을 저장한다. 일부 철회로 거둔 항목은 `withdrawn_consent_keys`(JSON 배열 문자열)에 함께 복사해, 현행 행을 덮어써도 과거 보관 계획과 철회 범위가 사라지지 않게 한다.
 
@@ -147,7 +149,7 @@ POST  /api/v1/admin/studies/participations/{participationId}/deletion-processed
 
 `study_participation.status`는 다른 연구 테이블(`collection_run` 등)과 같이 MySQL `ENUM`이 아니라 `VARCHAR(20)`로 만든다. 상태 값이 늘어도 `ALTER TABLE ... MODIFY COLUMN`이 필요 없다. `admin_audit_log.action`도 `VARCHAR(50)`이라 새 `AdminAction` 값에 DDL이 필요 없다.
 
-`active_key`는 MySQL 생성 컬럼이라 애플리케이션이 쓰지 않으며 엔티티에도 매핑하지 않는다. Hibernate의 스키마 검증은 매핑된 컬럼의 존재만 확인하고 DB에만 있는 컬럼은 검사하지 않는다.
+`active_key`는 엔티티에 매핑된 일반 컬럼이라 `ddl-auto`가 만드는 dev·테스트 스키마에도 UNIQUE 제약이 함께 생긴다. 운영 DDL과 Hibernate 스키마가 같은 제약을 갖는다.
 
 ## 9. 미결정 사항 (Open Questions)
 

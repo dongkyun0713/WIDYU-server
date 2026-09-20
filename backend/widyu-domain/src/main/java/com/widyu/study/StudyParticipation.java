@@ -40,13 +40,21 @@ import lombok.NoArgsConstructor;
 @Getter
 @Table(
     name = "study_participation",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_study_participation_id",
-        columnNames = {"participation_id"}
-    )
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_study_participation_id",
+            columnNames = {"participation_id"}
+        ),
+        @UniqueConstraint(
+            name = "uk_study_participation_active",
+            columnNames = {"study_id", "member_id", "active_key"}
+        )
+    }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudyParticipation extends BaseTimeEntity {
+
+    private static final String ACTIVE_KEY = "1";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -98,6 +106,14 @@ public class StudyParticipation extends BaseTimeEntity {
     @Column(name = "status", nullable = false, length = 20)
     private StudyParticipationStatus status;
 
+    /**
+     * ACTIVE일 때만 1이다. {@code (study_id, member_id, active_key)} UK로 같은 연구·회원의 진행 중인
+     * 참여 하나를 DB가 보장한다. ACTIVE가 아닌 행은 null이라 제약에서 빠지므로 철회·종료한 참여는
+     * 얼마든지 쌓인다. 회차의 {@code open_marker}와 같은 방식이다.
+     */
+    @Column(name = "active_key", length = 1)
+    private String activeKey;
+
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
@@ -144,7 +160,7 @@ public class StudyParticipation extends BaseTimeEntity {
         this.identifiedUntil = identifiedUntil;
         this.pseudonymizedAt = pseudonymizedAt;
         this.researchUntil = researchUntil;
-        this.status = StudyParticipationStatus.ACTIVE;
+        changeStatus(StudyParticipationStatus.ACTIVE);
     }
 
     public static StudyParticipation of(
@@ -191,7 +207,7 @@ public class StudyParticipation extends BaseTimeEntity {
         if (scope == WithdrawalScope.SELECTED_CONSENTS) {
             validateWithdrawableConsents(consentKeys);
         }
-        this.status = StudyParticipationStatus.WITHDRAWN;
+        changeStatus(StudyParticipationStatus.WITHDRAWN);
         this.withdrawalScope = scope;
         this.withdrawnAt = withdrawnAt;
         this.withdrawalConsentKeys.clear();
@@ -222,6 +238,16 @@ public class StudyParticipation extends BaseTimeEntity {
 
     public boolean isActive() {
         return status == StudyParticipationStatus.ACTIVE;
+    }
+
+    /** 상태와 UK 표식은 항상 함께 바뀐다. 상태를 바꾸는 경로는 모두 이 메서드를 지난다. */
+    private void changeStatus(StudyParticipationStatus status) {
+        this.status = status;
+        if (status == StudyParticipationStatus.ACTIVE) {
+            this.activeKey = ACTIVE_KEY;
+            return;
+        }
+        this.activeKey = null;
     }
 
     /**

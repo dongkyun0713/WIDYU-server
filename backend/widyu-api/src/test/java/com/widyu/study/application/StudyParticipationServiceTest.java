@@ -87,6 +87,8 @@ class StudyParticipationServiceTest {
         assertThat(response.researchUntil()).isEqualTo(RESEARCH_UNTIL);
         assertThat(savedHistoryTypes()).containsExactly(StudyParticipationHistoryType.REGISTERED);
         thenAudited(AdminAction.STUDY_PARTICIPATION_REGISTER);
+        // ACTIVE 단일성 UK가 걸리도록 표식을 함께 채운다.
+        assertThat(savedParticipation().getActiveKey()).isEqualTo("1");
     }
 
     @Test
@@ -222,6 +224,8 @@ class StudyParticipationServiceTest {
         assertThat(response.deletionProcessedAt()).isNull();
         assertThat(savedHistoryTypes()).containsExactly(StudyParticipationHistoryType.WITHDRAWN);
         thenAudited(AdminAction.STUDY_PARTICIPATION_WITHDRAW);
+        // 철회하면 표식이 빠져 같은 연구·회원에 새 참여를 등록할 수 있다.
+        assertThat(participation.getActiveKey()).isNull();
     }
 
     @Test
@@ -383,6 +387,12 @@ class StudyParticipationServiceTest {
 
     private List<StudyParticipationHistoryType> savedHistoryTypes() {
         return List.of(savedHistory().getHistoryType());
+    }
+
+    private StudyParticipation savedParticipation() {
+        ArgumentCaptor<StudyParticipation> saved = ArgumentCaptor.forClass(StudyParticipation.class);
+        then(studyParticipationRepository).should().save(saved.capture());
+        return saved.getValue();
     }
 
     private StudyParticipationHistory savedHistory() {

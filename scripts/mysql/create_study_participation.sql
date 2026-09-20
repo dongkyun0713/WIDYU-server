@@ -33,10 +33,12 @@ CREATE TABLE study_participation (
     deletion_processed_at DATETIME(6) NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
-    -- 같은 연구·회원의 ACTIVE 참여를 DB에서 하나로 묶는다. ACTIVE가 아닌 행은 NULL이라
+    -- 같은 연구·회원의 ACTIVE 참여를 DB에서 하나로 묶는다. ACTIVE일 때만 '1'이고 그 외에는 NULL이라
     -- UNIQUE 대상에서 빠지므로 철회·종료한 참여는 얼마든지 쌓인다.
-    -- 애플리케이션에는 매핑하지 않는 생성 컬럼이다(ddl-auto: validate는 미매핑 컬럼을 검사하지 않는다).
-    active_key CHAR(1) GENERATED ALWAYS AS (IF(status = 'ACTIVE', '1', NULL)) STORED,
+    -- 값은 엔티티가 상태와 함께 채운다(collection_run.open_marker와 같은 방식).
+    -- MySQL 생성 컬럼을 쓰지 않는 이유: ddl-auto로 스키마를 만드는 dev·테스트에는 생성 컬럼이 없어
+    -- 그 환경에서만 ACTIVE 중복이 새는 것을 막기 위해서다.
+    active_key CHAR(1) NULL,
     CONSTRAINT fk_study_participation_member FOREIGN KEY (member_id) REFERENCES member (id),
     CONSTRAINT uk_study_participation_id UNIQUE (participation_id),
     CONSTRAINT uk_study_participation_active UNIQUE (study_id, member_id, active_key),
