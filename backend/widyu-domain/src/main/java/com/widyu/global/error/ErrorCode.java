@@ -130,6 +130,9 @@ public enum ErrorCode {
     SENSOR_BATCH_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4003", "센서 배치 필드가 올바르지 않습니다."),
     SENSOR_CLOCK_MAPPING_CONFLICT(HttpStatus.CONFLICT, "SENSOR_4090", "시계 환산 기준점 묶음이 등록된 값과 다릅니다."),
 
+    // 위치 원본 관련
+    LOCATION_FIX_INVALID(HttpStatus.BAD_REQUEST, "LOCATION_4000", "위치 원본 형식이 올바르지 않습니다."),
+
     // 측정회차 관련
     RUN_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4041", "측정회차를 찾을 수 없습니다."),
     RUN_ALREADY_OPEN(HttpStatus.CONFLICT, "RUN_4090", "이미 열린 측정회차가 있습니다."),
