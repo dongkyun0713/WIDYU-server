@@ -147,6 +147,10 @@ public enum ErrorCode {
     RUN_NOT_CLOSED(HttpStatus.BAD_REQUEST, "RUN_4003", "닫힌 측정회차만 내보낼 수 있습니다."),
     RUN_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4042", "내보내기 작업을 찾을 수 없습니다."),
 
+    // 인앱 동의 관련
+    CONSENT_KEY_INVALID(HttpStatus.BAD_REQUEST, "CONSENT_4000", "알 수 없는 동의 항목입니다."),
+    CONSENT_REQUEST_EMPTY(HttpStatus.BAD_REQUEST, "CONSENT_4001", "동의 항목이 비어 있습니다."),
+
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
     FILE_IS_EMPTY(HttpStatus.BAD_REQUEST, "FILE_4000", "파일이 비어있습니다."),
