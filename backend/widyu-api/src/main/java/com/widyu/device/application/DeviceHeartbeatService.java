@@ -122,30 +122,23 @@ public class DeviceHeartbeatService {
     /** 이 하트비트가 붙을 회차와 연구 식별자. 셋 다 null이면 운영 외 자료다. */
     private record RunAttribution(String runId, String studyId, String participationId) {}
 
-    /**
-     * 회차 귀속(LLD-0045 5절). 앱이 실어 보낸 {@code run_id}가 있으면 그대로 쓰고,
-     * 없으면 그 시각에 이 폰을 쓰던 열린 회차를 서버가 찾는다.
-     */
+    /** 회차 귀속(LLD-0045 5절). 본문 회차도 소유자·기기·배정 시각을 서버가 검증한다. */
     private RunAttribution resolveAttribution(DeviceHeartbeatRequest request, Long memberId) {
         if (request.runId() != null) {
-            return new RunAttribution(request.runId(), request.studyId(), request.participationId());
+            return attributionOf(collectionRunService.requireAttributableRun(
+                    request.runId(), memberId, request.deviceId(), request.tsMs()));
         }
         Optional<CollectionRun> run =
                 collectionRunService.resolveRun(memberId, request.deviceId(), request.tsMs());
         if (run.isEmpty()) {
             return new RunAttribution(null, request.studyId(), request.participationId());
         }
-        return new RunAttribution(
-                run.get().getRunId(),
-                preferRequestValue(request.studyId(), run.get().getStudyId()),
-                preferRequestValue(request.participationId(), run.get().getParticipationId()));
+        return attributionOf(run.get());
     }
 
-    private String preferRequestValue(String requestValue, String runValue) {
-        if (requestValue != null) {
-            return requestValue;
-        }
-        return runValue;
+    /** 회차가 정본인 연구 식별자다. 하트비트 본문의 값으로 덮어쓰지 않는다. */
+    private RunAttribution attributionOf(CollectionRun run) {
+        return new RunAttribution(run.getRunId(), run.getStudyId(), run.getParticipationId());
     }
 
     private DeviceHeartbeat toEntity(

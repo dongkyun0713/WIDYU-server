@@ -10,6 +10,7 @@ import static com.widyu.device.application.DeviceHeartbeatFixture.WATCH_CONNECTE
 import static com.widyu.device.application.DeviceHeartbeatFixture.WATCH_DISCONNECTED;
 import static com.widyu.device.application.DeviceHeartbeatFixture.WATCH_OFF_BODY;
 import static com.widyu.device.application.DeviceHeartbeatFixture.heartbeat;
+import static com.widyu.device.application.DeviceHeartbeatFixture.heartbeatWithRun;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -236,6 +237,37 @@ class DeviceHeartbeatServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MEMBER_NOT_FOUND);
         then(deviceHeartbeatRepository).should(never()).save(any(DeviceHeartbeat.class));
+    }
+
+    @Test
+    @DisplayName("본문 회차가 배정 구간과 맞으면 서버 회차 식별자로 저장한다")
+    void 본문_회차가_배정_구간과_맞으면_서버_회차_식별자로_저장한다() {
+        // given
+        byte[] payload = heartbeatWithRun(
+                        PHONE, WATCH_CONNECTED, "run-0f3a", "forged-study", "forged-participation")
+                .getBytes(UTF_8);
+        CollectionRun run = CollectionRun.builder()
+                .runId("run-0f3a")
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .studyId("STUDY-2026")
+                .participationId("P-001")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+        given(memberRepository.existsById(MEMBER_ID)).willReturn(true);
+        given(collectionRunService.requireAttributableRun("run-0f3a", MEMBER_ID, DEVICE_ID, TS_MS))
+                .willReturn(run);
+        given(deviceHeartbeatRepository.existsByDeviceIdAndSessionIdAndTsMs(DEVICE_ID, SESSION_ID, TS_MS))
+                .willReturn(false);
+
+        // when
+        service().ingest(MEMBER_ID, payload);
+
+        // then
+        DeviceHeartbeat saved = savedHeartbeat();
+        assertThat(saved.getRunId()).isEqualTo("run-0f3a");
+        assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
+        assertThat(saved.getParticipationId()).isEqualTo("P-001");
     }
 
     private DeviceHeartbeat savedHeartbeat() {
