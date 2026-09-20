@@ -2,6 +2,7 @@ package com.widyu.run;
 
 import com.widyu.global.entity.BaseTimeEntity;
 import com.widyu.member.Member;
+import com.widyu.study.StudyParticipation;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -53,6 +54,17 @@ public class CollectionRun extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
+
+    /**
+     * 연구 회차의 연구 메타데이터 정본(LLD-0052 4절). {@code product} 회차와
+     * 참여 기록 도입 전에 열린 회차는 비어 있다.
+     *
+     * <p>회차를 읽는 쪽(응답·내보내기·자료 귀속)이 저마다 트랜잭션 경계가 달라 즉시 로딩한다.
+     * 회차는 건 단위로 조회하므로 목록 N+1 문제가 없다.
+     */
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "study_participation_id")
+    private StudyParticipation participation;
 
     @Column(name = "study_id", length = 64)
     private String studyId;
@@ -110,6 +122,7 @@ public class CollectionRun extends BaseTimeEntity {
     private CollectionRun(
             String runId,
             Member member,
+            StudyParticipation participation,
             String studyId,
             String participationId,
             String protocolRef,
@@ -126,6 +139,7 @@ public class CollectionRun extends BaseTimeEntity {
     ) {
         this.runId = runId;
         this.member = member;
+        this.participation = participation;
         this.studyId = studyId;
         this.participationId = participationId;
         this.protocolRef = protocolRef;
@@ -142,6 +156,61 @@ public class CollectionRun extends BaseTimeEntity {
         this.researchUntil = researchUntil;
         this.qualityNotes = qualityNotes;
         this.missingReason = missingReason;
+    }
+
+    /*
+     * 연구 메타데이터는 참여 기록이 정본이다(LLD-0052 4절). 참여 기록이 붙지 않은 회차
+     * (product 회차, 참여 기록 도입 전 회차)만 회차에 남은 중복 컬럼에서 읽는다.
+     * 중복 컬럼은 운영 백필 후 별도 승인으로 제거한다(LLD-0052 8절).
+     */
+
+    public String getStudyId() {
+        if (participation == null) {
+            return studyId;
+        }
+        return participation.getStudyId();
+    }
+
+    public String getParticipationId() {
+        if (participation == null) {
+            return participationId;
+        }
+        return participation.getParticipationId();
+    }
+
+    public String getConsentVersion() {
+        if (participation == null) {
+            return consentVersion;
+        }
+        return participation.getConsentVersion();
+    }
+
+    public String getDataPolicy() {
+        if (participation == null) {
+            return dataPolicy;
+        }
+        return participation.getDataPolicy();
+    }
+
+    public LocalDate getIdentifiedUntil() {
+        if (participation == null) {
+            return identifiedUntil;
+        }
+        return participation.getIdentifiedUntil();
+    }
+
+    public LocalDate getPseudonymizedAt() {
+        if (participation == null) {
+            return pseudonymizedAt;
+        }
+        return participation.getPseudonymizedAt();
+    }
+
+    public LocalDate getResearchUntil() {
+        if (participation == null) {
+            return researchUntil;
+        }
+        return participation.getResearchUntil();
     }
 
     public void close(Long endedAtMs, String qualityNotes, String missingReason) {

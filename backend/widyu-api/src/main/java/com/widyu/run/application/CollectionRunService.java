@@ -21,6 +21,8 @@ import com.widyu.run.repository.RunDeviceAssignmentRepository;
 import com.widyu.run.repository.RunMarkerRepository;
 import com.widyu.sensor.application.ClockMappingService;
 import com.widyu.sensor.dto.request.SensorBatchRequest;
+import com.widyu.study.StudyParticipation;
+import com.widyu.study.application.StudyParticipationService;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +48,8 @@ public class CollectionRunService {
 
     private static final String RUN_ID_PREFIX = "run-";
     private static final String ASSIGNMENT_ID_PREFIX = "asg-";
-    private static final String DEFAULT_COLLECTION_MODE = "research";
+    private static final String RESEARCH_MODE = "research";
+    private static final String DEFAULT_COLLECTION_MODE = RESEARCH_MODE;
     private static final String DATA_POLICY_RETAIN = "RETAIN";
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
@@ -60,6 +63,7 @@ public class CollectionRunService {
     private final MemberRepository memberRepository;
     private final ClockMappingService clockMappingService;
     private final AdminAuditLogService adminAuditLogService;
+    private final StudyParticipationService studyParticipationService;
 
     public CollectionRunResponse open(CollectionRunOpenRequest request) {
         Member member = memberRepository.findById(request.subjectMemberId())
@@ -67,24 +71,16 @@ public class CollectionRunService {
         if (collectionRunRepository.existsByMemberIdAndStatus(member.getId(), CollectionRunStatus.OPEN)) {
             throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
         }
-        validateRetention(request.retention());
+        String collectionMode = collectionModeOf(request);
+        StudyParticipation participation = null;
+        if (RESEARCH_MODE.equals(collectionMode)) {
+            participation = requireParticipation(request, member.getId());
+        } else {
+            validateRetention(request.retention());
+        }
 
         long startedAtMs = orNow(request.startedAtMs());
-        CollectionRun newRun = CollectionRun.builder()
-                .runId(newId(RUN_ID_PREFIX))
-                .member(member)
-                .studyId(request.studyId())
-                .participationId(request.participationId())
-                .protocolRef(request.protocolRef())
-                .consentVersion(request.consentVersion())
-                .collectionMode(collectionModeOf(request))
-                .startedAtMs(startedAtMs)
-                .status(CollectionRunStatus.OPEN)
-                .dataPolicy(dataPolicyOf(request))
-                .identifiedUntil(identifiedUntilOf(request))
-                .pseudonymizedAt(pseudonymizedAtOf(request))
-                .researchUntil(researchUntilOf(request))
-                .build();
+        CollectionRun newRun = newRun(member, participation, request, collectionMode, startedAtMs);
         List<RunDeviceAssignment> assignments = new ArrayList<>();
         if (request.devices() != null) {
             for (DeviceAssignRequest device : request.devices()) {
@@ -256,6 +252,45 @@ public class CollectionRunService {
     @Transactional(readOnly = true)
     public boolean hasOpenRun(Long memberId) {
         return collectionRunRepository.existsByMemberIdAndStatus(memberId, CollectionRunStatus.OPEN);
+    }
+
+    /** 연구 회차는 대상 회원의 ACTIVE 참여 기록 없이 열 수 없다(LLD-0052 5절). */
+    private StudyParticipation requireParticipation(CollectionRunOpenRequest request, Long memberId) {
+        if (request.participationId() == null || request.participationId().isBlank()) {
+            throw new BusinessException(ErrorCode.RUN_RESEARCH_PARTICIPATION_REQUIRED);
+        }
+        return studyParticipationService.requireActiveForRun(request.participationId(), memberId);
+    }
+
+    /**
+     * 연구 회차는 참여 기록 FK만 저장한다. 연구 ID·동의 판·보관 값은 요청을 신뢰하지 않고
+     * 참여 기록에서 읽으므로 중복 컬럼을 비워 둔다(LLD-0052 5절).
+     */
+    private CollectionRun newRun(
+            Member member,
+            StudyParticipation participation,
+            CollectionRunOpenRequest request,
+            String collectionMode,
+            long startedAtMs) {
+        CollectionRun.CollectionRunBuilder run = CollectionRun.builder()
+                .runId(newId(RUN_ID_PREFIX))
+                .member(member)
+                .participation(participation)
+                .protocolRef(request.protocolRef())
+                .collectionMode(collectionMode)
+                .startedAtMs(startedAtMs)
+                .status(CollectionRunStatus.OPEN);
+        if (participation != null) {
+            return run.build();
+        }
+        return run.studyId(request.studyId())
+                .participationId(request.participationId())
+                .consentVersion(request.consentVersion())
+                .dataPolicy(dataPolicyOf(request))
+                .identifiedUntil(identifiedUntilOf(request))
+                .pseudonymizedAt(pseudonymizedAtOf(request))
+                .researchUntil(researchUntilOf(request))
+                .build();
     }
 
     private void assignDevice(CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {
