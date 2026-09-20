@@ -25,6 +25,8 @@ import com.widyu.global.properties.SensorProperties;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
 import com.widyu.heart.repository.HeartRateEventRepository;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentService;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.sensor.dto.request.HeartRateBatchRequest;
@@ -56,6 +58,7 @@ class HeartRateBatchServiceTest {
     @Mock private HeartRatePersistenceService heartRatePersistenceService;
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private DecisionRecordPersistenceService decisionRecordPersistenceService;
+    @Mock private IncidentService incidentService;
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -211,6 +214,70 @@ class HeartRateBatchServiceTest {
         assertThat(saved.getHrMeasuredAtMs()).isEqualTo(FIRST_TS_MS);
         assertThat(saved.getHrAccuracy()).isEqualTo("HIGH");
         assertThat(saved.getReason()).isEqualTo(REASON);
+    }
+
+    @Test
+    @DisplayName("위급으로 판정하면 그 판정으로 본인확인 사건이 열린다")
+    void 위급으로_판정하면_그_판정으로_본인확인_사건이_열린다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+        givenDecisionSaved();
+        given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
+
+        // when
+        service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(sample(185, FIRST_TS_MS, "HIGH")),
+                System.currentTimeMillis());
+
+        // then
+        ArgumentCaptor<DecisionRecord> decision = ArgumentCaptor.forClass(DecisionRecord.class);
+        then(incidentService).should().openForAlert(decision.capture(), eq(IncidentKind.HR_ANOMALY));
+        assertThat(decision.getValue().getDecisionOutput()).isEqualTo("ALERT");
+    }
+
+    @Test
+    @DisplayName("판정 보류만 남은 배치는 본인확인 사건을 열지 않는다")
+    void 판정_보류만_남은_배치는_본인확인_사건을_열지_않는다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+        givenDecisionSaved();
+
+        // when
+        service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
+                System.currentTimeMillis());
+
+        // then
+        // 알림이 나가지 않은 판정에는 확인할 사건도 없다.
+        then(incidentService).should(never()).openForAlert(any(), any());
+    }
+
+    @Test
+    @DisplayName("본인확인 사건을 열지 못해도 심박 저장과 보호자 알림은 그대로 된다")
+    void 본인확인_사건을_열지_못해도_심박_저장은_그대로_된다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+        givenDecisionSaved();
+        given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
+        willThrow(new IllegalStateException("incident down"))
+                .given(incidentService).openForAlert(any(), any());
+
+        // when
+        HeartRateBatchService.BatchOutcome outcome = service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(sample(185, FIRST_TS_MS, "HIGH")),
+                System.currentTimeMillis());
+
+        // then
+        // 본인확인은 보호자 알림에 얹는 절차이지 그 앞을 막는 관문이 아니다.
+        assertThat(outcome.stored()).isEqualTo(1);
+        then(heartRatePersistenceService).should().saveBatchSample(
+                eq(member), eq(185), any(), eq(HeartRateStatus.EMERGENCY), eq(true),
+                eq("HIGH"), eq(BATCH_ID), anyString());
     }
 
     @Test
@@ -396,14 +463,15 @@ class HeartRateBatchServiceTest {
     private HeartRateBatchService service() {
         return new HeartRateBatchService(
                 heartRateAnomalyDetector, heartRatePersistenceService, heartRateEventRepository,
-                decisionRecordPersistenceService, properties(), meterRegistry);
+                decisionRecordPersistenceService, incidentService, properties(), meterRegistry);
     }
 
     private SensorProperties properties() {
         return new SensorProperties(
                 32_768, null, null,
                 new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
-                new SensorProperties.HeartAi("widyu-ai-hr", "ver7"));
+                new SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
+                new SensorProperties.Incident(45, 5000L));
     }
 
     /** 저장 서비스는 받은 행을 그대로 돌려준다. 식별자는 서비스가 붙이므로 그대로 흘려보낸다. */

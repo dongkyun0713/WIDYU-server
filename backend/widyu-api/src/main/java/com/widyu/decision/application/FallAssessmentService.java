@@ -8,6 +8,8 @@ import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.repository.HeartRateEventRepository;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentService;
 import com.widyu.sensor.SensorBatch;
 import com.widyu.sensor.repository.SensorBatchRepository;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +35,8 @@ public class FallAssessmentService {
 
     private static final List<String> IMU_STREAMS = List.of("imu_watch", "imu_phone");
     private static final String ABSTAIN = "ABSTAIN_INSUFFICIENT_INPUT";
-    private static final List<String> DECISIONS = List.of("ALERT", "NO_ALERT", ABSTAIN);
+    private static final String ALERT = "ALERT";
+    private static final List<String> DECISIONS = List.of(ALERT, "NO_ALERT", ABSTAIN);
     private static final ZoneId HEART_RATE_ZONE = ZoneId.of("Asia/Seoul");
 
     private final SensorProperties sensorProperties;
@@ -41,6 +44,7 @@ public class FallAssessmentService {
     private final HeartRateEventRepository heartRateEventRepository;
     private final FallAssessmentClient fallAssessmentClient;
     private final DecisionRecordPersistenceService decisionRecordPersistenceService;
+    private final IncidentService incidentService;
     private final S3Service s3Service;
     private final ObjectMapper objectMapper;
 
@@ -211,6 +215,24 @@ public class FallAssessmentService {
         decisionRecordPersistenceService.save(record);
         log.info("낙상 판정 기록: memberId={}, decisionId={}, output={}, batchCount={}",
                 record.getMemberId(), record.getDecisionId(), record.getDecisionOutput(), inputs.size());
+        openIncident(record, trigger.getBatchId());
+    }
+
+    /**
+     * 위급 판정 하나가 본인확인 사건 하나를 연다(LLD-0054 5.1).
+     *
+     * <p>사건을 못 열어도 판정 기록과 기존 흐름은 그대로 둔다. 본인확인은 판정에 얹는 절차다.
+     */
+    private void openIncident(DecisionRecord record, String batchId) {
+        if (!ALERT.equals(record.getDecisionOutput())) {
+            return;
+        }
+        try {
+            incidentService.openForAlert(record, IncidentKind.FALL_SUSPECTED);
+        } catch (Exception e) {
+            log.warn("인시던트 열기 실패: memberId={}, batchId={}, errorType={}",
+                    record.getMemberId(), batchId, e.getClass().getSimpleName());
+        }
     }
 
     private String streamIds(List<SensorBatch> inputs) {

@@ -58,3 +58,8 @@ sensor:
   heart-ai:
     decider-id: ${SENSOR_HEART_AI_DECIDER_ID:widyu-ai-hr}
     decider-version: ${SENSOR_HEART_AI_DECIDER_VERSION:ver7}
+
+  # 본인확인 마감과 무응답 폴링(LLD-0054). 45초는 형식서 §3.7의 계약값이다.
+  incident:
+    self-check-sec: ${SENSOR_INCIDENT_SELF_CHECK_SEC:45}
+    timeout-poll-ms: ${SENSOR_INCIDENT_TIMEOUT_POLL_MS:5000}

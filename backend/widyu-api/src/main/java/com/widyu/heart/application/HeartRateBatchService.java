@@ -8,6 +8,8 @@ import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
 import com.widyu.heart.repository.HeartRateEventRepository;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentService;
 import com.widyu.member.Member;
 import com.widyu.sensor.dto.request.HeartRateBatchRequest;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -55,6 +57,7 @@ public class HeartRateBatchService {
     private final HeartRatePersistenceService heartRatePersistenceService;
     private final HeartRateEventRepository heartRateEventRepository;
     private final DecisionRecordPersistenceService decisionRecordPersistenceService;
+    private final IncidentService incidentService;
     private final SensorProperties sensorProperties;
     private final MeterRegistry meterRegistry;
 
@@ -198,11 +201,30 @@ public class HeartRateBatchService {
             DecisionRecord saved = decisionRecordPersistenceService.save(record);
             log.info("심박 판정 기록: memberId={}, decisionId={}, output={}, batchId={}",
                     memberId, saved.getDecisionId(), saved.getDecisionOutput(), batchId);
+            openIncident(saved, batchId);
             return saved.getDecisionId();
         } catch (Exception e) {
             log.warn("심박 판정 기록 실패: memberId={}, batchId={}, errorType={}",
                     memberId, batchId, e.getClass().getSimpleName());
             return null;
+        }
+    }
+
+    /**
+     * 위급 판정 하나가 본인확인 사건 하나를 연다(LLD-0054 5.1).
+     *
+     * <p>사건을 못 열어도 심박 저장과 보호자 알림은 그대로 간다. 본인확인은 보호자 알림에
+     * 얹는 절차이지 그 앞을 막는 관문이 아니다.
+     */
+    private void openIncident(DecisionRecord saved, String batchId) {
+        if (!ALERT.equals(saved.getDecisionOutput())) {
+            return;
+        }
+        try {
+            incidentService.openForAlert(saved, IncidentKind.HR_ANOMALY);
+        } catch (Exception e) {
+            log.warn("인시던트 열기 실패: memberId={}, batchId={}, errorType={}",
+                    saved.getMemberId(), batchId, e.getClass().getSimpleName());
         }
     }
 
