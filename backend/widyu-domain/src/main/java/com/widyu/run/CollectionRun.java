@@ -133,7 +133,9 @@ public class CollectionRun extends BaseTimeEntity {
         this.collectionMode = collectionMode;
         this.startedAtMs = startedAtMs;
         this.status = status;
-        this.openMarker = CollectionRunStatus.OPEN == status ? 1 : null;
+        if (CollectionRunStatus.OPEN == status) {
+            this.openMarker = 1;
+        }
         this.dataPolicy = dataPolicy;
         this.identifiedUntil = identifiedUntil;
         this.pseudonymizedAt = pseudonymizedAt;
