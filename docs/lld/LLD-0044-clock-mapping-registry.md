@@ -67,7 +67,7 @@
 ### 5.1 `ClockMappingService.register(clock, deviceId, observedMinElapsedNs, observedMaxElapsedNs)` — `@Transactional`
 
 1. `findByClockMappingId(clock.clockMappingId())` 조회.
-2. **없으면** INSERT: 다섯 값·`device_id`·관측 범위·`first/last_seen_at_ms = now`. `saveAndFlush`. UK 경합(`DataIntegrityViolationException`)이면 다시 조회해 3단계로 간다(동시에 처음 보는 같은 매핑 → 한 행만 남고 둘 다 통과).
+2. **없으면** 별도 `REQUIRES_NEW` 트랜잭션에서 INSERT: 다섯 값·`device_id`·관측 범위·`first/last_seen_at_ms = now`. `saveAndFlush`의 UK 경합(`DataIntegrityViolationException`)은 해당 삽입 트랜잭션만 롤백한다. 호출 트랜잭션은 새 persistence context로 다시 조회해 3단계로 간다(동시에 처음 보는 같은 매핑 → 한 행만 남고 둘 다 통과).
 3. **있으면** 대조: `device_id`·`boot_id`·`anchor_elapsed_ns`·`anchor_epoch_ms`·`uncertainty_ms`가 전부 같아야 한다. 하나라도 다르면 `SENSOR_CLOCK_MAPPING_CONFLICT`. 부동소수 `uncertainty_ms`는 `Double.compare == 0`.
 4. 관측 범위 갱신: `observed_min = min(observed_min, 배치 min)`, `observed_max = max(observed_max, 배치 max)`, `last_seen_at_ms = now`. 동시 갱신에 안전하도록 **JPQL bulk update** 한 문장으로: `UPDATE ClockMapping m SET m.observedMinElapsedNs = CASE WHEN m.observedMinElapsedNs < :min THEN m.observedMinElapsedNs ELSE :min END, m.observedMaxElapsedNs = CASE WHEN m.observedMaxElapsedNs > :max THEN m.observedMaxElapsedNs ELSE :max END, m.lastSeenAtMs = :now WHERE m.clockMappingId = :id`.
 

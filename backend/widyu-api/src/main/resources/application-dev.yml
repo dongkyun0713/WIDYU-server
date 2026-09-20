@@ -12,11 +12,6 @@ spring:
 logging:
   level:
     org.springframework.web: info
-    # TODO(#478): 임시. 이상 심박이 NORMAL로 판정되는 클라이언트 건을 진단하기 위해 개발 환경에서만 켠다.
-    # 배치 심박 분포(개인 건강정보)가 로그에 남으므로 원인 확인 후 이 줄을 제거한다.
-    # 패키지가 아닌 진단 대상 클래스만 지정한다. com.widyu.heart로 켜면
-    # HeartRateWebSocketController의 memberId DEBUG 로그까지 함께 남는다.
-    com.widyu.heart.application.HeartRateAnomalyDetector: debug
     org.hibernate.SQL: "off"
     org.hibernate.type: "off"
     org.hibernate.orm.jdbc.bind: "off"

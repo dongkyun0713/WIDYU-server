@@ -49,7 +49,9 @@ class CollectionRunServiceTest {
     private static final long STARTED_AT_MS = 1_760_000_000_000L;
 
     @Mock private CollectionRunRepository collectionRunRepository;
+    @Mock private CollectionRunInsertService collectionRunInsertService;
     @Mock private RunDeviceAssignmentRepository runDeviceAssignmentRepository;
+    @Mock private RunDeviceAssignmentInsertService runDeviceAssignmentInsertService;
     @Mock private RunMarkerRepository runMarkerRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private ClockMappingService clockMappingService;
@@ -65,7 +67,7 @@ class CollectionRunServiceTest {
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
-        given(collectionRunRepository.save(any(CollectionRun.class))).willAnswer(i -> i.getArgument(0));
+        given(collectionRunInsertService.insert(any(CollectionRun.class))).willAnswer(i -> i.getArgument(0));
         given(runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 DEVICE_ID, CollectionRunStatus.OPEN)).willReturn(false);
         CollectionRunOpenRequest request = CollectionRunOpenRequest.of(
@@ -77,7 +79,7 @@ class CollectionRunServiceTest {
 
         // then
         ArgumentCaptor<CollectionRun> savedRun = ArgumentCaptor.forClass(CollectionRun.class);
-        then(collectionRunRepository).should().save(savedRun.capture());
+        then(collectionRunInsertService).should().insert(savedRun.capture());
         CollectionRun run = savedRun.getValue();
         assertThat(run.getRunId()).startsWith("run-").hasSize(36);
         assertThat(run.getStatus()).isEqualTo(CollectionRunStatus.OPEN);
@@ -88,7 +90,7 @@ class CollectionRunServiceTest {
 
         ArgumentCaptor<RunDeviceAssignment> savedAssignment =
                 ArgumentCaptor.forClass(RunDeviceAssignment.class);
-        then(runDeviceAssignmentRepository).should().save(savedAssignment.capture());
+        then(runDeviceAssignmentInsertService).should().insert(savedAssignment.capture());
         RunDeviceAssignment assignment = savedAssignment.getValue();
         assertThat(assignment.getAssignmentId()).startsWith("asg-").hasSize(36);
         assertThat(assignment.getDeviceId()).isEqualTo(DEVICE_ID);
@@ -110,7 +112,7 @@ class CollectionRunServiceTest {
         assertThatThrownBy(() -> collectionRunService.open(openRequest(null, List.of())))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_ALREADY_OPEN);
-        then(collectionRunRepository).should(never()).save(any());
+        then(collectionRunInsertService).should(never()).insert(any());
     }
 
     @Test
@@ -120,7 +122,7 @@ class CollectionRunServiceTest {
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member()));
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
-        given(collectionRunRepository.save(any(CollectionRun.class))).willAnswer(i -> i.getArgument(0));
+        given(collectionRunInsertService.insert(any(CollectionRun.class))).willAnswer(i -> i.getArgument(0));
         given(runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 DEVICE_ID, CollectionRunStatus.OPEN)).willReturn(true);
 
@@ -129,7 +131,7 @@ class CollectionRunServiceTest {
                 List.of(DeviceAssignRequest.of(DEVICE_ID, "watch", null, null)))))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
-        then(runDeviceAssignmentRepository).should(never()).save(any());
+        then(runDeviceAssignmentInsertService).should(never()).insert(any());
     }
 
     @Test

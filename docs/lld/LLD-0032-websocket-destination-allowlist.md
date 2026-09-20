@@ -25,9 +25,11 @@
 | SUBSCRIBE | `/topic/heart-rate/{memberId}` | 인증 및 FamilyAccessService 가족 인가 |
 | SUBSCRIBE | `/user/queue/location/ack` | 인증된 사용자, Spring user destination 유지 |
 | SUBSCRIBE | `/user/queue/heart-rate/result` | 인증된 사용자, 기존 발신 세션 ACK 유지 |
+| SUBSCRIBE | `/user/queue/sensor/result` | 인증된 사용자, 발신 세션 센서 배치 ACK (#632, LLD-0041) |
 | SUBSCRIBE | `/user/queue/errors` | 인증된 사용자, 기존 오류 응답 유지 |
 | SEND | `/app/location/update` | 인증, 기존 발신자 검증 유지 |
 | SEND | `/app/heart-rate/send-single` | 인증, 기존 단건 처리 유지 |
+| SEND | `/app/sensor/batches/send` | 인증, 평시 1초 센서 배치 (#632, LLD-0041) |
 
 memberId는 기존 계약인 ASCII 숫자 1~18자리를 유지한다. 존재·시니어 여부·가족 관계는 기존 서비스가 검증한다. 그 외 목적지와 목적지 누락은 거절한다. wildcard, suffix, raw `/queue`, 타 사용자 지정 `/user/{id}/queue`도 허용하지 않는다. HTTP·DTO·Swagger 변경은 없다.
 
@@ -38,9 +40,9 @@ DB 변경 없음. ERD-0001의 Member, SeniorProfile, FamilyMembership 관계를 
 ## 5. 처리 흐름
 
 1. CONNECT는 기존 인증 처리를 유지한다.
-2. SUBSCRIBE는 인증 회원을 확인하고 사용자 큐 3개 또는 정확한 가족 토픽인지 검사한다.
+2. SUBSCRIBE는 인증 회원을 확인하고 사용자 큐 4개 또는 정확한 가족 토픽인지 검사한다.
 3. 가족 토픽은 추출한 대상 회원과 호출자 ID로 가족 검증 후 통과시킨다.
-4. SEND는 인증 회원과 정확한 애플리케이션 목적지 2개를 확인한다.
+4. SEND는 인증 회원과 정확한 애플리케이션 목적지 3개를 확인한다.
 5. heartbeat(command 없음), ACK/NACK, UNSUBSCRIBE, DISCONNECT 등 제어 프레임은 기존대로 통과시킨다.
 6. 서버가 위치·심박 보호 토픽을 outbound로 전달할 때는 세션의 회원 ID를 찾고 현재 가족 관계와 양쪽 회원 ACTIVE 상태를 다시 검증한다. 관계 해제·정지·세션 매핑 누락·조회 오류면 해당 세션 메시지를 폐기한다.
 
@@ -54,7 +56,7 @@ inbound allowlist와 outbound 권한 재검증은 각각 clientInboundChannel, c
 
 - [x] AC1: 정확한 위치·심박 토픽은 가족 인가 후 허용하고 비가족은 거절한다.
 - [x] AC2: 상위 wildcard, 변형 경로, raw 큐, 누락 목적지 구독은 거절한다.
-- [x] AC3: 인증된 SEND는 두 경로만 허용하며 브로커 직접 발송·레거시 배치·변형 경로는 거절한다.
+- [x] AC3: 인증된 SEND는 세 경로만 허용하며 브로커 직접 발송·레거시 배치·변형 경로는 거절한다.
 - [x] AC4: 인증 누락은 허용 목적지에서도 거절하며 Principal과 인증 세션 fallback을 유지한다.
 - [x] AC5: 사용자 ACK·오류 큐 구독과 heartbeat·ACK/NACK·unsubscribe·disconnect를 유지한다.
 - [x] AC6: 채널을 통한 차단과 정상 전달 회귀 테스트 및 `bash scripts/harness/verify.sh`가 통과한다.

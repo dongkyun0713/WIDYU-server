@@ -43,21 +43,19 @@ public class HeartRateAnomalyDetector {
         HeartRateStatus status = parseStatus(response);
         boolean emergency = Boolean.TRUE.equals(response.alert()) && status == HeartRateStatus.EMERGENCY;
 
-        logAnalysis(memberId, context, status, response, startedAt);
+        logAnalysis(memberId, context, response, startedAt);
 
         return new DetectionResult(status, emergency);
     }
 
     /**
-     * AI 판정 근거를 남긴다. 개인화(layer=L1, baselineSource=PERSONAL)가 실제로 적용되는지와
-     * 누적 표본 수를 운영에서 확인하기 위한 로그다.
-     * 심박 수치는 개인 건강정보이므로 어느 프로파일에서도 기본 비활성화하고, 진단이 필요한 순간에만
-     * {@code LOGGING_LEVEL_COM_WIDYU_HEART=DEBUG}로 켰다가 끈다.
+     * AI 호출의 소요 시간과 누적 표본 수만 남긴다.
+     * 판정 상태·이상 사유·기준선 출처는 개인 건강정보이므로 어느 레벨에도 남기지 않는다
+     * (#639, 정책 1.6.7·완료기준 C9-6).
      */
     private void logAnalysis(
             Long memberId,
             String context,
-            HeartRateStatus status,
             AiHeartRateResponse response,
             long startedAt
     ) {
@@ -67,15 +65,11 @@ public class HeartRateAnomalyDetector {
 
         long elapsedMillis = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
         log.debug(
-                "심박 AI 판정: memberId={}, context={}, status={}, 소요={}ms, layer={}, baselineSource={}, sampleCount={}, 이상사유={}",
+                "심박 AI 판정: memberId={}, context={}, 소요={}ms, sampleCount={}",
                 memberId,
                 context,
-                status,
                 elapsedMillis,
-                response.layer(),
-                response.baselineSource(),
-                response.sampleCount(),
-                response.reason()
+                response.sampleCount()
         );
     }
 
@@ -99,7 +93,11 @@ public class HeartRateAnomalyDetector {
             return response;
         } catch (RestClientException e) {
             outcome = classifyAiRequestFailure(e);
-            log.error("AI 서버 호출 실패: url={}, error={}", url, e.getMessage(), e);
+            log.error(
+                    "AI 서버 호출 실패: url={}, exception={}, cause={}",
+                    url,
+                    e.getClass().getSimpleName(),
+                    causeName(e));
             throw new BusinessException(
                     ErrorCode.INTERNAL_SERVER_ERROR,
                     "AI 서버와의 통신에 실패했습니다. 잠시 후 다시 시도해주세요."
@@ -109,6 +107,14 @@ public class HeartRateAnomalyDetector {
                     .tag("outcome", outcome)
                     .register(meterRegistry));
         }
+    }
+
+    private String causeName(Throwable throwable) {
+        Throwable cause = throwable.getCause();
+        if (cause == null) {
+            return "-";
+        }
+        return cause.getClass().getSimpleName();
     }
 
     private String classifyAiRequestFailure(RestClientException exception) {
@@ -130,9 +136,19 @@ public class HeartRateAnomalyDetector {
             }
             return response;
         } catch (JsonProcessingException | IllegalArgumentException e) {
-            log.error("AI 서버 응답 처리 실패: response={}, error={}", jsonResponse, e.getMessage());
+            log.error(
+                    "AI 서버 응답 처리 실패: exception={}, responseLength={}",
+                    e.getClass().getSimpleName(),
+                    responseLength(jsonResponse));
             throw invalidResponse();
         }
+    }
+
+    private int responseLength(String jsonResponse) {
+        if (jsonResponse == null) {
+            return 0;
+        }
+        return jsonResponse.length();
     }
 
     private HeartRateStatus parseStatus(AiHeartRateResponse response) {
@@ -176,16 +192,14 @@ public class HeartRateAnomalyDetector {
     }
 
     /**
-     * 판정에 사용하는 필드는 {@code alert}, {@code level} 뿐이고 나머지는 로그 관측용이다.
+     * 판정에 사용하는 필드는 {@code alert}, {@code level} 뿐이고 {@code sample_count}는 로그 관측용이다.
+     * {@code layer}·{@code reason}·{@code baseline_source}는 판정 사유(개인 건강정보)라 받지 않는다(#639).
      * 영속화 범위는 LLD-0019를 따른다.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record AiHeartRateResponse(
             Boolean alert,
             String level,
-            String layer,
-            String reason,
-            @JsonProperty("baseline_source") String baselineSource,
             @JsonProperty("sample_count") Integer sampleCount
     ) {
     }

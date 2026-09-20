@@ -52,7 +52,8 @@ class JwtChannelInterceptorTest {
     private JwtChannelInterceptor jwtChannelInterceptor;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/user/queue/errors", "/user/queue/location/ack", "/user/queue/heart-rate/result"})
+    @ValueSource(strings = {"/user/queue/errors", "/user/queue/location/ack", "/user/queue/heart-rate/result",
+            "/user/queue/sensor/result"})
     @DisplayName("인증된 사용자가 ACK와 오류 큐를 구독하면 메시지를 통과시킨다")
     void 사용자_큐를_구독하면_메시지를_통과시킨다(String destination) {
         // given
@@ -210,7 +211,8 @@ class JwtChannelInterceptorTest {
             "/topic/heart-rate/+42", "/topic/heart-rate/-42", "/topic/heart-rate/%34%32",
             "/topic/heart-rate/42?x=1", "/topic/unknown/42", "/queue/errors",
             "/queue/heart-rate/result-userother", "/user/42/queue/heart-rate/result",
-            "/user/queue/**", "/user/queue/errors/", "/app/location/update"})
+            "/user/queue/**", "/user/queue/errors/", "/app/location/update",
+            "/queue/sensor/result", "/user/queue/sensor/result/", "/app/sensor/batches/send"})
     @DisplayName("허용 목록 밖 목적지를 구독하면 채널 다음 처리기에 전달하지 않는다")
     void 허용되지_않은_구독은_전달하지_않는다(String destination) {
         // given
@@ -232,7 +234,9 @@ class JwtChannelInterceptorTest {
     @ValueSource(strings = {"/topic/location/senior/42", "/topic/heart-rate/42", "/topic/**",
             "/queue/errors", "/queue/location/ack", "/user/queue/heart-rate/result",
             "/user/42/queue/heart-rate/result", "/app/heart-rate/send",
-            "/app/location/update/", "/app/location/update?x=1", "/app/**", "/app/unknown"})
+            "/app/location/update/", "/app/location/update?x=1", "/app/**", "/app/unknown",
+            "/app/sensor/batches/send/x", "/app/sensor/batches", "/queue/sensor/result",
+            "/user/queue/sensor/result"})
     @DisplayName("브로커 또는 미등록 경로에 SEND하면 채널 다음 처리기에 전달하지 않는다")
     void 직접_발송과_미등록_SEND는_전달하지_않는다(String destination) {
         // given
@@ -264,9 +268,26 @@ class JwtChannelInterceptorTest {
         assertThat(received).containsExactly(message);
     }
 
+    @Test
+    @DisplayName("인증된 사용자가 센서 배치 SEND 경로로 전송하면 원본 메시지를 전달한다")
+    void 센서_배치_SEND는_원본_메시지를_전달한다() {
+        // given
+        Message<?> message = frame(StompCommand.SEND, "/app/sensor/batches/send", true);
+        List<Message<?>> received = new ArrayList<>();
+        ExecutorSubscribableChannel channel = channel(received);
+
+        // when
+        boolean sent = channel.send(message);
+
+        // then
+        assertThat(sent).isTrue();
+        assertThat(received).containsExactly(message);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"/topic/location/senior/42", "/topic/heart-rate/42",
-            "/user/queue/location/ack", "/user/queue/heart-rate/result", "/user/queue/errors"})
+            "/user/queue/location/ack", "/user/queue/heart-rate/result", "/user/queue/errors",
+            "/user/queue/sensor/result"})
     @DisplayName("인증 없이 허용 목적지를 구독하면 거절한다")
     void 인증_없는_구독을_거절한다(String destination) {
         // given
@@ -278,7 +299,7 @@ class JwtChannelInterceptorTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/app/location/update", "/app/heart-rate/send-single"})
+    @ValueSource(strings = {"/app/location/update", "/app/heart-rate/send-single", "/app/sensor/batches/send"})
     @DisplayName("인증 없이 허용 SEND 경로로 전송하면 거절한다")
     void 인증_없는_SEND를_거절한다(String destination) {
         // given
