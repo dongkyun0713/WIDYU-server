@@ -99,6 +99,9 @@
 ### `mypage`
 - 시니어/보호자 분리(`SeniorMyPageService`·`GuardianMyPageService`·`MyPageProfileService`). Query/Command 분리 → LLD-0018
 
+### `admin` — 관리자
+- **접속기록**: `AdminAccessLogInterceptor`(`WebMvcConfig` 등록)가 `/api/v1/admin/**`·`/api/v1/auth/admin/**` 전 요청을 `admin_access_log`에 남긴다. 요청 본문·Authorization 헤더는 기록하지 않고, 삭제 스케줄러 없이 최소 2년 보관한다. 업무 행위 기록인 `admin_audit_log`와 역할이 다르다 → LLD-0057, ADR-0036
+
 ## Redis 임시 데이터
 
 쿼리 캐시가 아닌 **TTL 기반 임시 저장**. `@RedisHash` + `@TimeToLive`로 자동 만료.

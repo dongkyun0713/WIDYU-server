@@ -499,6 +499,21 @@ erDiagram
         Long member_id FK
     }
 
+    AdminAccessLog {
+        Long admin_access_log_id PK
+        Long admin_id
+        String admin_name
+        String method
+        String path
+        String query
+        Long target_member_id
+        String target_ref
+        int status
+        String client_ip
+        String user_agent
+        LocalDateTime accessed_at
+    }
+
     MedicationProofImageDeletionTask {
         Long id PK
         Long member_id FK
@@ -539,6 +554,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
+    Member ||..o{ AdminAccessLog : "관리자 접속기록 (admin_id·target_member_id, FK 없음)"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
@@ -638,6 +654,8 @@ erDiagram
 | `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
+| `admin_access_log` | `idx_admin_access_log_admin_time` | `(admin_id, accessed_at)` | 관리자별 접속기록 조회 (LLD-0057) |
+| `admin_access_log` | `idx_admin_access_log_time` | `(accessed_at)` | 기간 조회 |
 
 ## 도메인별 조회 기준
 
@@ -657,6 +675,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `admin_access_log` | 신규 테이블 (LLD-0057). 관리자 개인정보 조회·변경 접속기록. 추가 전용, 최소 2년 보관 | `scripts/mysql/create_admin_access_log.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |
