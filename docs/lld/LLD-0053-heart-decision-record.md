@@ -68,7 +68,9 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 `runId`를 인자로 받는다(호출자 `SensorBatchService.ingestHeartRate`가 배치의 run 귀속값을 넘긴다. 없으면 null).
 
 샘플 루프(기존 순서 유지: 정렬 → 중복 skip → AI 대상 판정 → detect → 저장):
-1. AI 대상이고 `detect` 성공 → `aiTargetCount++`. 결과가 `emergency`면 **먼저** `DecisionRecordPersistenceService.save`(REQUIRES_NEW)로 `ALERT` 행을 만들고 그 `decision_id`를 `saveBatchSample(..., decisionId)`에 넘긴다. 아니면 메트릭 `heart.decision{output=NO_ALERT}` 증가.
+1. AI 대상이고 `detect` 성공 → `aiTargetCount++`. 결과가 `emergency`면 `ALERT` 행을 **조립만 해서** `saveBatchSample(..., DecisionRecord decision)`에 넘기고, `HeartRatePersistenceService`의 `@Transactional` 안에서 `decisionRecordRepository.save` → 심박 이벤트 저장 → 위급 저장 → `HeartRateEmergencyEvent(memberId, decisionId)` 발행 순으로 **한 트랜잭션**에 묶는다. 아니면 메트릭 `heart.decision{output=NO_ALERT}` 증가.
+   - **판정 행을 먼저 따로 커밋하지 않는다.** REQUIRES_NEW로 앞서 커밋하면 이어지는 심박 저장이 실패했을 때 심박 이벤트도 위급 알림도 없이 판정만 남아, 「알림이 갔다고 적혔지만 아무것도 가지 않은」 자료가 된다.
+   - 행 **조립**이 실패하면(설정 누락 등) WARN만 남기고 `decision = null`로 심박만 저장한다.
 2. `detect`가 실패(aiAvailable=false)하면 기록 없음(기존대로 UNKNOWN 저장).
 3. 루프 뒤 **중복 skip을 뺀 저장 샘플이 1개 이상**이고 `aiTargetCount == 0`이고 AI가 한 번도 호출되지 않았다면 → `ABSTAIN_INSUFFICIENT_INPUT` 행 1개(배치 단위). AI 호출 실패로 대상이 0이 된 경우는 제외한다. **중복 skip된 샘플은 세지 않는다** — 이미 판정한 시각이 다시 온 것이라 입력 부족이 아니다. 그래서 전부 중복인 재전송 배치는 아무 행도 남기지 않는다(남기면 재전송 횟수만큼 없던 「판정 불가」가 쌓여 사후 분석이 오염된다).
 
@@ -89,14 +91,16 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 | `hr_*`, `reason` | 샘플 값, AI `reason` |
 | `alert_delivered` | false (초기) |
 
-`ABSTAIN` 행: 위와 같되 `decider_id/version`은 `sensor.fall-ai.server-decider-*`(서버 자체 판정, 기존 값 재사용), `window_start/end` = 배치 첫/마지막 샘플 `ts_ms`, `feature_support_end` = 마지막, `hr_*`·`reason`·`severity` null.
+`ABSTAIN` 행(짝이 될 심박 이벤트도 알림도 없어 묶을 트랜잭션이 없다. `DecisionRecordPersistenceService.save` REQUIRES_NEW 유지): 위와 같되 `decider_id/version`은 `sensor.fall-ai.server-decider-*`(서버 자체 판정, 기존 값 재사용), `window_start/end` = 배치 첫/마지막 샘플 `ts_ms`, `feature_support_end` = 마지막, `hr_*`·`reason`·`severity` null.
 
 인과성: `feature_support_end_ms > input_cutoff_ms`여도 **기록한다**(기기 시계 앞섬). 예외를 던지지 않는다. 검사기가 신고한다.
 
 ### 5.2 알림 도달
-1. `HeartRatePersistenceService.saveBatchSample`이 `decisionId`를 받아 `HeartRateEmergencyEvent(memberId, decisionId)`를 발행한다(단일 샘플 경로는 `decisionId = null`).
+1. `HeartRatePersistenceService.saveBatchSample`이 판정 행을 같은 트랜잭션에서 저장하고 그 `decisionId`로 `HeartRateEmergencyEvent(memberId, decisionId)`를 발행한다(단일 샘플 경로는 `decisionId = null`).
 2. `HeartRateEmergencyNotificationService`가 `FcmSendDto`에 `decisionId`를 싣고, `FcmOutboxService.enqueue`가 outbox 행 `decision_id`에 쓴다.
-3. `FcmOutboxTransactions.finish` 성공 분기: `row.getDecisionId() != null`이면 `decisionRecordRepository.findByDecisionId` → `markDelivered("fcm-" + row.getId(), nowMs)` (같은 트랜잭션). 행이 없으면 무시. 실패 분기는 손대지 않는다.
+3. `FcmOutboxTransactions.finish` 성공 분기: `row.getDecisionId() != null`이면 `decisionRecordRepository.markDeliveredIfFirst(decisionId, "fcm-" + row.getId(), nowMs)` 한 번. `set alert_delivered = true, alert_id = :alertId, alert_at_ms = :alertAtMs where decision_id = :decisionId and alert_id is null`인 **원자적 벌크 UPDATE**다. 반환값은 보지 않는다(0은 오류가 아니라 다른 보호자의 전송이 먼저 적혔다는 뜻이다). 행이 없으면 0건이라 무시된다. 실패 분기는 손대지 않는다.
+   - **읽고 나서 쓰지 않는다.** 보호자가 여럿이면 완료 트랜잭션이 동시에 돌아, 엔티티를 읽어 `markDelivered`하면 둘 다 빈 `alert_id`를 보고 나중 것이 앞선 시각을 덮어쓴다. 조건을 UPDATE 문에 넣어 DB가 한 번만 성공시킨다.
+   - `DecisionRecord.markDelivered`는 도메인 규칙(첫 성공만 남는다)의 자리로 남기고 outbox 경로에서는 쓰지 않는다.
 
 ### 5.3 내보내기
 `RunExportAssembler.toDecisionRecord`에 `hr_bpm != null`이면 `evidence{}` 추가. 그 외 변경 없음(심박 행은 `run_id`로 이미 조회된다).
@@ -106,7 +110,9 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 
 ## 6. 예외 / 에러 처리
 
-판정 기록 저장 실패는 심박 저장·알림을 막지 않는다. `try/catch(Exception)`로 감싸 WARN(예외 클래스명·batchId)만 남기고 `decisionId = null`로 진행한다. 새 ErrorCode 없음.
+판정 행 **조립** 실패는 심박 저장·알림을 막지 않는다. `try/catch(Exception)`로 감싸 WARN(예외 클래스명·batchId)만 남기고 `decision = null`로 진행한다. `ABSTAIN` 행의 **저장** 실패도 같은 방식으로 삼킨다.
+
+`ALERT` 행의 **저장**은 심박 이벤트와 한 트랜잭션이라 실패하면 그 샘플 전체가 롤백된다. 이는 의도한 것이다. 판정만 남고 알림이 가지 않는 자료보다 그 샘플이 통째로 없는 편이 낫고, 배치 저장 실패는 앱의 재전송으로 회복된다. 새 ErrorCode 없음.
 
 ## 7. 인수조건 (Acceptance Criteria)
 
@@ -118,7 +124,9 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 - [ ] `HeartRateEmergencyEvent`에 `decisionId`가 실리고 outbox 행 `decision_id`에 저장된다.
 - [ ] outbox 전송 성공 시 해당 판정의 `alert_delivered=true`, `alert_id="fcm-<id>"`, `alert_at_ms`가 채워진다. 두 번째 성공은 값을 덮지 않는다. 전송 실패 시 `false` 유지.
 - [ ] `decisionId`가 null인 outbox 행(다른 알림)은 판정 갱신을 시도하지 않는다.
-- [ ] 판정 기록 저장이 예외를 던져도 심박 저장·알림은 그대로 된다.
+- [ ] 판정 행 조립이 실패해도(설정 누락) 심박 저장·알림은 그대로 되고 `decisionId`는 null이다.
+- [ ] `ALERT` 행 저장과 심박 이벤트 저장·알림 발행이 같은 트랜잭션 안에서 일어난다.
+- [ ] 같은 판정에 전송 성공이 두 번 들어와도 `alert_id`·`alert_at_ms`는 첫 성공 값이다(원자적 조건부 UPDATE).
 - [ ] 로그 캡처 테스트: bpm·reason 문자열이 어떤 로그에도 없다.
 - [ ] 내보내기 통합 테스트에 심박 `ALERT` 행을 넣으면 `decisions.jsonl`에 `evidence`가 있고 검사기 K1·K2·K4·K5 PASS(수동, PR 본문).
 - [ ] `./gradlew compileJava`, `bash scripts/harness/run-module-tests.sh`, `verify.sh --base` 통과.

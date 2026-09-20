@@ -85,13 +85,15 @@ public class FcmOutboxTransactions {
      * 「알림」은 FCM 전송 성공으로 잰다(ADR-0035 결정 3). 「구글이 받았다」는 「가족 단말에 떴다」의 근사이고
      * 그 이상은 재지 못한다. 실패·만료는 도달하지 않은 것으로 남긴다.
      *
-     * <p>판정에서 나오지 않은 알림은 가리킬 행이 없으므로 조회조차 하지 않는다.
+     * <p>보호자가 여럿이면 이 트랜잭션이 동시에 여럿 돈다. 조건을 UPDATE 문 안에 넣은 원자적 갱신
+     * 하나로 첫 성공만 남긴다. 결과를 보지 않는 것은 0이 오류가 아니라 「이미 다른 보호자의 전송이
+     * 먼저 적혔다」는 정상 경로이기 때문이다. 판정에서 나오지 않은 알림은 건드릴 행이 없다.
      */
     private void markDecisionDelivered(FcmOutbox row) {
         if (row.getDecisionId() == null) {
             return;
         }
-        decisions.findByDecisionId(row.getDecisionId())
-                .ifPresent(record -> record.markDelivered("fcm-" + row.getId(), System.currentTimeMillis()));
+        decisions.markDeliveredIfFirst(
+                row.getDecisionId(), "fcm-" + row.getId(), System.currentTimeMillis());
     }
 }
