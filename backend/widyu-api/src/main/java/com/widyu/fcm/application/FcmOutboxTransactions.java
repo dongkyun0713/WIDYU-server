@@ -1,5 +1,6 @@
 package com.widyu.fcm.application;
 
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.repository.FcmNotificationRepository;
@@ -20,6 +21,7 @@ public class FcmOutboxTransactions {
     private final FcmEligibility eligibility;
     private final FcmDeliveryProperties properties;
     private final MemberFcmTokenRepository tokens;
+    private final DecisionRecordRepository decisions;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FcmDelivery claim(Long id) {
@@ -66,6 +68,7 @@ public class FcmOutboxTransactions {
                     .memberFcmToken(row.getMemberFcmToken()).title(row.getTitle()).body(row.getBody())
                     .image(row.getImage()).fcmCategory(row.getFcmCategory()).isRead(false).build());
             row.sent();
+            markDecisionDelivered(row);
             return;
         }
         if (result.permanentToken()) {
@@ -76,5 +79,19 @@ public class FcmOutboxTransactions {
             delay = result.retryAfter();
         }
         row.failed(result.retryable(), delay, now, properties.maxRetries());
+    }
+
+    /**
+     * 「알림」은 FCM 전송 성공으로 잰다(ADR-0035 결정 3). 「구글이 받았다」는 「가족 단말에 떴다」의 근사이고
+     * 그 이상은 재지 못한다. 실패·만료는 도달하지 않은 것으로 남긴다.
+     *
+     * <p>판정에서 나오지 않은 알림은 가리킬 행이 없으므로 조회조차 하지 않는다.
+     */
+    private void markDecisionDelivered(FcmOutbox row) {
+        if (row.getDecisionId() == null) {
+            return;
+        }
+        decisions.findByDecisionId(row.getDecisionId())
+                .ifPresent(record -> record.markDelivered("fcm-" + row.getId(), System.currentTimeMillis()));
     }
 }
