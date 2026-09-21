@@ -141,7 +141,7 @@ enum: `IncidentKind`, `IncidentState`, `IncidentResponseValue(OK, HELP)`, `Incid
 
 **enum 열은 VARCHAR로 못박는다.** Hibernate 6은 MySQL에서 `@Enumerated(STRING)`을 네이티브 `ENUM`으로 매핑해 운영 DDL(VARCHAR)과 어긋난다. `Incident`의 enum 필드 다섯(`kind`·`response`·`responseVia`·`state`·`outcome`)에 `@JdbcTypeCode(SqlTypes.VARCHAR)`를 함께 붙이고 `create_incident.sql`은 VARCHAR로 둔다.
 
-**`FcmCategory`에 `INCIDENT_SELF_CHECK`를 더한다.** `fcm_outbox`는 `create_fcm_outbox.sql`이 `VARCHAR(32)`로 만들지만 `fcm_notification`은 생성 DDL이 저장소에 없어 운영 컬럼이 Hibernate가 만든 네이티브 ENUM일 수 있다. `ddl-auto: update`는 기존 ENUM에 값을 더하지 않으므로 `scripts/mysql/alter_fcm_category_incident_self_check.sql`로 두 테이블을 `MODIFY COLUMN`한다. 적용 전에 `SHOW COLUMNS`로 타입을 보고 VARCHAR면 건너뛴다. #665가 같은 컬럼에 `LOCATION_NOTICE`를 더하므로 두 PR이 모두 머지된 뒤 적용한다면 ENUM 목록에 두 값을 함께 넣는다.
+**`FcmCategory`에 `INCIDENT_SELF_CHECK`를 더한다.** `fcm_outbox`는 `create_fcm_outbox.sql`이 `VARCHAR(32)`로 만들지만 `fcm_notification`은 생성 DDL이 저장소에 없어 운영 컬럼이 Hibernate가 만든 네이티브 ENUM일 수 있다. `ddl-auto: update`는 기존 ENUM에 값을 더하지 않으므로 `scripts/mysql/alter_fcm_category_incident_self_check.sql`로 두 테이블을 `MODIFY COLUMN`한다. 적용 전에 `SHOW COLUMNS`로 타입을 보고 VARCHAR면 건너뛴다. #665가 같은 컬럼에 더하는 `LOCATION_NOTICE`도 스크립트 목록에 함께 포함해, 두 ALTER 중 어느 것을 나중에 실행해도 앞서 추가된 값을 제거하지 않는다.
 
 **`sensor.export.absent-reason-not-implemented`를 뺀다.** 인시던트가 유일한 사용처였고 이제 0건일 때 `absent-reason-no-data`를 쓴다. `SensorProperties.Export`·`application-sensor.yml`·LLD-0050 두 줄을 함께 고친다.
 
