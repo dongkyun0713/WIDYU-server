@@ -95,6 +95,39 @@ class LocationFixServiceTest {
     }
 
     @Test
+    @DisplayName("회차가 있으면 요청이 실어 보낸 연구 식별자를 무시하고 회차 값을 저장한다")
+    void 회차가_있으면_요청이_실어_보낸_연구_식별자를_무시하고_회차_값을_저장한다() {
+        // given
+        LocationUpdateRequest request = new LocationUpdateRequest(
+                MEMBER_ID, null, null, null, 2, DEVICE_ID, SESSION_ID, SEQ,
+                "요청이-주장한-연구", "요청이-주장한-참여", null,
+                37.5551, 126.9707, 8.5, 0.9, 0.5, 212.0, 41.2, "fused", false, TS_MS, "move");
+        given(locationFixRepository.existsByDeviceIdAndSessionIdAndSeq(DEVICE_ID, SESSION_ID, SEQ))
+                .willReturn(false);
+        given(collectionRunService.resolveRun(MEMBER_ID, DEVICE_ID, TS_MS))
+                .willReturn(Optional.of(researchRun()));
+
+        // when
+        locationFixService.store(MEMBER_ID, request, "{}".getBytes(UTF_8), 1_000L, 2_000L);
+
+        // then
+        LocationFix saved = savedFix();
+        assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
+        assertThat(saved.getParticipationId()).isEqualTo("part-0f3a");
+    }
+
+    private CollectionRun researchRun() {
+        return CollectionRun.builder()
+                .runId("run-0f3a")
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .studyId("STUDY-2026")
+                .participationId("part-0f3a")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+    }
+
+    @Test
     @DisplayName("같은 기기·세션·seq를 다시 보내면 저장하지 않는다")
     void 같은_기기와_세션과_seq를_다시_보내면_저장하지_않는다() {
         // given
