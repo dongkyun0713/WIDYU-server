@@ -7,7 +7,8 @@ public record SensorProperties(
         int maxPayloadBytes,
         Config config,
         Export export,
-        FallAi fallAi
+        FallAi fallAi,
+        HeartAi heartAi
 ) {
 
     /**
@@ -57,5 +58,14 @@ public record SensorProperties(
             int windowBeforeSec,
             String serverDeciderId,
             String serverDeciderVersion
+    ) {}
+
+    /**
+     * 심박 판정기의 이름과 판. AI 응답에 판정기 식별자가 없어 설정값으로 적는다(ADR-0035 부정 1).
+     * AI 이미지 태그를 올릴 때 손으로 맞춰야 한다.
+     */
+    public record HeartAi(
+            String deciderId,
+            String deciderVersion
     ) {}
 }

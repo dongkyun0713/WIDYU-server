@@ -51,6 +51,7 @@ public class HeartRateEmergencyNotificationService {
                 .image(seniorMember.getProfileImage())
                 .relatedMemberId(event.memberId())
                 .emergency(true)
+                .decisionId(event.decisionId())
                 .build();
 
         for (FamilyMembership membership : memberships) {

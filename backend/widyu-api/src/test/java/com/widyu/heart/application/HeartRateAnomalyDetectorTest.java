@@ -8,6 +8,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.times;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.error.BusinessException;
@@ -26,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.ResourceAccessException;
@@ -161,6 +166,39 @@ class HeartRateAnomalyDetectorTest {
         // then
         assertThat(result.status()).isEqualTo(HeartRateStatus.CAUTION);
         assertThat(result.emergency()).isFalse();
+    }
+
+    @Test
+    @DisplayName("AI가 판정 사유를 주면 결과에 담되 어떤 로그에도 남기지 않는다")
+    void AI가_판정_사유를_주면_결과에_담되_어떤_로그에도_남기지_않는다() {
+        // given
+        HeartRateAnomalyDetector detector = detector();
+        given(aiRestTemplate.postForObject(eq("http://ai-server/api/hr"), any(), eq(String.class)))
+                .willReturn("{\"alert\":true,\"level\":\"EMERGENCY\",\"reason\":\"synthetic-reason\","
+                        + "\"layer\":\"L1\",\"baseline_source\":\"synthetic-baseline\",\"sample_count\":42}");
+        Logger logger = (Logger) LoggerFactory.getLogger(HeartRateAnomalyDetector.class);
+        Level oldLevel = logger.getLevel();
+        logger.setLevel(Level.TRACE);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            DetectionResult result = detector.detect(1L, measurement(), "UNKNOWN");
+
+            // then
+            // #640이 로그에서 뺀 자리는 판정 기록 행이다. 사유는 거기로만 흘러간다(ADR-0035 결정 2).
+            assertThat(result.reason()).isEqualTo("synthetic-reason");
+            assertThat(result.level()).isEqualTo("EMERGENCY");
+            for (ILoggingEvent event : appender.list) {
+                assertThat(event.getFormattedMessage()).doesNotContain("synthetic-");
+            }
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(oldLevel);
+            appender.stop();
+        }
     }
 
     private HeartRateAnomalyDetector detector() {

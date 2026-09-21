@@ -34,7 +34,8 @@ public class FcmOutboxService {
                     .title(message.title()).body(message.content()).image(message.image()).scheme(message.scheme())
                     .dataType(message.data().get("type"))
                     .dataRevision(parseRevision(message.data().get("revision")))
-                    .fcmCategory(message.fcmCategory()).emergency(message.emergency()).state(FcmOutbox.State.PENDING)
+                    .fcmCategory(message.fcmCategory()).emergency(message.emergency())
+                    .decisionId(message.decisionId()).state(FcmOutbox.State.PENDING)
                     .availableAt(now).expiresAt(now.plus(properties.ttl(message.emergency()))).build();
             outbox.save(row);
             Long id = row.getId();
