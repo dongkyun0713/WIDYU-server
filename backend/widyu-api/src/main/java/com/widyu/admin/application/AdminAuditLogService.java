@@ -25,8 +25,23 @@ public class AdminAuditLogService {
     private final AdminAuditLogRepository auditLogRepository;
     private final MemberRepository memberRepository;
 
+    /** 호출자 트랜잭션이 실패해도 시도 자체를 남긴다. 로그인·상태 변경처럼 시도 기록이 필요한 경로가 쓴다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(AdminAction action, String targetType, Long targetId, String detail) {
+        save(action, targetType, targetId, detail);
+    }
+
+    /**
+     * 대상 변경과 같은 트랜잭션에 남긴다. 변경이 롤백되면 감사 로그도 함께 사라지므로,
+     * 실제로 바뀌지 않은 일이 바뀐 것처럼 기록되지 않는다.
+     */
+    @Transactional
+    public void logInCurrentTransaction(
+            AdminAction action, String targetType, Long targetId, String detail) {
+        save(action, targetType, targetId, detail);
+    }
+
+    private void save(AdminAction action, String targetType, Long targetId, String detail) {
         Long adminId = resolveAdminId();
         String adminName = resolveAdminName(adminId);
         auditLogRepository.save(AdminAuditLog.of(adminId, adminName, action, targetType, targetId, detail));

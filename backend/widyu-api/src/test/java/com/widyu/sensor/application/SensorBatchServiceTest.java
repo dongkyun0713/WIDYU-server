@@ -603,6 +603,27 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("회차가 있으면 배치가 실어 보낸 연구 식별자를 무시하고 회차 값을 저장한다")
+    void 회차가_있으면_배치가_실어_보낸_연구_식별자를_무시하고_회차_값을_저장한다() {
+        // given
+        givenMemberExists();
+        given(sensorBatchRepository.findByBatchId(BATCH_ID)).willReturn(Optional.empty());
+        given(collectionRunService.resolveRun(eq(MEMBER_ID), eq("gw-3f2a"), anyLong()))
+                .willReturn(Optional.of(attributableRun("run-0f3a")));
+
+        // when
+        String payload = batch(ACC, "null")
+                .replace("\"study_id\": null", "\"study_id\": \"요청이-주장한-연구\"")
+                .replace("\"participation_id\": null", "\"participation_id\": \"요청이-주장한-참여\"");
+        service().ingest(MEMBER_ID, payload.getBytes(UTF_8));
+
+        // then
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
+        assertThat(saved.getParticipationId()).isEqualTo("P-001");
+    }
+
+    @Test
     @DisplayName("재전송 배치는 원 회차를 우선해 귀속하고 열린 회차를 찾지 않는다")
     void 재전송_배치는_원_회차를_우선해_귀속하고_열린_회차를_찾지_않는다() {
         // given

@@ -104,29 +104,36 @@ public class LocationFixService {
     private record RunAttribution(String runId, String studyId, String participationId) {}
 
     /**
-     * 회차 귀속(LLD-0045 5절). 앱이 실어 보낸 {@code run_id}가 있으면 그대로 쓰고,
-     * 없으면 잰 시각에 이 폰을 쓰던 열린 회차를 서버가 찾는다.
+     * 회차 귀속(LLD-0045 5절). 앱이 실어 보낸 {@code run_id}가 있으면 그 회차, 없으면 잰 시각에
+     * 이 폰을 쓰던 열린 회차를 서버가 찾는다.
      */
     private RunAttribution resolveAttribution(LocationUpdateRequest request, Long memberId) {
-        if (request.runId() != null) {
-            return new RunAttribution(request.runId(), request.studyId(), request.participationId());
+        Optional<CollectionRun> run = findRun(request, memberId);
+        if (run.isPresent()) {
+            return attributionOf(run.get());
         }
-        Optional<CollectionRun> run =
-                collectionRunService.resolveRun(memberId, request.deviceId(), request.tsMs());
-        if (run.isEmpty()) {
-            return new RunAttribution(null, request.studyId(), request.participationId());
-        }
-        return new RunAttribution(
-                run.get().getRunId(),
-                preferRequestValue(request.studyId(), run.get().getStudyId()),
-                preferRequestValue(request.participationId(), run.get().getParticipationId()));
+        // 배정된 회차가 없는 운영 외 자료. 이때만 요청값을 그대로 둔다.
+        return new RunAttribution(null, request.studyId(), request.participationId());
     }
 
-    private String preferRequestValue(String requestValue, String runValue) {
-        if (requestValue != null) {
-            return requestValue;
+    /**
+     * 앱이 회차를 명시했어도 그 회차가 이 회원·이 기기의 것이고 잰 시각에 배정돼 있었는지 서버가
+     * 확인한다. 확인하지 않으면 남의 회차에 위치 원본이 붙는다. 맞지 않으면 {@code RUN_NOT_FOUND}다.
+     */
+    private Optional<CollectionRun> findRun(LocationUpdateRequest request, Long memberId) {
+        if (request.runId() != null) {
+            return Optional.of(collectionRunService.requireAttributableRun(
+                    request.runId(), memberId, request.deviceId(), request.tsMs()));
         }
-        return runValue;
+        return collectionRunService.resolveRun(memberId, request.deviceId(), request.tsMs());
+    }
+
+    /**
+     * 회차가 정본인 연구 식별자다. 회차의 getter가 참여 기록을 먼저 읽으므로, 요청 본문의
+     * 연구 ID·참여 ID로 덮어쓰지 않는다(LLD-0052 5절).
+     */
+    private RunAttribution attributionOf(CollectionRun run) {
+        return new RunAttribution(run.getRunId(), run.getStudyId(), run.getParticipationId());
     }
 
     private String sha256(byte[] payload) {
