@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-07-05 |
+| 코드 동기화 | 2026-09-16 (study 도메인 추가) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -494,6 +494,19 @@ erDiagram
         Status status
     }
 
+    StudyParticipation {
+        Long id PK
+        String studyId
+        String participationId UK
+        Long member_id FK
+        DataPolicy dataPolicy
+        LocalDate identifiedUntil
+        LocalDate pseudonymizedAt
+        LocalDate researchUntil
+        String consentVersion
+        StudyParticipationStatus status
+    }
+
     AdminAuditLog {
         Long id PK
         Long member_id FK
@@ -539,6 +552,7 @@ erDiagram
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
+    Member ||--o{ StudyParticipation : "실증 참여 (재식별 키)"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
@@ -594,6 +608,10 @@ erDiagram
 | `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
+| `StudyParticipationStatus` | `ACTIVE`, `ENDED`, `WITHDRAWN` |
+| `WithdrawalScope` | `ALL`, `SELECTED_CONSENTS` |
+| `StudyParticipationHistoryType` | `REGISTERED`, `RETENTION_CHANGED`, `WITHDRAWN`, `DELETION_PROCESSED` |
+| `AdminAction` | `ADMIN_LOGIN`, `MEMBER_STATUS_CHANGE`, `FCM_TEST_SEND`, `COLLECTION_RUN_OPEN`, `COLLECTION_RUN_CLOSE`, `STUDY_PARTICIPATION_REGISTER`, `STUDY_PARTICIPATION_PERIOD_CHANGE`, `STUDY_PARTICIPATION_WITHDRAW`, `STUDY_PARTICIPATION_DELETION_PROCESSED` |
 
 ## 주요 인덱스
 
@@ -620,6 +638,7 @@ erDiagram
 | `collection_run` | UK `uk_collection_run_run_id` | `(run_id)` | 서버 발급 회차 식별자 |
 | `collection_run` | UK `uk_collection_run_member_open` | `(member_id, open_marker)` | 열린 회차만 marker=1로 회원당 OPEN 하나를 DB에서 보장 |
 | `collection_run` | `idx_collection_run_member_status` | `(member_id, status)` | 회원의 열린 회차 조회 (B12) |
+| `collection_run` | FK `fk_collection_run_study_participation` | `(study_participation_id)` | 연구 회차의 연구 메타데이터 정본 참조 (LLD-0052). `product` 회차는 NULL |
 | `run_device_assignment` | UK `uk_run_device_assignment_id` | `(assignment_id)` | 배정 식별자 |
 | `run_device_assignment` | UK `uk_run_device_assignment_active` | `(device_id, active_marker)` | 배정 중인 기기만 marker=1로 동시 이중 배정을 DB에서 차단 |
 | `run_device_assignment` | `idx_run_device_assignment_device` | `(device_id, unassigned_at_ms)` | 기기 중복 배정 검사·회차 귀속 |
@@ -638,6 +657,10 @@ erDiagram
 | `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
+| `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 서버 발급 참여 식별자 중복 방지 (LLD-0052) |
+| `study_participation` | `idx_study_participation_active` | `(study_id, member_id, status)` | 같은 연구·회원의 ACTIVE 참여 중복 검사 |
+| `study_participation` | UK `uk_study_participation_active` | `(study_id, member_id, active_key)` | 같은 연구·회원의 ACTIVE 참여 하나를 DB에서 보장. `active_key`는 ACTIVE일 때만 `'1'`이라 철회·종료 참여는 제약 대상에서 빠진다 (`collection_run.open_marker`와 같은 방식) |
+| `study_participation_history` | `idx_study_participation_history_participation` | `(study_participation_id, created_at)` | 참여 기록의 변경 이력 시각순 조회 |
 
 ## 도메인별 조회 기준
 
@@ -657,6 +680,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052, ADR-0034). ACTIVE 단일성은 엔티티가 채우는 `active_key` + UK로, 일부 철회 항목은 이력의 `withdrawn_consent_keys`(JSON)로 남긴다. 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |
@@ -669,6 +693,7 @@ erDiagram
 | 2026-09-19 | `sensor_batch` | v2 형식으로 통째 교체 (LLD-0041 v2). `batch_id` 멱등 키, 시계 5값 원본 보존, 시각 4단계. 미배포 테이블이라 DROP 후 재생성 | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-09-18 | `sensor_batch` | 신규 테이블 (LLD-0041 v1, 폐기). 시각은 epoch ms BIGINT | `scripts/mysql/create_sensor_batch.sql` |
 | 2026-07-16 | `senior_profile` | `family_id` NOT NULL → NULL 허용 (마지막 방장 탈퇴 시 Family 삭제 후 null 처리) | `ALTER TABLE senior_profile MODIFY COLUMN family_id BIGINT NULL;` |
+| 2026-09-16 | `study_participation` | 신규 테이블. 국내 실증(IRB) 연구 참여·보존 날짜·동의 버전 (LLD-0031, 운영 미배포 — LLD-0052가 대체) | LLD-0031 §8 CREATE TABLE 참조 |
 
 ## 코드 동기화 메모
 
