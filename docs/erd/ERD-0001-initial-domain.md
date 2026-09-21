@@ -365,6 +365,10 @@ erDiagram
         Long modelAvailableAtServerMaxMs
         Boolean alertDelivered
         String triggerBatchId
+        Integer hrBpm "심박 행만. 판정 대상 샘플의 bpm"
+        Long hrMeasuredAtMs "심박 행만. 샘플 잰 시각"
+        String hrAccuracy "심박 행만"
+        String reason "판정 사유 원문. 로그·응답 DTO 금지 (ADR-0035)"
     }
 
     RunMarker {
@@ -454,6 +458,7 @@ erDiagram
         String image
         Boolean isRead
         FcmCategory fcmCategory
+        String decisionId "nullable. 이 알림을 낳은 판정 (LLD-0053)"
     }
 
     FcmOutbox {
@@ -476,6 +481,7 @@ erDiagram
         LocalDateTime availableAt
         LocalDateTime expiresAt
         LocalDateTime leaseUntil
+        String decisionId "nullable. 이 알림을 낳은 판정 (LLD-0053)"
     }
 
     MemberNotificationSetting {
@@ -680,6 +686,8 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
+| 2026-09-21 | `fcm_outbox`, `fcm_notification` | `decision_id` 추가 (LLD-0053). 전송 성공 시 판정 도달 사실을 채우고 연구 철회 때 관련 알림만 찾는다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
 | 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052, ADR-0034). ACTIVE 단일성은 엔티티가 채우는 `active_key` + UK로, 일부 철회 항목은 이력의 `withdrawn_consent_keys`(JSON)로 남긴다. 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |

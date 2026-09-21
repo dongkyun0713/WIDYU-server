@@ -43,7 +43,7 @@
 ### `heart` — 심박수 (독립 도메인)
 - 심박 측정값 1건을 1초마다 수신 → AI(`POST /api/hr`) 1회 호출 → 즉시 판정·저장
 - `alert=true`인 EMERGENCY 시 `HeartRateEmergency` 기록 + 보호자 FCM
-- **AI 응답 중 `alert`·`level`만 사용**. `reason`(서맥·빈맥 등 사유)·`layer`(L0 고정임계값/L1 개인기준선)·`baseline_source`는 폐기 — 개인화는 `context=REST`에서만 동작
+- **AI 응답 중 `alert`·`level`을 판정에 쓰고 `reason`(서맥·빈맥 등 사유)은 받되 판정 기록 행에만 넣는다**. `layer`(L0 고정임계값/L1 개인기준선)·`baseline_source`는 계속 받지 않는다 — 개인화는 `context=REST`에서만 동작 → ADR-0035 결정 2
 - REST(`HeartRateController`) + WebSocket(`HeartRateWebSocketController`) 이중 지원
   - 시니어 전송: `/app/heart-rate/send-single`(1건)
   - 보호자 구독 `/topic/heart-rate/{memberId}` / ACK `/user/queue/heart-rate/result`
@@ -56,7 +56,8 @@
 - 수신한 단건 심박은 AI 판정 후 즉시 최신값에 반영한다.
 - `heart_rate_event`는 자동 삭제하지 않는다(#650). 보존 기간은 법률 검토 뒤 ADR로 정한다.
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
-- **로그에 bpm 값·AI 응답 본문·판정 사유를 남기지 않는다** (#639, 정책 1.6.7·완료기준 C9-6)
+- **배치 위급 판정은 `decision_record`에 한 줄 남고 그 `decision_id`가 FCM outbox 행을 타고 흘러간다**. 전송이 성공하면 그 판정의 `alert_delivered`·`alert_at_ms`가 채워진다. 단건 경로는 판정 기록을 남기지 않아 `decision_id`가 null이다 → LLD-0053
+- **로그에 bpm 값·AI 응답 본문·판정 사유를 남기지 않는다** (#639, 정책 1.6.7·완료기준 C9-6). 사유와 심박 값이 사는 곳은 판정 기록 행뿐이다
 
 ### `sensor` — 원시 IMU 배치 (연구 수집, v2 형식)
 - 워치·폰의 가속도·자이로 배치를 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{sha256}.json`) + `sensor_batch` 인덱스 행 1개 → ADR-0030 v2, LLD-0041 v2
@@ -72,6 +73,16 @@
 - 본문 상한은 `sensor.max-payload-bytes`(기본 32768, `application-sensor.yml`)
  - `stream`으로 갈린다: `imu_watch`·`imu_phone`은 축 검증, `hr`는 심박 검증(1~60샘플·`ts_ms` 엄격 증가·`bpm 0`은 `UNRELIABLE`만·`location`/`context` 금지) 후 `HeartRateBatchService`로 넘긴다. 심박 인덱스 행은 축·충격·설정 대조가 null이고 `sample_count`를 쓴다
  - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
+
+### `decision` — 판정 기록 (연구 수집)
+
+- 낙상과 심박이 `decision_record` 한 표를 쓴다. 정책서 1.4.2 필수 10필드 + 창·알림·인과성 필드를 한 줄에 담는다 → ADR-0033, ADR-0035, LLD-0051·0053
+- **실증 회차에 귀속된 배치에서 알림이 나간 건과 판정 못 한 건만 남긴다**. `run_id`가 없으면 연구 판정 행을 만들지 않는다. 위급(`ALERT`) 샘플마다 한 줄, 배치 안에 AI에 넘길 샘플이 하나도 없으면(`ABSTAIN_INSUFFICIENT_INPUT`) 배치당 한 줄. 정상·주의 판정은 행을 만들지 않고 `heart.decision{output=NO_ALERT}` 메트릭으로 건수만 센다. AI 호출 실패는 입력 부족이 아니라 판정기 장애라 기록하지 않는다
+- **판정 사유(`reason`)와 그때의 심박 값(`hr_*`)은 이 행에만 둔다**. 로그·응답 DTO에 넣지 않는다(정책 1.5.5·1.5.11)
+- **「알림」은 FCM 전송 성공으로 잰다**. 위급 판정의 outbox 행에 `decision_id`를 싣고 완료 지점(`FcmOutboxTransactions.finish`)에서 첫 성공을 `alert_id`·`alert_at_ms`에 적는다. 보호자가 여럿이어도 첫 성공만 남고 실패·만료면 `alert_delivered=false`로 남는다. 「구글이 받았다」는 「가족 단말에 떴다」의 근사다
+- **인과성 처리가 두 경로에서 다르다**. 낙상은 서버가 창을 정하므로 `feature_support_end_ms > input_cutoff_ms`면 설계 오류로 보고 예외를 던진다. 심박은 샘플 시각이 곧 창이라 기기 시계가 앞서면 그대로 기록하고 검사기가 신고하게 둔다
+- 판정 행 **조립** 실패와 `ABSTAIN` 저장 실패는 WARN(예외 클래스명·batchId)만 남기고 심박 저장·보호자 알림을 계속한다. `ALERT` 저장은 심박 이벤트와 한 트랜잭션이므로 실패하면 해당 샘플 전체가 롤백되고 앱 재전송으로 회복한다
+- 심박 `decider_id`·`decider_version`은 AI 응답에 없어 설정값(`sensor.heart-ai.*`)이다. AI 이미지 태그를 올릴 때 손으로 맞춘다
 
 ### `study` — 실증 참여 기록 (연구 동의·보관 정책의 정본)
 

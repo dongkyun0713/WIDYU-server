@@ -95,7 +95,7 @@ class RunExportAssemblerTest {
 
         // then
         List<JsonNode> decisions = readLines(workDir.resolve("decisions.jsonl"));
-        assertThat(decisions).hasSize(2);
+        assertThat(decisions).hasSize(3);
         assertThat(decisions.get(0).get("decision_id").asText()).isEqualTo("dec-01");
         assertThat(decisions.get(0).get("stream_ids_used")).containsExactly(
                 MAPPER.getNodeFactory().textNode("01j8zimu000000000000000001"));
@@ -104,6 +104,28 @@ class RunExportAssemblerTest {
         assertThat(decisions.get(1).get("decision_output").asText())
                 .isEqualTo("ABSTAIN_INSUFFICIENT_INPUT");
         assertThat(decisions.get(1).get("alert_at_ms").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("심박 판정 줄에만 판정 사유와 심박 값이 evidence로 붙는다")
+    void 심박_판정_줄에만_판정_사유와_심박_값이_붙는다() throws IOException {
+        // given
+        CollectionRun run = givenSyntheticRun();
+
+        // when
+        assembler().build(run, workDir);
+
+        // then
+        List<JsonNode> decisions = readLines(workDir.resolve("decisions.jsonl"));
+        JsonNode evidence = decisions.get(2).get("evidence");
+        assertThat(decisions.get(2).get("decider_id").asText()).isEqualTo("widyu-ai-hr");
+        assertThat(evidence.get("hr_bpm").asInt()).isEqualTo(185);
+        assertThat(evidence.get("hr_measured_at_ms").asLong()).isEqualTo(STARTED_AT_MS + 30_000L);
+        assertThat(evidence.get("hr_accuracy").asText()).isEqualTo("HIGH");
+        assertThat(evidence.get("reason").asText()).isEqualTo("연속 3회 임계 초과");
+        // 낙상 행에는 붙이지 않는다. 심박 값이 없는 판정은 근거로 내보낼 것이 없다(LLD-0053 3절).
+        assertThat(decisions.get(0).has("evidence")).isFalse();
+        assertThat(decisions.get(1).has("evidence")).isFalse();
     }
 
     @Test
@@ -389,7 +411,30 @@ class RunExportAssemblerTest {
                 .triggerPath("IMPACT")
                 .triggerBatchId("01j8zimu000000000000000002")
                 .build();
-        return List.of(alert, abstain);
+
+        DecisionRecord heartAlert = DecisionRecord.builder()
+                .decisionId("dec-03")
+                .memberId(RunExportFixture.MEMBER_ID)
+                .runId(RUN_ID)
+                .streamIdsUsed("[\"01j8zhr0000000000000001010\"]")
+                .decisionAtMs(STARTED_AT_MS + 30_400L)
+                .decisionOutput("ALERT")
+                .deciderId("widyu-ai-hr")
+                .deciderVersion("ver7")
+                .inputCutoffMs(STARTED_AT_MS + 30_300L)
+                .featureSupportEndMs(STARTED_AT_MS + 30_000L)
+                .modelAvailableAtServerMaxMs(STARTED_AT_MS + 30_300L)
+                .windowStartMs(STARTED_AT_MS + 30_000L)
+                .windowEndMs(STARTED_AT_MS + 30_000L)
+                .severity("EMERGENCY")
+                .triggerBatchId("01j8zhr0000000000000001010")
+                .hrBpm(185)
+                .hrMeasuredAtMs(STARTED_AT_MS + 30_000L)
+                .hrAccuracy("HIGH")
+                .reason("연속 3회 임계 초과")
+                .build();
+
+        return List.of(alert, abstain, heartAlert);
     }
 
     private RunExportAssembler assembler() {
