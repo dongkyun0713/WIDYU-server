@@ -13,13 +13,15 @@
 
 ## 1. 목적 / 배경
 
-ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판정 사유·심박 값을 그 행에만 두며, 보호자 FCM 전송 성공을 그 판정의 알림 도달 사실로 채운다.
+ADR-0035 결정 1~3. 실증 회차에 귀속된 심박 배치의 위급 판정을 `decision_record`에 남기고, 판정 사유·심박 값을 그 행에만 두며, 보호자 FCM 전송 성공을 그 판정의 알림 도달 사실로 채운다.
+
+정책서 B 1.4.2의 판정 기록은 실행 번호와 쓴 자료 목록을 필수로 요구한다. 따라서 `run_id`와 `batch_id`를 가진 실증 배치 경로만 이 기록의 대상이다. 기존 제품용 REST·WebSocket 단건 경로는 회차와 배치가 없어 이 계약에 맞는 판정 기록을 만들 수 없으며, 이 PR에서 임의 식별자를 만들어 연구 자료로 섞지 않는다.
 
 ## 2. 범위
 
 ### In scope
 - widyu-api / widyu-domain
-- `decision_record` 열 4개 추가, `fcm_outbox` 열 1개 추가
+- `decision_record` 열 4개 추가, `fcm_outbox`·`fcm_notification`에 판정 연결키 추가
 - `HeartRateBatchService`에서 판정 기록, `HeartRateAnomalyDetector`가 `reason`을 받음(로그 금지 유지)
 - `HeartRateEmergencyEvent`·`FcmSendDto`·outbox에 `decision_id` 전달, `FcmOutboxTransactions.finish` 성공 시 판정 갱신
 - 내보내기 `decisions.jsonl`에 심박 행·근거 필드
@@ -27,6 +29,7 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 
 ### Out of scope
 - 인시던트(LLD-0054), 낙상 경로 변경, 정상 판정 행, 앱 수신 확인
+- 회차·배치 식별자가 없는 기존 제품용 REST·WebSocket 단건 심박 경로의 판정 기록. 이 경로는 기존 `heart_rate_emergency`와 보호자 알림 동작을 유지한다
 
 ## 3. 인터페이스 / API
 
@@ -57,6 +60,8 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 | `reason` | TEXT | AI 응답 `reason` 원문. **로그·응답 DTO에 넣지 않는다** |
 
 `fcm_outbox` 추가 열: `decision_id VARCHAR(40) NULL`, 인덱스 없음(완료 지점에서 행 자신이 갖고 있는 값만 쓴다).
+
+`fcm_notification` 추가 열: `decision_id VARCHAR(40) NULL`, 인덱스 `idx_fcm_notification_decision`. 전송 성공 이력도 판정 연결키를 가져야 연구 철회 때 같은 회원의 다른 알림을 건드리지 않고 대상만 찾을 수 있다.
 
 `DecisionRecord`에 갱신 메서드 `markDelivered(String alertId, long alertAtMs)`: `alert_delivered=true`, `alert_id`·`alert_at_ms`는 비어 있을 때만 채운다(첫 성공만 기록, 보호자가 여럿이라도 한 번).
 
@@ -96,9 +101,10 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 인과성: `feature_support_end_ms > input_cutoff_ms`여도 **기록한다**(기기 시계 앞섬). 예외를 던지지 않는다. 검사기가 신고한다.
 
 ### 5.2 알림 도달
-1. `HeartRatePersistenceService.saveBatchSample`이 판정 행을 같은 트랜잭션에서 저장하고 그 `decisionId`로 `HeartRateEmergencyEvent(memberId, decisionId)`를 발행한다(단일 샘플 경로는 `decisionId = null`).
+1. `HeartRatePersistenceService.saveBatchSample`이 판정 행을 같은 트랜잭션에서 저장하고 그 `decisionId`로 `HeartRateEmergencyEvent(memberId, decisionId)`를 발행한다. 회차·배치 식별자가 없는 제품용 단건 경로는 이 LLD 범위 밖이므로 기존처럼 `decisionId = null`이다.
 2. `HeartRateEmergencyNotificationService`가 `FcmSendDto`에 `decisionId`를 싣고, `FcmOutboxService.enqueue`가 outbox 행 `decision_id`에 쓴다.
-3. `FcmOutboxTransactions.finish` 성공 분기: `row.getDecisionId() != null`이면 `decisionRecordRepository.markDeliveredIfFirst(decisionId, "fcm-" + row.getId(), nowMs)` 한 번. `set alert_delivered = true, alert_id = :alertId, alert_at_ms = :alertAtMs where decision_id = :decisionId and alert_id is null`인 **원자적 벌크 UPDATE**다. 반환값은 보지 않는다(0은 오류가 아니라 다른 보호자의 전송이 먼저 적혔다는 뜻이다). 행이 없으면 0건이라 무시된다. 실패 분기는 손대지 않는다.
+3. `FcmOutboxTransactions.finish` 성공 분기는 `fcm_notification.decision_id`에도 같은 값을 복사한다. 전송 이력에서 연구 판정 알림만 선택할 수 있게 하기 위해서다.
+4. 같은 성공 분기에서 `row.getDecisionId() != null`이면 `decisionRecordRepository.markDeliveredIfFirst(decisionId, "fcm-" + row.getId(), nowMs)` 한 번. `set alert_delivered = true, alert_id = :alertId, alert_at_ms = :alertAtMs where decision_id = :decisionId and alert_id is null`인 **원자적 벌크 UPDATE**다. 반환값은 보지 않는다(0은 오류가 아니라 다른 보호자의 전송이 먼저 적혔다는 뜻이다). 행이 없으면 0건이라 무시된다. 실패 분기는 손대지 않는다.
    - **읽고 나서 쓰지 않는다.** 보호자가 여럿이면 완료 트랜잭션이 동시에 돌아, 엔티티를 읽어 `markDelivered`하면 둘 다 빈 `alert_id`를 보고 나중 것이 앞선 시각을 덮어쓴다. 조건을 UPDATE 문에 넣어 DB가 한 번만 성공시킨다.
    - `DecisionRecord.markDelivered`는 도메인 규칙(첫 성공만 남는다)의 자리로 남기고 outbox 경로에서는 쓰지 않는다.
 
@@ -122,6 +128,7 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 - [ ] 배치의 모든 샘플이 중복으로 skip되면 판정 행이 없다(재전송은 입력 부족이 아니다).
 - [ ] AI 호출이 실패하면 판정 행이 없고 심박은 `UNKNOWN`으로 저장된다(기존 동작).
 - [ ] `HeartRateEmergencyEvent`에 `decisionId`가 실리고 outbox 행 `decision_id`에 저장된다.
+- [ ] 전송 성공으로 만들어진 `fcm_notification` 행에도 같은 `decision_id`가 저장되고 일반 알림은 null이다.
 - [ ] outbox 전송 성공 시 해당 판정의 `alert_delivered=true`, `alert_id="fcm-<id>"`, `alert_at_ms`가 채워진다. 두 번째 성공은 값을 덮지 않는다. 전송 실패 시 `false` 유지.
 - [ ] `decisionId`가 null인 outbox 행(다른 알림)은 판정 갱신을 시도하지 않는다.
 - [ ] 판정 행 조립이 실패해도(설정 누락) 심박 저장·알림은 그대로 되고 `decisionId`는 null이다.
@@ -129,11 +136,12 @@ ADR-0035 결정 1~3. 심박 위급 판정을 `decision_record`에 남기고, 판
 - [ ] 같은 판정에 전송 성공이 두 번 들어와도 `alert_id`·`alert_at_ms`는 첫 성공 값이다(원자적 조건부 UPDATE).
 - [ ] 로그 캡처 테스트: bpm·reason 문자열이 어떤 로그에도 없다.
 - [ ] 내보내기 통합 테스트에 심박 `ALERT` 행을 넣으면 `decisions.jsonl`에 `evidence`가 있고 검사기 K1·K2·K4·K5 PASS(수동, PR 본문).
+- [ ] 회차·배치 식별자가 없는 제품용 단건 심박은 연구 판정 기록을 만들지 않고 기존 위급 저장·보호자 알림을 유지한다.
 - [ ] `./gradlew compileJava`, `bash scripts/harness/run-module-tests.sh`, `verify.sh --base` 통과.
 
 ## 8. 영향 범위 / 마이그레이션
 
-`scripts/mysql/alter_decision_record_for_hr.sql`(열 4개), `scripts/mysql/alter_fcm_outbox_decision_id.sql`. ERD `decision_record`·`fcm_outbox` 갱신. `backend/CLAUDE.md` heart·decision 절. `application-sensor.yml` `heart-ai` 블록(`export:`와 같은 들여쓰기, #660 참고).
+`scripts/mysql/alter_decision_record_for_hr.sql`(열 4개), `scripts/mysql/alter_fcm_outbox_decision_id.sql`(`fcm_outbox`·`fcm_notification` 연결키). ERD `decision_record`·`fcm_outbox`·`fcm_notification` 갱신. `backend/CLAUDE.md` heart·decision 절. `application-sensor.yml` `heart-ai` 블록(`export:`와 같은 들여쓰기, #660 참고).
 
 ## 9. 미결정 사항 (Open Questions)
 
