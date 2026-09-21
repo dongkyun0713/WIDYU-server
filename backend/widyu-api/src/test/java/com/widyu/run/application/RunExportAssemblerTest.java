@@ -22,6 +22,7 @@ import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
+import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.location.raw.repository.LocationFixRepository;
@@ -550,7 +551,11 @@ class RunExportAssemblerTest {
                 .respondByMs(STARTED_AT_MS + 75_000L)
                 .build();
         closed.markChecking();
-        closed.respond(IncidentResponseValue.OK, ResponseVia.WATCH, STARTED_AT_MS + 42_000L);
+        // 응답은 조건부 UPDATE가 쓰므로 저장된 행의 모습을 그대로 만든다.
+        ReflectionTestUtils.setField(closed, "response", IncidentResponseValue.OK);
+        ReflectionTestUtils.setField(closed, "responseVia", ResponseVia.WATCH);
+        ReflectionTestUtils.setField(closed, "respondedAtMs", STARTED_AT_MS + 42_000L);
+        ReflectionTestUtils.setField(closed, "state", IncidentState.OK_CLOSED);
 
         Incident resolved = Incident.builder()
                 .incidentRef("inc-0002")

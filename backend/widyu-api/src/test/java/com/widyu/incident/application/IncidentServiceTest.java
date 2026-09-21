@@ -102,63 +102,66 @@ class IncidentServiceTest {
     }
 
     @Test
-    @DisplayName("본인이 OK로 답하면 사건이 닫히고 응답 시각과 경로가 남는다")
-    void 본인이_OK로_답하면_사건이_닫힌다() {
+    @DisplayName("본인이 OK로 답하면 마감 안 종료 상태로 응답 저장을 요청하고 저장된 값을 돌려준다")
+    void 본인이_OK로_답하면_마감_안_종료_상태로_응답_저장을_요청한다() {
         // given
         Incident incident = openIncident();
         given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        givenRespondUpdates(1);
 
         // when
         IncidentResponse response = service().respond(
                 SENIOR_ID, INCIDENT_REF, new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.WATCH));
 
         // then
-        assertThat(response.state()).isEqualTo(IncidentState.OK_CLOSED);
-        assertThat(response.response()).isEqualTo(IncidentResponseValue.OK);
-        assertThat(response.responseVia()).isEqualTo(ResponseVia.WATCH);
-        assertThat(response.respondedAtMs()).isNotNull();
+        // 마감을 넘겼는지는 행을 보는 UPDATE가 정한다. 서비스는 마감 안에 답했을 때의 상태만 넘긴다.
+        then(incidentRepository).should().respond(eq(INCIDENT_REF), eq(SENIOR_ID),
+                eq(IncidentResponseValue.OK), eq(ResponseVia.WATCH), anyLong(), eq(IncidentState.OK_CLOSED));
+        assertThat(response.incidentId()).isEqualTo(INCIDENT_REF);
     }
 
     @Test
-    @DisplayName("본인이 HELP로 답하면 사건이 ESCALATED로 올라간다")
-    void 본인이_HELP로_답하면_사건이_올라간다() {
+    @DisplayName("본인이 HELP로 답하면 무응답과 같은 상태로 응답 저장을 요청한다")
+    void 본인이_HELP로_답하면_무응답과_같은_상태로_응답_저장을_요청한다() {
         // given
-        Incident incident = openIncident();
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        givenRespondUpdates(1);
 
         // when
-        IncidentResponse response = service().respond(
-                SENIOR_ID, INCIDENT_REF, new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.PHONE));
+        service().respond(SENIOR_ID, INCIDENT_REF,
+                new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.PHONE));
 
         // then
-        assertThat(response.state()).isEqualTo(IncidentState.ESCALATED);
-        assertThat(response.response()).isEqualTo(IncidentResponseValue.HELP);
+        then(incidentRepository).should().respond(eq(INCIDENT_REF), eq(SENIOR_ID),
+                eq(IncidentResponseValue.HELP), eq(ResponseVia.PHONE), anyLong(), eq(IncidentState.ESCALATED));
     }
 
     @Test
-    @DisplayName("무응답으로 올라간 뒤 늦게 온 OK는 응답만 남기고 상태를 되돌리지 않는다")
-    void 무응답으로_올라간_뒤_늦게_온_OK는_상태를_되돌리지_않는다() {
+    @DisplayName("응답 시각은 서버 시각으로 넘긴다")
+    void 응답_시각은_서버_시각으로_넘긴다() {
         // given
-        Incident incident = escalatedIncident();
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        long before = System.currentTimeMillis();
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        givenRespondUpdates(1);
 
         // when
-        IncidentResponse response = service().respond(
-                SENIOR_ID, INCIDENT_REF, new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.WATCH));
+        service().respond(SENIOR_ID, INCIDENT_REF,
+                new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.WATCH));
 
         // then
-        // 보호자에게 이미 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림을 설명할 자료가 없어진다.
-        assertThat(response.state()).isEqualTo(IncidentState.ESCALATED);
-        assertThat(response.response()).isEqualTo(IncidentResponseValue.OK);
+        // 마감 판정의 기준이 되는 시각이라 단말이 보낸 값을 쓰지 않는다.
+        ArgumentCaptor<Long> respondedAtMs = ArgumentCaptor.forClass(Long.class);
+        then(incidentRepository).should().respond(any(), any(), any(), any(),
+                respondedAtMs.capture(), any());
+        assertThat(respondedAtMs.getValue()).isBetween(before, System.currentTimeMillis());
     }
 
     @Test
-    @DisplayName("이미 답한 사건에 다시 응답하면 예외가 발생한다")
-    void 이미_답한_사건에_다시_응답하면_예외가_발생한다() {
+    @DisplayName("이미 답했거나 종결된 사건이라 갱신된 행이 없으면 예외가 발생한다")
+    void 갱신된_행이_없으면_예외가_발생한다() {
         // given
-        Incident incident = openIncident();
-        incident.respond(IncidentResponseValue.OK, ResponseVia.WATCH, OPENED_AT_MS + 1_000L);
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        givenRespondUpdates(0);
         IncidentService service = service();
         IncidentRespondRequest request = new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.WATCH);
 
@@ -180,6 +183,7 @@ class IncidentServiceTest {
         assertThatThrownBy(() -> service.respond(GUARDIAN_ID, INCIDENT_REF, request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
+        then(incidentRepository).should(never()).respond(any(), any(), any(), any(), anyLong(), any());
     }
 
     @Test
@@ -282,6 +286,10 @@ class IncidentServiceTest {
         return new IncidentService(incidentRepository, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(45, 5000L)));
+    }
+
+    private void givenRespondUpdates(int updated) {
+        given(incidentRepository.respond(any(), any(), any(), any(), anyLong(), any())).willReturn(updated);
     }
 
     /** 저장 서비스는 받은 행을 그대로 돌려준다. 식별자는 서비스가 붙이므로 그대로 흘려보낸다. */

@@ -9,6 +9,7 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
+import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
@@ -75,17 +76,33 @@ public class IncidentService {
         return incident;
     }
 
-    /** 본인 응답(LLD-0054 5.2). 다른 회원이 부르면 사건의 존재를 알리지 않고 404다. */
+    /**
+     * 본인 응답(LLD-0054 5.2). 다른 회원이 부르면 사건의 존재를 알리지 않고 404다.
+     *
+     * <p>저장은 조건부 UPDATE 한 문장이 한다. 읽고 고쳐 저장하면 그 사이에 무응답 스케줄러가 올린
+     * 상태를 덮고, 마감을 넘긴 응답을 정상 종료로 적을 수 있다. 갱신이 0건이면 이미 답했거나
+     * 종결된 사건이다.
+     */
     @Transactional
     public IncidentResponse respond(Long memberId, String incidentRef, IncidentRespondRequest request) {
-        Incident incident = findOwned(memberId, incidentRef);
-        if (incident.isAnswered() || incident.getState() == IncidentState.RESOLVED) {
+        findOwned(memberId, incidentRef);
+        int updated = incidentRepository.respond(incidentRef, memberId, request.response(), request.via(),
+                System.currentTimeMillis(), answeredState(request.response()));
+        if (updated == 0) {
             throw new BusinessException(ErrorCode.INCIDENT_ALREADY_ANSWERED);
         }
-        incident.respond(request.response(), request.via(), System.currentTimeMillis());
+        Incident answered = findOwned(memberId, incidentRef);
         log.info("인시던트 응답: memberId={}, incidentRef={}, state={}",
-                memberId, incidentRef, incident.getState());
-        return IncidentResponse.from(incident);
+                memberId, incidentRef, answered.getState());
+        return IncidentResponse.from(answered);
+    }
+
+    /** 마감 안에 답했을 때의 상태. 마감을 넘겼는지는 행을 보는 UPDATE가 정한다. */
+    private IncidentState answeredState(IncidentResponseValue response) {
+        if (response == IncidentResponseValue.HELP) {
+            return IncidentState.ESCALATED;
+        }
+        return IncidentState.OK_CLOSED;
     }
 
     /** 보호자의 사후 판정(LLD-0054 5.4). 라벨을 덮어쓰지 않으려고 두 번째 판정은 막는다. */

@@ -83,8 +83,19 @@ enum: `IncidentKind`, `IncidentState`, `IncidentResponseValue(OK, HELP)`, `Incid
 
 ### 5.2 본인 응답 — `respond(memberId, incidentRef, request)`
 1. 인시던트 조회, `member_id != memberId` → `INCIDENT_NOT_FOUND`.
-2. `response != null` 또는 `state == RESOLVED` → `INCIDENT_ALREADY_ANSWERED`(409).
-3. `response`·`responded_at_ms=now`·`response_via` 저장. `OK` → `state=OK_CLOSED`(단, 이미 `ESCALATED`면 그대로 둔다: 마감 뒤 늦은 응답), `HELP` → `state=ESCALATED`.
+2. 저장은 **조건부 UPDATE 한 문장**(`IncidentRepository.respond`)이 한다.
+   `where incident_ref = :ref and member_id = :m and response is null and state <> 'RESOLVED'`,
+   갱신 0건이면 `INCIDENT_ALREADY_ANSWERED`(409).
+3. 상태는 그 UPDATE가 행을 보고 정한다.
+   `responded_at_ms > respond_by_ms`(마감을 넘긴 응답)이거나 이미 `ESCALATED`면 → `ESCALATED`,
+   그 밖이면 `HELP` → `ESCALATED`, `OK` → `OK_CLOSED`.
+   **마감을 넘긴 `OK`도 `ESCALATED`다.** 마감이 지난 뒤 스케줄러 폴링(최대 `timeout-poll-ms`) 전에
+   온 `OK`를 `OK_CLOSED`로 적으면 무응답이던 사건이 정상 종료로 둔갑하고 그 뒤 스케줄러 대상에서도
+   빠진다. 응답 값·시각·경로는 어느 쪽이든 그대로 저장한다.
+4. 읽고 고쳐 저장하는 대신 UPDATE 한 문장을 쓰는 이유: 응답 트랜잭션이 읽은 상태와 스케줄러의
+   벌크 `ESCALATED`가 경합하면 stale 상태가 `ESCALATED`를 덮는다. 조건·상태 결정을 같은 문장에
+   두면 그 틈이 없고 `@Version` 열도 필요 없다. 사후 판정처럼 남은 읽고-고치기 경로는 엔티티의
+   `@DynamicUpdate`로 자기가 건드리지 않은 열을 되돌려 쓰지 않게 한다.
 
 ### 5.3 무응답 — `IncidentTimeoutScheduler` (`@Scheduled(fixedDelayString="${sensor.incident.timeout-poll-ms}")`)
 `update incident set state='ESCALATED' where state in ('OPEN','CHECKING') and respond_by_ms < :now` 벌크 1문(`@Modifying`, `@Transactional`). 갱신 건수만 로그. 추가 알림 없음(보호자는 판정 시점에 이미 받았다, ADR-0035 결정 7).
@@ -110,8 +121,8 @@ enum: `IncidentKind`, `IncidentState`, `IncidentResponseValue(OK, HELP)`, `Incid
 
 - [ ] `ALERT` 판정이 저장되면 인시던트 1건이 생기고 `respond_by_ms − opened_at_ms = 45000`, `state=CHECKING`, 시니어에게 FCM 1건이 enqueue된다. 같은 판정으로 두 번 열면 1건이다.
 - [ ] 인시던트 열기가 실패해도 심박 저장·보호자 알림은 그대로 된다.
-- [ ] `OK` 응답 → `OK_CLOSED`, `HELP` → `ESCALATED`, 응답 시각·경로 저장. 두 번째 응답은 409.
-- [ ] 마감을 넘긴 `OPEN/CHECKING`은 스케줄러가 `ESCALATED`로 바꾸고, 그 뒤 온 `OK`는 응답만 저장하고 상태는 `ESCALATED`.
+- [ ] 마감 안 `OK` 응답 → `OK_CLOSED`, `HELP` → `ESCALATED`, 응답 시각·경로 저장. 두 번째 응답은 409.
+- [ ] 마감을 넘긴 `OPEN/CHECKING`은 스케줄러가 `ESCALATED`로 바꾸고, 그 뒤 온 `OK`는 응답만 저장하고 상태는 `ESCALATED`. 스케줄러가 돌기 전에 온 마감 뒤 `OK`도 `ESCALATED`다.
 - [ ] 다른 회원이 응답하면 404. 다른 가족 보호자가 사후 판정·조회하면 가족 접근 오류.
 - [ ] 사후 판정 → `RESOLVED`, `resolved_by`·`resolved_at_ms`·`emergency_called_at_ms` 저장. 두 번째는 409.
 - [ ] 응답 DTO에 bpm·사유·좌표가 없다.

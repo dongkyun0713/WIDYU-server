@@ -15,6 +15,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -33,6 +34,8 @@ import org.hibernate.type.SqlTypes;
  */
 @Entity
 @Getter
+// 사후 판정이 자기가 건드리지 않은 열(본인 응답 등)까지 되돌려 쓰지 않도록 바뀐 열만 UPDATE한다.
+@DynamicUpdate
 @Table(
     name = "incident",
     uniqueConstraints = {
@@ -143,24 +146,12 @@ public class Incident extends BaseTimeEntity {
     }
 
     /**
-     * 본인 응답을 남긴다(LLD-0054 5.2).
+     * 본인 응답은 이 자리에서 고치지 않는다(LLD-0054 5.2).
      *
-     * <p>마감 뒤 늦게 온 {@code OK}는 응답만 적고 상태는 {@code ESCALATED}로 둔다. 보호자에게 이미
-     * 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림이 왜 갔는지 설명할 자료가 없어진다.
+     * <p>읽고 고쳐 저장하면 그 사이에 무응답 스케줄러가 올린 {@code ESCALATED}를 덮는다. 그래서
+     * 응답 저장은 {@code IncidentRepository.respond}의 조건부 UPDATE 한 문장이 맡고, 마감을 넘겼는지도
+     * 그 문장이 행을 보고 정한다. 응답 규칙을 여기에도 두면 두 벌이 갈라진다.
      */
-    public void respond(IncidentResponseValue response, ResponseVia responseVia, long respondedAtMs) {
-        this.response = response;
-        this.responseVia = responseVia;
-        this.respondedAtMs = respondedAtMs;
-        if (response == IncidentResponseValue.HELP) {
-            this.state = IncidentState.ESCALATED;
-            return;
-        }
-        if (this.state == IncidentState.ESCALATED) {
-            return;
-        }
-        this.state = IncidentState.OK_CLOSED;
-    }
 
     /** 보호자의 사후 판정. 라벨은 한 번만 붙이고 덮어쓰지 않는다(LLD-0054 5.4). */
     public void resolve(IncidentOutcome outcome, Long resolvedBy, long resolvedAtMs, Long emergencyCalledAtMs) {

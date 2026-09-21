@@ -92,7 +92,8 @@
 - 열기는 `HeartRateBatchService`(심박 `HR_ANOMALY`)와 `FallAssessmentService`(낙상 `FALL_SUSPECTED`)의 판정 저장 직후다. 둘 다 `try/catch`라 **사건을 못 열어도 심박 저장·보호자 알림은 그대로 간다**
 - 여는 즉시 시니어 본인에게 확인 푸시(`FcmCategory.INCIDENT_SELF_CHECK`, `scheme=widyu://incident/{incidentRef}`)를 보내고 상태를 `CHECKING`으로 둔다. 제목·본문에 건강값을 담지 않는다
 - **무응답은 서버가 판정한다**(`respond_by_ms = opened_at_ms + 45초`, `sensor.incident.self-check-sec`). `IncidentTimeoutScheduler`가 `sensor.incident.timeout-poll-ms`마다 벌크 UPDATE 한 문장으로 `ESCALATED`로 올린다. 여기서 보호자에게 다시 알리지 않는다 — 판정 시점에 이미 나갔다
-- **마감 뒤 늦게 온 `OK`는 응답만 남기고 상태를 되돌리지 않는다**. 보호자에게 이미 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림을 설명할 자료가 없어진다
+- **마감을 넘긴 `OK`는 응답만 남기고 상태는 `ESCALATED`다**. 스케줄러가 아직 돌지 않아 상태가 `CHECKING`이어도 마찬가지다 — `OK_CLOSED`로 적으면 무응답이던 사건이 정상 종료로 둔갑하고 그 뒤 스케줄러 대상에서도 빠진다. 보호자에게 이미 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림을 설명할 자료가 없어진다
+- **응답 저장은 `IncidentRepository.respond`의 조건부 UPDATE 한 문장**이다(`response is null`·`state <> RESOLVED` 조건, 갱신 0건이면 409). 읽고 고쳐 저장하면 스케줄러의 벌크 `ESCALATED`와 경합해 stale 상태가 덮는다. 사후 판정처럼 남은 읽고-고치기 경로는 엔티티의 `@DynamicUpdate`가 자기가 건드리지 않은 열을 되돌려 쓰지 않게 막는다
 - API 4개: 시니어 응답(`POST /api/v1/incidents/{incidentId}/response`)·보호자 사후 판정(`.../outcome`)·가족 조회(`GET /api/v1/incidents?seniorId=&state=`, `@ValidateFamilyAccess`)·본인 대기 목록(`GET /api/v1/incidents/mine/pending`). 시니어 API는 본인 사건이 아니면 **404**(존재를 드러내지 않는다), 사후 판정은 서비스에서 `FamilyAccessService.verifyFamilyAccess`를 부른다
 - **119는 서버가 신고하지 않는다**. 보호자가 신고 시각을 입력하고 서버는 그 사실만 적는다
 - 응답 DTO에 bpm·판정 사유·좌표를 싣지 않고 로그에는 식별자와 건수만 남긴다
