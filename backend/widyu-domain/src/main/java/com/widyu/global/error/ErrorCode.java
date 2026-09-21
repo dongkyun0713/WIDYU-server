@@ -151,6 +151,12 @@ public enum ErrorCode {
     CONSENT_KEY_INVALID(HttpStatus.BAD_REQUEST, "CONSENT_4000", "알 수 없는 동의 항목입니다."),
     CONSENT_REQUEST_EMPTY(HttpStatus.BAD_REQUEST, "CONSENT_4001", "동의 항목이 비어 있습니다."),
 
+    // 인시던트 관련
+    INCIDENT_REQUEST_INVALID(HttpStatus.BAD_REQUEST, "INCIDENT_4000", "인시던트 요청 값이 올바르지 않습니다."),
+    INCIDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "INCIDENT_4040", "인시던트를 찾을 수 없습니다."),
+    INCIDENT_ALREADY_ANSWERED(HttpStatus.CONFLICT, "INCIDENT_4090", "이미 응답한 인시던트입니다."),
+    INCIDENT_ALREADY_RESOLVED(HttpStatus.CONFLICT, "INCIDENT_4091", "이미 사후 판정이 끝난 인시던트입니다."),
+
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
     FILE_IS_EMPTY(HttpStatus.BAD_REQUEST, "FILE_4000", "파일이 비어있습니다."),
