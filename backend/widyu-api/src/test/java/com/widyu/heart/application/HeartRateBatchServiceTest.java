@@ -178,6 +178,25 @@ class HeartRateBatchServiceTest {
     }
 
     @Test
+    @DisplayName("회차가 없는 배치는 입력 부족이어도 연구 판정 보류를 남기지 않는다")
+    void 회차가_없는_배치는_입력_부족이어도_연구_판정_보류를_남기지_않는다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+
+        // when
+        service().storeAndAssess(
+                member, BATCH_ID, null, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
+                System.currentTimeMillis());
+
+        // then
+        then(decisionRecordPersistenceService).should(never()).save(any());
+        then(heartRatePersistenceService).should().saveBatchSample(
+                eq(member), eq(0), any(), eq(HeartRateStatus.UNKNOWN), eq(false),
+                eq("UNRELIABLE"), eq(BATCH_ID), isNull());
+    }
+
+    @Test
     @DisplayName("위급으로 판정하면 판정 행 하나에 필수 필드와 심박 근거가 남는다")
     void 위급으로_판정하면_판정_행_하나에_필수_필드와_심박_근거가_남는다() {
         // given
@@ -213,6 +232,27 @@ class HeartRateBatchServiceTest {
         assertThat(saved.getHrMeasuredAtMs()).isEqualTo(FIRST_TS_MS);
         assertThat(saved.getHrAccuracy()).isEqualTo("HIGH");
         assertThat(saved.getReason()).isEqualTo(REASON);
+    }
+
+    @Test
+    @DisplayName("회차가 없는 배치는 위급이어도 연구 판정 행을 남기지 않는다")
+    void 회차가_없는_배치는_위급이어도_연구_판정_행을_남기지_않는다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+        given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", REASON));
+
+        // when
+        service().storeAndAssess(
+                member, BATCH_ID, null, List.of(sample(185, FIRST_TS_MS, "HIGH")),
+                System.currentTimeMillis());
+
+        // then
+        then(decisionRecordPersistenceService).should(never()).save(any());
+        then(heartRatePersistenceService).should().saveBatchSample(
+                eq(member), eq(185), any(), eq(HeartRateStatus.EMERGENCY), eq(true),
+                eq("HIGH"), eq(BATCH_ID), isNull());
     }
 
     @Test

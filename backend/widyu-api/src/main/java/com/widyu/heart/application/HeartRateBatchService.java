@@ -147,6 +147,9 @@ public class HeartRateBatchService {
             meterRegistry.counter("heart.decision", "output", NO_ALERT).increment();
             return null;
         }
+        if (runId == null) {
+            return null;
+        }
         try {
             return alertRecord(member, batchId, runId, sample, detected, serverReceivedAtMs);
         } catch (Exception e) {
@@ -196,7 +199,7 @@ public class HeartRateBatchService {
     private void recordAbstain(
             Member member, String batchId, String runId, List<HeartRateBatchRequest.Sample> samples,
             int assessableCount, int aiTargetCount, boolean aiCalled, long serverReceivedAtMs) {
-        if (assessableCount == 0 || aiTargetCount > 0 || aiCalled) {
+        if (runId == null || assessableCount == 0 || aiTargetCount > 0 || aiCalled) {
             return;
         }
         List<HeartRateBatchRequest.Sample> sorted = sortedByMeasuredTime(samples);
