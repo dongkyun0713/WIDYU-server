@@ -147,6 +147,10 @@ public enum ErrorCode {
     RUN_NOT_CLOSED(HttpStatus.BAD_REQUEST, "RUN_4003", "닫힌 측정회차만 내보낼 수 있습니다."),
     RUN_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4042", "내보내기 작업을 찾을 수 없습니다."),
 
+    // 인앱 동의 관련
+    CONSENT_KEY_INVALID(HttpStatus.BAD_REQUEST, "CONSENT_4000", "알 수 없는 동의 항목입니다."),
+    CONSENT_REQUEST_EMPTY(HttpStatus.BAD_REQUEST, "CONSENT_4001", "동의 항목이 비어 있습니다."),
+
     // 인시던트 관련
     INCIDENT_REQUEST_INVALID(HttpStatus.BAD_REQUEST, "INCIDENT_4000", "인시던트 요청 값이 올바르지 않습니다."),
     INCIDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "INCIDENT_4040", "인시던트를 찾을 수 없습니다."),

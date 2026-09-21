@@ -504,6 +504,25 @@ erDiagram
         String decisionId "nullable. 이 알림을 낳은 판정 (LLD-0053)"
     }
 
+    ConsentRecord {
+        Long consent_record_id PK
+        Long member_id FK
+        ConsentKey consentKey "인앱 동의 항목 6종"
+        String version "앱이 보여 준 동의문 판. 철회 행은 직전 판 복사"
+        boolean granted "false = 철회 또는 미동의"
+        LocalDateTime recordedAt "서버 시각. 행이 불변이라 updated_at 없음"
+        ConsentSource source "APP / ADMIN (지금은 APP만)"
+    }
+
+    LocationAccessLog {
+        Long location_access_log_id PK
+        Long viewer_member_id FK "위치를 본 보호자"
+        Long senior_member_id FK "위치가 조회된 시니어"
+        LocationAccessPath path "REST_LAST / REST_TRAIL / REST_FAMILY / WS_SUBSCRIBE / HOME_OUTING"
+        LocalDateTime accessedAt "서버 시각. 행이 불변이라 updated_at 없음"
+        LocalDateTime notifiedAt "통보 FCM enqueue 시각. NULL이면 미통보"
+    }
+
     MemberNotificationSetting {
         Long id PK
         Long member_id FK
@@ -565,6 +584,8 @@ erDiagram
     Member ||--o{ Payment : "결제"
     Member ||--o{ MemberFcmToken : "FCM 토큰"
     Member ||--o{ MemberNotificationSetting : "알림 설정"
+    Member ||--o{ ConsentRecord : "인앱 동의 기록 (추가 전용)"
+    Member ||--o{ LocationAccessLog : "위치 열람 주체·대상"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
     Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
@@ -622,12 +643,14 @@ erDiagram
 | `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
+| `ConsentKey` | `PRIVACY_PERSONAL`, `PRIVACY_HEALTH`, `LOCATION`, `GUARDIAN_LOCATION_PROVIDE`, `LOCATION_NOTICE_BATCHED`, `RETENTION_NOTICE` |
+| `ConsentSource` | `APP`, `ADMIN` |
 | `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED` |
 | `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
 | `IncidentResponseValue` | `OK`, `HELP` |
 | `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
 | `ResponseVia` | `WATCH`, `PHONE` |
-| `FcmCategory` | `ALL`, `ALBUM`, `TARGET`, `HEALTH_SCHEDULE`, `WALK`, `MEDICINE_SCHEDULE`, `HEART_MESSAGE`, `SAFE_ZONE`, `INCIDENT_SELF_CHECK`, `ETC` |
+| `FcmCategory` | `ALL`, `ALBUM`, `TARGET`, `HEALTH_SCHEDULE`, `WALK`, `MEDICINE_SCHEDULE`, `HEART_MESSAGE`, `SAFE_ZONE`, `INCIDENT_SELF_CHECK`, `LOCATION_NOTICE`, `ETC` |
 
 ## 주요 인덱스
 
@@ -677,6 +700,9 @@ erDiagram
 | `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
+| `consent_record` | `idx_consent_record_member_key_time` | `(member_id, consent_key, recorded_at)` | 항목별 최신 행 조회. UK를 두지 않는다 — 같은 항목에 행이 여러 개인 것이 이력이다 (LLD-0055) |
+| `location_access_log` | `idx_location_access_log_senior_time` | `(senior_member_id, accessed_at)` | 시니어가 자기 열람 기록을 기간으로 조회 (LLD-0056) |
+| `location_access_log` | `idx_location_access_log_senior_notified` | `(senior_member_id, notified_at)` | 즉시 통보 쿨다운 판단과 다이제스트 대상(`notified_at IS NULL`) 조회 (LLD-0056) |
 
 ## 도메인별 조회 기준
 
@@ -692,10 +718,18 @@ erDiagram
 - Redis `senior_location:{seniorId}` 키로 저장, TTL 5분
 - WebSocket 연결 시 실시간 업데이트, 구독 해제 시 자연 만료
 
+### 위치 열람 기록 (LocationAccessLog)
+- 보호자 읽기 경로 5곳에서 추가 전용으로 쌓는다. 좌표는 담지 않는다
+- 시니어 조회: `senior_member_id` + `accessed_at` 기간, `accessed_at DESC` 페이지
+- 통보 대상: `notified_at IS NULL` 전체를 시니어별로 묶어 하루 한 번 요약
+
 ## 스키마 마이그레이션 이력
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
+| 2026-09-21 | `location_access_log` | 신규 테이블 (LLD-0056). 위치 열람 주체·대상·경로·통보 시각 | `scripts/mysql/create_location_access_log.sql` |
+| 2026-09-21 | `fcm_notification`·`member_notification_setting` | `fcm_category`에 `LOCATION_NOTICE` 추가 (LLD-0056). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_location_notice.sql` |
 | 2026-09-21 | `incident` | 신규 테이블 (LLD-0054). 위급 알림 뒤의 본인확인·무응답 판정·사후 판정 | `scripts/mysql/create_incident.sql` |
 | 2026-09-21 | `fcm_notification`·`fcm_outbox` | `fcm_category`에 `INCIDENT_SELF_CHECK` 추가 (LLD-0054). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_incident_self_check.sql` |
 | 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
