@@ -48,6 +48,9 @@ public class FcmOutbox extends BaseTimeEntity {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
     private LocalDateTime leaseUntil;
+    /** 이 알림을 낳은 판정(LLD-0053 5.2). 완료 지점이 도달 사실을 채울 때만 읽는다. 인덱스는 두지 않는다. */
+    @Column(name = "decision_id", length = 40)
+    private String decisionId;
 
     public boolean claim(LocalDateTime now, Duration lease, int maxRetries) {
         if (state != State.PENDING && state != State.CLAIMED) {

@@ -464,7 +464,7 @@ class HeartRateServiceTest {
         given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
         given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
         given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
-                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false));
+                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", null));
         given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.NORMAL, false))
                 .willReturn(savedResult);
 
@@ -514,7 +514,7 @@ class HeartRateServiceTest {
         given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
         given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
         given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
-                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true));
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
         given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
                 .willReturn(savedResult);
 

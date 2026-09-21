@@ -318,6 +318,22 @@ class FcmOutboxIntegrationTest {
         assertThat(outbox.findById(id).orElseThrow().getState()).isEqualTo(FcmOutbox.State.EXPIRED);
     }
 
+    @Test
+    @DisplayName("판정에서 나온 알림을 넣으면 outbox 행이 그 판정을 들고 있다")
+    void 판정에서_나온_알림을_넣으면_outbox_행이_그_판정을_들고_있다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = new FcmSendDto(
+                "제목", "본문", FcmCategory.HEART_MESSAGE, "", null, true, member, java.util.Map.of(), "dec-01");
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        // 완료 지점은 행 자신이 가진 값만 읽는다(LLD-0053 5.2).
+        assertThat(outbox.findAll().getFirst().getDecisionId()).isEqualTo("dec-01");
+    }
+
     private Long queued() {
         service.enqueue(memberWithToken(), message());
         return outbox.findAll().getFirst().getId();

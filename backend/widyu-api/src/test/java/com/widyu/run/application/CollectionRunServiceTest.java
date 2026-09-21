@@ -49,6 +49,8 @@ class CollectionRunServiceTest {
     private static final String RUN_ID = "run-0f3a";
     private static final String DEVICE_ID = "gw-3f2a";
     private static final long STARTED_AT_MS = 1_760_000_000_000L;
+    private static final String PARTICIPATION_ID = "part-0f3a";
+    private static final LocalDate RESEARCH_UNTIL = LocalDate.of(2029, 3, 31);
 
     @Mock private CollectionRunRepository collectionRunRepository;
     @Mock private CollectionRunOpenCommandService collectionRunOpenCommandService;
@@ -64,18 +66,20 @@ class CollectionRunServiceTest {
     @InjectMocks private CollectionRunService collectionRunService;
 
     @Test
-    @DisplayName("회차를 열면 서버가 발급한 run_id와 기기 배정이 함께 저장된다")
-    void 회차를_열면_서버가_발급한_run_id와_기기_배정이_함께_저장된다() {
+    @DisplayName("연구 회차를 열면 서버가 발급한 run_id와 기기 배정이 함께 저장된다")
+    void 연구_회차를_열면_서버가_발급한_run_id와_기기_배정이_함께_저장된다() {
         // given
         Member member = member();
         given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
-        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any())).willAnswer(i -> i.getArgument(0));
+        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any(), any()))
+                .willAnswer(i -> i.getArgument(0));
         given(runDeviceAssignmentRepository.existsByDeviceIdAndUnassignedAtMsIsNullAndRun_Status(
                 DEVICE_ID, CollectionRunStatus.OPEN)).willReturn(false);
         CollectionRunOpenRequest request = CollectionRunOpenRequest.of(
-                MEMBER_ID, "STUDY-2026", "P-001", "PROTO-A", "v1", null, STARTED_AT_MS, null,
+                MEMBER_ID, "무시되는-연구-ID", PARTICIPATION_ID, "PROTO-A", "무시되는-동의판", null,
+                STARTED_AT_MS, null,
                 List.of(DeviceAssignRequest.of(DEVICE_ID, "watch", "LEFT_WRIST", null)));
 
         // when
@@ -83,17 +87,24 @@ class CollectionRunServiceTest {
 
         // then
         ArgumentCaptor<CollectionRun> savedRun = ArgumentCaptor.forClass(CollectionRun.class);
-        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any());
+        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any(), any());
         CollectionRun run = savedRun.getValue();
         assertThat(run.getRunId()).startsWith("run-").hasSize(36);
         assertThat(run.getStatus()).isEqualTo(CollectionRunStatus.OPEN);
         // 수집 모드 기본값은 research다.
         assertThat(run.getCollectionMode()).isEqualTo("research");
         assertThat(run.getStartedAtMs()).isEqualTo(STARTED_AT_MS);
-        assertThat(run.getStudyId()).isEqualTo("STUDY-2026");
+        // 연구 회차는 요청의 연구 메타데이터를 옮겨 적지 않는다. 정본은 참여 기록이다.
+        assertThat(run.getStudyId()).isNull();
+        assertThat(run.getConsentVersion()).isNull();
+        // 참여 기록 FK는 저장 트랜잭션 안에서 잠금 재검증한 뒤 붙으므로 식별자를 넘긴다.
+        ArgumentCaptor<String> handedParticipationId = ArgumentCaptor.forClass(String.class);
+        then(collectionRunOpenCommandService).should()
+                .open(any(), any(), handedParticipationId.capture());
+        assertThat(handedParticipationId.getValue()).isEqualTo(PARTICIPATION_ID);
 
         ArgumentCaptor<List<RunDeviceAssignment>> savedAssignments = ArgumentCaptor.forClass(List.class);
-        then(collectionRunOpenCommandService).should().open(any(), savedAssignments.capture());
+        then(collectionRunOpenCommandService).should().open(any(), savedAssignments.capture(), any());
         RunDeviceAssignment assignment = savedAssignments.getValue().get(0);
         assertThat(assignment.getAssignmentId()).startsWith("asg-").hasSize(36);
         assertThat(assignment.getDeviceId()).isEqualTo(DEVICE_ID);
@@ -115,7 +126,7 @@ class CollectionRunServiceTest {
         assertThatThrownBy(() -> collectionRunService.open(openRequest(null, List.of())))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_ALREADY_OPEN);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
     }
 
     @Test
@@ -133,7 +144,7 @@ class CollectionRunServiceTest {
                 List.of(DeviceAssignRequest.of(DEVICE_ID, "watch", null, null)))))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_DEVICE_ALREADY_ASSIGNED);
-        then(collectionRunOpenCommandService).should(never()).open(any(), any());
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
     }
 
     @Test
@@ -144,7 +155,7 @@ class CollectionRunServiceTest {
         given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
                 .willReturn(false);
         willThrow(new DataIntegrityViolationException("device_id"))
-                .given(collectionRunOpenCommandService).open(any(CollectionRun.class), any());
+                .given(collectionRunOpenCommandService).open(any(CollectionRun.class), any(), any());
         given(collectionRunConflictLookupService.hasOpenRun(MEMBER_ID)).willReturn(false);
         given(collectionRunConflictLookupService.hasActiveDevice(DEVICE_ID)).willReturn(true);
 
@@ -188,6 +199,52 @@ class CollectionRunServiceTest {
         assertThatThrownBy(() -> collectionRunService.open(openRequest(retention, List.of())))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_RETENTION_INVALID);
+    }
+
+    @Test
+    @DisplayName("연구 회차를 참여 식별자 없이 열면 예외가 발생한다")
+    void 연구_회차를_참여_식별자_없이_열면_예외가_발생한다() {
+        // given
+        given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member()));
+        given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
+                .willReturn(false);
+        CollectionRunOpenRequest request = CollectionRunOpenRequest.of(
+                MEMBER_ID, "STUDY-2026", null, null, null, "research", STARTED_AT_MS, null, List.of());
+
+        // when & then
+        assertThatThrownBy(() -> collectionRunService.open(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_RESEARCH_PARTICIPATION_REQUIRED);
+        then(collectionRunOpenCommandService).should(never()).open(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("일반 수집 회차는 참여 기록 없이 요청한 보존 정보로 연다")
+    void 일반_수집_회차는_참여_기록_없이_요청한_보존_정보로_연다() {
+        // given
+        given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member()));
+        given(collectionRunRepository.existsByMemberIdAndStatus(MEMBER_ID, CollectionRunStatus.OPEN))
+                .willReturn(false);
+        given(collectionRunOpenCommandService.open(any(CollectionRun.class), any(), any()))
+                .willAnswer(i -> i.getArgument(0));
+        CollectionRunOpenRequest.RetentionRequest retention = CollectionRunOpenRequest.RetentionRequest.of(
+                "RETAIN", LocalDate.of(2027, 3, 31), LocalDate.of(2027, 3, 31), RESEARCH_UNTIL);
+
+        // when
+        collectionRunService.open(openRequest(retention, List.of()));
+
+        // then
+        ArgumentCaptor<CollectionRun> savedRun = ArgumentCaptor.forClass(CollectionRun.class);
+        then(collectionRunOpenCommandService).should().open(savedRun.capture(), any(), any());
+        CollectionRun run = savedRun.getValue();
+        assertThat(run.getCollectionMode()).isEqualTo("product");
+        assertThat(run.getParticipation()).isNull();
+        assertThat(run.getDataPolicy()).isEqualTo("RETAIN");
+        assertThat(run.getResearchUntil()).isEqualTo(RESEARCH_UNTIL);
+        ArgumentCaptor<String> handedParticipationId = ArgumentCaptor.forClass(String.class);
+        then(collectionRunOpenCommandService).should()
+                .open(any(), any(), handedParticipationId.capture());
+        assertThat(handedParticipationId.getValue()).isNull();
     }
 
     @Test
@@ -384,11 +441,13 @@ class CollectionRunServiceTest {
         return member;
     }
 
+    /** 참여 기록 없이 열 수 있는 일반 수집 회차. */
     private CollectionRunOpenRequest openRequest(
             CollectionRunOpenRequest.RetentionRequest retention, List<DeviceAssignRequest> devices) {
         return CollectionRunOpenRequest.of(
-                MEMBER_ID, null, null, null, null, null, STARTED_AT_MS, retention, devices);
+                MEMBER_ID, null, null, null, null, "product", STARTED_AT_MS, retention, devices);
     }
+
 
     private CollectionRun openRun() {
         CollectionRun run = CollectionRun.builder()

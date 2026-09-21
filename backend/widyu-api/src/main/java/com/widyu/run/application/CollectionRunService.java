@@ -46,7 +46,8 @@ public class CollectionRunService {
 
     private static final String RUN_ID_PREFIX = "run-";
     private static final String ASSIGNMENT_ID_PREFIX = "asg-";
-    private static final String DEFAULT_COLLECTION_MODE = "research";
+    private static final String RESEARCH_MODE = "research";
+    private static final String DEFAULT_COLLECTION_MODE = RESEARCH_MODE;
     private static final String DATA_POLICY_RETAIN = "RETAIN";
     private static final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
 
@@ -67,24 +68,16 @@ public class CollectionRunService {
         if (collectionRunRepository.existsByMemberIdAndStatus(member.getId(), CollectionRunStatus.OPEN)) {
             throw new BusinessException(ErrorCode.RUN_ALREADY_OPEN);
         }
-        validateRetention(request.retention());
+        String collectionMode = collectionModeOf(request);
+        String participationId = null;
+        if (RESEARCH_MODE.equals(collectionMode)) {
+            participationId = requireParticipationId(request);
+        } else {
+            validateRetention(request.retention());
+        }
 
         long startedAtMs = orNow(request.startedAtMs());
-        CollectionRun newRun = CollectionRun.builder()
-                .runId(newId(RUN_ID_PREFIX))
-                .member(member)
-                .studyId(request.studyId())
-                .participationId(request.participationId())
-                .protocolRef(request.protocolRef())
-                .consentVersion(request.consentVersion())
-                .collectionMode(collectionModeOf(request))
-                .startedAtMs(startedAtMs)
-                .status(CollectionRunStatus.OPEN)
-                .dataPolicy(dataPolicyOf(request))
-                .identifiedUntil(identifiedUntilOf(request))
-                .pseudonymizedAt(pseudonymizedAtOf(request))
-                .researchUntil(researchUntilOf(request))
-                .build();
+        CollectionRun newRun = newRun(member, request, collectionMode, startedAtMs);
         List<RunDeviceAssignment> assignments = new ArrayList<>();
         if (request.devices() != null) {
             for (DeviceAssignRequest device : request.devices()) {
@@ -94,7 +87,7 @@ public class CollectionRunService {
 
         CollectionRun run;
         try {
-            run = collectionRunOpenCommandService.open(newRun, assignments);
+            run = collectionRunOpenCommandService.open(newRun, assignments, participationId);
         } catch (DataIntegrityViolationException e) {
             // 명령 transaction은 이미 롤백됐다. 별도 snapshot에서 UK 승자 행만 409으로 바꾼다.
             if (collectionRunConflictLookupService.hasOpenRun(member.getId())) {
@@ -256,6 +249,44 @@ public class CollectionRunService {
     @Transactional(readOnly = true)
     public boolean hasOpenRun(Long memberId) {
         return collectionRunRepository.existsByMemberIdAndStatus(memberId, CollectionRunStatus.OPEN);
+    }
+
+    /** 연구 회차는 대상 회원의 ACTIVE 참여 기록 없이 열 수 없다(LLD-0052 5절). */
+    private String requireParticipationId(CollectionRunOpenRequest request) {
+        if (request.participationId() == null || request.participationId().isBlank()) {
+            throw new BusinessException(ErrorCode.RUN_RESEARCH_PARTICIPATION_REQUIRED);
+        }
+        return request.participationId();
+    }
+
+    /**
+     * 연구 회차는 참여 기록 FK만 저장한다. 연구 ID·동의 판·보관 값은 요청을 신뢰하지 않고
+     * 참여 기록에서 읽으므로 중복 컬럼을 비워 둔다(LLD-0052 5절).
+     * FK는 회차를 저장하는 트랜잭션 안에서 잠금 재검증한 뒤 붙인다.
+     */
+    private CollectionRun newRun(
+            Member member,
+            CollectionRunOpenRequest request,
+            String collectionMode,
+            long startedAtMs) {
+        CollectionRun.CollectionRunBuilder run = CollectionRun.builder()
+                .runId(newId(RUN_ID_PREFIX))
+                .member(member)
+                .protocolRef(request.protocolRef())
+                .collectionMode(collectionMode)
+                .startedAtMs(startedAtMs)
+                .status(CollectionRunStatus.OPEN);
+        if (RESEARCH_MODE.equals(collectionMode)) {
+            return run.build();
+        }
+        return run.studyId(request.studyId())
+                .participationId(request.participationId())
+                .consentVersion(request.consentVersion())
+                .dataPolicy(dataPolicyOf(request))
+                .identifiedUntil(identifiedUntilOf(request))
+                .pseudonymizedAt(pseudonymizedAtOf(request))
+                .researchUntil(researchUntilOf(request))
+                .build();
     }
 
     private void assignDevice(CollectionRun run, DeviceAssignRequest request, long defaultAssignedAtMs) {

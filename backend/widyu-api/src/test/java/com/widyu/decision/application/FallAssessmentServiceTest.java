@@ -139,7 +139,8 @@ class FallAssessmentServiceTest {
                 new SensorProperties.Export.Clock("DEVICE_MONOTONIC", "UTC_EPOCH_MS", "ANCHOR_PAIR", "TEST"),
                 "NO_DEVICE", "NO_DATA", "NOT_IMPLEMENTED");
         return new SensorProperties(
-                32768, null, export, new SensorProperties.FallAi(enabled, "/api/fall", 2, "server", "v1"));
+                32768, null, export, new SensorProperties.FallAi(enabled, "/api/fall", 2, "server", "v1"),
+                new SensorProperties.HeartAi("widyu-ai-hr", "ver7"));
     }
 
     private SensorBatch trigger() {
