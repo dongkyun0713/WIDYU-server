@@ -568,8 +568,12 @@ class RunExportAssemblerTest {
                 .respondByMs(STARTED_AT_MS + 145_000L)
                 .build();
         resolved.markChecking();
-        resolved.resolve(IncidentOutcome.TRUE_EMERGENCY, 2048L,
-                STARTED_AT_MS + 160_000L, STARTED_AT_MS + 130_000L);
+        // 사후 판정도 조건부 UPDATE가 쓰므로 저장된 행의 모습을 그대로 만든다.
+        ReflectionTestUtils.setField(resolved, "state", IncidentState.RESOLVED);
+        ReflectionTestUtils.setField(resolved, "outcome", IncidentOutcome.TRUE_EMERGENCY);
+        ReflectionTestUtils.setField(resolved, "resolvedBy", 2048L);
+        ReflectionTestUtils.setField(resolved, "resolvedAtMs", STARTED_AT_MS + 160_000L);
+        ReflectionTestUtils.setField(resolved, "emergencyCalledAtMs", STARTED_AT_MS + 130_000L);
 
         return List.of(closed, resolved);
     }

@@ -102,8 +102,14 @@ enum: `IncidentKind`, `IncidentState`, `IncidentResponseValue(OK, HELP)`, `Incid
 
 ### 5.4 사후 판정 — `resolve(guardianId, incidentRef, request)`
 1. 인시던트 조회 → `member_id`를 seniorId로 가족 접근 검증(실패 시 기존 가족 접근 오류).
-2. `state == RESOLVED` → `INCIDENT_ALREADY_RESOLVED`(409). 라벨은 덮지 않는다.
-3. `outcome`, `resolved_by=guardianId`, `resolved_at_ms=now`, `emergency_called_at_ms`(요청값, null 허용) 저장, `state=RESOLVED`.
+   **이 읽기는 권한 확인용이다.** 시니어가 누구인지 알아야 검증기를 부를 수 있어서 읽을 뿐,
+   종결 여부는 읽은 값으로 판단하지 않는다.
+2. 저장은 5.2와 같은 **조건부 UPDATE 한 문장**(`IncidentRepository.resolve`):
+   `set state='RESOLVED', outcome, resolved_by=:guardianId, resolved_at_ms=:now, emergency_called_at_ms`
+   `where incident_ref = :ref and state <> 'RESOLVED'`. 갱신 0건이면 `INCIDENT_ALREADY_RESOLVED`(409).
+3. 읽고 고쳐 저장하지 않는 이유: 보호자 둘이 같은 순간에 판정하면 둘 다 종결 전 상태를 읽고
+   나중 요청이 앞선 `outcome`·`resolved_by`를 덮는다. 라벨은 사람이 쓴 사실이라 덮어쓰면 어느
+   쪽이 실제 판단이었는지 남지 않는다(정책 1.8.1의 라벨을 지키는 자리다).
 
 ### 5.5 내보내기 — `RunExportAssembler`
 `incident` where `run_id` 정렬 `opened_at_ms` → `streams/incidents.jsonl`, 한 줄에 형식서 §3.7 필드: `incident_id`(=`incident_ref`), `run_id`, `study_id`, `participation_id`(회차에서), `kind`, `level`, `opened_at_ms`, `respond_by_ms`, `response`, `responded_at_ms`, `response_via`, `state`, `outcome`, `resolved_by`, `resolved_at_ms` + 추가 `decision_id`, `emergency_called_at_ms`. `device_id`·`_server{}` 없음. 0건이면 파일을 만들지 않고 `streams_absent`에 `reason = absent-reason-no-data`. 1건 이상이면 `streams_absent`에서 인시던트를 빼고 `manifest.files[]`에 형식서 §5 규칙대로 싣는다(형식서를 읽고 결정. 검사기 L2·I 항목이 기준).
@@ -124,7 +130,7 @@ enum: `IncidentKind`, `IncidentState`, `IncidentResponseValue(OK, HELP)`, `Incid
 - [ ] 마감 안 `OK` 응답 → `OK_CLOSED`, `HELP` → `ESCALATED`, 응답 시각·경로 저장. 두 번째 응답은 409.
 - [ ] 마감을 넘긴 `OPEN/CHECKING`은 스케줄러가 `ESCALATED`로 바꾸고, 그 뒤 온 `OK`는 응답만 저장하고 상태는 `ESCALATED`. 스케줄러가 돌기 전에 온 마감 뒤 `OK`도 `ESCALATED`다.
 - [ ] 다른 회원이 응답하면 404. 다른 가족 보호자가 사후 판정·조회하면 가족 접근 오류.
-- [ ] 사후 판정 → `RESOLVED`, `resolved_by`·`resolved_at_ms`·`emergency_called_at_ms` 저장. 두 번째는 409.
+- [ ] 사후 판정 → `RESOLVED`, `resolved_by`·`resolved_at_ms`·`emergency_called_at_ms` 저장. 두 번째는 409(조건부 UPDATE 0건)이고 첫 라벨이 그대로 남는다.
 - [ ] 응답 DTO에 bpm·사유·좌표가 없다.
 - [ ] 내보내기 통합 테스트에 인시던트 2건 → `streams/incidents.jsonl` 2줄, §3.7 필드, 검사기 L2 PASS·FAIL 0(수동, PR 본문). 0건이면 `streams_absent` 사유가 `NO_DATA_IN_THIS_RUN`.
 - [ ] `./gradlew compileJava`, `run-module-tests.sh`, `verify.sh --base` 통과.

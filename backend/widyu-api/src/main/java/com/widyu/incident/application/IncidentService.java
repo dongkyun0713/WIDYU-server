@@ -105,18 +105,28 @@ public class IncidentService {
         return IncidentState.OK_CLOSED;
     }
 
-    /** 보호자의 사후 판정(LLD-0054 5.4). 라벨을 덮어쓰지 않으려고 두 번째 판정은 막는다. */
+    /**
+     * 보호자의 사후 판정(LLD-0054 5.4). 라벨을 덮어쓰지 않으려고 두 번째 판정은 막는다.
+     *
+     * <p>사건을 읽는 것은 <b>가족 접근을 확인하려고 시니어가 누구인지 알기 위해서</b>다. 종결
+     * 여부는 읽은 값으로 판단하지 않고 UPDATE 조건이 정한다. 읽고 고쳐 저장하면 보호자 둘이 같은
+     * 순간에 판정할 때 나중 요청이 앞선 라벨을 덮는다.
+     */
     @Transactional
     public IncidentResponse resolve(Long guardianId, String incidentRef, IncidentResolveRequest request) {
         Incident incident = incidentRepository.findByIncidentRef(incidentRef)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
         familyAccessService.verifyFamilyAccess(guardianId, incident.getMemberId());
-        if (incident.getState() == IncidentState.RESOLVED) {
+
+        int updated = incidentRepository.resolve(incidentRef, request.outcome(), guardianId,
+                System.currentTimeMillis(), request.emergencyCalledAtMs());
+        if (updated == 0) {
             throw new BusinessException(ErrorCode.INCIDENT_ALREADY_RESOLVED);
         }
-        incident.resolve(request.outcome(), guardianId, System.currentTimeMillis(), request.emergencyCalledAtMs());
+        Incident resolved = incidentRepository.findByIncidentRef(incidentRef)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
         log.info("인시던트 사후 판정: guardianId={}, incidentRef={}", guardianId, incidentRef);
-        return IncidentResponse.from(incident);
+        return IncidentResponse.from(resolved);
     }
 
     /** 가족 접근 검증은 컨트롤러의 {@code @ValidateFamilyAccess}가 먼저 한다(ADR-0002). */

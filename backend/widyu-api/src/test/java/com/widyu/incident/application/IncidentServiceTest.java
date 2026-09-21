@@ -187,11 +187,12 @@ class IncidentServiceTest {
     }
 
     @Test
-    @DisplayName("보호자가 사후 판정을 넣으면 판정자와 119 신고 시각이 남고 사건이 종결된다")
+    @DisplayName("보호자가 사후 판정을 넣으면 판정자와 119 신고 시각과 함께 저장을 요청한다")
     void 보호자가_사후_판정을_넣으면_사건이_종결된다() {
         // given
-        Incident incident = escalatedIncident();
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF))
+                .willReturn(Optional.of(escalatedIncident()), Optional.of(resolvedIncident()));
+        givenResolveUpdates(1);
         long calledAtMs = OPENED_AT_MS + 120_000L;
 
         // when
@@ -199,21 +200,40 @@ class IncidentServiceTest {
                 new IncidentResolveRequest(IncidentOutcome.TRUE_EMERGENCY, calledAtMs));
 
         // then
+        // 사건을 읽는 것은 시니어가 누구인지 알아 가족 접근을 확인하기 위해서다.
+        then(familyAccessService).should().verifyFamilyAccess(GUARDIAN_ID, SENIOR_ID);
+        then(incidentRepository).should().resolve(eq(INCIDENT_REF), eq(IncidentOutcome.TRUE_EMERGENCY),
+                eq(GUARDIAN_ID), anyLong(), eq(calledAtMs));
         assertThat(response.state()).isEqualTo(IncidentState.RESOLVED);
         assertThat(response.outcome()).isEqualTo(IncidentOutcome.TRUE_EMERGENCY);
         assertThat(response.resolvedBy()).isEqualTo(GUARDIAN_ID);
-        assertThat(response.resolvedAtMs()).isNotNull();
-        assertThat(response.emergencyCalledAtMs()).isEqualTo(calledAtMs);
-        then(familyAccessService).should().verifyFamilyAccess(GUARDIAN_ID, SENIOR_ID);
     }
 
     @Test
-    @DisplayName("이미 판정한 사건을 다시 판정하면 예외가 발생한다")
+    @DisplayName("판정 시각은 서버 시각으로 넘긴다")
+    void 판정_시각은_서버_시각으로_넘긴다() {
+        // given
+        long before = System.currentTimeMillis();
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF))
+                .willReturn(Optional.of(escalatedIncident()), Optional.of(resolvedIncident()));
+        givenResolveUpdates(1);
+
+        // when
+        service().resolve(GUARDIAN_ID, INCIDENT_REF,
+                new IncidentResolveRequest(IncidentOutcome.FALSE_ALARM, null));
+
+        // then
+        ArgumentCaptor<Long> resolvedAtMs = ArgumentCaptor.forClass(Long.class);
+        then(incidentRepository).should().resolve(any(), any(), any(), resolvedAtMs.capture(), any());
+        assertThat(resolvedAtMs.getValue()).isBetween(before, System.currentTimeMillis());
+    }
+
+    @Test
+    @DisplayName("이미 판정한 사건이라 갱신된 행이 없으면 예외가 발생한다")
     void 이미_판정한_사건을_다시_판정하면_예외가_발생한다() {
         // given
-        Incident incident = escalatedIncident();
-        incident.resolve(IncidentOutcome.FALSE_ALARM, GUARDIAN_ID, OPENED_AT_MS + 60_000L, null);
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(resolvedIncident()));
+        givenResolveUpdates(0);
         IncidentService service = service();
         IncidentResolveRequest request = new IncidentResolveRequest(IncidentOutcome.TRUE_EMERGENCY, null);
 
@@ -238,6 +258,7 @@ class IncidentServiceTest {
         assertThatThrownBy(() -> service.resolve(GUARDIAN_ID, INCIDENT_REF, request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        then(incidentRepository).should(never()).resolve(any(), any(), any(), anyLong(), any());
     }
 
     @Test
@@ -286,6 +307,21 @@ class IncidentServiceTest {
         return new IncidentService(incidentRepository, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(45, 5000L)));
+    }
+
+    private void givenResolveUpdates(int updated) {
+        given(incidentRepository.resolve(any(), any(), any(), anyLong(), any())).willReturn(updated);
+    }
+
+    /** 조건부 UPDATE가 쓴 뒤 다시 읽은 행. */
+    private Incident resolvedIncident() {
+        Incident incident = escalatedIncident();
+        ReflectionTestUtils.setField(incident, "state", IncidentState.RESOLVED);
+        ReflectionTestUtils.setField(incident, "outcome", IncidentOutcome.TRUE_EMERGENCY);
+        ReflectionTestUtils.setField(incident, "resolvedBy", GUARDIAN_ID);
+        ReflectionTestUtils.setField(incident, "resolvedAtMs", OPENED_AT_MS + 160_000L);
+        ReflectionTestUtils.setField(incident, "emergencyCalledAtMs", OPENED_AT_MS + 120_000L);
+        return incident;
     }
 
     private void givenRespondUpdates(int updated) {

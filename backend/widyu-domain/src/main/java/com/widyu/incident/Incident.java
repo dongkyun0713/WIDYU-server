@@ -153,12 +153,10 @@ public class Incident extends BaseTimeEntity {
      * 그 문장이 행을 보고 정한다. 응답 규칙을 여기에도 두면 두 벌이 갈라진다.
      */
 
-    /** 보호자의 사후 판정. 라벨은 한 번만 붙이고 덮어쓰지 않는다(LLD-0054 5.4). */
-    public void resolve(IncidentOutcome outcome, Long resolvedBy, long resolvedAtMs, Long emergencyCalledAtMs) {
-        this.outcome = outcome;
-        this.resolvedBy = resolvedBy;
-        this.resolvedAtMs = resolvedAtMs;
-        this.emergencyCalledAtMs = emergencyCalledAtMs;
-        this.state = IncidentState.RESOLVED;
-    }
+    /**
+     * 사후 판정도 이 자리에서 고치지 않는다(LLD-0054 5.4).
+     *
+     * <p>본인 응답과 같은 이유다. 읽고 고쳐 저장하면 보호자 둘이 같은 순간에 판정할 때 나중
+     * 요청이 앞선 라벨과 판정자를 덮는다. {@code IncidentRepository.resolve}의 조건부 UPDATE가 맡는다.
+     */
 }

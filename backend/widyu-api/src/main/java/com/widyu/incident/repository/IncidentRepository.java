@@ -1,6 +1,7 @@
 package com.widyu.incident.repository;
 
 import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
@@ -64,6 +65,33 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             @Param("responseVia") ResponseVia responseVia,
             @Param("respondedAtMs") long respondedAtMs,
             @Param("answeredState") IncidentState answeredState);
+
+    /**
+     * 보호자의 사후 판정을 한 문장으로 저장한다(LLD-0054 5.4).
+     *
+     * <p>읽고 고쳐 저장하면 보호자 둘이 같은 순간에 판정할 때 둘 다 종결 전 상태를 읽고 나중
+     * 요청이 앞선 라벨과 판정자를 덮는다. 라벨은 사람이 쓴 사실이라 덮어쓰면 어느 쪽이 실제
+     * 판단이었는지 남지 않는다. 조건을 같은 UPDATE에 두면 한 쪽만 성공한다.
+     *
+     * @return 1이면 저장, 0이면 이미 사후 판정이 끝난 사건이다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.state = com.widyu.incident.IncidentState.RESOLVED,
+                   i.outcome = :outcome,
+                   i.resolvedBy = :resolvedBy,
+                   i.resolvedAtMs = :resolvedAtMs,
+                   i.emergencyCalledAtMs = :emergencyCalledAtMs
+             WHERE i.incidentRef = :incidentRef
+               AND i.state <> com.widyu.incident.IncidentState.RESOLVED
+            """)
+    int resolve(
+            @Param("incidentRef") String incidentRef,
+            @Param("outcome") IncidentOutcome outcome,
+            @Param("resolvedBy") Long resolvedBy,
+            @Param("resolvedAtMs") long resolvedAtMs,
+            @Param("emergencyCalledAtMs") Long emergencyCalledAtMs);
 
     /**
      * 마감을 넘긴 미응답 사건을 한 문장으로 올린다(ADR-0035 결정 5).

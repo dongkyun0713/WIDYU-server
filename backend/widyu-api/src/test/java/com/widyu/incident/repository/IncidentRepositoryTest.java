@@ -6,6 +6,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
+import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
@@ -123,6 +124,47 @@ class IncidentRepositoryTest {
         // then
         assertThat(updated).isZero();
         assertThat(incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getResponse()).isNull();
+    }
+
+    @Test
+    @DisplayName("사후 판정을 넣으면 라벨과 판정자와 119 신고 시각이 함께 남는다")
+    void 사후_판정을_넣으면_라벨과_판정자와_119_신고_시각이_함께_남는다() {
+        // given
+        incidentRepository.save(checkingIncident());
+
+        // when
+        int updated = incidentRepository.resolve(INCIDENT_REF, IncidentOutcome.TRUE_EMERGENCY,
+                OTHER_ID, RESPOND_BY_MS + 120_000L, RESPOND_BY_MS + 60_000L);
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        Incident found = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.RESOLVED);
+        assertThat(found.getOutcome()).isEqualTo(IncidentOutcome.TRUE_EMERGENCY);
+        assertThat(found.getResolvedBy()).isEqualTo(OTHER_ID);
+        assertThat(found.getResolvedAtMs()).isEqualTo(RESPOND_BY_MS + 120_000L);
+        assertThat(found.getEmergencyCalledAtMs()).isEqualTo(RESPOND_BY_MS + 60_000L);
+    }
+
+    @Test
+    @DisplayName("이미 판정한 사건을 다시 판정하면 아무 행도 바뀌지 않고 첫 라벨이 남는다")
+    void 이미_판정한_사건을_다시_판정하면_첫_라벨이_남는다() {
+        // given
+        incidentRepository.save(checkingIncident());
+        incidentRepository.resolve(INCIDENT_REF, IncidentOutcome.TRUE_EMERGENCY,
+                OTHER_ID, RESPOND_BY_MS + 120_000L, RESPOND_BY_MS + 60_000L);
+
+        // when
+        int updated = incidentRepository.resolve(INCIDENT_REF, IncidentOutcome.FALSE_ALARM,
+                SENIOR_ID, RESPOND_BY_MS + 300_000L, null);
+
+        // then
+        // 라벨은 사람이 쓴 사실이다. 덮어쓰면 어느 쪽이 실제 판단이었는지 남지 않는다.
+        assertThat(updated).isZero();
+        Incident found = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow();
+        assertThat(found.getOutcome()).isEqualTo(IncidentOutcome.TRUE_EMERGENCY);
+        assertThat(found.getResolvedBy()).isEqualTo(OTHER_ID);
+        assertThat(found.getEmergencyCalledAtMs()).isEqualTo(RESPOND_BY_MS + 60_000L);
     }
 
     @Test
