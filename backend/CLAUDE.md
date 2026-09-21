@@ -43,7 +43,7 @@
 ### `heart` — 심박수 (독립 도메인)
 - 심박 측정값 1건을 1초마다 수신 → AI(`POST /api/hr`) 1회 호출 → 즉시 판정·저장
 - `alert=true`인 EMERGENCY 시 `HeartRateEmergency` 기록 + 보호자 FCM
-- **AI 응답 중 `alert`·`level`만 사용**. `reason`(서맥·빈맥 등 사유)·`layer`(L0 고정임계값/L1 개인기준선)·`baseline_source`는 폐기 — 개인화는 `context=REST`에서만 동작
+- **AI 응답 중 `alert`·`level`을 판정에 쓰고 `reason`(서맥·빈맥 등 사유)은 받되 판정 기록 행에만 넣는다**. `layer`(L0 고정임계값/L1 개인기준선)·`baseline_source`는 계속 받지 않는다 — 개인화는 `context=REST`에서만 동작 → ADR-0035 결정 2
 - REST(`HeartRateController`) + WebSocket(`HeartRateWebSocketController`) 이중 지원
   - 시니어 전송: `/app/heart-rate/send-single`(1건)
   - 보호자 구독 `/topic/heart-rate/{memberId}` / ACK `/user/queue/heart-rate/result`
@@ -56,7 +56,8 @@
 - 수신한 단건 심박은 AI 판정 후 즉시 최신값에 반영한다.
 - `heart_rate_event`는 자동 삭제하지 않는다(#650). 보존 기간은 법률 검토 뒤 ADR로 정한다.
 - AI: Docker `ryuchanghoon/widyu-ai-ver7:latest` port 5000, multi-arch. → LLD-0010·0019·0020, ADR-0008·0013·0014
-- **로그에 bpm 값·AI 응답 본문·판정 사유를 남기지 않는다** (#639, 정책 1.6.7·완료기준 C9-6)
+- **배치 위급 판정은 `decision_record`에 한 줄 남고 그 `decision_id`가 FCM outbox 행을 타고 흘러간다**. 전송이 성공하면 그 판정의 `alert_delivered`·`alert_at_ms`가 채워진다. 단건 경로는 판정 기록을 남기지 않아 `decision_id`가 null이다 → LLD-0053
+- **로그에 bpm 값·AI 응답 본문·판정 사유를 남기지 않는다** (#639, 정책 1.6.7·완료기준 C9-6). 사유와 심박 값이 사는 곳은 판정 기록 행뿐이다
 
 ### `sensor` — 원시 IMU 배치 (연구 수집, v2 형식)
 - 워치·폰의 가속도·자이로 배치를 **재표본화 없이** 저장. 배치 1건 = S3 객체 1개(`sensor/{memberId}/{deviceId}/{stream}/{batch_id}-{sha256}.json`) + `sensor_batch` 인덱스 행 1개 → ADR-0030 v2, LLD-0041 v2
@@ -73,10 +74,32 @@
  - `stream`으로 갈린다: `imu_watch`·`imu_phone`은 축 검증, `hr`는 심박 검증(1~60샘플·`ts_ms` 엄격 증가·`bpm 0`은 `UNRELIABLE`만·`location`/`context` 금지) 후 `HeartRateBatchService`로 넘긴다. 심박 인덱스 행은 축·충격·설정 대조가 null이고 `sample_count`를 쓴다
  - REST `POST /api/v1/sensor/batches`, WebSocket `/app/sensor/batches/send`(컨트롤러가 `Message<byte[]>`로 받아 같은 원문 바이트를 넘긴다) → ACK `/user/queue/sensor/result`의 `{batchId, seq, result}`. 검증 실패는 원문에서 `batch_id`·`seq`만 얕게 읽어 `REJECTED`, 못 읽으면 `/user/queue/errors`
 
+### `decision` — 판정 기록 (연구 수집)
+
+- 낙상과 심박이 `decision_record` 한 표를 쓴다. 정책서 1.4.2 필수 10필드 + 창·알림·인과성 필드를 한 줄에 담는다 → ADR-0033, ADR-0035, LLD-0051·0053
+- **실증 회차에 귀속된 배치에서 알림이 나간 건과 판정 못 한 건만 남긴다**. `run_id`가 없으면 연구 판정 행을 만들지 않는다. 위급(`ALERT`) 샘플마다 한 줄, 배치 안에 AI에 넘길 샘플이 하나도 없으면(`ABSTAIN_INSUFFICIENT_INPUT`) 배치당 한 줄. 정상·주의 판정은 행을 만들지 않고 `heart.decision{output=NO_ALERT}` 메트릭으로 건수만 센다. AI 호출 실패는 입력 부족이 아니라 판정기 장애라 기록하지 않는다
+- **판정 사유(`reason`)와 그때의 심박 값(`hr_*`)은 이 행에만 둔다**. 로그·응답 DTO에 넣지 않는다(정책 1.5.5·1.5.11)
+- **「알림」은 FCM 전송 성공으로 잰다**. 위급 판정의 outbox 행에 `decision_id`를 싣고 완료 지점(`FcmOutboxTransactions.finish`)에서 첫 성공을 `alert_id`·`alert_at_ms`에 적는다. 보호자가 여럿이어도 첫 성공만 남고 실패·만료면 `alert_delivered=false`로 남는다. 「구글이 받았다」는 「가족 단말에 떴다」의 근사다
+- **인과성 처리가 두 경로에서 다르다**. 낙상은 서버가 창을 정하므로 `feature_support_end_ms > input_cutoff_ms`면 설계 오류로 보고 예외를 던진다. 심박은 샘플 시각이 곧 창이라 기기 시계가 앞서면 그대로 기록하고 검사기가 신고하게 둔다
+- 판정 행 **조립** 실패와 `ABSTAIN` 저장 실패는 WARN(예외 클래스명·batchId)만 남기고 심박 저장·보호자 알림을 계속한다. `ALERT` 저장은 심박 이벤트와 한 트랜잭션이므로 실패하면 해당 샘플 전체가 롤백되고 앱 재전송으로 회복한다
+- 심박 `decider_id`·`decider_version`은 AI 응답에 없어 설정값(`sensor.heart-ai.*`)이다. AI 이미지 태그를 올릴 때 손으로 맞춘다
+
+### `study` — 실증 참여 기록 (연구 동의·보관 정책의 정본)
+
+- 한 회원의 한 번의 국내 실증 참여를 `study_participation` 한 행으로 남긴다. **실증 참여 여부와 연구 보관 정책의 정본**이며 연구 회차가 이 행을 참조한다 → LLD-0052, 지시서 B 1.5
+- 관리자 전용 `/api/v1/admin/studies/participations/**` (등록·조회·보관 계획 수정·철회·삭제 처리 기록). 이름·전화번호는 요청·응답·로그에 넣지 않는다
+- `participation_id`는 **서버 발급**(`part-` + UUID hex). 같은 `study_id + member_id`의 ACTIVE 참여는 하나만 허용한다(409)
+- **보관 날짜 셋은 전부이거나 전무다**(`identified ≤ pseudonymized ≤ research`). IRB 승인 전이라 못 정한 상태와, 일부만 정해 빠진 값이 무한 보관으로 읽히는 상태를 구분한다
+- 등록·보관 계획 수정·철회·삭제 처리는 **같은 트랜잭션에서 `study_participation_history` snapshot**을 남긴다. 현행 행을 덮어써도 과거 보관 계획과 철회 범위가 사라지지 않는다
+- 변경마다 **관리자 감사 로그**(`AdminAction.STUDY_PARTICIPATION_*`)도 남긴다. snapshot이 "무엇이 바뀌었나", 감사 로그가 "누가 바꿨나"를 답한다. detail에는 식별자만 담는다
+- 철회는 **상태만 바꾼다**. 센서 원문·심박·위치의 실제 삭제는 서버가 하지 않으며, 운영자가 수동 삭제를 마치면 `deletion-processed`로 시각만 기록한다
+
 ### `run` — 측정회차·기기 배정·마커 (연구 운영)
 - 실증은 기기를 여러 참가자가 돌려 쓴다. 회차가 「누가·어떤 기기를·어디에 차고·언제부터 언제까지」를 묶어 자료 귀속의 다리를 놓는다 → LLD-0045, 지시서 B8
 - 운영자는 **관리자 계정**으로 `/api/v1/admin/collection-runs/**`를 호출한다(`ROLE_ADMIN`, 기존 `/api/v1/admin/**` 인가 규칙)
-- **불변식**: 회원당 열린 회차 1개(409), 기기는 한 번에 한 열린 회차에만 배정(409), 닫을 때 미해제 배정을 종료 시각으로 함께 해제, `data_policy=RETAIN`이면 보존 날짜 셋 필수·`identified ≤ pseudonymized ≤ research`
+- **불변식**: 회원당 열린 회차 1개(409), 기기는 한 번에 한 열린 회차에만 배정(409), 닫을 때 미해제 배정을 종료 시각으로 함께 해제, `data_policy=RETAIN`이면 보존 날짜 셋 필수·`identified ≤ pseudonymized ≤ research`(`product` 회차 요청값 검증)
+- **연구 회차 게이트**: `collection_mode=research`(기본값)는 대상 회원의 **ACTIVE 참여 기록 없이 열 수 없다**. `participationId`가 없으면 `RUN_RESEARCH_PARTICIPATION_REQUIRED`, 회원이 다르면 `RUN_RESEARCH_PARTICIPATION_MISMATCH`, ACTIVE가 아니면 `STUDY_PARTICIPATION_NOT_ACTIVE` → LLD-0052
+- 연구 회차는 `study_participation_id` FK만 저장한다. 연구 ID·동의 판·보관 값은 **요청을 믿지 않고 참여 기록에서 읽는다**. `CollectionRun`의 해당 getter가 참여 기록을 우선 읽으므로 응답·내보내기·자료 귀속이 모두 같은 값을 본다. 회차에 남은 중복 컬럼은 `product` 회차와 이 기능 이전 회차에만 쓰이며 운영 백필 후 제거한다
 - **마커는 정답 라벨**이다. 판정 결과 기록(B 1.4)과 같은 자리에 섞지 않는다(정책 1.8.1). `marker_id`로 멱등이며 같은 id에 다른 내용이면 409. 누른 기기의 `clock`도 `ClockMappingService.register`로 같은 규칙으로 등록해 센서와 같은 시간축에 놓는다
 - **배치 귀속**: `run_id`가 오면 그대로, 없으면 `resend.original_run_id`(늦게 온 자료를 나중 참가자에게 붙이지 않기 위해), 그것도 없으면 `resolveRun(member, device, measured_at_start)`으로 열린 회차를 찾는다. 없으면 null(운영 외 자료)
 - `run_id`·`assignment_id`는 서버 발급(`run-`/`asg-` + UUID hex). 사람이 읽는 회차 번호는 `protocol_ref`

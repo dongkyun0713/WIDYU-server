@@ -45,7 +45,7 @@ public class HeartRateAnomalyDetector {
 
         logAnalysis(memberId, context, response, startedAt);
 
-        return new DetectionResult(status, emergency);
+        return new DetectionResult(status, emergency, response.level(), response.reason());
     }
 
     /**
@@ -164,7 +164,11 @@ public class HeartRateAnomalyDetector {
         return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "AI 서버가 올바르지 않은 응답을 반환했습니다.");
     }
 
-    public record DetectionResult(HeartRateStatus status, boolean emergency) {
+    /**
+     * {@code level}·{@code reason}은 판정 기록 행에만 들어간다(ADR-0035 결정 2).
+     * 로그·응답 DTO로 흘려보내지 않는다.
+     */
+    public record DetectionResult(HeartRateStatus status, boolean emergency, String level, String reason) {
     }
 
     private record AiHeartRateRequest(
@@ -192,14 +196,16 @@ public class HeartRateAnomalyDetector {
     }
 
     /**
-     * 판정에 사용하는 필드는 {@code alert}, {@code level} 뿐이고 {@code sample_count}는 로그 관측용이다.
-     * {@code layer}·{@code reason}·{@code baseline_source}는 판정 사유(개인 건강정보)라 받지 않는다(#639).
+     * 판정에 사용하는 필드는 {@code alert}, {@code level}이고 {@code sample_count}는 로그 관측용이다.
+     * {@code reason}은 판정 사유(개인 건강정보)라 <b>받되 로그에 남기지 않는다</b> — 판정 기록 행이 유일한
+     * 보관처다(#639에서 로그를 뺀 자리, ADR-0035 결정 2). {@code layer}·{@code baseline_source}는 계속 받지 않는다.
      * 영속화 범위는 LLD-0019를 따른다.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record AiHeartRateResponse(
             Boolean alert,
             String level,
+            String reason,
             @JsonProperty("sample_count") Integer sampleCount
     ) {
     }

@@ -2,6 +2,7 @@ package com.widyu.fcm;
 
 import com.widyu.global.entity.BaseTimeEntity;
 import com.widyu.member.Member;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -38,6 +39,10 @@ public class FcmNotification extends BaseTimeEntity {
     private String body;
     private boolean isRead;
     private String image;
+
+    /** 이 알림을 낳은 판정. 연구 철회 시 다른 알림을 건드리지 않고 이 행만 찾는 연결키다. */
+    @Column(name = "decision_id", length = 40)
+    private String decisionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "memberFcmToken_id", nullable = false)

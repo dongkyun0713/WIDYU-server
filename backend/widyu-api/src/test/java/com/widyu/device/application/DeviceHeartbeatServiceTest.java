@@ -115,6 +115,36 @@ class DeviceHeartbeatServiceTest {
     }
 
     @Test
+    @DisplayName("회차가 있으면 본문이 실어 보낸 연구 식별자를 무시하고 회차 값을 저장한다")
+    void 회차가_있으면_본문이_실어_보낸_연구_식별자를_무시하고_회차_값을_저장한다() {
+        // given
+        byte[] payload = heartbeatWithRun(
+                PHONE, WATCH_CONNECTED, "run-0f3a", "요청이-주장한-연구", "요청이-주장한-참여")
+                .getBytes(UTF_8);
+        CollectionRun run = CollectionRun.builder()
+                .runId("run-0f3a")
+                .member(Member.createMember(MemberType.SENIOR, "시니어", "01012345678"))
+                .studyId("STUDY-2026")
+                .participationId("part-0f3a")
+                .startedAtMs(1_760_000_000_000L)
+                .status(CollectionRunStatus.OPEN)
+                .build();
+        given(memberRepository.existsById(MEMBER_ID)).willReturn(true);
+        given(collectionRunService.requireAttributableRun("run-0f3a", MEMBER_ID, DEVICE_ID, TS_MS))
+                .willReturn(run);
+        given(deviceHeartbeatRepository.existsByDeviceIdAndSessionIdAndTsMs(DEVICE_ID, SESSION_ID, TS_MS))
+                .willReturn(false);
+
+        // when
+        service().ingest(MEMBER_ID, payload);
+
+        // then
+        DeviceHeartbeat saved = savedHeartbeat();
+        assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
+        assertThat(saved.getParticipationId()).isEqualTo("part-0f3a");
+    }
+
+    @Test
     @DisplayName("같은 기기·세션·측정 시각을 다시 보내면 저장하지 않고 DUPLICATE를 반환한다")
     void 같은_기기와_세션과_측정_시각을_다시_보내면_DUPLICATE를_반환한다() {
         // given

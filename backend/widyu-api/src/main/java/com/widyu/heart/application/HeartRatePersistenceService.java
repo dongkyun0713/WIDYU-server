@@ -1,5 +1,7 @@
 package com.widyu.heart.application;
 
+import com.widyu.decision.DecisionRecord;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import com.widyu.global.error.BusinessException;
@@ -28,6 +30,7 @@ public class HeartRatePersistenceService {
     private final HeartRateEventRepository heartRateEventRepository;
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final MemberRepository memberRepository;
+    private final DecisionRecordRepository decisionRecordRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). */
@@ -53,7 +56,8 @@ public class HeartRatePersistenceService {
         if (isEmergency) {
             heartRateEmergencyRepository.save(HeartRateEmergency.of(
                     member, request.heartRate(), request.measuredAt(), request.location()));
-            eventPublisher.publishEvent(new HeartRateEmergencyEvent(memberId));
+            // 단건 경로는 판정 기록을 남기지 않는다. 가리킬 판정이 없으면 도달 사실도 채우지 않는다.
+            eventPublisher.publishEvent(new HeartRateEmergencyEvent(memberId, null));
         }
 
         return result;
@@ -63,6 +67,11 @@ public class HeartRatePersistenceService {
      * 배치 샘플 1건을 저장한다(LLD-0047 5절 6단계). 저장이 판정에 앞서므로 상태가 {@code UNKNOWN}이어도
      * 그대로 저장한다. 위급이면 기존 단건 경로와 같은 이벤트를 발행해 알림 정책을 공유한다.
      * 배치에는 주소가 없어 {@code location}은 null이다(ADR-0031 후속).
+     *
+     * <p>{@code decision}은 이 위급을 낳은 판정 기록이며 <b>여기서 같은 트랜잭션으로 저장한다</b>.
+     * 판정 행을 먼저 따로 커밋하면 이어지는 심박 저장이 실패했을 때 심박 이벤트도 위급 알림도 없이
+     * 판정만 남아, 「알림이 갔다고 적혔지만 아무것도 가지 않은」 자료가 생긴다. 판정 식별자는
+     * 알림이 나갔다는 사실을 그 행에 채우려고 이벤트에 싣는다(LLD-0053 5.2). 판정이 없으면 null이다.
      */
     @Transactional
     @Timed(value = "heart.persistence", extraTags = {"path", "batch"})
@@ -73,15 +82,21 @@ public class HeartRatePersistenceService {
             HeartRateStatus status,
             boolean isEmergency,
             String accuracy,
-            String batchId
+            String batchId,
+            DecisionRecord decision
     ) {
+        String decisionId = null;
+        if (decision != null) {
+            decisionId = decisionRecordRepository.save(decision).getDecisionId();
+        }
+
         heartRateEventRepository.save(
                 HeartRateEvent.of(member, heartRate, measuredAt, status, accuracy, batchId));
 
         if (isEmergency) {
             heartRateEmergencyRepository.save(
                     HeartRateEmergency.of(member, heartRate, measuredAt, null));
-            eventPublisher.publishEvent(new HeartRateEmergencyEvent(member.getId()));
+            eventPublisher.publishEvent(new HeartRateEmergencyEvent(member.getId(), decisionId));
         }
     }
 

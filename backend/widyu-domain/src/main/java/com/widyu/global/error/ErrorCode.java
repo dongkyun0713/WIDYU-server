@@ -146,6 +146,8 @@ public enum ErrorCode {
     RUN_MARKER_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "RUN_4002", "마커 시각이 회차 구간을 벗어났습니다."),
     RUN_NOT_CLOSED(HttpStatus.BAD_REQUEST, "RUN_4003", "닫힌 측정회차만 내보낼 수 있습니다."),
     RUN_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "RUN_4042", "내보내기 작업을 찾을 수 없습니다."),
+    RUN_RESEARCH_PARTICIPATION_REQUIRED(HttpStatus.BAD_REQUEST, "RUN_4004", "연구 회차에는 유효한 참여 기록이 필요합니다."),
+    RUN_RESEARCH_PARTICIPATION_MISMATCH(HttpStatus.BAD_REQUEST, "RUN_4005", "참여 기록의 회원과 회차 대상 회원이 다릅니다."),
 
     // 인앱 동의 관련
     CONSENT_KEY_INVALID(HttpStatus.BAD_REQUEST, "CONSENT_4000", "알 수 없는 동의 항목입니다."),
@@ -158,6 +160,13 @@ public enum ErrorCode {
     INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "FILE_4002", "지원하지 않는 파일 형식입니다."),
     INVALID_FILE_URL(HttpStatus.BAD_REQUEST, "FILE_4003", "유효하지 않은 파일 URL입니다."),
     FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "FILE_4004", "파일 크기가 너무 큽니다."),
+
+    // 연구 참여 관련
+    STUDY_PARTICIPATION_NOT_FOUND(HttpStatus.NOT_FOUND, "STUDY_4041", "연구 참여 정보를 찾을 수 없습니다."),
+    STUDY_PARTICIPATION_DUPLICATED(HttpStatus.CONFLICT, "STUDY_4090", "이미 등록된 연구 참여입니다."),
+    STUDY_RETENTION_PERIOD_INVALID(HttpStatus.BAD_REQUEST, "STUDY_4000", "보존 기간 순서가 올바르지 않습니다."),
+    STUDY_PARTICIPATION_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "STUDY_4001", "활성 상태의 연구 참여가 아닙니다."),
+    STUDY_WITHDRAWAL_CONSENT_INVALID(HttpStatus.BAD_REQUEST, "STUDY_4002", "동의한 항목만 철회할 수 있습니다."),
 
     // 잘못된 요청
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "REQ_4000", "잘못된 요청입니다."),

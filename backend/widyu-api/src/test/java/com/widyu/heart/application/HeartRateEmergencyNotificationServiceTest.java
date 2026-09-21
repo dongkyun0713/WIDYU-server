@@ -59,7 +59,7 @@ class HeartRateEmergencyNotificationServiceTest {
         given(senior.getProfileImage()).willReturn("profile-image");
 
         // when
-        heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L));
+        heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));
 
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), notificationCaptor.capture());
@@ -90,7 +90,7 @@ class HeartRateEmergencyNotificationServiceTest {
 
         // when & then
         assertThatThrownBy(() ->
-                heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L)))
+                heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null)))
                 .isInstanceOf(RuntimeException.class).hasMessage("FCM 실패");
         then(fcmService).should().sendMessageToUser(eq(2L), any());
         then(secondMembership).should(never()).getGuardian();
