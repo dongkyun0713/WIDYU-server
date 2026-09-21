@@ -8,7 +8,8 @@ public record SensorProperties(
         Config config,
         Export export,
         FallAi fallAi,
-        HeartAi heartAi
+        HeartAi heartAi,
+        Incident incident
 ) {
 
     /**
@@ -39,8 +40,7 @@ public record SensorProperties(
             java.util.Map<String, Long> gapThresholdMs,
             Clock clock,
             String absentReasonRoleMissing,
-            String absentReasonNoData,
-            String absentReasonNotImplemented
+            String absentReasonNoData
     ) {
 
         public record Clock(
@@ -67,5 +67,14 @@ public record SensorProperties(
     public record HeartAi(
             String deciderId,
             String deciderVersion
+    ) {}
+
+    /**
+     * 본인확인 마감과 무응답 폴링 주기(LLD-0054 4절).
+     * 45초는 계약값(형식서 §3.7 {@code SELF_CHECK_SEC})이라 코드에 박지 않고 설정으로 둔다.
+     */
+    public record Incident(
+            int selfCheckSec,
+            long timeoutPollMs
     ) {}
 }

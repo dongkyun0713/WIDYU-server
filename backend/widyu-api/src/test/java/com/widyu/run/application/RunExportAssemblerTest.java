@@ -18,6 +18,13 @@ import com.widyu.decision.DecisionRecord;
 import com.widyu.device.repository.DeviceHeartbeatRepository;
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.global.infrastructure.s3.S3Service;
+import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.IncidentOutcome;
+import com.widyu.incident.IncidentResponseValue;
+import com.widyu.incident.IncidentState;
+import com.widyu.incident.ResponseVia;
+import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.location.raw.repository.LocationFixRepository;
 import com.widyu.run.CollectionRun;
 import com.widyu.run.repository.RunDeviceAssignmentRepository;
@@ -54,6 +61,7 @@ class RunExportAssemblerTest {
     @Mock private LocationFixRepository locationFixRepository;
     @Mock private DeviceHeartbeatRepository deviceHeartbeatRepository;
     @Mock private DecisionRecordRepository decisionRecordRepository;
+    @Mock private IncidentRepository incidentRepository;
     @Mock private ClockMappingRepository clockMappingRepository;
     @Mock private RunDeviceAssignmentRepository runDeviceAssignmentRepository;
     @Mock private RunMarkerRepository runMarkerRepository;
@@ -79,7 +87,8 @@ class RunExportAssemblerTest {
                 "imu_watch_%s.jsonl".formatted(WATCH_DEVICE),
                 "hr_%s.jsonl".formatted(WATCH_DEVICE),
                 "location_%s.jsonl".formatted(PHONE_DEVICE),
-                "heartbeat_%s.jsonl".formatted(PHONE_DEVICE));
+                "heartbeat_%s.jsonl".formatted(PHONE_DEVICE),
+                "incidents.jsonl");
 
         keepZipIfRequested();
     }
@@ -328,16 +337,107 @@ class RunExportAssemblerTest {
         manifest.get("streams_absent").forEach(node -> absent.add(
                 node.path("stream").asText() + "|" + node.path("device_id").asText()
                         + "|" + node.path("reason").asText()));
-        // 폰에 배정됐지만 자료가 없는 스트림, 역할이 없는 스트림, 미구현 스트림 셋 다 적는다(검사기 I10).
+        // 폰에 배정됐지만 자료가 없는 스트림과 역할이 없는 스트림을 적는다(검사기 I10).
         assertThat(absent).contains(
                 "imu_phone|%s|NO_DATA_IN_THIS_RUN".formatted(PHONE_DEVICE),
-                "measurements||NO_DEVICE_ASSIGNED",
-                "incidents||NOT_IMPLEMENTED_IN_THIS_RUN");
+                "measurements||NO_DEVICE_ASSIGNED");
+        // 사건이 있으면 파일이 있으니 부재를 선언하지 않는다. 선언과 실재가 어긋나면 검사기가 잡는다(I4).
+        assertThat(absent).noneMatch(entry -> entry.startsWith("incidents|"));
+    }
+
+    @Test
+    @DisplayName("사건이 있으면 기기 접미어 없는 incidents.jsonl에 형식서 필드가 한 줄씩 실린다")
+    void 사건이_있으면_incidents_파일에_형식서_필드가_한_줄씩_실린다() throws IOException {
+        // given
+        CollectionRun run = givenSyntheticRun();
+
+        // when
+        assembler().build(run, workDir);
+
+        // then
+        List<JsonNode> incidents = readStream("incidents.jsonl");
+        assertThat(incidents).hasSize(2);
+
+        JsonNode closed = incidents.get(0);
+        assertThat(closed.get("incident_id").asText()).isEqualTo("inc-0001");
+        assertThat(closed.get("run_id").asText()).isEqualTo(RUN_ID);
+        assertThat(closed.get("study_id").asText()).isEqualTo("STUDY-2026");
+        assertThat(closed.get("participation_id").asText()).isEqualTo("P-001");
+        assertThat(closed.get("stream").asText()).isEqualTo("incidents");
+        assertThat(closed.get("kind").asText()).isEqualTo("HR_ANOMALY");
+        // 45초는 계약값이다(형식서 §3.7 SELF_CHECK_SEC). 검사기 L2가 ±1초로 잰다.
+        assertThat(closed.get("respond_by_ms").asLong() - closed.get("opened_at_ms").asLong())
+                .isEqualTo(45_000L);
+        assertThat(closed.get("response").asText()).isEqualTo("OK");
+        assertThat(closed.get("response_via").asText()).isEqualTo("WATCH");
+        assertThat(closed.get("state").asText()).isEqualTo("OK_CLOSED");
+        assertThat(closed.get("outcome").isNull()).isTrue();
+        // 서버가 만든 기록이라 기기 식별자와 봉투가 없다.
+        assertThat(closed.has("device_id")).isFalse();
+        assertThat(closed.has("_server")).isFalse();
+
+        JsonNode resolved = incidents.get(1);
+        assertThat(resolved.get("kind").asText()).isEqualTo("FALL_SUSPECTED");
+        // 이 값이 실증의 지도학습 라벨이다(형식서 §3.7).
+        assertThat(resolved.get("outcome").asText()).isEqualTo("TRUE_EMERGENCY");
+        assertThat(resolved.get("state").asText()).isEqualTo("RESOLVED");
+        assertThat(resolved.get("resolved_by").asLong()).isEqualTo(2048L);
+        assertThat(resolved.get("emergency_called_at_ms").asLong()).isEqualTo(STARTED_AT_MS + 130_000L);
+        assertThat(resolved.get("decision_id").asText()).isEqualTo("dec-01");
+    }
+
+    @Test
+    @DisplayName("사건 파일은 기기 없이 manifest와 quality 집계에 사건 수 그대로 실린다")
+    void 사건_파일은_기기_없이_집계에_실린다() throws IOException {
+        // given
+        CollectionRun run = givenSyntheticRun();
+
+        // when
+        assembler().build(run, workDir);
+
+        // then
+        JsonNode file = manifestFile("streams/incidents.jsonl");
+        assertThat(file.get("stream").asText()).isEqualTo("incidents");
+        assertThat(file.get("device_id").isNull()).isTrue();
+        assertThat(file.get("record_count").asLong()).isEqualTo(2L);
+        assertThat(file.get("sample_count").asLong()).isEqualTo(2L);
+        // 봉투가 없어 시각 범위는 사건을 연 시각으로 잰다(검사기 I7).
+        assertThat(file.get("first_measured_at_ms").asLong()).isEqualTo(STARTED_AT_MS + 30_000L);
+        assertThat(file.get("last_measured_at_ms").asLong()).isEqualTo(STARTED_AT_MS + 100_000L);
+
+        JsonNode quality = perStream(readJson("quality.json"), "incidents");
+        // 사건은 주기로 오는 자료가 아니라 일어난 만큼만 생긴다. 기대 수가 곧 실제 건수다.
+        assertThat(quality.get("device_id").isNull()).isTrue();
+        assertThat(quality.get("expected_sample_count").asLong()).isEqualTo(2L);
+        assertThat(quality.get("actual_sample_count").asLong()).isEqualTo(2L);
+        assertThat(quality.get("coverage").asDouble()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("사건이 한 건도 없으면 파일을 만들지 않고 자료 없음으로 신고한다")
+    void 사건이_없으면_파일을_만들지_않고_자료_없음으로_신고한다() throws IOException {
+        // given
+        CollectionRun run = givenSyntheticRun(List.of());
+
+        // when
+        assembler().build(run, workDir);
+
+        // then
+        // 「파일 없음 + 부재 선언」과 「파일 있음 + 0건」은 다른 명제다(형식서 §1, 검사기 I5).
+        assertThat(streamNames()).doesNotContain("incidents.jsonl");
+        List<String> absent = new ArrayList<>();
+        readJson("manifest.json").get("streams_absent").forEach(node -> absent.add(
+                node.path("stream").asText() + "|" + node.path("reason").asText()));
+        assertThat(absent).contains("incidents|NO_DATA_IN_THIS_RUN");
     }
 
     // ── 합성 자료 ──────────────────────────────────────────────────
 
     private CollectionRun givenSyntheticRun() {
+        return givenSyntheticRun(syntheticIncidents());
+    }
+
+    private CollectionRun givenSyntheticRun(List<Incident> incidents) {
         CollectionRun run = RunExportFixture.closedRun();
         RunExportFixture.SyntheticRun synthetic = RunExportFixture.syntheticRun();
         given(runDeviceAssignmentRepository.findByRun_IdOrderByIdAsc(run.getId()))
@@ -365,6 +465,7 @@ class RunExportAssemblerTest {
                 .willReturn(synthetic.heartbeats());
         given(decisionRecordRepository.findByRunIdOrderByDecisionAtMsAsc(RUN_ID))
                 .willReturn(syntheticDecisions());
+        given(incidentRepository.findByRunIdOrderByOpenedAtMsAsc(RUN_ID)).willReturn(incidents);
         given(s3Service.downloadBytes(any())).willAnswer(invocation ->
                 synthetic.payloadsByS3Key().get(invocation.<String>getArgument(0))
                         .getBytes(StandardCharsets.UTF_8));
@@ -437,10 +538,50 @@ class RunExportAssemblerTest {
         return List.of(alert, abstain, heartAlert);
     }
 
+    /** 본인이 답하고 닫힌 사건 하나, 무응답 뒤 보호자가 위급으로 판정한 사건 하나(LLD-0054 7절). */
+    private List<Incident> syntheticIncidents() {
+        Incident closed = Incident.builder()
+                .incidentRef("inc-0001")
+                .memberId(RunExportFixture.MEMBER_ID)
+                .runId(RUN_ID)
+                .decisionId("dec-03")
+                .kind(IncidentKind.HR_ANOMALY)
+                .level("EMERGENCY")
+                .openedAtMs(STARTED_AT_MS + 30_000L)
+                .respondByMs(STARTED_AT_MS + 75_000L)
+                .build();
+        closed.markChecking();
+        // 응답은 조건부 UPDATE가 쓰므로 저장된 행의 모습을 그대로 만든다.
+        ReflectionTestUtils.setField(closed, "response", IncidentResponseValue.OK);
+        ReflectionTestUtils.setField(closed, "responseVia", ResponseVia.WATCH);
+        ReflectionTestUtils.setField(closed, "respondedAtMs", STARTED_AT_MS + 42_000L);
+        ReflectionTestUtils.setField(closed, "state", IncidentState.OK_CLOSED);
+
+        Incident resolved = Incident.builder()
+                .incidentRef("inc-0002")
+                .memberId(RunExportFixture.MEMBER_ID)
+                .runId(RUN_ID)
+                .decisionId("dec-01")
+                .kind(IncidentKind.FALL_SUSPECTED)
+                .level("HIGH")
+                .openedAtMs(STARTED_AT_MS + 100_000L)
+                .respondByMs(STARTED_AT_MS + 145_000L)
+                .build();
+        resolved.markChecking();
+        // 사후 판정도 조건부 UPDATE가 쓰므로 저장된 행의 모습을 그대로 만든다.
+        ReflectionTestUtils.setField(resolved, "state", IncidentState.RESOLVED);
+        ReflectionTestUtils.setField(resolved, "outcome", IncidentOutcome.TRUE_EMERGENCY);
+        ReflectionTestUtils.setField(resolved, "resolvedBy", 2048L);
+        ReflectionTestUtils.setField(resolved, "resolvedAtMs", STARTED_AT_MS + 160_000L);
+        ReflectionTestUtils.setField(resolved, "emergencyCalledAtMs", STARTED_AT_MS + 130_000L);
+
+        return List.of(closed, resolved);
+    }
+
     private RunExportAssembler assembler() {
         return new RunExportAssembler(
                 sensorBatchRepository, locationFixRepository, deviceHeartbeatRepository, decisionRecordRepository,
-                clockMappingRepository, runDeviceAssignmentRepository, runMarkerRepository,
+                incidentRepository, clockMappingRepository, runDeviceAssignmentRepository, runMarkerRepository,
                 s3Service, MAPPER, RunExportFixture.properties());
     }
 
@@ -468,6 +609,15 @@ class RunExportAssemblerTest {
             }
         }
         return lines;
+    }
+
+    private JsonNode manifestFile(String path) throws IOException {
+        for (JsonNode file : readJson("manifest.json").get("files")) {
+            if (path.equals(file.get("path").asText())) {
+                return file;
+            }
+        }
+        throw new IllegalStateException("manifest.files에 %s가 없습니다.".formatted(path));
     }
 
     private JsonNode perStream(JsonNode quality, String stream) {

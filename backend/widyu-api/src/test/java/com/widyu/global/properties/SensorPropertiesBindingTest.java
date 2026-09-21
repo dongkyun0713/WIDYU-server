@@ -36,8 +36,9 @@ class SensorPropertiesBindingTest {
         assertThat(export.gapThresholdMs()).containsEntry("hr", 5000L);
         assertThat(export.clock()).isNotNull();
         assertThat(export.clock().sourceDomain()).isEqualTo("DEVICE_MONOTONIC");
-        assertThat(export.absentReasonNotImplemented()).isEqualTo("NOT_IMPLEMENTED_IN_THIS_RUN");
         assertThat(properties.fallAi().enabled()).isFalse();
+        assertThat(properties.incident().selfCheckSec()).isEqualTo(45L);
+        assertThat(properties.incident().timeoutPollMs()).isEqualTo(5000L);
     }
 
     private Binder binderOf(String classpathLocation) throws IOException {

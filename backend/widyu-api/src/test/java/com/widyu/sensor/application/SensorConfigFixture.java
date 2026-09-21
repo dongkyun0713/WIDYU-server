@@ -9,7 +9,7 @@ final class SensorConfigFixture {
     }
 
     static SensorProperties properties() {
-        return new SensorProperties(32_768, config(), export(), fallAi(), heartAi());
+        return new SensorProperties(32_768, config(), export(), fallAi(), heartAi(), incident());
     }
 
     static SensorProperties.Config config() {
@@ -30,8 +30,7 @@ final class SensorConfigFixture {
                 new SensorProperties.Export.Clock(
                         "DEVICE_MONOTONIC", "UTC_EPOCH_MS", "ANCHOR_PAIR", "APP_REPORTED_ANCHOR"),
                 "NO_DEVICE_ASSIGNED",
-                "NO_DATA_IN_THIS_RUN",
-                "NOT_IMPLEMENTED_IN_THIS_RUN");
+                "NO_DATA_IN_THIS_RUN");
     }
 
     static SensorProperties.FallAi fallAi() {
@@ -40,5 +39,9 @@ final class SensorConfigFixture {
 
     static SensorProperties.HeartAi heartAi() {
         return new SensorProperties.HeartAi("widyu-ai-hr", "ver7");
+    }
+
+    static SensorProperties.Incident incident() {
+        return new SensorProperties.Incident(45, 5000L);
     }
 }

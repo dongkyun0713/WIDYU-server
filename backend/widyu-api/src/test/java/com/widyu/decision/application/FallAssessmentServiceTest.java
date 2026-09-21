@@ -3,6 +3,7 @@ package com.widyu.decision.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -13,6 +14,8 @@ import com.widyu.decision.DecisionRecord;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.heart.repository.HeartRateEventRepository;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentService;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.sensor.SensorBatch;
@@ -36,6 +39,7 @@ class FallAssessmentServiceTest {
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private FallAssessmentClient fallAssessmentClient;
     @Mock private DecisionRecordPersistenceService decisionRecordPersistenceService;
+    @Mock private IncidentService incidentService;
     @Mock private S3Service s3Service;
 
     @Test
@@ -109,6 +113,44 @@ class FallAssessmentServiceTest {
     }
 
     @Test
+    @DisplayName("AI가 위급으로 판정하면 그 판정으로 본인확인 사건이 열린다")
+    void AI가_위급으로_판정하면_그_판정으로_본인확인_사건이_열린다() {
+        // given
+        SensorBatch input = accelerationBatch("01j8zimu000000000000000001", "sensor/input.json", 2_120L);
+        given(sensorBatchRepository.findFallInputBatches(anyLong(), any(), anyLong(), anyLong(), anyLong()))
+                .willReturn(List.of(input));
+        given(s3Service.downloadBytes("sensor/input.json")).willReturn(accPayload());
+        given(heartRateEventRepository.findByMemberIdAndMeasuredAtBetweenOrderByMeasuredAtAsc(anyLong(), any(), any()))
+                .willReturn(List.of());
+        given(fallAssessmentClient.assess(any()))
+                .willReturn(new FallAssessmentClient.Result("ALERT", "fall-ai", "2026.09", "HIGH", "IMPACT"));
+
+        // when
+        service(true).assessAfterImpact(input);
+
+        // then
+        ArgumentCaptor<DecisionRecord> decision = ArgumentCaptor.forClass(DecisionRecord.class);
+        then(incidentService).should().openForAlert(decision.capture(), eq(IncidentKind.FALL_SUSPECTED));
+        assertThat(decision.getValue().getDecisionOutput()).isEqualTo("ALERT");
+        assertThat(decision.getValue().getSeverity()).isEqualTo("HIGH");
+    }
+
+    @Test
+    @DisplayName("위급이 아닌 판정은 본인확인 사건을 열지 않는다")
+    void 위급이_아닌_판정은_본인확인_사건을_열지_않는다() {
+        // given
+        SensorBatch trigger = trigger();
+        given(sensorBatchRepository.findFallInputBatches(anyLong(), any(), anyLong(), anyLong(), anyLong()))
+                .willReturn(List.of(trigger));
+
+        // when
+        service(true).assessAfterImpact(trigger);
+
+        // then
+        then(incidentService).should(never()).openForAlert(any(), any());
+    }
+
+    @Test
     @DisplayName("AI 호출이 예외를 던지면 판정 기록을 남기지 않는다")
     void AI_호출이_예외를_던지면_판정_기록을_남기지_않는다() {
         // given
@@ -130,17 +172,18 @@ class FallAssessmentServiceTest {
     private FallAssessmentService service(boolean enabled) {
         return new FallAssessmentService(
                 properties(enabled), sensorBatchRepository, heartRateEventRepository, fallAssessmentClient,
-                decisionRecordPersistenceService, s3Service, new ObjectMapper());
+                decisionRecordPersistenceService, incidentService, s3Service, new ObjectMapper());
     }
 
     private SensorProperties properties(boolean enabled) {
         SensorProperties.Export export = new SensorProperties.Export(
                 5000L, 900_000L, 15, "test-build", java.util.Map.of(), java.util.Map.of(),
                 new SensorProperties.Export.Clock("DEVICE_MONOTONIC", "UTC_EPOCH_MS", "ANCHOR_PAIR", "TEST"),
-                "NO_DEVICE", "NO_DATA", "NOT_IMPLEMENTED");
+                "NO_DEVICE", "NO_DATA");
         return new SensorProperties(
                 32768, null, export, new SensorProperties.FallAi(enabled, "/api/fall", 2, "server", "v1"),
-                new SensorProperties.HeartAi("widyu-ai-hr", "ver7"));
+                new SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
+                new SensorProperties.Incident(45, 5000L));
     }
 
     private SensorBatch trigger() {

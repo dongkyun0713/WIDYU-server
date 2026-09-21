@@ -45,12 +45,16 @@ sensor:
       evidence-method: APP_REPORTED_ANCHOR
     absent-reason-role-missing: NO_DEVICE_ASSIGNED
     absent-reason-no-data: NO_DATA_IN_THIS_RUN
-    absent-reason-not-implemented: NOT_IMPLEMENTED_IN_THIS_RUN
 
   # 심박 판정기의 이름과 판. AI 응답에 없어 여기서 적는다. AI 이미지 태그와 손으로 맞춘다(ADR-0035).
   heart-ai:
     decider-id: ${SENSOR_HEART_AI_DECIDER_ID:widyu-ai-hr}
     decider-version: ${SENSOR_HEART_AI_DECIDER_VERSION:ver7}
+
+  # 본인확인 마감과 무응답 폴링(LLD-0054). 45초는 형식서 §3.7의 계약값이다.
+  incident:
+    self-check-sec: ${SENSOR_INCIDENT_SELF_CHECK_SEC:45}
+    timeout-poll-ms: ${SENSOR_INCIDENT_TIMEOUT_POLL_MS:5000}
 
   fall-ai:
     enabled: ${SENSOR_FALL_AI_ENABLED:false}
