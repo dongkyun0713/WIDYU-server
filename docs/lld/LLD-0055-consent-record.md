@@ -83,6 +83,8 @@
 | `CONSENT_KEY_INVALID` (`CONSENT_4000`) | 400 | enum 밖 키 |
 | `CONSENT_REQUEST_EMPTY` (`CONSENT_4001`) | 400 | `consents`·`keys`가 비어 있음 |
 
+빈 컬렉션 검증은 **서비스가 한다**. DTO에 `@NotEmpty`를 붙이면 Bean Validation이 서비스보다 먼저 걸려 `CONSENT_4001` 대신 일반 검증 400이 나간다. 필드가 아예 없어 null로 들어와도 빈 것으로 본다.
+
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [x] 항목 3개를 제출하면 행 3개가 `version`·`recorded_at`·`source=APP`으로 저장되고 현재 상태 응답에 3개가 있다.
