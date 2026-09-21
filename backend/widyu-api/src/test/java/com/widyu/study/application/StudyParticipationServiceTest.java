@@ -122,7 +122,7 @@ class StudyParticipationServiceTest {
         assertThatThrownBy(() -> studyParticipationService.register(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
-        then(studyParticipationRepository).should(never()).save(any());
+        then(studyParticipationRepository).should(never()).saveAndFlush(any());
         then(studyParticipationHistoryRepository).should(never()).save(any());
     }
 
@@ -137,7 +137,7 @@ class StudyParticipationServiceTest {
         assertThatThrownBy(() -> studyParticipationService.register(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
-        then(studyParticipationRepository).should(never()).save(any());
+        then(studyParticipationRepository).should(never()).saveAndFlush(any());
     }
 
     @Test
@@ -152,7 +152,7 @@ class StudyParticipationServiceTest {
         assertThatThrownBy(() -> studyParticipationService.register(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
-        then(studyParticipationRepository).should(never()).save(any());
+        then(studyParticipationRepository).should(never()).saveAndFlush(any());
     }
 
     @Test
@@ -167,7 +167,7 @@ class StudyParticipationServiceTest {
         assertThatThrownBy(() -> studyParticipationService.register(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_RETENTION_PERIOD_INVALID);
-        then(studyParticipationRepository).should(never()).save(any());
+        then(studyParticipationRepository).should(never()).saveAndFlush(any());
     }
 
     @Test
@@ -181,7 +181,7 @@ class StudyParticipationServiceTest {
         assertThatThrownBy(() -> studyParticipationService.register(createRequest(null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.STUDY_PARTICIPATION_DUPLICATED);
-        then(studyParticipationRepository).should(never()).save(any());
+        then(studyParticipationRepository).should(never()).saveAndFlush(any());
     }
 
     @Test
@@ -332,7 +332,7 @@ class StudyParticipationServiceTest {
         given(studyParticipationRepository.existsByStudyIdAndMemberIdAndStatus(
                 STUDY_ID, MEMBER_ID, StudyParticipationStatus.ACTIVE)).willReturn(false);
         givenExistingMember();
-        given(studyParticipationRepository.save(any(StudyParticipation.class)))
+        given(studyParticipationRepository.saveAndFlush(any(StudyParticipation.class)))
                 .willThrow(new DataIntegrityViolationException("uk_study_participation_active"));
 
         // when & then
@@ -372,7 +372,7 @@ class StudyParticipationServiceTest {
         given(studyParticipationRepository.existsByStudyIdAndMemberIdAndStatus(
                 STUDY_ID, MEMBER_ID, StudyParticipationStatus.ACTIVE)).willReturn(false);
         givenExistingMember();
-        given(studyParticipationRepository.save(any(StudyParticipation.class)))
+        given(studyParticipationRepository.saveAndFlush(any(StudyParticipation.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -391,7 +391,7 @@ class StudyParticipationServiceTest {
 
     private StudyParticipation savedParticipation() {
         ArgumentCaptor<StudyParticipation> saved = ArgumentCaptor.forClass(StudyParticipation.class);
-        then(studyParticipationRepository).should().save(saved.capture());
+        then(studyParticipationRepository).should().saveAndFlush(saved.capture());
         return saved.getValue();
     }
 

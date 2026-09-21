@@ -143,7 +143,8 @@ public class StudyParticipationService {
      */
     private StudyParticipation saveNew(StudyParticipation participation) {
         try {
-            return studyParticipationRepository.save(participation);
+            // flush까지 해야 제약 위반이 여기서 잡힌다. 커밋까지 미루면 try 밖에서 터져 500이 된다.
+            return studyParticipationRepository.saveAndFlush(participation);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.STUDY_PARTICIPATION_DUPLICATED);
         }
