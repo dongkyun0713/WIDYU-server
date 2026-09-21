@@ -14,7 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 관리자가 개인정보를 조회·변경한 접속기록. 추가 전용이며 요청 본문·헤더는 담지 않는다.
+ * 관리자가 개인정보를 조회·변경한 접속기록. 추가 전용이며 요청 본문·헤더·쿼리 값은 담지 않는다.
  * 업무 행위 기록인 {@link AdminAuditLog}과 역할이 다르다(ADR-0036, LLD-0057).
  */
 @Entity

@@ -24,7 +24,7 @@
 - 관리자 조회 API
 
 ### Out of scope
-- 요청·응답 본문 기록, 기존 `admin_audit_log` 변경, 삭제·보관 상한, 관리자 로그인 실패 기록
+- 요청·응답 본문 기록, 쿼리 파라미터 값 기록, 기존 `admin_audit_log` 변경, 삭제·보관 상한, 관리자 로그인 실패 기록
 
 ## 3. 인터페이스 / API
 
@@ -45,7 +45,7 @@
 | `admin_name` | VARCHAR(50) | NOT NULL | `AdminAuditLogService`의 이름 해석과 같은 방식 |
 | `method` | VARCHAR(8) | NOT NULL | |
 | `path` | VARCHAR(255) | NOT NULL | `request.getRequestURI()` |
-| `query` | VARCHAR(500) | NULL | 쿼리 문자열. 500자 초과는 자른다 |
+| `query` | VARCHAR(500) | NULL | 쿼리 파라미터 이름만 `&`로 연결. 값은 저장하지 않고 500자 초과는 자른다 |
 | `target_member_id` | BIGINT | NULL | 경로 변수 `memberId`가 있으면 |
 | `target_ref` | VARCHAR(64) | NULL | 경로 변수 `runId`·`participationId`·`exportId` 중 하나 |
 | `status` | INT | NOT NULL | 응답 상태 |
@@ -61,7 +61,7 @@
 2. `WebMvcConfig implements WebMvcConfigurer` (`global/config`): `addInterceptors`로 `/api/v1/admin/**`, `/api/v1/auth/admin/**` 등록.
 3. 관리자 식별: `SecurityContextHolder` → `PrincipalDetails.getMemberId()`; 없으면 `-1`, 이름 `"인증 전"`. 이름 해석은 `AdminAuditLogService`의 `resolveAdminName`을 공용 헬퍼로 뽑아 둘 다 쓴다.
 4. 경로 변수: `request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE)`에서 `memberId`(Long 변환 실패 시 null), `runId`/`participationId`/`exportId`.
-5. 본문·헤더(Authorization 포함)는 읽지 않는다.
+5. 본문·헤더(Authorization 포함)는 읽지 않는다. URL 쿼리는 `name`·`q` 등에 회원 이름이나 전화번호가 들어갈 수 있으므로 값은 버리고 파라미터 이름만 중복 제거해 남긴다.
 6. `GET /api/v1/admin/access-logs` 자기 자신도 기록된다(예외 두지 않는다).
 
 ## 6. 예외 / 에러 처리
@@ -73,7 +73,7 @@
 - [ ] `GET /api/v1/admin/members/{memberId}` 호출 뒤 행 1개: `admin_id`·`method=GET`·`path`·`target_member_id`·`status=200`·`accessed_at`. (`@WebMvcTest` 또는 인터셉터 단위 테스트 + `MockHttpServletRequest`)
 - [ ] `POST /api/v1/auth/admin/login`(인증 전)도 `admin_id=-1`로 기록된다.
 - [ ] 저장 서비스가 예외를 던져도 응답은 정상이다.
-- [ ] 행에 요청 본문·Authorization 값이 없다.
+- [ ] 행에 요청 본문·Authorization 값·검색어 등 쿼리 값이 없고 쿼리 파라미터 이름만 남는다.
 - [ ] 조회 API가 adminId·기간 필터와 페이지를 지원하고 최근순이다.
 - [ ] `./gradlew compileJava`, `run-module-tests.sh`, `verify.sh --base` 통과.
 

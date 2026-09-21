@@ -40,7 +40,7 @@ class AdminAccessLogInterceptorTest {
         // given
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/admin/members/42");
         request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Map.of("memberId", "42"));
-        request.setQueryString("detail=true");
+        request.setQueryString("detail=true&name=%EA%B9%80%EB%8F%99%EA%B7%A0");
         request.setRemoteAddr("10.0.0.7");
         request.addHeader("User-Agent", "widyu-admin/1.0");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -55,7 +55,7 @@ class AdminAccessLogInterceptorTest {
         then(adminAccessLogService).should().record(
                 eq("GET"),
                 eq("/api/v1/admin/members/42"),
-                eq("detail=true"),
+                eq("detail&name"),
                 eq(42L),
                 isNull(),
                 eq(200),
@@ -63,6 +63,27 @@ class AdminAccessLogInterceptorTest {
                 eq("widyu-admin/1.0"),
                 accessedAt.capture());
         assertThat(accessedAt.getValue()).isEqualTo(request.getAttribute(AdminAccessLogInterceptor.START_TIME_ATTRIBUTE));
+    }
+
+    @Test
+    @DisplayName("관리자 검색어가 있어도 쿼리 값은 버리고 파라미터 이름만 기록한다")
+    void 관리자_검색어는_값을_버리고_파라미터_이름만_기록한다() {
+        // given
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/admin/search");
+        request.setQueryString("q=010-1234-5678&page=0&q=senior-name");
+        request.setRemoteAddr("10.0.0.8");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // when
+        interceptor.afterCompletion(request, response, new Object(), null);
+
+        // then
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        then(adminAccessLogService).should().record(
+                anyString(), anyString(), query.capture(), any(), any(), anyInt(),
+                anyString(), any(), any(LocalDateTime.class));
+        assertThat(query.getValue()).isEqualTo("q&page");
+        assertThat(query.getValue()).doesNotContain("010-1234-5678", "senior-name");
     }
 
     @Test
