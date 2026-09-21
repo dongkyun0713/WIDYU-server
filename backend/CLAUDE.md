@@ -119,6 +119,19 @@
 - **v2 원본 저장**: `/app/location/update`를 `Message<byte[]>`로 받아 파싱한다. `v==2`·`device_id`·`ts_ms`가 오면 잰 시각·정확도·속도·`reason`(move/keepalive/incident)과 원문을 `location_fix`에 남긴다. 멱등 키는 `(device_id, session_id, seq)`, 회차 귀속은 B8 재사용 → LLD-0048
 - **정확도가 낮은 위치도 거르지 않는다**(정책 1.6.6, `accuracy_m > 100`도 저장). `reason`·좌표 범위 검증은 브로드캐스트 **앞**에서 하고(`LOCATION_4000`), 저장 실패는 WARN만 남기고 ACK를 막지 않는다. **좌표 값은 어떤 로그에도 남기지 않는다**(memberId·seq만, LLD-0029)
 
+### `location.access` — 보호자 위치 열람 기록·통보
+- 보호자가 시니어 위치를 읽으면 **읽기 경로마다 `location_access_log` 한 줄**을 남기고 시니어에게 통보한다(위치정보법 제16조②·제19조③④) → ADR-0036 결정 3·4, LLD-0056
+- **훅 5곳**: `RealtimeLocationService.getLastLocation`(`REST_LAST`)·`getLocationTrail`(`REST_TRAIL`)·`getTrackedSeniors`(`REST_FAMILY`, 목록의 시니어마다 1행), `JwtChannelInterceptor.handleSubscribe`(`WS_SUBSCRIBE`, 위치 topic만), `GuardianHomeService.getHomeCards`(`HOME_OUTING`). 모두 **권한 검증 통과 뒤**에 건다
+- **STOMP는 구독 시점에 한 번**만 기록한다. 그 뒤 흘러가는 위치 메시지는 같은 열람이다
+- **본인 조회는 기록하지 않는다.** `viewerId == seniorId`면 아무것도 하지 않는다
+- 기록은 `REQUIRES_NEW`이고 **호출부가 `try/catch(Exception)`으로 감싸 WARN만 남긴다**. 프록시가 커밋 시점에 던지는 예외는 서비스 메서드 안에서 잡을 수 없어 훅마다 감싼다. 기록 실패가 위치 조회를 막지 않는다
+- **통보는 두 방식**이다. `ConsentService.isGranted(seniorId, LOCATION_NOTICE_BATCHED)`가 true면 `LocationAccessDigestScheduler`가 하루 한 번 요약 FCM, 아니면 건마다 FCM이되 같은 보호자의 반복 조회는 `location-access.immediate-cooldown-min`(기본 10분) 안에서 합친다
+- 다이제스트는 시니어별 `LocationAccessDigestSender` 트랜잭션에서 미통보 행 선점과 FCM enqueue를 함께 처리한다. enqueue 실패 시 선점도 롤백되어 다음 실행에서 재시도한다
+- **합쳐진 건은 `notified_at`을 비워 둔다.** 다이제스트가 `notified_at IS NULL` 전체를 묶으므로 즉시 모드에서 빠진 건도 결국 알린다
+- `FcmCategory.LOCATION_NOTICE`는 알림 설정 그룹에 없다 — 법 요건이라 끄지 않는다(미등록 카테고리는 기본 허용)
+- 시니어 조회는 `GET /api/v1/location/access-logs/mine?from=&to=&page=&size=`(기본 최근 30일). **응답·로그에 좌표를 남기지 않는다**(LLD-0029). 응답의 `viewerName`은 같은 가족 보호자 이름이라 본인에게 공개한다
+- 자동 삭제가 없다(ADR-0036 결정 6)
+
 ### `consent` — 인앱 동의 기록
 - 서비스 동의는 앱이 항목별로 받고 서버는 **버전·시각·철회**만 기록한다(정책 1.5.10). 서면 연구 참여 동의는 `study_participation`이 담는다 → ADR-0036 결정 1·2, LLD-0055
 - **추가 전용 테이블**이다. `consent_record`를 UPDATE·DELETE하지 않으므로 테이블이 곧 이력이고 현재 상태는 항목별 최신 행이다. 철회도 `granted=false` 행을 새로 남기며 **직전 행의 `version`을 복사**한다(직전 행이 없으면 `-`)

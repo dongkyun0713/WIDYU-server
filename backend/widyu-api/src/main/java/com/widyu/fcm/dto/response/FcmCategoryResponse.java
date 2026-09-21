@@ -29,6 +29,8 @@ public class FcmCategoryResponse {
             case MEDICINE_SCHEDULE -> "복약 알림";
             case HEART_MESSAGE -> "가족 메시지";
             case SAFE_ZONE -> "안전구역";
+            case INCIDENT_SELF_CHECK -> "본인확인";
+            case LOCATION_NOTICE -> "위치 조회 알림";
             case ETC -> "기타";
         };
     }

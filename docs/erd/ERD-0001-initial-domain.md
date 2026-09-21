@@ -371,6 +371,26 @@ erDiagram
         String reason "판정 사유 원문. 로그·응답 DTO 금지 (ADR-0035)"
     }
 
+    Incident {
+        Long id PK
+        String incidentRef UK "외부 식별자. 내보내기의 incident_id"
+        Long memberId
+        String runId
+        String decisionId UK "이 사건을 연 판정. 판정 1 = 사건 1"
+        String kind "HR_ANOMALY / FALL_SUSPECTED"
+        String level "판정 severity 복사"
+        Long openedAtMs
+        Long respondByMs "openedAtMs + 45초 (설정값)"
+        String response "OK / HELP"
+        Long respondedAtMs
+        String responseVia "WATCH / PHONE"
+        String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
+        String outcome "TRUE_EMERGENCY / FALSE_ALARM / UNKNOWN. 실증 학습 라벨"
+        Long resolvedBy "보호자 member_id"
+        Long resolvedAtMs
+        Long emergencyCalledAtMs "보호자가 입력한 119 신고 시각"
+    }
+
     RunMarker {
         Long id PK
         String markerId UK "앱 발급, 멱등"
@@ -494,6 +514,15 @@ erDiagram
         ConsentSource source "APP / ADMIN (지금은 APP만)"
     }
 
+    LocationAccessLog {
+        Long location_access_log_id PK
+        Long viewer_member_id FK "위치를 본 보호자"
+        Long senior_member_id FK "위치가 조회된 시니어"
+        LocationAccessPath path "REST_LAST / REST_TRAIL / REST_FAMILY / WS_SUBSCRIBE / HOME_OUTING"
+        LocalDateTime accessedAt "서버 시각. 행이 불변이라 updated_at 없음"
+        LocalDateTime notifiedAt "통보 FCM enqueue 시각. NULL이면 미통보"
+    }
+
     MemberNotificationSetting {
         Long id PK
         Long member_id FK
@@ -574,6 +603,8 @@ erDiagram
     Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
     Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
+    Member ||--o{ Incident : "위급 사건 (본인확인·사후 판정)"
+    DecisionRecord ||--o| Incident : "decision_id 참조 (FK 없음)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
     CollectionRun ||..o{ RunExport : "내보내기 잡 (run_id 문자열 참조)"
@@ -582,6 +613,7 @@ erDiagram
     Member ||--o{ MemberFcmToken : "FCM 토큰"
     Member ||--o{ MemberNotificationSetting : "알림 설정"
     Member ||--o{ ConsentRecord : "인앱 동의 기록 (추가 전용)"
+    Member ||--o{ LocationAccessLog : "위치 열람 주체·대상"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
     Member ||..o{ AdminAccessLog : "관리자 접속기록 (admin_id·target_member_id, FK 없음)"
@@ -643,6 +675,12 @@ erDiagram
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
 | `ConsentKey` | `PRIVACY_PERSONAL`, `PRIVACY_HEALTH`, `LOCATION`, `GUARDIAN_LOCATION_PROVIDE`, `LOCATION_NOTICE_BATCHED`, `RETENTION_NOTICE` |
 | `ConsentSource` | `APP`, `ADMIN` |
+| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED` |
+| `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
+| `IncidentResponseValue` | `OK`, `HELP` |
+| `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
+| `ResponseVia` | `WATCH`, `PHONE` |
+| `FcmCategory` | `ALL`, `ALBUM`, `TARGET`, `HEALTH_SCHEDULE`, `WALK`, `MEDICINE_SCHEDULE`, `HEART_MESSAGE`, `SAFE_ZONE`, `INCIDENT_SELF_CHECK`, `LOCATION_NOTICE`, `ETC` |
 | `StudyParticipationStatus` | `ACTIVE`, `ENDED`, `WITHDRAWN` |
 | `WithdrawalScope` | `ALL`, `SELECTED_CONSENTS` |
 | `StudyParticipationHistoryType` | `REGISTERED`, `RETENTION_CHANGED`, `WITHDRAWN`, `DELETION_PROCESSED` |
@@ -686,6 +724,11 @@ erDiagram
 | `decision_record` | `idx_decision_record_run_time` | `(run_id, decision_at_ms)` | 회차 내보내기 판정 시각순 조회 |
 | `decision_record` | `idx_decision_record_member_time` | `(member_id, decision_at_ms)` | 회원별 판정 이력 조회 |
 | `decision_record` | `idx_decision_record_trigger_batch` | `(trigger_batch_id)` | 충격 배치 근거 추적 |
+| `incident` | UK `uk_incident_incident_ref` | `(incident_ref)` | 외부 식별자 |
+| `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 판정 1 = 사건 1. 재시도가 사건을 늘리지 못하게 막는다 |
+| `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
+| `incident` | `idx_incident_run_time` | `(run_id, opened_at_ms)` | 회차 내보내기 |
+| `incident` | `idx_incident_state_deadline` | `(state, respond_by_ms)` | 무응답 스케줄러가 매 폴링마다 타는 경로 |
 | `location_fix` | UK `uk_location_fix_seq` | `(device_id, session_id, seq)` | 같은 fix 재전송 멱등 (LLD-0048) |
 | `location_fix` | `idx_location_fix_member_time` | `(member_id, ts_ms)` | 참가자별 잰 시각순 조회·내보내기 |
 | `location_fix` | `idx_location_fix_run` | `(run_id)` | 회차별 위치 조회 |
@@ -693,6 +736,8 @@ erDiagram
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
 | `consent_record` | `idx_consent_record_member_key_time` | `(member_id, consent_key, recorded_at)` | 항목별 최신 행 조회. UK를 두지 않는다 — 같은 항목에 행이 여러 개인 것이 이력이다 (LLD-0055) |
+| `location_access_log` | `idx_location_access_log_senior_time` | `(senior_member_id, accessed_at)` | 시니어가 자기 열람 기록을 기간으로 조회 (LLD-0056) |
+| `location_access_log` | `idx_location_access_log_senior_notified` | `(senior_member_id, notified_at)` | 즉시 통보 쿨다운 판단과 다이제스트 대상(`notified_at IS NULL`) 조회 (LLD-0056) |
 | `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 서버 발급 참여 식별자 중복 방지 (LLD-0052) |
 | `study_participation` | `idx_study_participation_active` | `(study_id, member_id, status)` | 같은 연구·회원의 ACTIVE 참여 중복 검사 |
 | `study_participation` | UK `uk_study_participation_active` | `(study_id, member_id, active_key)` | 같은 연구·회원의 ACTIVE 참여 하나를 DB에서 보장. `active_key`는 ACTIVE일 때만 `'1'`이라 철회·종료 참여는 제약 대상에서 빠진다 (`collection_run.open_marker`와 같은 방식) |
@@ -714,11 +759,20 @@ erDiagram
 - Redis `senior_location:{seniorId}` 키로 저장, TTL 5분
 - WebSocket 연결 시 실시간 업데이트, 구독 해제 시 자연 만료
 
+### 위치 열람 기록 (LocationAccessLog)
+- 보호자 읽기 경로 5곳에서 추가 전용으로 쌓는다. 좌표는 담지 않는다
+- 시니어 조회: `senior_member_id` + `accessed_at` 기간, `accessed_at DESC` 페이지
+- 통보 대상: `notified_at IS NULL` 전체를 시니어별로 묶어 하루 한 번 요약
+
 ## 스키마 마이그레이션 이력
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
 | 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
+| 2026-09-21 | `location_access_log` | 신규 테이블 (LLD-0056). 위치 열람 주체·대상·경로·통보 시각 | `scripts/mysql/create_location_access_log.sql` |
+| 2026-09-21 | `fcm_notification`·`member_notification_setting` | `fcm_category`에 `LOCATION_NOTICE` 추가 (LLD-0056). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_location_notice.sql` |
+| 2026-09-21 | `incident` | 신규 테이블 (LLD-0054). 위급 알림 뒤의 본인확인·무응답 판정·사후 판정 | `scripts/mysql/create_incident.sql` |
+| 2026-09-21 | `fcm_notification`·`fcm_outbox` | `fcm_category`에 `INCIDENT_SELF_CHECK` 추가 (LLD-0054). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_incident_self_check.sql` |
 | 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
 | 2026-09-21 | `fcm_outbox`, `fcm_notification` | `decision_id` 추가 (LLD-0053). 전송 성공 시 판정 도달 사실을 채우고 연구 철회 때 관련 알림만 찾는다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
 | 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052, ADR-0034). ACTIVE 단일성은 엔티티가 채우는 `active_key` + UK로, 일부 철회 항목은 이력의 `withdrawn_consent_keys`(JSON)로 남긴다. 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |

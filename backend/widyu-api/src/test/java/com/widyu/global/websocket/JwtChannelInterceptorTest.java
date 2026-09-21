@@ -12,6 +12,8 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.MemberRole;
+import com.widyu.location.access.LocationAccessPath;
+import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.member.application.FamilyAccessService;
 import java.util.HashMap;
 import java.util.Map;
@@ -47,6 +49,7 @@ class JwtChannelInterceptorTest {
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private FamilyAccessService familyAccessService;
     @Mock private WebSocketSessionRegistry webSocketSessionRegistry;
+    @Mock private LocationAccessLogService locationAccessLogService;
 
     @InjectMocks
     private JwtChannelInterceptor jwtChannelInterceptor;
@@ -362,7 +365,7 @@ class JwtChannelInterceptorTest {
         // given
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         JwtChannelInterceptor brokerInterceptor = new JwtChannelInterceptor(
-                jwtTokenProvider, familyAccessService, sessionRegistry);
+                jwtTokenProvider, familyAccessService, sessionRegistry, locationAccessLogService);
         FamilyTopicOutboundInterceptor outboundInterceptor = new FamilyTopicOutboundInterceptor(
                 familyAccessService, sessionRegistry);
         ExecutorSubscribableChannel inbound = new ExecutorSubscribableChannel();
@@ -446,6 +449,66 @@ class JwtChannelInterceptorTest {
             accessor.setSessionAttributes(Map.of("memberId", 100L));
         }
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    @Test
+    @DisplayName("보호자가 위치 topic을 구독하면 인가 통과 뒤 WS_SUBSCRIBE 열람 기록을 남긴다")
+    void 위치_topic_구독은_WS_SUBSCRIBE_기록을_남긴다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/location/senior/42", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNotNull();
+        verify(locationAccessLogService).record(100L, 42L, LocationAccessPath.WS_SUBSCRIBE);
+    }
+
+    @Test
+    @DisplayName("심박 topic을 구독하면 위치 열람이 아니므로 기록을 남기지 않는다")
+    void 심박_topic_구독은_열람_기록을_남기지_않는다() {
+        // given
+        Message<?> message = buildSubscribeMessage("/topic/heart-rate/42", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNotNull();
+        verifyNoInteractions(locationAccessLogService);
+    }
+
+    @Test
+    @DisplayName("인가가 거부되면 위치 topic이어도 열람 기록을 남기지 않는다")
+    void 인가가_거부되면_열람_기록을_남기지_않는다() {
+        // given
+        willThrow(new BusinessException(ErrorCode.FORBIDDEN))
+                .given(familyAccessService).verifyFamilyAccess(100L, 42L);
+        Message<?> message = buildSubscribeMessage("/topic/location/senior/42", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+        verifyNoInteractions(locationAccessLogService);
+    }
+
+    @Test
+    @DisplayName("열람 기록이 예외를 던져도 위치 topic 구독은 그대로 성립한다")
+    void 열람_기록이_실패해도_구독은_성립한다() {
+        // given
+        willThrow(new IllegalStateException("DB 장애"))
+                .given(locationAccessLogService)
+                .record(100L, 42L, LocationAccessPath.WS_SUBSCRIBE);
+        Message<?> message = buildSubscribeMessage("/topic/location/senior/42", 100L);
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNotNull();
     }
 
     private Message<?> buildSubscribeMessage(String destination, Long subscriberId) {

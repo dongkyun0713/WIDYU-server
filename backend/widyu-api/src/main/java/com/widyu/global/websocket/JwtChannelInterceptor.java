@@ -6,6 +6,8 @@ import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
+import com.widyu.location.access.LocationAccessPath;
+import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.member.application.FamilyAccessService;
 import java.util.Set;
 import java.util.Map;
@@ -47,6 +49,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     private final JwtTokenProvider jwtTokenProvider;
     private final FamilyAccessService familyAccessService;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
+    private final LocationAccessLogService locationAccessLogService;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -126,7 +129,22 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             return null;
         }
 
+        // 구독 한 번이 열람 한 번이다. 뒤따르는 위치 메시지는 같은 열람이라 세지 않는다(ADR-0036 대안 4).
+        if (LOCATION_TOPIC.matcher(destination).matches()) {
+            recordAccessQuietly(subscriberId, targetMemberId);
+        }
+
         return message;
+    }
+
+    /** 기록이 깨져도 구독은 성립해야 한다(LLD-0056 5.1). */
+    private void recordAccessQuietly(Long subscriberId, Long targetMemberId) {
+        try {
+            locationAccessLogService.record(subscriberId, targetMemberId, LocationAccessPath.WS_SUBSCRIBE);
+        } catch (Exception e) {
+            log.warn("위치 열람 기록 실패: path={}, cause={}",
+                    LocationAccessPath.WS_SUBSCRIBE, e.getClass().getSimpleName());
+        }
     }
 
     private Long extractProtectedMemberId(String destination) {
