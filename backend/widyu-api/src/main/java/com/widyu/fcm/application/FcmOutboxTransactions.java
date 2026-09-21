@@ -66,7 +66,8 @@ public class FcmOutboxTransactions {
         if (result.success()) {
             notifications.save(FcmNotification.builder().recipientMember(row.getRecipientMember())
                     .memberFcmToken(row.getMemberFcmToken()).title(row.getTitle()).body(row.getBody())
-                    .image(row.getImage()).fcmCategory(row.getFcmCategory()).isRead(false).build());
+                    .image(row.getImage()).fcmCategory(row.getFcmCategory())
+                    .decisionId(row.getDecisionId()).isRead(false).build());
             row.sent();
             markDecisionDelivered(row);
             return;

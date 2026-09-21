@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -57,6 +58,9 @@ class FcmOutboxTransactionsTest {
         // 보호자가 여럿이면 이 트랜잭션이 동시에 여럿 돈다. 읽고 나서 쓰면 나중 것이 앞선 시각을 덮으므로
         // 「비어 있을 때만」 조건을 UPDATE 문에 넣은 원자적 갱신 하나로 간다(ADR-0035 결정 3).
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.SENT);
+        ArgumentCaptor<FcmNotification> notification = ArgumentCaptor.forClass(FcmNotification.class);
+        then(notifications).should().save(notification.capture());
+        assertThat(notification.getValue().getDecisionId()).isEqualTo(DECISION_ID);
         ArgumentCaptor<Long> alertAtMs = ArgumentCaptor.forClass(Long.class);
         then(decisions).should().markDeliveredIfFirst(
                 eq(DECISION_ID), eq("fcm-7"), alertAtMs.capture());
@@ -75,6 +79,9 @@ class FcmOutboxTransactionsTest {
 
         // then
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.SENT);
+        ArgumentCaptor<FcmNotification> notification = ArgumentCaptor.forClass(FcmNotification.class);
+        then(notifications).should().save(notification.capture());
+        assertThat(notification.getValue().getDecisionId()).isNull();
         then(decisions).shouldHaveNoInteractions();
     }
 

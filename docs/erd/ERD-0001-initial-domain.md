@@ -478,6 +478,7 @@ erDiagram
         String image
         Boolean isRead
         FcmCategory fcmCategory
+        String decisionId "nullable. 이 알림을 낳은 판정 (LLD-0053)"
     }
 
     FcmOutbox {
@@ -698,7 +699,7 @@ erDiagram
 | 2026-09-21 | `incident` | 신규 테이블 (LLD-0054). 위급 알림 뒤의 본인확인·무응답 판정·사후 판정 | `scripts/mysql/create_incident.sql` |
 | 2026-09-21 | `fcm_notification`·`fcm_outbox` | `fcm_category`에 `INCIDENT_SELF_CHECK` 추가 (LLD-0054). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_incident_self_check.sql` |
 | 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
-| 2026-09-21 | `fcm_outbox` | `decision_id` 추가 (LLD-0053). 전송 성공 시 그 판정의 알림 도달 사실을 채운다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
+| 2026-09-21 | `fcm_outbox`, `fcm_notification` | `decision_id` 추가 (LLD-0053). 전송 성공 시 판정 도달 사실을 채우고 연구 철회 때 관련 알림만 찾는다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
 | 2026-09-20 | `location_fix` | 신규 테이블 (LLD-0048). 위치 원본 — 잰 시각·정확도·속도·사유와 원문 JSON | `scripts/mysql/create_location_fix.sql` |
 | 2026-09-20 | `device_heartbeat` | 신규 테이블 (LLD-0049). 폰·워치 상태와 원문 JSON | `scripts/mysql/create_device_heartbeat.sql` |
 | 2026-09-20 | `run_export` | 신규 테이블 (LLD-0050). 회차 내보내기 잡 큐 | `scripts/mysql/create_run_export.sql` |
