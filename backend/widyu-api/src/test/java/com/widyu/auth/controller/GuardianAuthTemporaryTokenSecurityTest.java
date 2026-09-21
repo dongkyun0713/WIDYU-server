@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.widyu.auth.application.guardian.GuardianAuthService;
+import com.widyu.admin.application.AdminAccessLogService;
 import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
@@ -46,6 +47,10 @@ class GuardianAuthTemporaryTokenSecurityTest {
 
     @MockBean
     private AdminAccessValidator adminAccessValidator;
+
+    // WebMvcConfig가 등록하는 접속기록 인터셉터의 의존성. 슬라이스 테스트에는 서비스 빈이 없다.
+    @MockBean
+    private AdminAccessLogService adminAccessLogService;
 
     @Test
     @DisplayName("임시 토큰으로 이메일 회원가입하면 서비스까지 요청을 전달한다")
