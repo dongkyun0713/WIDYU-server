@@ -112,13 +112,18 @@ public class LocationFixService {
         if (run.isPresent()) {
             return attributionOf(run.get());
         }
-        // 모르는 회차이거나 배정된 회차가 없다. 이때만 요청값을 그대로 둔다(운영 외 자료).
-        return new RunAttribution(request.runId(), request.studyId(), request.participationId());
+        // 배정된 회차가 없는 운영 외 자료. 이때만 요청값을 그대로 둔다.
+        return new RunAttribution(null, request.studyId(), request.participationId());
     }
 
+    /**
+     * 앱이 회차를 명시했어도 그 회차가 이 회원·이 기기의 것이고 잰 시각에 배정돼 있었는지 서버가
+     * 확인한다. 확인하지 않으면 남의 회차에 위치 원본이 붙는다. 맞지 않으면 {@code RUN_NOT_FOUND}다.
+     */
     private Optional<CollectionRun> findRun(LocationUpdateRequest request, Long memberId) {
         if (request.runId() != null) {
-            return collectionRunService.findRunByRunId(request.runId());
+            return Optional.of(collectionRunService.requireAttributableRun(
+                    request.runId(), memberId, request.deviceId(), request.tsMs()));
         }
         return collectionRunService.resolveRun(memberId, request.deviceId(), request.tsMs());
     }

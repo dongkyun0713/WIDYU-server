@@ -12,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 import com.widyu.global.error.BusinessException;
@@ -114,6 +115,28 @@ class LocationFixServiceTest {
         LocationFix saved = savedFix();
         assertThat(saved.getStudyId()).isEqualTo("STUDY-2026");
         assertThat(saved.getParticipationId()).isEqualTo("part-0f3a");
+    }
+
+    @Test
+    @DisplayName("다른 회원·기기에 배정된 회차를 실어 보내면 거부하고 저장하지 않는다")
+    void 다른_회원과_기기에_배정된_회차를_실어_보내면_거부하고_저장하지_않는다() {
+        // given
+        LocationUpdateRequest request = new LocationUpdateRequest(
+                MEMBER_ID, null, null, null, 2, DEVICE_ID, SESSION_ID, SEQ,
+                null, null, "run-남의것",
+                37.5551, 126.9707, 8.5, 0.9, 0.5, 212.0, 41.2, "fused", false, TS_MS, "move");
+        given(locationFixRepository.existsByDeviceIdAndSessionIdAndSeq(DEVICE_ID, SESSION_ID, SEQ))
+                .willReturn(false);
+        willThrow(new BusinessException(ErrorCode.RUN_NOT_FOUND))
+                .given(collectionRunService)
+                .requireAttributableRun("run-남의것", MEMBER_ID, DEVICE_ID, TS_MS);
+
+        // when & then
+        assertThatThrownBy(() ->
+                locationFixService.store(MEMBER_ID, request, "{}".getBytes(UTF_8), 1_000L, 2_000L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.RUN_NOT_FOUND);
+        then(locationFixRepository).should(never()).save(any());
     }
 
     private CollectionRun researchRun() {
