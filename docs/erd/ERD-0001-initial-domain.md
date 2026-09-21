@@ -484,6 +484,16 @@ erDiagram
         String decisionId "nullable. 이 알림을 낳은 판정 (LLD-0053)"
     }
 
+    ConsentRecord {
+        Long consent_record_id PK
+        Long member_id FK
+        ConsentKey consentKey "인앱 동의 항목 6종"
+        String version "앱이 보여 준 동의문 판. 철회 행은 직전 판 복사"
+        boolean granted "false = 철회 또는 미동의"
+        LocalDateTime recordedAt "서버 시각. 행이 불변이라 updated_at 없음"
+        ConsentSource source "APP / ADMIN (지금은 APP만)"
+    }
+
     MemberNotificationSetting {
         Long id PK
         Long member_id FK
@@ -571,6 +581,7 @@ erDiagram
     Member ||--o{ Payment : "결제"
     Member ||--o{ MemberFcmToken : "FCM 토큰"
     Member ||--o{ MemberNotificationSetting : "알림 설정"
+    Member ||--o{ ConsentRecord : "인앱 동의 기록 (추가 전용)"
     Member ||--o{ AddressBookmark : "주소 즐겨찾기"
     Member ||--o{ AdminAuditLog : "관리자 로그"
     Member ||..o{ AdminAccessLog : "관리자 접속기록 (admin_id·target_member_id, FK 없음)"
@@ -630,6 +641,8 @@ erDiagram
 | `SensorStreamType` | `WATCH_ACCEL`, `WATCH_GYRO`, `PHONE_ACCEL`, `PHONE_GYRO`, `PHONE_LOCATION` |
 | `SensorBatchKind` | `LIVE`, `RETRANSMIT`, `GYRO_ENRICH` |
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
+| `ConsentKey` | `PRIVACY_PERSONAL`, `PRIVACY_HEALTH`, `LOCATION`, `GUARDIAN_LOCATION_PROVIDE`, `LOCATION_NOTICE_BATCHED`, `RETENTION_NOTICE` |
+| `ConsentSource` | `APP`, `ADMIN` |
 | `StudyParticipationStatus` | `ACTIVE`, `ENDED`, `WITHDRAWN` |
 | `WithdrawalScope` | `ALL`, `SELECTED_CONSENTS` |
 | `StudyParticipationHistoryType` | `REGISTERED`, `RETENTION_CHANGED`, `WITHDRAWN`, `DELETION_PROCESSED` |
@@ -679,6 +692,7 @@ erDiagram
 | `device_heartbeat` | UK `uk_device_heartbeat_ts` | `(device_id, session_id, ts_ms)` | seq 없는 하트비트 멱등 키 |
 | `device_heartbeat` | `idx_device_heartbeat_member_time` | `(member_id, ts_ms)` | 참가자별 시각순 조회 |
 | `device_heartbeat` | `idx_device_heartbeat_run` | `(run_id)` | 회차별 상태 조회 |
+| `consent_record` | `idx_consent_record_member_key_time` | `(member_id, consent_key, recorded_at)` | 항목별 최신 행 조회. UK를 두지 않는다 — 같은 항목에 행이 여러 개인 것이 이력이다 (LLD-0055) |
 | `study_participation` | UK `uk_study_participation_id` | `(participation_id)` | 서버 발급 참여 식별자 중복 방지 (LLD-0052) |
 | `study_participation` | `idx_study_participation_active` | `(study_id, member_id, status)` | 같은 연구·회원의 ACTIVE 참여 중복 검사 |
 | `study_participation` | UK `uk_study_participation_active` | `(study_id, member_id, active_key)` | 같은 연구·회원의 ACTIVE 참여 하나를 DB에서 보장. `active_key`는 ACTIVE일 때만 `'1'`이라 철회·종료 참여는 제약 대상에서 빠진다 (`collection_run.open_marker`와 같은 방식) |
@@ -704,6 +718,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
 | 2026-09-21 | `decision_record` | `hr_bpm`·`hr_measured_at_ms`·`hr_accuracy`·`reason` 추가 (LLD-0053). 심박 판정의 근거와 사유. 낙상 행은 비움 | `scripts/mysql/alter_decision_record_for_hr.sql` |
 | 2026-09-21 | `fcm_outbox`, `fcm_notification` | `decision_id` 추가 (LLD-0053). 전송 성공 시 판정 도달 사실을 채우고 연구 철회 때 관련 알림만 찾는다 | `scripts/mysql/alter_fcm_outbox_decision_id.sql` |
 | 2026-09-21 | `study_participation`(재정의)·`study_participation_consent`·`study_participation_withdrawal_item`·`study_participation_history`·`collection_run` | 실증 참여 기록 4테이블과 `collection_run.study_participation_id` FK 추가 (LLD-0052, ADR-0034). ACTIVE 단일성은 엔티티가 채우는 `active_key` + UK로, 일부 철회 항목은 이력의 `withdrawn_consent_keys`(JSON)로 남긴다. 연구 보관 정책의 정본을 참여 기록으로 옮긴다. `collection_run`의 `study_id`·`participation_id`·`consent_version`·보관 날짜 컬럼은 **새 회차에서 미사용**이며 운영 백필 후 별도 승인으로 제거 예정 | `scripts/mysql/create_study_participation.sql` |

@@ -119,6 +119,16 @@
 - **v2 원본 저장**: `/app/location/update`를 `Message<byte[]>`로 받아 파싱한다. `v==2`·`device_id`·`ts_ms`가 오면 잰 시각·정확도·속도·`reason`(move/keepalive/incident)과 원문을 `location_fix`에 남긴다. 멱등 키는 `(device_id, session_id, seq)`, 회차 귀속은 B8 재사용 → LLD-0048
 - **정확도가 낮은 위치도 거르지 않는다**(정책 1.6.6, `accuracy_m > 100`도 저장). `reason`·좌표 범위 검증은 브로드캐스트 **앞**에서 하고(`LOCATION_4000`), 저장 실패는 WARN만 남기고 ACK를 막지 않는다. **좌표 값은 어떤 로그에도 남기지 않는다**(memberId·seq만, LLD-0029)
 
+### `consent` — 인앱 동의 기록
+- 서비스 동의는 앱이 항목별로 받고 서버는 **버전·시각·철회**만 기록한다(정책 1.5.10). 서면 연구 참여 동의는 `study_participation`이 담는다 → ADR-0036 결정 1·2, LLD-0055
+- **추가 전용 테이블**이다. `consent_record`를 UPDATE·DELETE하지 않으므로 테이블이 곧 이력이고 현재 상태는 항목별 최신 행이다. 철회도 `granted=false` 행을 새로 남기며 **직전 행의 `version`을 복사**한다(직전 행이 없으면 `-`)
+- 같은 값을 다시 제출해도 행을 남긴다 — 「언제 다시 동의했는지」도 기록할 사실이다
+- `ConsentKey` 6종은 서버가 고정한다: `PRIVACY_PERSONAL`·`PRIVACY_HEALTH`(민감정보는 별도)·`LOCATION`·`GUARDIAN_LOCATION_PROVIDE`·`LOCATION_NOTICE_BATCHED`·`RETENTION_NOTICE`. 모르는 값은 400 `CONSENT_4000`
+- **동의 유무로 기능을 막지 않는다**(ADR-0036 결정 2). 차단은 제품 결정이고 앱 동의 화면과 함께 정한다. 다른 기능은 `ConsentService.isGranted(memberId, key)`로 읽는다(기록이 없으면 false)
+- 회원 API는 `PUT`·`GET /api/v1/consents`·`POST /api/v1/consents/withdrawal`, 관리자 이력은 `GET /api/v1/admin/members/{memberId}/consents`(전체 행 최근순)
+- **응답·로그에 이름·전화번호를 남기지 않는다**. 로그는 memberId와 항목 수만
+- 자동 삭제가 없다(ADR-0036 결정 6). 보관 상한은 법무 검토 뒤 결정한다
+
 ### `mypage`
 - 시니어/보호자 분리(`SeniorMyPageService`·`GuardianMyPageService`·`MyPageProfileService`). Query/Command 분리 → LLD-0018
 

@@ -149,6 +149,10 @@ public enum ErrorCode {
     RUN_RESEARCH_PARTICIPATION_REQUIRED(HttpStatus.BAD_REQUEST, "RUN_4004", "연구 회차에는 유효한 참여 기록이 필요합니다."),
     RUN_RESEARCH_PARTICIPATION_MISMATCH(HttpStatus.BAD_REQUEST, "RUN_4005", "참여 기록의 회원과 회차 대상 회원이 다릅니다."),
 
+    // 인앱 동의 관련
+    CONSENT_KEY_INVALID(HttpStatus.BAD_REQUEST, "CONSENT_4000", "알 수 없는 동의 항목입니다."),
+    CONSENT_REQUEST_EMPTY(HttpStatus.BAD_REQUEST, "CONSENT_4001", "동의 항목이 비어 있습니다."),
+
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
     FILE_IS_EMPTY(HttpStatus.BAD_REQUEST, "FILE_4000", "파일이 비어있습니다."),
