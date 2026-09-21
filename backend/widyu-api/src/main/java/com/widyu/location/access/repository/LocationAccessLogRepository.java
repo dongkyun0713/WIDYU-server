@@ -10,7 +10,6 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 추가 전용 테이블이라 조회와 {@code notified_at} 갱신만 정의한다(LLD-0056 4절).
@@ -39,9 +38,9 @@ public interface LocationAccessLogRepository extends JpaRepository<LocationAcces
      * <p>읽고-보내고-갱신하면 인스턴스가 여럿일 때 같은 행을 저마다 읽어 중복 통보가 나간다.
      * 조건부 UPDATE 한 방이 그 경합을 없앤다 — {@code RunExportRepository.claim}과 같은 방식이다.
      *
-     * <p>스케줄러가 시니어마다 독립적으로 실패할 수 있어야 하므로 이 갱신은 자기 트랜잭션에서 끝낸다.
+     * <p>호출자인 {@code LocationAccessDigestSender}의 트랜잭션에 참여한다. FCM 등록이 실패하면
+     * 이 갱신도 롤백되어 다음 실행에서 다시 선점할 수 있다.
      */
-    @Transactional
     @Modifying(clearAutomatically = true)
     @Query("update LocationAccessLog l set l.notifiedAt = :now"
             + " where l.seniorMemberId = :seniorMemberId and l.notifiedAt is null")

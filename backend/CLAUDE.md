@@ -103,6 +103,7 @@
 - **본인 조회는 기록하지 않는다.** `viewerId == seniorId`면 아무것도 하지 않는다
 - 기록은 `REQUIRES_NEW`이고 **호출부가 `try/catch(Exception)`으로 감싸 WARN만 남긴다**. 프록시가 커밋 시점에 던지는 예외는 서비스 메서드 안에서 잡을 수 없어 훅마다 감싼다. 기록 실패가 위치 조회를 막지 않는다
 - **통보는 두 방식**이다. `ConsentService.isGranted(seniorId, LOCATION_NOTICE_BATCHED)`가 true면 `LocationAccessDigestScheduler`가 하루 한 번 요약 FCM, 아니면 건마다 FCM이되 같은 보호자의 반복 조회는 `location-access.immediate-cooldown-min`(기본 10분) 안에서 합친다
+- 다이제스트는 시니어별 `LocationAccessDigestSender` 트랜잭션에서 미통보 행 선점과 FCM enqueue를 함께 처리한다. enqueue 실패 시 선점도 롤백되어 다음 실행에서 재시도한다
 - **합쳐진 건은 `notified_at`을 비워 둔다.** 다이제스트가 `notified_at IS NULL` 전체를 묶으므로 즉시 모드에서 빠진 건도 결국 알린다
 - `FcmCategory.LOCATION_NOTICE`는 알림 설정 그룹에 없다 — 법 요건이라 끄지 않는다(미등록 카테고리는 기본 허용)
 - 시니어 조회는 `GET /api/v1/location/access-logs/mine?from=&to=&page=&size=`(기본 최근 30일). **응답·로그에 좌표를 남기지 않는다**(LLD-0029). 응답의 `viewerName`은 같은 가족 보호자 이름이라 본인에게 공개한다

@@ -89,9 +89,9 @@
 3. 집은 뒤 `findBySeniorMemberIdAndNotifiedAt(seniorId, now)`로 **실제로 집은 행만** 다시 읽어 조회자 수 `n`과 횟수 `m`을 센다. 선점 전 목록을 세면 그 사이 늘어난 행까지 세어 숫자가 맞지 않는다. 그 사이 늘어난 행은 `notified_at`이 비어 있으니 다음 회차 몫이다.
 4. FCM 1건 enqueue.
 
-선점은 자기 트랜잭션에서 끝나고 **스케줄러 메서드에는 트랜잭션을 걸지 않는다.** 하나로 묶으면 한 시니어의 실패가 트랜잭션을 rollback-only로 만들어 그날 전체가 함께 무너지고, 시니어별 `try/catch`가 무의미해진다.
+선점과 FCM enqueue는 별도 빈 `LocationAccessDigestSender.send`의 **시니어별 트랜잭션 하나**로 묶는다. enqueue가 실패하면 `notified_at` 선점도 롤백되어 다음 실행에서 다시 시도할 수 있다. 서버 인스턴스가 둘이면 먼저 UPDATE한 트랜잭션이 행 잠금을 잡고, 뒤 트랜잭션은 앞선 커밋 뒤 0건을 받아 중복 발송하지 않는다. 앞선 트랜잭션이 실패하면 롤백 뒤 다음 트랜잭션이 선점할 수 있다.
 
-트레이드오프: 선점이 먼저이므로 enqueue가 실패한 시니어의 행은 이미 통보된 것으로 표시되어 다시 잡히지 않는다. 중복 통보 대신 드문 누락을 택한 것이며, 열람 기록 자체는 남고 시니어는 언제든 API(5.5)로 전부 볼 수 있다.
+스케줄러 자체에는 트랜잭션을 걸지 않고 시니어마다 위 별도 빈을 호출한다. 한 시니어의 실패는 그 시니어 트랜잭션만 롤백하며, 스케줄러의 `try/catch`가 다음 시니어 처리를 이어 간다.
 
 ### 5.5 조회
 `GET …/access-logs/mine`: `seniorId = 현재 회원`, 기간 필터·페이지. `viewerName`은 `Member.name`(가족이므로 노출 가능).
@@ -105,7 +105,7 @@
 - [ ] `getLastLocation`·`getLocationTrail`·`getTrackedSeniors`·홈 카드·STOMP 구독 각각에서 행이 생긴다(경로 값 확인). 본인 조회는 행이 없다.
 - [ ] 기록 서비스가 예외를 던져도 위치 응답은 정상이다.
 - [ ] 즉시 모드: 첫 조회에 FCM 1건과 `notified_at`, 쿨다운 안 재조회는 FCM 없음·`notified_at` null, 쿨다운 뒤 재조회는 FCM.
-- [ ] 모아서 모드: 조회 시 FCM 없음, 다이제스트가 미통보 행을 묶어 시니어당 FCM 1건과 `notified_at` 갱신.
+- [ ] 모아서 모드: 조회 시 FCM 없음, 다이제스트가 미통보 행을 묶어 시니어당 FCM 1건과 `notified_at` 갱신. FCM enqueue 실패 시 선점이 롤백되어 다음 실행에서 재시도한다.
 - [ ] 시니어 조회 API가 기간·페이지로 자기 기록만 준다. 다른 회원 기록은 보이지 않는다.
 - [ ] 응답에 좌표가 없다.
 - [ ] `JwtChannelInterceptorTest` 기존 회귀 유지.
@@ -140,13 +140,15 @@ SHOW COLUMNS FROM member_notification_setting LIKE 'category';
 ALTER TABLE fcm_notification
     MODIFY COLUMN fcm_category ENUM(
         'ALL', 'ALBUM', 'TARGET', 'HEALTH_SCHEDULE', 'WALK', 'MEDICINE_SCHEDULE',
-        'HEART_MESSAGE', 'SAFE_ZONE', 'LOCATION_NOTICE', 'ETC');
+        'HEART_MESSAGE', 'SAFE_ZONE', 'INCIDENT_SELF_CHECK', 'LOCATION_NOTICE', 'ETC');
 
 ALTER TABLE member_notification_setting
     MODIFY COLUMN category ENUM(
         'ALL', 'ALBUM', 'TARGET', 'HEALTH_SCHEDULE', 'WALK', 'MEDICINE_SCHEDULE',
-        'HEART_MESSAGE', 'SAFE_ZONE', 'LOCATION_NOTICE', 'ETC') NOT NULL;
+        'HEART_MESSAGE', 'SAFE_ZONE', 'INCIDENT_SELF_CHECK', 'LOCATION_NOTICE', 'ETC') NOT NULL;
 ```
+
+`INCIDENT_SELF_CHECK`는 병렬 PR #674가 추가하는 값이다. 두 PR 중 어느 ALTER를 나중에 실행해도 먼저 추가된 값을 제거하지 않도록 두 값을 함께 적는다.
 
 `LOCATION_NOTICE`는 `NotificationSettingGroup` 어디에도 넣지 않았다. 미등록 카테고리는 `NotificationSettingService.isNotificationEnabled`가 기본 허용하므로 설정으로 끌 수 없고, 법이 요구하는 통보에는 그 동작이 맞다.
 
