@@ -180,7 +180,7 @@ public interface GoalHomeDocs {
 
                     **반환 정보:**
                     - **지난주 목표 달성률**: 지난주(일~토) 전체 달성률
-                    - **이번주 목표 달성률**: 이번주(일~토) 전체 달성률
+                    - **오늘 목표 달성률**: 오늘 목표(약 복용·걸음 수) 중 달성한 비율
                     - **이번주 일별 달성률**: 일요일부터 토요일까지 각 날짜의 달성률 배열
 
                     **달성률 계산:**
@@ -205,7 +205,7 @@ public interface GoalHomeDocs {
                                               "message": "보호자 목표 현황 조회 성공",
                                               "data": {
                                                 "lastWeekGoalRate": 0.8,
-                                                "thisWeekGoalRate": 0.65,
+                                                "todayGoalRate": 0.65,
                                                 "thisWeekGoalRates": [0.6, 0.24, 0.53, 0.75, 0.85, 0.9, 1.0]
                                               }
                                             }
