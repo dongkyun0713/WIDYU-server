@@ -45,6 +45,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Service
@@ -414,11 +416,25 @@ public class RealtimeLocationService {
         safeZoneAlertService.handleSafeZoneTransition(member.getId(), previousLocationType, locationType);
 
         StayInfo newStay = StayInfo.of(newLat, newLng, locationType, locationName);
-        redisTemplate.opsForValue().set(stayKey, newStay, STAY_TTL_SECONDS, TimeUnit.SECONDS);
+        saveStayAfterCommit(stayKey, newStay);
         log.debug("새로운 위치로 이동 - stayKey: {}, 체류 시작: {}, 위치 타입: {}",
                 stayKey, newStay.startTime(), locationType);
 
         return newStay;
+    }
+
+    // 체류 정보는 안전구역 이탈 판정의 기준이다. 롤백된 갱신이 이를 바꾸면 같은 이탈을 다시 감지하지 못하므로 커밋 뒤에 저장한다 (LLD-0058)
+    private void saveStayAfterCommit(String stayKey, StayInfo stay) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            redisTemplate.opsForValue().set(stayKey, stay, STAY_TTL_SECONDS, TimeUnit.SECONDS);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                redisTemplate.opsForValue().set(stayKey, stay, STAY_TTL_SECONDS, TimeUnit.SECONDS);
+            }
+        });
     }
 
     /**

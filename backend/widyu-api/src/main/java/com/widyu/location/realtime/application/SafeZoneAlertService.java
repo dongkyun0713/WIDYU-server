@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Service
@@ -38,7 +40,23 @@ public class SafeZoneAlertService {
             return;
         }
 
+        releaseAlertOnRollback(alertKey);
         eventPublisher.publishEvent(new SafeZoneExitEvent(memberId));
         log.info("안전구역 이탈 이벤트 발행 - memberId: {}", memberId);
+    }
+
+    // 알림 요청(outbox)이 롤백되면 플래그도 풀어야 다음 위치 갱신에서 이탈을 다시 알린다 (LLD-0058)
+    private void releaseAlertOnRollback(String alertKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    redisTemplate.delete(alertKey);
+                }
+            }
+        });
     }
 }

@@ -49,6 +49,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RealtimeLocationService 예외 처리 단위 테스트")
@@ -133,6 +135,65 @@ class RealtimeLocationServiceTest {
         then(valueOperations).should().set(eq("location:stay:1"), any(StayInfo.class), eq(86400L), eq(TimeUnit.SECONDS));
         then(safeZoneAlertService).should().handleSafeZoneTransition(1L, null, null);
         then(messagingTemplate).should().convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+    }
+
+    @Test
+    @DisplayName("위치 갱신 트랜잭션이 롤백되면 체류 정보를 저장하지 않는다")
+    void 위치_갱신_트랜잭션이_롤백되면_체류_정보를_저장하지_않는다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            realtimeLocationService.updateAndBroadcast(request, 1L);
+
+            // when
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+
+            // then
+            then(valueOperations).should(never()).set(eq("location:stay:1"), any(), eq(86400L), eq(TimeUnit.SECONDS));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("위치 갱신 트랜잭션이 커밋되면 체류 정보를 저장한다")
+    void 위치_갱신_트랜잭션이_커밋되면_체류_정보를_저장한다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            realtimeLocationService.updateAndBroadcast(request, 1L);
+            then(valueOperations).should(never()).set(eq("location:stay:1"), any(), eq(86400L), eq(TimeUnit.SECONDS));
+
+            // when
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            // then
+            then(valueOperations).should().set(eq("location:stay:1"), any(StayInfo.class), eq(86400L), eq(TimeUnit.SECONDS));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

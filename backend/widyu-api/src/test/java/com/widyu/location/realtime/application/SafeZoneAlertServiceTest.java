@@ -1,6 +1,9 @@
 package com.widyu.location.realtime.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -18,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("SafeZoneAlertService 단위 테스트")
@@ -91,5 +96,88 @@ class SafeZoneAlertServiceTest {
 
         // then
         then(eventPublisher).should(never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("이탈 플래그를 잡은 트랜잭션이 롤백되면 플래그를 삭제한다")
+    void 이탈_플래그를_잡은_트랜잭션이_롤백되면_플래그를_삭제한다() {
+        // given
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.setIfAbsent(
+                eq("safezone:alert:1"),
+                eq(true),
+                eq(1800L),
+                eq(TimeUnit.SECONDS)
+        )).willReturn(true);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            safeZoneAlertService.handleSafeZoneTransition(1L, "HOME", null);
+
+            // when
+            completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+            // then
+            then(redisTemplate).should().delete("safezone:alert:1");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("이탈 플래그를 잡은 트랜잭션이 커밋되면 플래그를 유지한다")
+    void 이탈_플래그를_잡은_트랜잭션이_커밋되면_플래그를_유지한다() {
+        // given
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.setIfAbsent(
+                eq("safezone:alert:1"),
+                eq(true),
+                eq(1800L),
+                eq(TimeUnit.SECONDS)
+        )).willReturn(true);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            safeZoneAlertService.handleSafeZoneTransition(1L, "HOME", null);
+
+            // when
+            completeTransaction(TransactionSynchronization.STATUS_COMMITTED);
+
+            // then
+            then(redisTemplate).should(never()).delete("safezone:alert:1");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("알림 요청 저장이 실패해 롤백되면 플래그를 삭제한다")
+    void 알림_요청_저장이_실패해_롤백되면_플래그를_삭제한다() {
+        // given
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.setIfAbsent(
+                eq("safezone:alert:1"),
+                eq(true),
+                eq(1800L),
+                eq(TimeUnit.SECONDS)
+        )).willReturn(true);
+        willThrow(new IllegalStateException("outbox 저장 실패"))
+                .given(eventPublisher).publishEvent(any(SafeZoneExitEvent.class));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertThatThrownBy(() -> safeZoneAlertService.handleSafeZoneTransition(1L, "HOME", null))
+                    .isInstanceOf(IllegalStateException.class);
+
+            // when
+            completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+            // then
+            then(redisTemplate).should().delete("safezone:alert:1");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    private static void completeTransaction(int status) {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(synchronization -> synchronization.afterCompletion(status));
     }
 }
