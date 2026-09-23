@@ -205,7 +205,7 @@ public interface GoalHomeDocs {
                                               "message": "보호자 목표 현황 조회 성공",
                                               "data": {
                                                 "lastWeekGoalRate": 0.8,
-                                                "todayGoalRate": 0.65,
+                                                "todayGoalRate": 0.75,
                                                 "thisWeekGoalRates": [0.6, 0.24, 0.53, 0.75, 0.85, 0.9, 1.0]
                                               }
                                             }
