@@ -145,9 +145,10 @@ public class GoalHomeService {
 
         // 이번주 일별 달성률
         List<Double> thisWeekGoalRates = calculateDailyGoalRates(periodData, thisWeekStart, thisWeekEnd);
-        Double thisWeekGoalRate = calculateWeeklyGoalRate(thisWeekGoalRates, thisWeekStart, today);
+        // 오늘 달성률 (일요일=0 인덱스)
+        Double todayGoalRate = thisWeekGoalRates.get(today.getDayOfWeek().getValue() % 7);
 
-        return GuardianGoalStatsResponse.of(lastWeekGoalRate, thisWeekGoalRate, thisWeekGoalRates);
+        return GuardianGoalStatsResponse.of(lastWeekGoalRate, todayGoalRate, thisWeekGoalRates);
     }
 
     /**

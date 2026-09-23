@@ -27,7 +27,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,7 +132,6 @@ class GoalHomeServiceTest {
         GuardianGoalStatsResponse response = goalHomeService.getGuardianGoalStats(11L);
 
         // then
-        long elapsedDays = ChronoUnit.DAYS.between(thisWeekStart, today) + 1;
         List<Double> expectedDailyRates = new ArrayList<>();
         for (LocalDate date = thisWeekStart; !date.isAfter(thisWeekEnd); date = date.plusDays(1)) {
             if (date.isEqual(today)) {
@@ -143,7 +141,7 @@ class GoalHomeServiceTest {
             }
         }
         assertThat(response.lastWeekGoalRate()).isZero();
-        assertThat(response.thisWeekGoalRate()).isEqualTo(1.0 / elapsedDays);
+        assertThat(response.todayGoalRate()).isEqualTo(1.0);
         assertThat(response.thisWeekGoalRates()).containsExactlyElementsOf(expectedDailyRates);
         verify(medicineScheduleRepository, times(1))
                 .findEffectiveByMemberAndDateRange(member, Status.ACTIVE, lastWeekStart, thisWeekEnd);
