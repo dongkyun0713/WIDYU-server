@@ -432,7 +432,12 @@ public class RealtimeLocationService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                redisTemplate.opsForValue().set(stayKey, stay, STAY_TTL_SECONDS, TimeUnit.SECONDS);
+                // afterCommit 예외는 이미 커밋된 요청을 실패로 돌려보낸다. 저장을 못 하면 다음 위치 갱신이 이전 체류 정보로 다시 판정한다
+                try {
+                    redisTemplate.opsForValue().set(stayKey, stay, STAY_TTL_SECONDS, TimeUnit.SECONDS);
+                } catch (RuntimeException e) {
+                    log.warn("커밋 후 체류 정보 저장 실패 - stayKey: {}", stayKey, e);
+                }
             }
         });
     }

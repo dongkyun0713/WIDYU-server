@@ -1,6 +1,7 @@
 package com.widyu.location.realtime.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -191,6 +192,35 @@ class RealtimeLocationServiceTest {
 
             // then
             then(valueOperations).should().set(eq("location:stay:1"), any(StayInfo.class), eq(86400L), eq(TimeUnit.SECONDS));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    @DisplayName("커밋 후 체류 정보 저장이 실패해도 예외를 전달하지 않는다")
+    void 커밋_후_체류_정보_저장이_실패해도_예외를_전달하지_않는다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        willThrow(new IllegalStateException("Redis 연결 실패"))
+                .given(valueOperations).set(eq("location:stay:1"), any(StayInfo.class), eq(86400L), eq(TimeUnit.SECONDS));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            realtimeLocationService.updateAndBroadcast(request, 1L);
+
+            // when & then
+            assertThatCode(() -> TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit))
+                    .doesNotThrowAnyException();
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
