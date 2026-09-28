@@ -5,13 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
-import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
+import com.widyu.auth.application.guardian.unlink.SocialUnlinkService;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
+import com.widyu.auth.event.MemberWithdrawnEvent;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
@@ -34,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,11 +46,10 @@ class MemberWithdrawServiceTest {
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private FamilyRepository familyRepository;
     @Mock private SeniorProfileRepository seniorProfileRepository;
-    @Mock private SocialLoginStrategyFactory strategyFactory;
     @Mock private MemberUtil memberUtil;
     @Mock private MedicationProofDeletionService medicationProofDeletionService;
-    @Mock private SocialLoginStrategy kakaoStrategy;
-    @Mock private SocialLoginStrategy appleStrategy;
+    @Mock private SocialUnlinkService socialUnlinkService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MemberWithdrawService memberWithdrawService;
@@ -152,7 +152,8 @@ class MemberWithdrawServiceTest {
         // when & then
         assertThatThrownBy(() -> memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유")))
                 .isInstanceOf(BusinessException.class);
-        verify(kakaoStrategy, never()).withdrawSocialAccount(any(), any());
+        verify(socialUnlinkService, never()).schedule(any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -181,27 +182,8 @@ class MemberWithdrawServiceTest {
     }
 
     @Test
-    @DisplayName("카카오 계정이 있는 회원 탈퇴 시 카카오 탈퇴 API를 호출한다")
-    void 카카오_계정_보유_회원_탈퇴_시_카카오_탈퇴_API_호출() {
-        // given
-        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
-        ReflectionTestUtils.setField(member, "id", 1L);
-        SocialAccount kakaoAccount = SocialAccount.createSocialAccount("k@k.com", "kakao", "kakao-id", member);
-        ReflectionTestUtils.setField(member, "socialAccounts", List.of(kakaoAccount));
-
-        given(memberUtil.getCurrentMember()).willReturn(member);
-        given(strategyFactory.getStrategy("kakao")).willReturn(kakaoStrategy);
-
-        // when
-        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
-
-        // then
-        verify(kakaoStrategy).withdrawSocialAccount(null, "kakao-id");
-    }
-
-    @Test
-    @DisplayName("애플 계정(리프레시 토큰 있음) 탈퇴 시 리프레시 토큰으로 탈퇴 API를 호출한다")
-    void 애플_계정_보유_회원_탈퇴_시_리프레시토큰으로_탈퇴_API_호출() {
+    @DisplayName("소셜 계정이 있는 회원이 탈퇴하면 마스킹 전 값으로 연동 해제를 예약하고 탈퇴 이벤트를 발행한다")
+    void 소셜_계정_보유_회원_탈퇴_시_마스킹_전_값으로_연동_해제를_예약하고_이벤트를_발행한다() {
         // given
         Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", 1L);
@@ -209,56 +191,20 @@ class MemberWithdrawServiceTest {
                 "a@a.com", "apple", "apple-id", "apple-refresh-token", member
         );
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
-
         given(memberUtil.getCurrentMember()).willReturn(member);
-        given(strategyFactory.getStrategy("apple")).willReturn(appleStrategy);
+        List<String> scheduledWith = new ArrayList<>();
+        willAnswer(invocation -> {
+            scheduledWith.add(appleAccount.getOauthId());
+            scheduledWith.add(appleAccount.getRefreshToken());
+            return null;
+        }).given(socialUnlinkService).schedule(member);
 
         // when
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
 
         // then
-        verify(appleStrategy).withdrawSocialAccount("apple-refresh-token", "apple-id");
-    }
-
-    @Test
-    @DisplayName("카카오 탈퇴 실패 시에도 전체 탈퇴 흐름(토큰 삭제, 회원 저장)은 계속 진행된다")
-    void 카카오_탈퇴_실패_시에도_전체_탈퇴_흐름이_계속된다() {
-        // given
-        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
-        ReflectionTestUtils.setField(member, "id", 1L);
-        SocialAccount kakaoAccount = SocialAccount.createSocialAccount("k@k.com", "kakao", "kakao-id", member);
-        ReflectionTestUtils.setField(member, "socialAccounts", List.of(kakaoAccount));
-
-        given(memberUtil.getCurrentMember()).willReturn(member);
-        given(strategyFactory.getStrategy("kakao")).willReturn(kakaoStrategy);
-        willThrow(new RuntimeException("카카오 서버 오류")).given(kakaoStrategy).withdrawSocialAccount(any(), any());
-
-        // when
-        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
-
-        // then
-        verify(refreshTokenRepository).deleteById(1L);
-        verify(memberRepository).save(member);
-    }
-
-    @Test
-    @DisplayName("리프레시 토큰이 없는 애플 계정은 탈퇴 API를 호출하지 않는다")
-    void 리프레시토큰_없는_애플_계정은_탈퇴_API_호출하지_않는다() {
-        // given
-        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
-        ReflectionTestUtils.setField(member, "id", 1L);
-        SocialAccount appleAccountNoToken = SocialAccount.createSocialAccount(
-                "a@a.com", "apple", "apple-id", null, member
-        );
-        ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccountNoToken));
-
-        given(memberUtil.getCurrentMember()).willReturn(member);
-
-        // when
-        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
-
-        // then
-        verify(appleStrategy, never()).withdrawSocialAccount(any(), any());
+        assertThat(scheduledWith).containsExactly("apple-id", "apple-refresh-token");
+        verify(eventPublisher).publishEvent(new MemberWithdrawnEvent(1L));
     }
 
     @Test
@@ -293,7 +239,6 @@ class MemberWithdrawServiceTest {
         );
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
         given(memberUtil.getCurrentMember()).willReturn(member);
-        given(strategyFactory.getStrategy("apple")).willReturn(appleStrategy);
 
         // when
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
@@ -301,7 +246,6 @@ class MemberWithdrawServiceTest {
         // then
         assertThat(appleAccount.getRefreshToken()).isNull();
         assertThat(member.getProfileImage()).isNull();
-        verify(appleStrategy).withdrawSocialAccount("apple-refresh-token", "apple-id");
     }
 
     @Test
