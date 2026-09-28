@@ -57,6 +57,7 @@ public class MemberWithdrawService {
         handleFamilyMembershipWithdrawal(member.getId());
 
         // 4. 개인정보 마스킹 (GDPR 준수)
+        String profileImage = member.getProfileImage();
         member.maskPersonalInfo();
 
         // 5. 로컬 계정 삭제
@@ -64,6 +65,9 @@ public class MemberWithdrawService {
 
         // 6. 회원 데이터 저장
         memberRepository.save(member);
+
+        // 7. 프로필 사진 삭제 작업 저장 (커밋 뒤 삭제, 실패 시 재시도, 롤백되면 작업도 사라진다)
+        medicationProofDeletionService.scheduleImageDeletion(member.getId(), profileImage);
 
         log.info("회원 탈퇴 완료: memberId={}", member.getId());
     }

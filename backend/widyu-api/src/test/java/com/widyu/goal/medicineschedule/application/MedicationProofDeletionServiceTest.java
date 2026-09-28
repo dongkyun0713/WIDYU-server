@@ -3,6 +3,7 @@ package com.widyu.goal.medicineschedule.application;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.widyu.goal.medicineschedule.event.MedicationProofImagesDeletionEvent;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
@@ -80,6 +81,41 @@ class MedicationProofDeletionServiceTest {
                 ArgumentCaptor.forClass(MedicationProofImagesDeletionEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         org.assertj.core.api.Assertions.assertThat(eventCaptor.getValue().taskIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("사진 삭제를 예약하면 삭제 작업을 저장하고 삭제 이벤트를 발행한다")
+    void 사진_삭제를_예약하면_삭제_작업을_저장하고_이벤트를_발행한다() {
+        // given
+        given(s3Service.extractObjectKey("https://cdn.example.com/profile/a.jpg")).willReturn("profile/a.jpg");
+        given(deletionTaskRepository.save(any())).willAnswer(invocation -> {
+            MedicationProofImageDeletionTask task = invocation.getArgument(0);
+            ReflectionTestUtils.setField(task, "id", 21L);
+            return task;
+        });
+
+        // when
+        medicationProofDeletionService.scheduleImageDeletion(1L, "https://cdn.example.com/profile/a.jpg");
+
+        // then
+        ArgumentCaptor<MedicationProofImageDeletionTask> taskCaptor =
+                ArgumentCaptor.forClass(MedicationProofImageDeletionTask.class);
+        verify(deletionTaskRepository).save(taskCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(taskCaptor.getValue().getObjectKey()).isEqualTo("profile/a.jpg");
+        ArgumentCaptor<MedicationProofImagesDeletionEvent> eventCaptor =
+                ArgumentCaptor.forClass(MedicationProofImagesDeletionEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(eventCaptor.getValue().taskIds()).containsExactly(21L);
+    }
+
+    @Test
+    @DisplayName("사진 주소가 없으면 삭제 작업을 저장하지 않는다")
+    void 사진_주소가_없으면_삭제_작업을_저장하지_않는다() {
+        // when
+        medicationProofDeletionService.scheduleImageDeletion(1L, null);
+
+        // then
+        verifyNoInteractions(deletionTaskRepository, eventPublisher);
     }
 
     private MedicationProof createProof(String imageUrl) {

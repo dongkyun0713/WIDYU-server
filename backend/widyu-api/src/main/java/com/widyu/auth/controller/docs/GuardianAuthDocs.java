@@ -375,6 +375,7 @@ public interface GuardianAuthDocs {
             summary = "비밀번호 변경(임시 토큰 필요)",
             description = """
                     SMS 본인확인 후 발급된 임시 토큰(Authorization: Bearer)을 사용하여 비밀번호를 변경합니다.
+                    새 비밀번호는 가입과 같은 규칙(8~12자, 영문·숫자·특수기호 모두 포함)을 따르며, 맞지 않으면 400을 반환합니다.
                     """
     )
     @ApiResponse(

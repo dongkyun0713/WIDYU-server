@@ -1,5 +1,6 @@
 package com.widyu.auth.application.guardian;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -278,5 +279,45 @@ class MemberWithdrawServiceTest {
                         m -> !"홍길동".equals(m.getName())
                 )
         );
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 시 연동 해제에 쓴 소셜 리프레시 토큰과 프로필 사진을 비운다")
+    void 회원_탈퇴_시_소셜_토큰과_프로필_사진을_비운다() {
+        // given
+        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        member.updateProfileImage("https://bucket/profile/a.jpg");
+        SocialAccount appleAccount = SocialAccount.createSocialAccount(
+                "a@a.com", "apple", "apple-id", "apple-refresh-token", member
+        );
+        ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(strategyFactory.getStrategy("apple")).willReturn(appleStrategy);
+
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+
+        // then
+        assertThat(appleAccount.getRefreshToken()).isNull();
+        assertThat(member.getProfileImage()).isNull();
+        verify(appleStrategy).withdrawSocialAccount("apple-refresh-token", "apple-id");
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 시 기존 프로필 사진의 삭제 작업을 저장한다")
+    void 회원_탈퇴_시_프로필_사진_삭제_작업을_저장한다() {
+        // given
+        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
+        member.updateProfileImage("https://bucket/profile/a.jpg");
+        given(memberUtil.getCurrentMember()).willReturn(member);
+
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+
+        // then
+        verify(medicationProofDeletionService).scheduleImageDeletion(1L, "https://bucket/profile/a.jpg");
     }
 }

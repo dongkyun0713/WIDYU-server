@@ -37,6 +37,20 @@ public class MedicationProofDeletionService {
                 member.getId(), proofs.size(), tasks.size());
     }
 
+    // 복약 인증 사진 삭제 작업을 다른 사진(탈퇴 회원 프로필 등)에도 쓴다. 커밋 뒤 삭제하고 실패하면 스케줄러가 재시도한다.
+    @Transactional
+    public void scheduleImageDeletion(Long memberId, String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return;
+        }
+        MedicationProofImageDeletionTask task = createTask(memberId, imageUrl);
+        if (task == null) {
+            return;
+        }
+        MedicationProofImageDeletionTask savedTask = deletionTaskRepository.save(task);
+        eventPublisher.publishEvent(new MedicationProofImagesDeletionEvent(List.of(savedTask.getId())));
+    }
+
     private List<String> extractImageUrls(List<MedicationProof> proofs) {
         return proofs.stream()
                 .flatMap(proof -> proof.getProofImageUrls().stream())
