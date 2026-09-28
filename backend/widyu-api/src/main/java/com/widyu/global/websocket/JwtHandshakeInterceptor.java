@@ -3,6 +3,7 @@ package com.widyu.global.websocket;
 import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
 
 import com.widyu.auth.dto.AccessTokenDto;
+import com.widyu.global.security.ActiveMemberValidator;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.member.MemberRole;
 import java.util.Map;
@@ -25,6 +26,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final WsTokenService wsTokenService;
+    private final ActiveMemberValidator activeMemberValidator;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
@@ -60,6 +62,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
                 log.warn("WebSocket handshake 실패 - WS 토큰 만료 또는 존재하지 않음");
                 return false;
             }
+            if (!activeMemberValidator.isActive(memberId)) {
+                log.warn("WebSocket handshake 실패 - 비활성 회원 memberId: {}", memberId);
+                return false;
+            }
             attributes.put("memberId", memberId);
             attributes.put("memberRole", MemberRole.USER);
             log.info("WebSocket handshake 성공 (WS 토큰) - memberId: {}", memberId);
@@ -81,6 +87,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
         if (accessTokenDto == null) {
             log.warn("WebSocket handshake 실패 - 유효하지 않은 JWT");
+            return false;
+        }
+        if (!activeMemberValidator.isActive(accessTokenDto.memberId())) {
+            log.warn("WebSocket handshake 실패 - 비활성 회원 memberId: {}", accessTokenDto.memberId());
             return false;
         }
 

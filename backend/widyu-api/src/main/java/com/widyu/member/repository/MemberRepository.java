@@ -1,5 +1,6 @@
 package com.widyu.member.repository;
 
+import com.widyu.global.entity.Status;
 import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
 import com.widyu.member.MemberType;
@@ -37,4 +38,5 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
     Page<Member> findByNameContainingOrderByIdDesc(String name, Pageable pageable);
     Page<Member> findAllByOrderByIdDesc(Pageable pageable);
     List<Member> findTop3ByPhoneNumberContainingOrderByIdDesc(String phoneNumber);
+    boolean existsByIdAndStatus(Long id, Status status);
 }

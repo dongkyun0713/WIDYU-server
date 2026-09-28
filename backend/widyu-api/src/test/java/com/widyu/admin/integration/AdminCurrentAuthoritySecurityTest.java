@@ -22,6 +22,7 @@ import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.global.config.SecurityConfig;
 import com.widyu.global.entity.Status;
+import com.widyu.global.security.ActiveMemberValidator;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
@@ -52,6 +53,8 @@ class AdminCurrentAuthoritySecurityTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private JwtTokenProvider jwtTokenProvider;
+    // 일반 회원 활성 확인은 LLD-0060 범위다. 이 테스트는 관리자 권한 확인만 본다.
+    @MockBean private ActiveMemberValidator activeMemberValidator;
     @MockBean private MemberRepository memberRepository;
     @MockBean private LocalAccountRepository localAccountRepository;
     @MockBean private AdminAuditLogRepository adminAuditLogRepository;

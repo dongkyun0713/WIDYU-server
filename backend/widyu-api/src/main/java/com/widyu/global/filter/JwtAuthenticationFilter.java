@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.security.ActiveMemberValidator;
 import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.MemberRole;
@@ -42,6 +43,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final AdminAccessValidator adminAccessValidator;
+    private final ActiveMemberValidator activeMemberValidator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -63,6 +65,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 AccessTokenDto accessTokenDto = jwtTokenProvider.retrieveAccessToken(accessTokenHeaderValue);
                 if (accessTokenDto.memberRole() == MemberRole.ADMIN) {
                     adminAccessValidator.validateMemberId(accessTokenDto.memberId());
+                }
+                if (accessTokenDto.memberRole() == MemberRole.USER) {
+                    activeMemberValidator.validate(accessTokenDto.memberId());
                 }
                 setAuthenticationToContext(accessTokenDto.memberId(), accessTokenDto.memberRole());
             } catch (BusinessException e) {

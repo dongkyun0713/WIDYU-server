@@ -2,6 +2,7 @@ package com.widyu.global.config;
 
 import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.global.filter.JwtAuthenticationFilter;
+import com.widyu.global.security.ActiveMemberValidator;
 import com.widyu.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,7 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final AdminAccessValidator adminAccessValidator;
+    private final ActiveMemberValidator activeMemberValidator;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -93,6 +95,6 @@ public class SecurityConfig {
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider) {
-        return new JwtAuthenticationFilter(jwtTokenProvider, adminAccessValidator);
+        return new JwtAuthenticationFilter(jwtTokenProvider, adminAccessValidator, activeMemberValidator);
     }
 }
