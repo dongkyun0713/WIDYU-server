@@ -17,7 +17,7 @@
 - 복약 스케줄 생성·수정·삭제 및 복용 인증 성공 후 revision을 증가시킨다.
 - 과거부터 유효한 스케줄을 당일 수정해 새 버전을 만들 때는 그날의 복용 인증을 새 버전으로 이관한다.
 - 스케줄 설정 변경 시 `MEDICATION_SCHEDULE_CHANGED`와 revision을 FCM data payload로 enqueue한다.
-- (#688) 복용 알림(정시·10분·20분)과 30분 미복용 보호자 알림에도 같은 data를 싣는다. revision은 받는 회원의 현재 값이며, 발송 조건·문구는 바꾸지 않는다. data는 `MedicationAlarmPayload.of(revision)` 한 곳에서 만든다.
+- (#688) 복용 알림(정시·10분·20분)과 30분 미복용 보호자 알림에도 같은 data를 싣는다. revision은 알람 스케줄의 버전, 곧 스케줄 주인(시니어)의 현재 값이며 보호자에게 가는 알림도 같다. 발송 조건·문구는 바꾸지 않는다. data는 `MedicationAlarmPayload.of(revision)` 한 곳에서 만든다.
 
 ## 3. API
 
@@ -41,7 +41,7 @@ FCM data payload: `{ "type": "MEDICATION_SCHEDULE_CHANGED", "revision": "42" }`.
 - 스케줄 CRUD는 revision을 1 증가시키고 FCM에 type/revision을 넣는다.
 - 당일 인증 후 스케줄을 새 버전으로 수정해도 completed와 기존 정시 FCM 스케줄러는 새 scheduleId를 완료 처리한다.
 - 복용 인증은 revision을 1 증가시키지만 설정 변경 FCM은 보내지 않는다.
-- (#688) 복용 알림과 보호자 미복용 알림의 FCM data에 `type`과 받는 회원의 revision이 실린다.
+- (#688) 복용 알림과 보호자 미복용 알림의 FCM data에 `type`과 스케줄 주인의 revision이 실린다.
 - `Asia/Seoul`을 반환하고 completed 날짜도 그 기준으로 계산한다.
 
 ## 6. 배포 마이그레이션
