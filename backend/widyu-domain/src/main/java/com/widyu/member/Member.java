@@ -149,7 +149,8 @@ public class Member extends BaseTimeEntity {
     public void maskPersonalInfo() {
         this.name = "탈퇴회원";
         this.phoneNumber = null;
-        
+        this.profileImage = null;
+
         if (this.localAccount != null) {
             this.localAccount.maskEmail();
         }

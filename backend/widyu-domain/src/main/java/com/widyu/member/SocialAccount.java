@@ -91,6 +91,7 @@ public class SocialAccount {
     public void maskPersonalInfo() {
         maskEmail();
         maskOauthId();
+        this.refreshToken = null;
     }
 }
 
