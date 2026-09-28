@@ -321,7 +321,7 @@ public class MedicineScheduleService {
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
                 .scheme("")
                 .image("")
-                .data(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", Long.toString(revision)))
+                .data(MedicationAlarmPayload.of(revision))
                 .build());
     }
 
