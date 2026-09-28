@@ -15,16 +15,12 @@ import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
-import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.mypage.application.MyPageProfileService;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Service
@@ -39,7 +35,6 @@ public class MemberWithdrawService {
     private final SocialLoginStrategyFactory strategyFactory;
     private final MemberUtil memberUtil;
     private final MedicationProofDeletionService medicationProofDeletionService;
-    private final S3Service s3Service;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
@@ -71,23 +66,10 @@ public class MemberWithdrawService {
         // 6. 회원 데이터 저장
         memberRepository.save(member);
 
-        // 7. 커밋 뒤 프로필 사진 삭제 (롤백되면 사진을 남긴다)
-        deleteProfileImageAfterCommit(profileImage);
+        // 7. 프로필 사진 삭제 작업 저장 (커밋 뒤 삭제, 실패 시 재시도, 롤백되면 작업도 사라진다)
+        medicationProofDeletionService.scheduleImageDeletion(member.getId(), profileImage);
 
         log.info("회원 탈퇴 완료: memberId={}", member.getId());
-    }
-
-    // ponytail: 삭제 실패 시 재시도 없이 로그만 남긴다. 재시도가 필요하면 복약 사진 삭제 작업(MedicationProofImageDeletionTask) 방식으로 옮긴다.
-    private void deleteProfileImageAfterCommit(String profileImage) {
-        if (profileImage == null || profileImage.isBlank()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                MyPageProfileService.deleteProfileImage(s3Service, profileImage);
-            }
-        });
     }
 
     private void validateLeaderCanWithdraw(Long guardianId) {

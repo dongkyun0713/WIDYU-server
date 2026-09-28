@@ -15,7 +15,6 @@ import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
-import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
@@ -36,8 +35,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MemberWithdrawService 단위 테스트")
@@ -53,7 +50,6 @@ class MemberWithdrawServiceTest {
     @Mock private MedicationProofDeletionService medicationProofDeletionService;
     @Mock private SocialLoginStrategy kakaoStrategy;
     @Mock private SocialLoginStrategy appleStrategy;
-    @Mock private S3Service s3Service;
 
     @InjectMocks
     private MemberWithdrawService memberWithdrawService;
@@ -298,42 +294,30 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
         given(memberUtil.getCurrentMember()).willReturn(member);
         given(strategyFactory.getStrategy("apple")).willReturn(appleStrategy);
-        TransactionSynchronizationManager.initSynchronization();
 
-        try {
-            // when
-            memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
 
-            // then
-            assertThat(appleAccount.getRefreshToken()).isNull();
-            assertThat(member.getProfileImage()).isNull();
-            verify(appleStrategy).withdrawSocialAccount("apple-refresh-token", "apple-id");
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        // then
+        assertThat(appleAccount.getRefreshToken()).isNull();
+        assertThat(member.getProfileImage()).isNull();
+        verify(appleStrategy).withdrawSocialAccount("apple-refresh-token", "apple-id");
     }
 
     @Test
-    @DisplayName("회원 탈퇴 트랜잭션이 커밋되면 기존 프로필 사진을 삭제한다")
-    void 회원_탈퇴_커밋_뒤에만_프로필_사진을_삭제한다() {
+    @DisplayName("회원 탈퇴 시 기존 프로필 사진의 삭제 작업을 저장한다")
+    void 회원_탈퇴_시_프로필_사진_삭제_작업을_저장한다() {
         // given
         Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", 1L);
         ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
         member.updateProfileImage("https://bucket/profile/a.jpg");
         given(memberUtil.getCurrentMember()).willReturn(member);
-        TransactionSynchronizationManager.initSynchronization();
 
-        try {
-            // when
-            memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
 
-            // then
-            verify(s3Service, never()).deleteFile(any());
-            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-            verify(s3Service).deleteFile("https://bucket/profile/a.jpg");
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        // then
+        verify(medicationProofDeletionService).scheduleImageDeletion(1L, "https://bucket/profile/a.jpg");
     }
 }
