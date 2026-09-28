@@ -104,11 +104,10 @@ public class AlbumFileService {
         try {
             // 1) 필요 시 압축 → 결과 File을 이후 단계에서 직접 재사용
             if (videoCompressionService.needsCompression(file)) {
-                log.info("동영상 압축 시작: name={}, originalSizeMB={}", file.getOriginalFilename(), mb(file.getSize()));
+                log.info("동영상 압축 시작: memberId={}, originalSizeMB={}", memberId, mb(file.getSize()));
                 tempCompressedFile = videoCompressionService.compressVideo(file);
                 processedFile = wrapFileAsMultipart(tempCompressedFile, safeOriginalName(file));
-                log.info("동영상 압축 완료: name={}, compressedSizeMB={}", file.getOriginalFilename(),
-                        mb(processedFile.getSize()));
+                log.info("동영상 압축 완료: memberId={}, compressedSizeMB={}", memberId, mb(processedFile.getSize()));
                 sourceFile = tempCompressedFile;
             } else {
                 // 압축 불필요 시 MultipartFile을 File로 한 번만 변환 (이후 복사 없음)
@@ -120,7 +119,7 @@ public class AlbumFileService {
             int duration = videoCompressionService.extractDuration(sourceFile);
             log.info("동영상 길이 추출 완료: duration={}s", duration);
 
-            log.info("썸네일 생성 시작: name={}", safeOriginalName(file));
+            log.info("썸네일 생성 시작: memberId={}", memberId);
             tempThumbnailFile = videoCompressionService.generateThumbnail(sourceFile, (double) duration);
             String thumbName = baseName(safeOriginalName(file)) + "_thumbnail.jpg";
             MultipartFile thumbnailPart = wrapFileAsMultipart(tempThumbnailFile, thumbName);
@@ -133,13 +132,13 @@ public class AlbumFileService {
 
             String thumbnailUrl = uploadThumbnail(thumbnailPart, memberId);
             uploadedUrls.add(thumbnailUrl);
-            log.info("비디오/썸네일 업로드 성공: videoUrl={}, thumbnailUrl={}", videoUrl, thumbnailUrl);
+            log.info("비디오/썸네일 업로드 성공: memberId={}, duration={}s", memberId, duration);
 
             return new VideoUploadResult(videoUrl, thumbnailUrl, duration);
 
         } catch (Exception e) {
             cleanupUploadedFiles(uploadedUrls);
-            log.error("동영상 처리 실패: name={}, error={}", file.getOriginalFilename(), e.getMessage());
+            log.error("동영상 처리 실패: memberId={}, errorType={}", memberId, e.getClass().getSimpleName());
             if (e instanceof BusinessException businessException) {
                 throw businessException;
             }
@@ -180,7 +179,7 @@ public class AlbumFileService {
                     mediaUrls.add(url);
                     thumbnailUrls.add(url); // 사진은 원본이 곧 썸네일 (null 저장 시 @ElementCollection 드롭됨)
                     durations.add(null);
-                    log.debug("이미지 업로드 성공: url={}", url);
+                    log.debug("이미지 업로드 성공: memberId={}", memberId);
                     continue;
                 }
 
@@ -189,8 +188,7 @@ public class AlbumFileService {
                     mediaUrls.add(r.videoUrl());
                     thumbnailUrls.add(r.thumbnailUrl());
                     durations.add(r.duration());
-                    log.debug("비디오 업로드 성공: videoUrl={}, thumbUrl={}, duration={}", r.videoUrl(), r.thumbnailUrl(),
-                            r.duration());
+                    log.debug("비디오 업로드 성공: memberId={}, duration={}", memberId, r.duration());
                     continue;
                 }
 
@@ -283,7 +281,7 @@ public class AlbumFileService {
             try {
                 s3Service.deleteFile(url);
             } catch (Exception ex) {
-                log.warn("파일 정리 실패: url={}, error={}", url, ex.getMessage());
+                log.warn("파일 정리 실패: errorType={}", ex.getClass().getSimpleName());
             }
         }
     }
