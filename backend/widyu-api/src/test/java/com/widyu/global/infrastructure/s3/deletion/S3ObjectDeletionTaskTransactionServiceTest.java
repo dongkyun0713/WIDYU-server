@@ -1,14 +1,11 @@
-package com.widyu.goal.medicineschedule.application;
+package com.widyu.global.infrastructure.s3.deletion;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.infrastructure.s3.S3DeleteResult;
 import com.widyu.global.infrastructure.s3.S3Service;
-import com.widyu.goal.medicineschedule.event.MedicationProofImageDeletionListener;
-import com.widyu.goal.medicineschedule.event.MedicationProofImagesDeletionEvent;
-import com.widyu.goal.medicineschedule.repository.MedicationProofImageDeletionTaskRepository;
-import com.widyu.medicine.MedicationProofImageDeletionTask;
-import com.widyu.medicine.MedicationProofImageDeletionTaskStatus;
+import com.widyu.global.storage.S3ObjectDeletionTask;
+import com.widyu.global.storage.S3ObjectDeletionTaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,15 +31,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @ActiveProfiles("test")
 @Import({
         JpaAuditingConfig.class,
-        MedicationProofImageDeletionTaskTransactionService.class,
-        MedicationProofImageDeletionTaskService.class,
-        MedicationProofImageDeletionListener.class
+        S3ObjectDeletionTaskTransactionService.class,
+        S3ObjectDeletionTaskService.class,
+        S3ObjectDeletionListener.class
 })
-@DisplayName("MedicationProofImageDeletionTaskTransactionService 영속화 테스트")
-class MedicationProofImageDeletionTaskTransactionServiceTest {
+@DisplayName("S3ObjectDeletionTaskTransactionService 영속화 테스트")
+class S3ObjectDeletionTaskTransactionServiceTest {
 
-    @Autowired private MedicationProofImageDeletionTaskRepository repository;
-    @Autowired private MedicationProofImageDeletionTaskTransactionService transactionService;
+    @Autowired private S3ObjectDeletionTaskRepository repository;
+    @Autowired private S3ObjectDeletionTaskTransactionService transactionService;
     @Autowired private ApplicationEventPublisher eventPublisher;
     @Autowired private PlatformTransactionManager transactionManager;
     @MockBean private JPAQueryFactory jpaQueryFactory;
@@ -52,21 +49,21 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
     @DisplayName("선점과 완료 결과는 호출 트랜잭션이 끝난 뒤에도 별도 트랜잭션으로 저장된다")
     void 선점과_완료_결과는_호출_트랜잭션이_끝난_뒤에도_별도_트랜잭션으로_저장된다() {
         // given
-        MedicationProofImageDeletionTask task = repository.saveAndFlush(
-                MedicationProofImageDeletionTask.pending(1L, "medication-proof/1.jpg"));
+        S3ObjectDeletionTask task = repository.saveAndFlush(
+                S3ObjectDeletionTask.pending(1L, "medication-proof/1.jpg"));
         Long taskId = task.getId();
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
         // when
-        MedicationProofImageDeletionTaskTransactionService.DeletionCommand command =
+        S3ObjectDeletionTaskTransactionService.DeletionCommand command =
                 transactionService.claimForProcessing(taskId).orElseThrow();
         transactionService.recordResult(command.id(), command.attempt(), true, null);
 
         // then
         TestTransaction.start();
-        MedicationProofImageDeletionTask completed = repository.findById(taskId).orElseThrow();
-        assertThat(completed.getStatus()).isEqualTo(MedicationProofImageDeletionTaskStatus.COMPLETED);
+        S3ObjectDeletionTask completed = repository.findById(taskId).orElseThrow();
+        assertThat(completed.getStatus()).isEqualTo(S3ObjectDeletionTaskStatus.COMPLETED);
         assertThat(completed.getCompletedAt()).isNotNull();
     }
 
@@ -74,8 +71,8 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
     @DisplayName("선점된 작업은 같은 시도에서 한 번만 처리할 수 있다")
     void 선점된_작업은_같은_시도에서_한_번만_처리할_수_있다() {
         // given
-        MedicationProofImageDeletionTask task = repository.saveAndFlush(
-                MedicationProofImageDeletionTask.pending(1L, "medication-proof/1.jpg"));
+        S3ObjectDeletionTask task = repository.saveAndFlush(
+                S3ObjectDeletionTask.pending(1L, "medication-proof/1.jpg"));
         Long taskId = task.getId();
         TestTransaction.flagForCommit();
         TestTransaction.end();
@@ -104,16 +101,16 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
 
         // when
         Long taskId = transactionTemplate.execute(status -> {
-            MedicationProofImageDeletionTask task = repository.saveAndFlush(
-                    MedicationProofImageDeletionTask.pending(1L, "medication-proof/1.jpg"));
-            eventPublisher.publishEvent(new MedicationProofImagesDeletionEvent(List.of(task.getId())));
+            S3ObjectDeletionTask task = repository.saveAndFlush(
+                    S3ObjectDeletionTask.pending(1L, "medication-proof/1.jpg"));
+            eventPublisher.publishEvent(new S3ObjectDeletionEvent(List.of(task.getId())));
             return task.getId();
         });
 
         // then
-        MedicationProofImageDeletionTask completed = repository.findById(taskId).orElseThrow();
+        S3ObjectDeletionTask completed = repository.findById(taskId).orElseThrow();
         assertThat(s3CalledWithoutTransaction.get()).isTrue();
-        assertThat(completed.getStatus()).isEqualTo(MedicationProofImageDeletionTaskStatus.COMPLETED);
+        assertThat(completed.getStatus()).isEqualTo(S3ObjectDeletionTaskStatus.COMPLETED);
     }
 
     @Test
@@ -126,9 +123,9 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
 
         // when
         transactionTemplate.executeWithoutResult(status -> {
-            MedicationProofImageDeletionTask task = repository.saveAndFlush(
-                    MedicationProofImageDeletionTask.pending(1L, "medication-proof/1.jpg"));
-            eventPublisher.publishEvent(new MedicationProofImagesDeletionEvent(List.of(task.getId())));
+            S3ObjectDeletionTask task = repository.saveAndFlush(
+                    S3ObjectDeletionTask.pending(1L, "medication-proof/1.jpg"));
+            eventPublisher.publishEvent(new S3ObjectDeletionEvent(List.of(task.getId())));
             status.setRollbackOnly();
         });
 
@@ -141,12 +138,12 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
     @DisplayName("임대가 만료된 작업은 다시 선점하고 이전 시도의 늦은 결과는 무시한다")
     void 임대가_만료된_작업은_다시_선점하고_이전_시도의_늦은_결과는_무시한다() {
         // given
-        MedicationProofImageDeletionTask task = repository.saveAndFlush(
-                MedicationProofImageDeletionTask.pending(1L, "medication-proof/1.jpg"));
+        S3ObjectDeletionTask task = repository.saveAndFlush(
+                S3ObjectDeletionTask.pending(1L, "medication-proof/1.jpg"));
         Long taskId = task.getId();
         TestTransaction.flagForCommit();
         TestTransaction.end();
-        MedicationProofImageDeletionTaskTransactionService.DeletionCommand first =
+        S3ObjectDeletionTaskTransactionService.DeletionCommand first =
                 transactionService.claimForProcessing(taskId).orElseThrow();
 
         TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
@@ -154,15 +151,15 @@ class MedicationProofImageDeletionTaskTransactionServiceTest {
                 repository.findById(taskId).orElseThrow(), "leaseExpiresAt", LocalDateTime.now().minusMinutes(1)));
 
         // when
-        MedicationProofImageDeletionTaskTransactionService.DeletionCommand second =
+        S3ObjectDeletionTaskTransactionService.DeletionCommand second =
                 transactionService.claimForProcessing(taskId).orElseThrow();
         transactionService.recordResult(first.id(), first.attempt(), true, null);
 
         // then
         TestTransaction.start();
-        MedicationProofImageDeletionTask processing = repository.findById(taskId).orElseThrow();
+        S3ObjectDeletionTask processing = repository.findById(taskId).orElseThrow();
         assertThat(second.attempt()).isGreaterThan(first.attempt());
-        assertThat(processing.getStatus()).isEqualTo(MedicationProofImageDeletionTaskStatus.PROCESSING);
+        assertThat(processing.getStatus()).isEqualTo(S3ObjectDeletionTaskStatus.PROCESSING);
         assertThat(processing.getProcessingAttempt()).isEqualTo(second.attempt());
     }
 }

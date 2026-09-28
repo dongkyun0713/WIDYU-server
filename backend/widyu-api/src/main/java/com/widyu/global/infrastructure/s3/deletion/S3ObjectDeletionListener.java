@@ -1,6 +1,5 @@
-package com.widyu.goal.medicineschedule.event;
+package com.widyu.global.infrastructure.s3.deletion;
 
-import com.widyu.goal.medicineschedule.application.MedicationProofImageDeletionTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -10,12 +9,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class MedicationProofImageDeletionListener {
+public class S3ObjectDeletionListener {
 
-    private final MedicationProofImageDeletionTaskService taskService;
+    private final S3ObjectDeletionTaskService taskService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void deleteImagesAfterCommit(MedicationProofImagesDeletionEvent event) {
+    public void deleteImagesAfterCommit(S3ObjectDeletionEvent event) {
         event.taskIds().forEach(this::process);
     }
 
@@ -23,7 +22,7 @@ public class MedicationProofImageDeletionListener {
         try {
             taskService.process(taskId);
         } catch (Exception e) {
-            log.error("복약 인증 사진 삭제 작업 처리 실패: taskId={}, errorType={}",
+            log.error("S3 파일 삭제 작업 처리 실패: taskId={}, errorType={}",
                     taskId, e.getClass().getSimpleName());
         }
     }

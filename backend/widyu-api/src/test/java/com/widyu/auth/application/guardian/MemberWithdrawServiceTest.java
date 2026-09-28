@@ -15,6 +15,7 @@ import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.infrastructure.s3.deletion.S3ObjectDeletionTaskService;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
@@ -48,6 +49,7 @@ class MemberWithdrawServiceTest {
     @Mock private SocialLoginStrategyFactory strategyFactory;
     @Mock private MemberUtil memberUtil;
     @Mock private MedicationProofDeletionService medicationProofDeletionService;
+    @Mock private S3ObjectDeletionTaskService s3ObjectDeletionTaskService;
     @Mock private SocialLoginStrategy kakaoStrategy;
     @Mock private SocialLoginStrategy appleStrategy;
 
@@ -318,6 +320,6 @@ class MemberWithdrawServiceTest {
         memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
 
         // then
-        verify(medicationProofDeletionService).scheduleImageDeletion(1L, "https://bucket/profile/a.jpg");
+        verify(s3ObjectDeletionTaskService).schedule(1L, List.of("https://bucket/profile/a.jpg"));
     }
 }
