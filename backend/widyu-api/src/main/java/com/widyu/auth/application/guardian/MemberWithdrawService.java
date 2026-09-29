@@ -15,8 +15,10 @@ import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.infrastructure.s3.deletion.S3ObjectDeletionTaskService;
 import com.widyu.global.util.MemberUtil;
 import java.util.Optional;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class MemberWithdrawService {
     private final SocialLoginStrategyFactory strategyFactory;
     private final MemberUtil memberUtil;
     private final MedicationProofDeletionService medicationProofDeletionService;
+    private final S3ObjectDeletionTaskService s3ObjectDeletionTaskService;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
@@ -67,7 +70,7 @@ public class MemberWithdrawService {
         memberRepository.save(member);
 
         // 7. 프로필 사진 삭제 작업 저장 (커밋 뒤 삭제, 실패 시 재시도, 롤백되면 작업도 사라진다)
-        medicationProofDeletionService.scheduleImageDeletion(member.getId(), profileImage);
+        s3ObjectDeletionTaskService.schedule(member.getId(), Stream.ofNullable(profileImage).toList());
 
         log.info("회원 탈퇴 완료: memberId={}", member.getId());
     }
