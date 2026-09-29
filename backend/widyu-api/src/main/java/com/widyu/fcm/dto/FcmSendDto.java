@@ -30,4 +30,8 @@ public record FcmSendDto(
     public FcmSendDto withRelatedMember(Long memberId) {
         return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, memberId, data, decisionId);
     }
+
+    public FcmSendDto withData(Map<String, String> newData) {
+        return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, relatedMemberId, newData, decisionId);
+    }
 }
