@@ -56,7 +56,7 @@ public class AddressSearchService {
                         latitude = geo.latitude();
                         longitude = geo.longitude();
                     } catch (Exception e) {
-                        log.warn("좌표 변환 실패: {}", item.roadAddrPart1());
+                        log.warn("좌표 변환 실패: errorType={}", e.getClass().getSimpleName());
                     }
                     return AddressItem.from(item, latitude, longitude);
                 })
