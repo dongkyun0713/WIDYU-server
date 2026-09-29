@@ -59,8 +59,8 @@ class MedicineScheduleNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("복용 알림과 보호자 미복용 알림에 알람 스케줄 주인의 revision을 data로 싣는다")
-    void 복용_알림과_보호자_알림에_스케줄_주인의_revision을_싣는다() {
+    @DisplayName("복용 알림과 보호자 미복용 알림에 받는 회원의 복약 알람 revision을 data로 싣는다")
+    void 복용_알림과_보호자_알림에_받는_회원의_revision을_싣는다() {
         // given
         Member senior = Member.createMember(MemberType.SENIOR, "김할머니", "01011112222");
         ReflectionTestUtils.setField(senior, "id", 1L);
@@ -96,7 +96,7 @@ class MedicineScheduleNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());
         assertThat(guardianCaptor.getValue().data())
                 .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("revision", "42");
+                .containsEntry("revision", "7");
         assertThat(guardianCaptor.getValue().relatedMemberId()).isEqualTo(1L);
     }
 }

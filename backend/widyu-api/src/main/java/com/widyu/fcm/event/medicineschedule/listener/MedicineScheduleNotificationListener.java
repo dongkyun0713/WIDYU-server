@@ -164,7 +164,7 @@ public class MedicineScheduleNotificationListener {
                     FcmCategory.MEDICINE_SCHEDULE,
                     "",
                     schedule.getMember().getProfileImage()
-            ).withData(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision()));
+            ).withData(MedicationAlarmPayload.of(membership.getGuardian().getMedicationAlarmRevision()));
 
             fcmService.sendMessageToUser(membership.getGuardian().getId(), dto.withRelatedMember(seniorMemberId));
 
