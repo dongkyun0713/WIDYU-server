@@ -1,5 +1,6 @@
 package com.widyu.global.config;
 
+import com.widyu.global.util.PiiMaskingUtil;
 import com.widyu.member.LocalAccount;
 import com.widyu.member.Member;
 import com.widyu.member.repository.LocalAccountRepository;
@@ -41,6 +42,6 @@ public class AdminBootstrapInitializer implements CommandLineRunner {
         localAccountRepository.save(
                 LocalAccount.createLocalAccount(admin, adminEmail, passwordEncoder.encode(adminPassword))
         );
-        log.info("[AdminBootstrap] 관리자 계정 생성 완료: {}", adminEmail);
+        log.info("[AdminBootstrap] 관리자 계정 생성 완료: {}", PiiMaskingUtil.maskEmail(adminEmail));
     }
 }

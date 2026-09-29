@@ -23,7 +23,7 @@
 
 ### Out of scope
 
-- 앨범·프로필 등 복약 인증 이외 미디어 삭제 작업
+- 앨범 등 복약 인증 이외 미디어 삭제 작업 (탈퇴 회원 프로필 사진은 #679에서 추가)
 - 완료·실패 작업의 보존 기간과 관리 화면
 - S3 URL 또는 객체 키의 별도 암호화
 
@@ -33,7 +33,7 @@
 
 ## 4. 데이터 모델
 
-`medication_proof_image_deletion_task`를 추가한다. `member_id`, `object_key`, `status(PENDING/PROCESSING/COMPLETED/FAILED)`, `retry_count`, `processing_attempt`, `lease_expires_at`, `next_retry_at`, `last_error_type`, `completed_at`, `failed_at`을 보관한다. `status, next_retry_at` 복합 인덱스로 재시도 대상을 조회한다.
+`s3_object_deletion_task`를 추가한다(최초 이름 `medication_proof_image_deletion_task`, #681에서 범용 이름으로 변경). `member_id`, `object_key`, `status(PENDING/PROCESSING/COMPLETED/FAILED)`, `retry_count`, `processing_attempt`, `lease_expires_at`, `next_retry_at`, `last_error_type`, `completed_at`, `failed_at`을 보관한다. `status, next_retry_at` 복합 인덱스로 재시도 대상을 조회한다.
 
 ## 5. 처리 흐름
 
@@ -62,7 +62,9 @@
 
 ## 8. 영향 범위 / 마이그레이션
 
-운영 DB는 `ddl-auto: validate`이므로 배포 전에 `scripts/mysql/create_medication_proof_image_deletion_task.sql`을 실행한다.
+운영 DB는 `ddl-auto: validate`이므로 배포 전에 `scripts/mysql/create_s3_object_deletion_task.sql`을 실행한다.
+
+#681에서 작업 구조를 복약 도메인 밖 공통 패키지(`global.storage.S3ObjectDeletionTask`, `global.infrastructure.s3.deletion`)로 옮기고, 삭제 예약을 `S3ObjectDeletionTaskService.schedule(memberId, fileUrls)`로 모았다. 탈퇴 회원의 프로필 사진도 같은 작업으로 지운다(#679). 동작은 이 문서와 같다.
 
 ## 9. 미결정 사항 (Open Questions)
 

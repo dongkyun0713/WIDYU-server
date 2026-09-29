@@ -4,6 +4,7 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.entity.Status;
+import com.widyu.goal.medicineschedule.application.MedicationAlarmPayload;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.member.FamilyMembership;
@@ -126,7 +127,7 @@ public class MedicineScheduleNotificationListener {
                 FcmCategory.MEDICINE_SCHEDULE,
                 "",
                 MEDICINE_DEFAULT_IMAGE
-        );
+        ).withData(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision()));
 
         fcmService.sendMessageToUser(schedule.getMember().getId(), dto);
 
@@ -163,7 +164,7 @@ public class MedicineScheduleNotificationListener {
                     FcmCategory.MEDICINE_SCHEDULE,
                     "",
                     schedule.getMember().getProfileImage()
-            );
+            ).withData(MedicationAlarmPayload.of(membership.getGuardian().getMedicationAlarmRevision()));
 
             fcmService.sendMessageToUser(membership.getGuardian().getId(), dto.withRelatedMember(seniorMemberId));
 

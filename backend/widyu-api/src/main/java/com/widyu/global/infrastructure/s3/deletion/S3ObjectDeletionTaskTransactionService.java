@@ -1,8 +1,7 @@
-package com.widyu.goal.medicineschedule.application;
+package com.widyu.global.infrastructure.s3.deletion;
 
-import com.widyu.goal.medicineschedule.repository.MedicationProofImageDeletionTaskRepository;
-import com.widyu.medicine.MedicationProofImageDeletionTask;
-import com.widyu.medicine.MedicationProofImageDeletionTaskStatus;
+import com.widyu.global.storage.S3ObjectDeletionTask;
+import com.widyu.global.storage.S3ObjectDeletionTaskStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -14,9 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class MedicationProofImageDeletionTaskTransactionService {
+public class S3ObjectDeletionTaskTransactionService {
 
-    private final MedicationProofImageDeletionTaskRepository repository;
+    private final S3ObjectDeletionTaskRepository repository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<DeletionCommand> claimForProcessing(Long id) {
@@ -44,8 +43,8 @@ public class MedicationProofImageDeletionTaskTransactionService {
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public List<Long> findDueIds() {
         return repository.findDueIds(
-                MedicationProofImageDeletionTaskStatus.PENDING,
-                MedicationProofImageDeletionTaskStatus.PROCESSING,
+                S3ObjectDeletionTaskStatus.PENDING,
+                S3ObjectDeletionTaskStatus.PROCESSING,
                 LocalDateTime.now(),
                 PageRequest.of(0, 100));
     }

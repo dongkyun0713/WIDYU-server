@@ -1,4 +1,4 @@
-package com.widyu.medicine;
+package com.widyu.global.storage;
 
 import com.widyu.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
@@ -18,9 +18,9 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "medication_proof_image_deletion_task",
-        indexes = @Index(name = "idx_proof_image_deletion_retry", columnList = "status,next_retry_at"))
-public class MedicationProofImageDeletionTask extends BaseTimeEntity {
+@Table(name = "s3_object_deletion_task",
+        indexes = @Index(name = "idx_s3_object_deletion_retry", columnList = "status,next_retry_at"))
+public class S3ObjectDeletionTask extends BaseTimeEntity {
     private static final int MAX_RETRY_COUNT = 5;
     private static final int PROCESSING_LEASE_MINUTES = 10;
 
@@ -36,7 +36,7 @@ public class MedicationProofImageDeletionTask extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MedicationProofImageDeletionTaskStatus status;
+    private S3ObjectDeletionTaskStatus status;
 
     @Column(name = "retry_count", nullable = false)
     private int retryCount;
@@ -51,29 +51,29 @@ public class MedicationProofImageDeletionTask extends BaseTimeEntity {
     @Column(name = "last_error_type", length = 100) private String lastErrorType;
     @Column(name = "completed_at") private LocalDateTime completedAt;
     @Column(name = "failed_at") private LocalDateTime failedAt;
-    private MedicationProofImageDeletionTask(Long memberId, String objectKey) {
+    private S3ObjectDeletionTask(Long memberId, String objectKey) {
         this.memberId = memberId;
         this.objectKey = objectKey;
-        this.status = MedicationProofImageDeletionTaskStatus.PENDING;
+        this.status = S3ObjectDeletionTaskStatus.PENDING;
         this.nextRetryAt = LocalDateTime.now();
     }
 
-    public static MedicationProofImageDeletionTask pending(Long memberId, String objectKey) {
-        return new MedicationProofImageDeletionTask(memberId, objectKey);
+    public static S3ObjectDeletionTask pending(Long memberId, String objectKey) {
+        return new S3ObjectDeletionTask(memberId, objectKey);
     }
 
     public boolean isProcessing(int attempt) {
-        return status == MedicationProofImageDeletionTaskStatus.PROCESSING && processingAttempt == attempt;
+        return status == S3ObjectDeletionTaskStatus.PROCESSING && processingAttempt == attempt;
     }
 
     public void claim(LocalDateTime now) {
-        status = MedicationProofImageDeletionTaskStatus.PROCESSING;
+        status = S3ObjectDeletionTaskStatus.PROCESSING;
         processingAttempt++;
         leaseExpiresAt = now.plusMinutes(PROCESSING_LEASE_MINUTES);
     }
 
     public void complete() {
-        status = MedicationProofImageDeletionTaskStatus.COMPLETED;
+        status = S3ObjectDeletionTaskStatus.COMPLETED;
         completedAt = LocalDateTime.now();
         nextRetryAt = null;
         leaseExpiresAt = null;
@@ -84,12 +84,12 @@ public class MedicationProofImageDeletionTask extends BaseTimeEntity {
         lastErrorType = errorType;
         leaseExpiresAt = null;
         if (retryCount >= MAX_RETRY_COUNT) {
-            status = MedicationProofImageDeletionTaskStatus.FAILED;
+            status = S3ObjectDeletionTaskStatus.FAILED;
             failedAt = LocalDateTime.now();
             nextRetryAt = null;
             return;
         }
-        status = MedicationProofImageDeletionTaskStatus.PENDING;
+        status = S3ObjectDeletionTaskStatus.PENDING;
         nextRetryAt = LocalDateTime.now().plusMinutes(5);
     }
 }
