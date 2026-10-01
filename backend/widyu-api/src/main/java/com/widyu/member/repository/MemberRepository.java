@@ -1,5 +1,6 @@
 package com.widyu.member.repository;
 
+import com.widyu.global.entity.Status;
 import com.widyu.member.Member;
 import com.widyu.member.MemberRole;
 import com.widyu.member.MemberType;
@@ -39,6 +40,7 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
     Page<Member> findByNameContainingOrderByIdDesc(String name, Pageable pageable);
     Page<Member> findAllByOrderByIdDesc(Pageable pageable);
     List<Member> findTop3ByPhoneNumberContainingOrderByIdDesc(String phoneNumber);
+    boolean existsByIdAndStatus(Long id, Status status);
 
     @Query("SELECT m.id FROM Member m WHERE m.id IN :ids AND m.status = com.widyu.global.entity.Status.ACTIVE")
     Set<Long> findActiveIdsIn(@Param("ids") Collection<Long> ids);

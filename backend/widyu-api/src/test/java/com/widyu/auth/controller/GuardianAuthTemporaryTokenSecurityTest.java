@@ -17,6 +17,7 @@ import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.config.SecurityConfig;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.security.ActiveMemberValidator;
 import com.widyu.global.security.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,9 @@ class GuardianAuthTemporaryTokenSecurityTest {
 
     @MockBean
     private AdminAccessValidator adminAccessValidator;
+
+    @MockBean
+    private ActiveMemberValidator activeMemberValidator;
 
     // WebMvcConfig가 등록하는 접속기록 인터셉터의 의존성. 슬라이스 테스트에는 서비스 빈이 없다.
     @MockBean
