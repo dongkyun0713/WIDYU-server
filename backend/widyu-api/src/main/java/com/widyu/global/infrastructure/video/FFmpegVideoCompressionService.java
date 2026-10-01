@@ -54,7 +54,7 @@ public class FFmpegVideoCompressionService implements VideoCompressionService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("동영상 압축 실패: fileName={}, error={}", inputFile.getOriginalFilename(), e.getMessage());
+            log.error("동영상 압축 실패: errorType={}", e.getClass().getSimpleName());
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "동영상 압축 중 오류가 발생했습니다.");
         } finally {
             deleteSilently(tempInputFile);

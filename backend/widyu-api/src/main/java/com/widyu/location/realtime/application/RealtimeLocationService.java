@@ -22,6 +22,7 @@ import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.parentlocation.LocationType;
 import com.widyu.parentlocation.ParentLocation;
@@ -64,6 +65,7 @@ public class RealtimeLocationService {
     private final SafeZoneAlertService safeZoneAlertService;
     private final LocationFixService locationFixService;
     private final LocationAccessLogService locationAccessLogService;
+    private final MemberRepository memberRepository;
     private final Validator validator;
     // 미지정 필드를 무시하고 페이로드를 읽는 전용 매퍼. 주입받지 않는 이유는 Redis·응답 직렬화와
     // 설정을 공유하면 안 되기 때문이다(초기화 필드라 생성자 주입 대상에서 빠진다).
@@ -543,17 +545,37 @@ public class RealtimeLocationService {
     /**
      * 4분마다 실행 — SeniorLocation(5분 TTL)과 location:stay(24시간 TTL)를 갱신해
      * 시니어가 정지 중이어도 위치 데이터가 만료되지 않도록 유지한다.
+     * 활성 회원이 아니면 갱신하지 않고 지운다. 탈퇴 삭제와 겹쳐 위치가 다시 저장돼도 다음 주기에 사라진다. → LLD-0059
      */
     @Scheduled(fixedRate = 240_000)
     public void refreshLocationTtl() {
-        Iterable<SeniorLocation> activeLocations = seniorLocationRepository.findAll();
-        for (SeniorLocation location : activeLocations) {
-            if (location == null) {
+        List<SeniorLocation> locations = new ArrayList<>();
+        seniorLocationRepository.findAll().forEach(location -> {
+            if (location != null) {
+                locations.add(location);
+            }
+        });
+        if (locations.isEmpty()) {
+            return;
+        }
+        Set<Long> activeMemberIds = memberRepository.findActiveIdsIn(
+                locations.stream().map(SeniorLocation::getSeniorId).toList());
+        for (SeniorLocation location : locations) {
+            if (!activeMemberIds.contains(location.getSeniorId())) {
+                deleteLocation(location.getSeniorId());
                 continue;
             }
             seniorLocationRepository.save(location);
             String stayKey = LOCATION_STAY_KEY_PREFIX + location.getSeniorId();
             redisTemplate.expire(stayKey, STAY_TTL_SECONDS, TimeUnit.SECONDS);
         }
+    }
+
+    /**
+     * 탈퇴한 회원의 Redis 위치(현재 위치·이동 경로·체류)를 지운다. → LLD-0059
+     */
+    public void deleteLocation(Long memberId) {
+        seniorLocationRepository.deleteById(memberId);
+        redisTemplate.delete(List.of(LOCATION_TRAIL_KEY_PREFIX + memberId, LOCATION_STAY_KEY_PREFIX + memberId));
     }
 }

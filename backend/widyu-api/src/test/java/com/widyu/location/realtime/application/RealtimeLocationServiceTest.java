@@ -31,6 +31,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -69,11 +70,42 @@ class RealtimeLocationServiceTest {
     @Mock private SafeZoneAlertService safeZoneAlertService;
     @Mock private LocationFixService locationFixService;
     @Mock private LocationAccessLogService locationAccessLogService;
+    @Mock private MemberRepository memberRepository;
     // 실제 제약(memberId @NotNull)을 그대로 태운다. 목이면 검증이 통째로 비어 버린다.
     @Spy private Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @InjectMocks
     private RealtimeLocationService realtimeLocationService;
+
+    @Test
+    @DisplayName("탈퇴 회원의 위치를 지우면 현재 위치·이동 경로·체류 키를 모두 삭제한다")
+    void 탈퇴_회원의_위치를_지우면_Redis_위치_키를_모두_삭제한다() {
+        // when
+        realtimeLocationService.deleteLocation(7L);
+
+        // then
+        then(seniorLocationRepository).should().deleteById(7L);
+        then(redisTemplate).should().delete(java.util.List.of("location:trail:7", "location:stay:7"));
+    }
+
+    @Test
+    @DisplayName("위치 TTL을 갱신할 때 활성 회원은 갱신하고 활성이 아닌 회원의 위치는 지운다")
+    void 위치_TTL_갱신_시_활성_회원만_갱신하고_나머지는_지운다() {
+        // given
+        SeniorLocation active = SeniorLocation.of(1L, 37.5, 127.0);
+        SeniorLocation withdrawn = SeniorLocation.of(2L, 37.5, 127.0);
+        given(seniorLocationRepository.findAll()).willReturn(java.util.List.of(active, withdrawn));
+        given(memberRepository.findActiveIdsIn(java.util.List.of(1L, 2L))).willReturn(java.util.Set.of(1L));
+
+        // when
+        realtimeLocationService.refreshLocationTtl();
+
+        // then
+        then(seniorLocationRepository).should().save(active);
+        then(seniorLocationRepository).should(never()).save(withdrawn);
+        then(seniorLocationRepository).should().deleteById(2L);
+        then(redisTemplate).should().delete(java.util.List.of("location:trail:2", "location:stay:2"));
+    }
 
     private static final String RAW_FIX_PAYLOAD = """
             {"v":2,"memberId":1,"device_id":"ph-9c1","session_id":"s-2026","seq":5120,

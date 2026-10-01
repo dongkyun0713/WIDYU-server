@@ -572,14 +572,26 @@ erDiagram
         LocalDateTime accessed_at
     }
 
-    MedicationProofImageDeletionTask {
+    S3ObjectDeletionTask {
         Long id PK
         Long member_id FK
         String object_key
-        MedicationProofImageDeletionTaskStatus status
+        S3ObjectDeletionTaskStatus status
         int retry_count
         int processing_attempt
         LocalDateTime lease_expires_at
+        LocalDateTime next_retry_at
+        String last_error_type
+    }
+
+    SocialUnlinkTask {
+        Long id PK
+        Long member_id FK
+        String provider
+        String oauth_id "종료 시 NULL"
+        String refresh_token "AES-GCM, 종료 시 NULL"
+        SocialUnlinkTaskStatus status
+        int attempt_count
         LocalDateTime next_retry_at
         String last_error_type
     }
@@ -618,7 +630,8 @@ erDiagram
     Member ||--o{ AdminAuditLog : "관리자 로그"
     Member ||..o{ AdminAccessLog : "관리자 접속기록 (admin_id·target_member_id, FK 없음)"
     Member ||--o{ StudyParticipation : "실증 참여 (재식별 키)"
-    Member ||--o{ MedicationProofImageDeletionTask : "복약 사진 삭제 작업"
+    Member ||--o{ S3ObjectDeletionTask : "S3 파일 삭제 작업 (복약 인증·프로필 사진)"
+    Member ||..o{ SocialUnlinkTask : "탈퇴 시 소셜 연동 해제 작업 (member_id, FK 없음)"
 
     Family ||--o{ FamilyMembership : "보호자 구성"
     Family |o--o{ SeniorProfile : "시니어 구성"

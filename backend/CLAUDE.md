@@ -11,6 +11,7 @@
 - Multi-provider OAuth (Apple/Naver/Kakao) + 로컬 SMS 인증
 - 토큰 3종: Access(단기, `Bearer`) / Refresh(Redis TTL) / Temporary(회원가입 1회용, 30분)
 - SMS 플로우: 발송 → 코드 검증 → Temporary Token → 회원가입 → JWT. Apple은 전화번호 별도 수집. → ADR-0002, LLD-0004
+- **탈퇴 시 소셜 연동 해제는 트랜잭션 밖이다**: 탈퇴 트랜잭션은 `social_unlink_task`만 저장하고 `MemberWithdrawnEvent`를 발행한다. 커밋 뒤 리스너가 호출하고 실패하면 10분마다 최대 5회 재시도하며, 끝나면 oauthId·토큰을 지운다. 같은 이벤트로 Redis 위치 키도 지운다 → LLD-0059
 
 ### `member` — 회원 (가족 도메인)
 - `Member` + `MemberType`(SENIOR/GUARDIAN), `MemberRole`(ADMIN/USER/TEMPORARY)

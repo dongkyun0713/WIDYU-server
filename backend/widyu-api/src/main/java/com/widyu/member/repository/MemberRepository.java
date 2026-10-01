@@ -6,8 +6,10 @@ import com.widyu.member.MemberRole;
 import com.widyu.member.MemberType;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -39,4 +41,7 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
     Page<Member> findAllByOrderByIdDesc(Pageable pageable);
     List<Member> findTop3ByPhoneNumberContainingOrderByIdDesc(String phoneNumber);
     boolean existsByIdAndStatus(Long id, Status status);
+
+    @Query("SELECT m.id FROM Member m WHERE m.id IN :ids AND m.status = com.widyu.global.entity.Status.ACTIVE")
+    Set<Long> findActiveIdsIn(@Param("ids") Collection<Long> ids);
 }

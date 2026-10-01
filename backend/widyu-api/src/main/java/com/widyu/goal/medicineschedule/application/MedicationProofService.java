@@ -59,7 +59,7 @@ public class MedicationProofService {
             try {
                 s3Service.deleteFile(imageUrl);
             } catch (Exception exception) {
-                log.warn("복용 인증 이미지 보상 삭제 실패: imageUrl={}", imageUrl, exception);
+                log.warn("복용 인증 이미지 보상 삭제 실패: errorType={}", exception.getClass().getSimpleName());
             }
         }
     }
