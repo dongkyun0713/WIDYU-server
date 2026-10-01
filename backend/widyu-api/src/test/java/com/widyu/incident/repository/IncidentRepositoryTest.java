@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -29,7 +30,7 @@ class IncidentRepositoryTest {
     private static final Long OTHER_ID = 2048L;
     private static final String INCIDENT_REF = "inc-0001";
     private static final long OPENED_AT_MS = 1_760_000_000_000L;
-    private static final long RESPOND_BY_MS = OPENED_AT_MS + 45_000L;
+    private static final long RESPOND_BY_MS = OPENED_AT_MS + 60_000L;
 
     @Autowired private IncidentRepository incidentRepository;
     @MockBean private JPAQueryFactory jpaQueryFactory;
@@ -42,7 +43,7 @@ class IncidentRepositoryTest {
 
         // when
         int updated = incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
-                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, IncidentState.OK_CLOSED);
+                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, null, IncidentState.OK_CLOSED);
 
         // then
         assertThat(updated).isEqualTo(1);
@@ -62,7 +63,7 @@ class IncidentRepositoryTest {
 
         // when
         int updated = incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
-                ResponseVia.WATCH, RESPOND_BY_MS + 1_500L, IncidentState.OK_CLOSED);
+                ResponseVia.WATCH, RESPOND_BY_MS + 1_500L, 123L, IncidentState.OK_CLOSED);
 
         // then
         // 여기서 OK_CLOSED로 적으면 무응답이던 사건이 정상 종료로 둔갑하고 스케줄러 대상에서도 빠진다.
@@ -71,6 +72,7 @@ class IncidentRepositoryTest {
         assertThat(found.getState()).isEqualTo(IncidentState.ESCALATED);
         assertThat(found.getResponse()).isEqualTo(IncidentResponseValue.OK);
         assertThat(found.getRespondedAtMs()).isEqualTo(RESPOND_BY_MS + 1_500L);
+        assertThat(found.getDeviceRespondedAtMs()).isEqualTo(123L);
     }
 
     @Test
@@ -83,7 +85,7 @@ class IncidentRepositoryTest {
 
         // when
         int updated = incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
-                ResponseVia.PHONE, RESPOND_BY_MS - 1_000L, IncidentState.OK_CLOSED);
+                ResponseVia.PHONE, RESPOND_BY_MS - 1_000L, null, IncidentState.OK_CLOSED);
 
         // then
         assertThat(updated).isEqualTo(1);
@@ -98,11 +100,11 @@ class IncidentRepositoryTest {
         // given
         incidentRepository.save(checkingIncident());
         incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
-                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, IncidentState.OK_CLOSED);
+                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, null, IncidentState.OK_CLOSED);
 
         // when
         int updated = incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.HELP,
-                ResponseVia.PHONE, RESPOND_BY_MS - 1_000L, IncidentState.ESCALATED);
+                ResponseVia.PHONE, RESPOND_BY_MS - 1_000L, null, IncidentState.ESCALATED);
 
         // then
         assertThat(updated).isZero();
@@ -119,7 +121,7 @@ class IncidentRepositoryTest {
 
         // when
         int updated = incidentRepository.respond(INCIDENT_REF, OTHER_ID, IncidentResponseValue.OK,
-                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, IncidentState.OK_CLOSED);
+                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, null, IncidentState.OK_CLOSED);
 
         // then
         assertThat(updated).isZero();
@@ -168,25 +170,152 @@ class IncidentRepositoryTest {
     }
 
     @Test
-    @DisplayName("마감을 넘긴 미응답 사건만 무응답으로 올라간다")
-    void 마감을_넘긴_미응답_사건만_무응답으로_올라간다() {
+    @DisplayName("플래그 ON의 미응답 사건이 마감을 넘기면 상태 전환과 최초 알림 게이트가 각각 성공한다")
+    void 플래그_ON의_미응답_사건은_상태_전환과_알림_게이트가_성공한다() {
         // given
         incidentRepository.save(checkingIncident());
         Incident answered = incident("inc-0002", SENIOR_ID, "dec-02");
         incidentRepository.save(answered);
         incidentRepository.respond("inc-0002", SENIOR_ID, IncidentResponseValue.OK,
-                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, IncidentState.OK_CLOSED);
+                ResponseVia.WATCH, RESPOND_BY_MS - 3_000L, null, IncidentState.OK_CLOSED);
 
         // when
-        int escalated = incidentRepository.escalateTimedOut(RESPOND_BY_MS + 1L);
+        Long id = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getId();
+        int escalated = incidentRepository.escalateTimedOutIfDue(id, RESPOND_BY_MS + 1L);
+        int claimed = incidentRepository.claimInitialAlertIfDue(id, RESPOND_BY_MS + 1L);
 
         // then
         // 답한 사건은 OPEN도 CHECKING도 아니라 대상이 아니다.
         assertThat(escalated).isEqualTo(1);
+        assertThat(claimed).isEqualTo(1);
         assertThat(incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getState())
                 .isEqualTo(IncidentState.ESCALATED);
+        assertThat(incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getInitialAlertSentAtMs())
+                .isEqualTo(RESPOND_BY_MS + 1L);
         assertThat(incidentRepository.findByIncidentRef("inc-0002").orElseThrow().getState())
                 .isEqualTo(IncidentState.OK_CLOSED);
+    }
+
+    @Test
+    @DisplayName("마감 시각에 OK가 도착하면 늦은 응답으로 남고 최초 알림 후보가 된다")
+    void 마감_시각에_OK가_도착하면_최초_알림_후보가_된다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+
+        // when
+        incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
+                ResponseVia.PHONE, RESPOND_BY_MS, 77L, IncidentState.OK_CLOSED);
+        int sent = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS);
+
+        // then
+        assertThat(sent).isEqualTo(1);
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.ESCALATED);
+        assertThat(found.getDeviceRespondedAtMs()).isEqualTo(77L);
+        assertThat(found.getInitialAlertSentAtMs()).isEqualTo(RESPOND_BY_MS);
+    }
+
+    @Test
+    @DisplayName("늦은 OK로 상태가 올라가면 다음 폴링이 최초 알림을 한 번만 예약한다")
+    void 늦은_OK로_상태가_올라가면_최초_알림을_한_번만_예약한다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+        incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
+                ResponseVia.WATCH, RESPOND_BY_MS + 1_000L, 12L, IncidentState.OK_CLOSED);
+
+        // when
+        var due = incidentRepository.findDueIds(RESPOND_BY_MS + 1_000L, 0L, PageRequest.of(0, 10));
+        int first = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS + 1_000L);
+        int second = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS + 2_000L);
+
+        // then
+        assertThat(due).containsExactly(incident.getId());
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+    }
+
+    @Test
+    @DisplayName("HELP로 이미 올라간 미발송 사건은 상태 전환 없이 최초 알림만 한 번 예약한다")
+    void HELP로_이미_올라간_미발송_사건은_최초_알림만_예약한다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+        incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.HELP,
+                ResponseVia.WATCH, RESPOND_BY_MS - 2_000L, null, IncidentState.ESCALATED);
+
+        // when
+        var due = incidentRepository.findDueIds(RESPOND_BY_MS - 1_000L, 0L, PageRequest.of(0, 10));
+        int escalated = incidentRepository.escalateTimedOutIfDue(incident.getId(), RESPOND_BY_MS - 1_000L);
+        int sent = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS - 1_000L);
+        int repeated = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS - 500L);
+
+        // then
+        assertThat(due).containsExactly(incident.getId());
+        assertThat(escalated).isZero();
+        assertThat(sent).isEqualTo(1);
+        assertThat(repeated).isZero();
+        assertThat(incidentRepository.findById(incident.getId()).orElseThrow().getInitialAlertSentAtMs())
+                .isEqualTo(RESPOND_BY_MS - 1_000L);
+    }
+
+    @Test
+    @DisplayName("플래그 OFF로 이미 알림을 보낸 사건이 60초 무응답이면 상태만 올라간다")
+    void 플래그_OFF로_이미_알림을_보낸_사건은_무응답에_상태만_올라간다() {
+        // given
+        Incident incident = checkingIncident();
+        incident.markInitialAlertSent(OPENED_AT_MS + 1L);
+        incidentRepository.save(incident);
+
+        // when
+        var due = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, 0L, PageRequest.of(0, 10));
+        int escalated = incidentRepository.escalateTimedOutIfDue(incident.getId(), RESPOND_BY_MS + 1L);
+        int claimed = incidentRepository.claimInitialAlertIfDue(incident.getId(), RESPOND_BY_MS + 1L);
+
+        // then
+        assertThat(due).containsExactly(incident.getId());
+        assertThat(escalated).isEqualTo(1);
+        assertThat(claimed).isZero();
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.ESCALATED);
+        assertThat(found.getInitialAlertSentAtMs()).isEqualTo(OPENED_AT_MS + 1L);
+        assertThat(incidentRepository.findDueIds(RESPOND_BY_MS + 2L, 0L, PageRequest.of(0, 10)))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("후보를 키셋으로 조회하면 마지막 사건 ID 뒤의 사건부터 순서대로 반환한다")
+    void 후보를_키셋으로_조회하면_마지막_ID_뒤부터_반환한다() {
+        // given
+        Incident first = incidentRepository.save(checkingIncident());
+        Incident second = incidentRepository.save(incident("inc-0002", SENIOR_ID, "dec-02"));
+        Incident third = incidentRepository.save(incident("inc-0003", SENIOR_ID, "dec-03"));
+
+        // when
+        var firstPage = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, 0L, PageRequest.of(0, 1));
+        var nextPage = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, first.getId(), PageRequest.of(0, 2));
+
+        // then
+        assertThat(firstPage).containsExactly(first.getId());
+        assertThat(nextPage).containsExactly(second.getId(), third.getId());
+    }
+
+    @Test
+    @DisplayName("낙상 사건이 마감을 넘기면 상태만 올라가고 심박 알림 후보에서는 빠진다")
+    void 낙상_사건이_마감을_넘기면_심박_알림_후보에서는_빠진다() {
+        // given
+        Incident fall = checkingIncident();
+        ReflectionTestUtils.setField(fall, "kind", IncidentKind.FALL_SUSPECTED);
+        incidentRepository.save(fall);
+
+        // when
+        var due = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, 0L, PageRequest.of(0, 10));
+        int updated = incidentRepository.escalateFallTimedOut(RESPOND_BY_MS + 1L);
+
+        // then
+        assertThat(due).isEmpty();
+        assertThat(updated).isEqualTo(1);
+        Incident found = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.ESCALATED);
+        assertThat(found.getInitialAlertSentAtMs()).isNull();
     }
 
     private Incident checkingIncident() {
