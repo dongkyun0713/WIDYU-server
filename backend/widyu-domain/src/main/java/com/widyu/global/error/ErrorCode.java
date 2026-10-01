@@ -81,6 +81,8 @@ public enum ErrorCode {
     FCM_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "FCM_4040", "FCM 토큰이 존재하지 않습니다."),
     FCM_NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "FCM_4041", "FCM 알림이 존재하지 않습니다."),
     INVALID_FCM_CATEGORY(HttpStatus.BAD_REQUEST, "FCM_4001", "유효하지 않은 알림 카테고리입니다."),
+    INVALID_NOTIFICATION_CENTER_FILTER(HttpStatus.BAD_REQUEST, "FCM_4002", "사용할 수 없는 알림센터 필터입니다."),
+    INVALID_NOTIFICATION_CURSOR(HttpStatus.BAD_REQUEST, "FCM_4003", "유효하지 않은 알림센터 커서입니다."),
 
     // 알림 관련
     NOTIFICATION_COMMENTER_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_4040", "댓글 작성자를 찾을 수 없습니다."),

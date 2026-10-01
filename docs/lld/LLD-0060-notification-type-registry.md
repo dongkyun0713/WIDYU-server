@@ -101,8 +101,8 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 | 13 | `WALK_GOAL_UNMET` | WALK | (GOAL) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W01 |
 | 14a | `GOAL_ACHIEVED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals/{entityId}` | G01-S/C |
 | 14b | `GOALS_ACHIEVED_GROUPED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals` | G02-S/C |
-| 15a | `POINT_EARNED` | TARGET | GOAL | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P01 |
-| 15b | `POINT_USED` | TARGET | GOAL | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P02 |
+| 15a | `POINT_EARNED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P01 |
+| 15b | `POINT_USED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P02 |
 | 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X01-OS/INAPP |
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X02-OS/INAPP |
 | 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01/S02 |
