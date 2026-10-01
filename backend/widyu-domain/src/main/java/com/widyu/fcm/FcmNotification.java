@@ -61,6 +61,10 @@ public class FcmNotification extends BaseTimeEntity {
     private Long seniorId;
     @Column(name = "actor_display_name")
     private String actorDisplayName;
+    @Column(name = "senior_display_name")
+    private String seniorDisplayName;
+    @Column(name = "remaining_locked_count")
+    private Integer remainingLockedCount;
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
     @Column(name = "retention_policy_version", length = 32)

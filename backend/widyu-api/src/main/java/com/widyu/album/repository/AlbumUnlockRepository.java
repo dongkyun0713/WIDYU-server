@@ -30,4 +30,19 @@ public interface AlbumUnlockRepository extends JpaRepository<AlbumUnlock, Long> 
 
     @Query("SELECT COUNT(au) * " + Album.UNLOCK_PRICE + " FROM AlbumUnlock au WHERE au.member = :member")
     Long getTotalUnlockPriceByMember(@Param("member") Member member);
+
+    @Query("""
+            SELECT COUNT(a) FROM Album a
+            WHERE a.member.id = :writerId
+              AND a.status = com.widyu.global.entity.Status.ACTIVE
+              AND a.id <> :justUnlockedAlbumId
+              AND NOT EXISTS (
+                  SELECT au.id FROM AlbumUnlock au
+                  WHERE au.album = a AND au.member.id = :seniorId
+              )
+            """)
+    long countRemainingLockedByWriterAndSenior(
+            @Param("writerId") Long writerId,
+            @Param("seniorId") Long seniorId,
+            @Param("justUnlockedAlbumId") Long justUnlockedAlbumId);
 }
