@@ -3,6 +3,8 @@ package com.widyu.fcm;
 import com.widyu.global.entity.BaseTimeEntity;
 import com.widyu.member.Member;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.*;
@@ -33,6 +35,12 @@ public class FcmOutbox extends BaseTimeEntity {
     @Column(length = 100)
     private String dataType;
     private Long dataRevision;
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "notification_type", length = 48)
+    private NotificationType notificationType;
+    @Column(name = "data_payload", columnDefinition = "TEXT")
+    private String dataPayload;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32)
     private FcmCategory fcmCategory;
     @Column(nullable = false)

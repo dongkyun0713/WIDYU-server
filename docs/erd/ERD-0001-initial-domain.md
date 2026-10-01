@@ -493,6 +493,8 @@ erDiagram
         String scheme
         String dataType
         Long dataRevision
+        String notificationType "nullable VARCHAR(48), LLD-0060"
+        String dataPayload "nullable TEXT JSON object, LLD-0060"
         FcmCategory fcmCategory
         Boolean emergency
         String state
@@ -781,6 +783,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-01 | `fcm_outbox` | `notification_type VARCHAR(48)`·`data_payload TEXT` 추가 (LLD-0060). type별 FCM 표현과 재시도 data 복원, 기존 행은 NULL 폴백 | `scripts/mysql/alter_fcm_outbox_notification_type.sql` |
 | 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
 | 2026-09-21 | `location_access_log` | 신규 테이블 (LLD-0056). 위치 열람 주체·대상·경로·통보 시각 | `scripts/mysql/create_location_access_log.sql` |
 | 2026-09-21 | `fcm_notification`·`member_notification_setting` | `fcm_category`에 `LOCATION_NOTICE` 추가 (LLD-0056). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_location_notice.sql` |
