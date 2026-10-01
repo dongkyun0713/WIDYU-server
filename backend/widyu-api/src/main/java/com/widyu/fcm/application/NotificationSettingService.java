@@ -1,15 +1,18 @@
 package com.widyu.fcm.application;
 
-import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.MemberNotificationSetting;
-import com.widyu.fcm.NotificationSettingGroup;
+import com.widyu.fcm.PushSettingGroup;
 import com.widyu.fcm.dto.request.UpdateNotificationSettingRequest;
 import com.widyu.fcm.dto.response.NotificationSettingResponse;
 import com.widyu.fcm.repository.MemberNotificationSettingRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.global.util.SecurityUtil;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
+import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.MemberRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -24,89 +27,108 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationSettingService {
 
     private final MemberNotificationSettingRepository notificationSettingRepository;
+    private final FamilyMembershipRepository familyMembershipRepository;
+    private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
+    private final SecurityUtil securityUtil;
 
     public List<NotificationSettingResponse> getNotificationSettings() {
         Member member = memberUtil.getCurrentMember();
+        boolean leader = isLeader(member);
+        Map<PushSettingGroup, MemberNotificationSetting> settings = notificationSettingRepository
+                .findAllByMemberId(member.getId()).stream()
+                .collect(Collectors.toMap(MemberNotificationSetting::getCategory, Function.identity()));
 
-        Map<FcmCategory, MemberNotificationSetting> settingMap =
-                notificationSettingRepository.findAllByMemberId(member.getId())
-                        .stream()
-                        .collect(Collectors.toMap(
-                                MemberNotificationSetting::getCategory,
-                                Function.identity()
-                        ));
-
-        return NotificationSettingGroup.stream()
-                .map(group -> {
-                    boolean isGroupEnabled = group.getCategories().stream()
-                            .anyMatch(category -> {
-                                MemberNotificationSetting setting = settingMap.get(category);
-                                // DB에 없으면 기본값 true, 있으면 enabled 값 따름
-                                return setting == null || setting.isEnabled();
-                            });
-
-                    return NotificationSettingResponse.builder()
-                            .group(group.name())
-                            .groupName(group.getDescription())
-                            .enabled(isGroupEnabled)
-                            .build();
-                })
+        return PushSettingGroup.stream()
+                .filter(group -> member.getType() != MemberType.SENIOR || group == PushSettingGroup.GENERAL)
+                .map(group -> response(member, group, leader, settings.get(group)))
                 .toList();
     }
 
     @Transactional
     public NotificationSettingResponse updateNotificationSetting(UpdateNotificationSettingRequest request) {
-        Member member = memberUtil.getCurrentMember();
+        PushSettingGroup group = parseGroup(request.group());
+        if (request.enabled() == null || request.policyRevision() == null || request.policyRevision() < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
 
-        if (request.group() == null || request.group().isBlank()) {
+        Long memberId = securityUtil.getCurrentMemberId();
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getNotificationPolicyRevision() != request.policyRevision()) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_POLICY_REVISION_CONFLICT);
+        }
+        if (member.getType() == MemberType.SENIOR && group != PushSettingGroup.GENERAL) {
             throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
         }
-
-        NotificationSettingGroup group;
-        try {
-            group = NotificationSettingGroup.valueOf(request.group());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY); // 재사용, 혹은 새로운 에러 코드 정의
+        boolean leader = isLeader(member);
+        if (leader && group.isMandatoryForLeader() && !request.enabled()) {
+            throw new BusinessException(ErrorCode.MANDATORY_NOTIFICATION_PUSH);
         }
 
-        List<FcmCategory> categoriesInGroup = group.getCategories();
-        if (categoriesInGroup.isEmpty()) {
-            // ETC와 같이 카테고리가 없는 그룹은 변경 불가
-            throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
+        MemberNotificationSetting setting = notificationSettingRepository
+                .findByMemberIdAndCategory(memberId, group).orElse(null);
+        if (leader && group.isMandatoryForLeader()) {
+            return NotificationSettingResponse.of(group, true, true, member.getNotificationPolicyRevision());
         }
-
-        Map<FcmCategory, MemberNotificationSetting> existingSettings = notificationSettingRepository
-                .findByMemberIdAndCategoryIn(member.getId(), categoriesInGroup)
-                .stream()
-                .collect(Collectors.toMap(MemberNotificationSetting::getCategory, Function.identity()));
-
-        for (FcmCategory category : categoriesInGroup) {
-            MemberNotificationSetting setting = existingSettings.get(category);
-            if (setting != null) {
-                setting.updateEnabled(request.enabled());
+        boolean previous = setting == null || setting.isEnabled();
+        if (previous != request.enabled()) {
+            if (setting == null) {
+                notificationSettingRepository.save(MemberNotificationSetting.create(member, group, request.enabled()));
             } else {
-                notificationSettingRepository.save(
-                        MemberNotificationSetting.create(member, category, request.enabled())
-                );
+                setting.updateEnabled(request.enabled());
             }
+            member.incrementNotificationPolicyRevision();
         }
-
-        return NotificationSettingResponse.builder()
-                .group(group.name())
-                .groupName(group.getDescription())
-                .enabled(request.enabled())
-                .build();
+        return response(member, group, leader, request.enabled());
     }
 
-    public boolean isNotificationEnabled(Long memberId, FcmCategory category) {
-        if (category == FcmCategory.ALL) {
+    public boolean isNotificationEnabled(Long memberId, PushSettingGroup group) {
+        if (group == null || group == PushSettingGroup.NONE) {
             return true;
         }
+        if (group.isMandatoryForLeader() && familyMembershipRepository.findByGuardianId(memberId)
+                .map(membership -> membership.isLeader()).orElse(false)) {
+            return true;
+        }
+        return notificationSettingRepository.findByMemberIdAndCategory(memberId, group)
+                .map(MemberNotificationSetting::isEnabled).orElse(true);
+    }
 
-        return notificationSettingRepository
-                .findByMemberIdAndCategory(memberId, category)
-                .map(MemberNotificationSetting::isEnabled)
-                .orElse(true);
+    private PushSettingGroup parseGroup(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
+        }
+        try {
+            PushSettingGroup group = PushSettingGroup.valueOf(value);
+            if (group == PushSettingGroup.NONE) {
+                throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
+            }
+            return group;
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
+        }
+    }
+
+    private boolean isLeader(Member member) {
+        if (member.getType() != MemberType.GUARDIAN) {
+            return false;
+        }
+        return familyMembershipRepository.findByGuardianId(member.getId())
+                .map(membership -> membership.isLeader()).orElse(false);
+    }
+
+    private NotificationSettingResponse response(Member member, PushSettingGroup group, boolean leader,
+                                                  MemberNotificationSetting setting) {
+        boolean mandatory = leader && group.isMandatoryForLeader();
+        boolean enabled = mandatory || setting == null || setting.isEnabled();
+        return NotificationSettingResponse.of(group, enabled, mandatory, member.getNotificationPolicyRevision());
+    }
+
+    private NotificationSettingResponse response(Member member, PushSettingGroup group, boolean leader,
+                                                  boolean requestedEnabled) {
+        boolean mandatory = leader && group.isMandatoryForLeader();
+        boolean enabled = mandatory || requestedEnabled;
+        return NotificationSettingResponse.of(group, enabled, mandatory, member.getNotificationPolicyRevision());
     }
 }

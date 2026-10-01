@@ -9,15 +9,21 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.fcm.dto.request.UpdateNotificationSettingRequest;
 import com.widyu.fcm.dto.response.FcmNotificationResponse;
 import com.widyu.fcm.repository.*;
 import com.widyu.global.config.JpaAuditingConfig;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.global.util.SecurityUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.Family;
+import com.widyu.member.FamilyMembership;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyRepository;
+import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.Duration;
@@ -53,6 +59,7 @@ import org.springframework.transaction.support.TransactionTemplate;
         FcmEligibility.class, NotificationSettingService.class})
 class FcmOutboxIntegrationTest {
     @Autowired FcmOutboxService service;
+    @Autowired NotificationSettingService settingService;
     @Autowired FcmOutboxTransactions transactions;
     @Autowired FcmOutboxRepository outbox;
     @Autowired FcmNotificationRepository notifications;
@@ -60,11 +67,13 @@ class FcmOutboxIntegrationTest {
     @Autowired MemberFcmTokenRepository tokens;
     @Autowired MemberRepository members;
     @Autowired FamilyRepository families;
+    @Autowired FamilyMembershipRepository memberships;
     @Autowired SeniorProfileRepository seniorProfiles;
     @Autowired PlatformTransactionManager transactionManager;
     @MockBean FcmOutboxDispatcher immediate;
     @MockBean JPAQueryFactory queryFactory;
     @MockBean MemberUtil memberUtil;
+    @MockBean SecurityUtil securityUtil;
 
     @AfterEach
     void cleanup() {
@@ -74,6 +83,7 @@ class FcmOutboxIntegrationTest {
             settings.deleteAll();
             tokens.deleteAll();
             seniorProfiles.deleteAll();
+            memberships.deleteAll();
             families.deleteAll();
             members.deleteAll();
         });
@@ -326,7 +336,7 @@ class FcmOutboxIntegrationTest {
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        FcmCategory.ALBUM, false)));
+                        PushSettingGroup.GENERAL, false)));
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
@@ -342,13 +352,98 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("비방장이 안심구역 푸시를 꺼도 센터 행은 남고 기기 작업만 취소한다")
+    void 비방장이_안심구역_푸시를_꺼도_센터_행은_남는다() {
+        // given
+        Long guardianId = new TransactionTemplate(transactionManager).execute(status -> {
+            Member guardian = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01045678901"));
+            Family family = families.save(Family.createFamily("123ABC"));
+            memberships.save(FamilyMembership.createMembership(family, guardian));
+            tokens.save(MemberFcmToken.builder().member(guardian).token("guardian-token").active(true).build());
+            settings.save(MemberNotificationSetting.create(guardian, PushSettingGroup.SAFE_ZONE, false));
+            return guardian.getId();
+        });
+
+        // when
+        service.enqueue(guardianId, FcmSendDto.builder().title("안심구역").content("본문")
+                .notificationType(NotificationType.SAFE_ZONE_EXITED).seniorId(guardianId).build());
+        Long rowId = outbox.findAll().getFirst().getId();
+        FcmDelivery delivery = transactions.claim(rowId);
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(delivery).isNull();
+        assertThat(outbox.findById(rowId).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("claim 뒤 푸시를 끄면 preflight가 기기 작업을 취소하고 센터 행은 유지한다")
+    void claim_뒤_푸시를_끄면_preflight가_작업을_취소한다() {
+        // given
+        Long member = memberWithToken();
+        service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+        Long id = outbox.findAll().getFirst().getId();
+        FcmDelivery delivery = transactions.claim(id);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
+                        PushSettingGroup.GENERAL, false)));
+
+        // when
+        boolean allowed = transactions.preflight(delivery);
+
+        // then
+        assertThat(allowed).isFalse();
+        assertThat(outbox.findById(id).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CANCELLED);
+        assertThat(notifications.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("같은 revision으로 동시에 설정하면 한 요청만 저장하고 다른 요청은 거부한다")
+    void 같은_revision으로_동시에_설정하면_한_요청만_저장한다() throws Exception {
+        // given
+        Long member = memberWithToken();
+        given(securityUtil.getCurrentMemberId()).willReturn(member);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Callable<Long> patch = () -> {
+                start.await();
+                try {
+                    return settingService.updateNotificationSetting(
+                            new UpdateNotificationSettingRequest("GENERAL", false, 0L)).policyRevision();
+                } catch (BusinessException exception) {
+                    if (exception.getErrorCode() == ErrorCode.NOTIFICATION_POLICY_REVISION_CONFLICT) {
+                        return -1L;
+                    }
+                    throw exception;
+                }
+            };
+            Future<Long> first = executor.submit(patch);
+            Future<Long> second = executor.submit(patch);
+
+            // when
+            start.countDown();
+            List<Long> results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+
+            // then
+            assertThat(results).containsExactlyInAnyOrder(1L, -1L);
+            assertThat(members.findById(member).orElseThrow().getNotificationPolicyRevision()).isEqualTo(1L);
+            assertThat(settings.findByMemberIdAndCategory(member, PushSettingGroup.GENERAL))
+                    .hasValueSatisfying(row -> assertThat(row.isEnabled()).isFalse());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     @DisplayName("전달 방식을 구분하면 센터와 기기 작업 수가 정책대로 저장된다")
     void 전달_방식을_구분하면_센터와_기기_작업을_나눈다() {
         // given
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        FcmCategory.MEDICINE_SCHEDULE, false)));
+                        PushSettingGroup.MEDICATION_CHECK, false)));
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("업로드").content("본문")

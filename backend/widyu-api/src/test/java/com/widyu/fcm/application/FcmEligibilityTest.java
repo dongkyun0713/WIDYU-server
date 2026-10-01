@@ -7,6 +7,7 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.PushSettingGroup;
 import com.widyu.global.entity.Status;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
@@ -113,7 +114,7 @@ class FcmEligibilityTest {
         // given
         FcmOutbox outbox = outbox(null);
         activeRecipient(outbox);
-        given(settings.isNotificationEnabled(1L, FcmCategory.ALBUM)).willReturn(false);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
 
         // when
         boolean allowed = eligibility.eligible(outbox);
@@ -135,6 +136,56 @@ class FcmEligibilityTest {
 
         // then
         assertThat(allowed).isTrue();
+    }
+
+    @Test
+    @DisplayName("복약 변경 타입을 판정하면 기존 복약 카테고리보다 일반 그룹을 따른다")
+    void 복약_변경_타입을_판정하면_일반_그룹을_따른다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        ReflectionTestUtils.setField(outbox, "fcmCategory", FcmCategory.MEDICINE_SCHEDULE);
+        activeRecipient(outbox);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isFalse();
+    }
+
+    @Test
+    @DisplayName("복약 미확인 타입을 판정하면 복약 확인 그룹을 따른다")
+    void 복약_미확인_타입을_판정하면_복약_확인_그룹을_따른다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_PROOF_MISSING);
+        activeRecipient(outbox);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.MEDICATION_CHECK)).willReturn(false);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isFalse();
+    }
+
+    @Test
+    @DisplayName("괜찮다는 안내를 판정하면 안전 카테고리보다 일반 그룹을 따른다")
+    void 괜찮다는_안내를_판정하면_일반_그룹을_따른다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE);
+        ReflectionTestUtils.setField(outbox, "fcmCategory", FcmCategory.SAFE_ZONE);
+        activeRecipient(outbox);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isFalse();
     }
 
     @Test
@@ -212,7 +263,7 @@ class FcmEligibilityTest {
     }
 
     private void enabled() {
-        given(settings.isNotificationEnabled(1L, FcmCategory.ALBUM)).willReturn(true);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(true);
     }
 
     private FcmOutbox outbox(Long relatedId) {

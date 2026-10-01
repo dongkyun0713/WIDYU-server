@@ -83,6 +83,8 @@ public enum ErrorCode {
     INVALID_FCM_CATEGORY(HttpStatus.BAD_REQUEST, "FCM_4001", "유효하지 않은 알림 카테고리입니다."),
     INVALID_NOTIFICATION_CENTER_FILTER(HttpStatus.BAD_REQUEST, "FCM_4002", "사용할 수 없는 알림센터 필터입니다."),
     INVALID_NOTIFICATION_CURSOR(HttpStatus.BAD_REQUEST, "FCM_4003", "유효하지 않은 알림센터 커서입니다."),
+    MANDATORY_NOTIFICATION_PUSH(HttpStatus.CONFLICT, "FCM_4090", "방장의 안전 알림 푸시는 끌 수 없습니다."),
+    NOTIFICATION_POLICY_REVISION_CONFLICT(HttpStatus.CONFLICT, "FCM_4091", "알림 설정이 변경되었습니다. 최신 설정을 다시 조회해주세요."),
 
     // 알림 관련
     NOTIFICATION_COMMENTER_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_4040", "댓글 작성자를 찾을 수 없습니다."),

@@ -13,12 +13,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.List;
 
-@Tag(name = "FCM Settings", description = "그룹별 알림 수신 설정 API")
+@Tag(name = "FCM Settings", description = "본인의 그룹별 제품 푸시 설정 API")
 public interface NotificationSettingDocs {
 
     @Operation(
             summary = "알림 설정 조회",
-            description = "현재 로그인한 유저의 그룹별 알림 수신 설정을 조회합니다. 그룹 내 하나의 카테고리라도 활성화되어 있으면 그룹은 enabled=true로 반환됩니다."
+            description = "본인의 제품 푸시 설정을 조회합니다. 보호자는 4그룹, 시니어는 GENERAL 1그룹입니다. 기기 상태 unknown은 OS 권한을 알 수 없다는 뜻입니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -32,24 +32,15 @@ public interface NotificationSettingDocs {
                                       "message": "알림 설정 조회 성공",
                                       "data": [
                                         {
-                                          "group": "GOAL",
-                                          "groupName": "목표 관련 알림",
-                                          "enabled": true
-                                        },
-                                        {
-                                          "group": "ALBUM",
-                                          "groupName": "앨범 관련 알림",
-                                          "enabled": false
-                                        },
-                                        {
-                                          "group": "HOME",
-                                          "groupName": "안전/소통 관련 알림",
-                                          "enabled": true
-                                        },
-                                        {
-                                          "group": "ETC",
-                                          "groupName": "기타 알림",
-                                          "enabled": true
+                                          "group": "SAFETY",
+                                          "groupName": "안전 알림",
+                                          "enabled": true,
+                                          "recipientEnabled": true,
+                                          "productPushEnabled": true,
+                                          "mandatoryProductPush": true,
+                                          "canEditProductPush": false,
+                                          "devicePushStatus": "unknown",
+                                          "policyRevision": 4
                                         }
                                       ]
                                     }
@@ -61,7 +52,7 @@ public interface NotificationSettingDocs {
 
     @Operation(
             summary = "알림 설정 변경",
-            description = "특정 그룹의 알림 수신 설정을 변경합니다. enabled=false로 설정하면 해당 그룹에 속한 모든 카테고리의 알림이 전송되지 않습니다."
+            description = "로그인한 본인의 제품 푸시만 변경합니다. policyRevision이 최신값과 다르거나 방장이 안전 푸시를 끄면 409입니다. 푸시를 꺼도 알림센터 행은 남습니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -74,9 +65,15 @@ public interface NotificationSettingDocs {
                                       "code": "FCM_2011",
                                       "message": "알림 설정 변경 성공",
                                       "data": {
-                                        "group": "ALBUM",
-                                        "groupName": "앨범 관련 알림",
-                                        "enabled": false
+                                        "group": "GENERAL",
+                                        "groupName": "일반 알림",
+                                        "enabled": false,
+                                        "recipientEnabled": true,
+                                        "productPushEnabled": false,
+                                        "mandatoryProductPush": false,
+                                        "canEditProductPush": true,
+                                        "devicePushStatus": "unknown",
+                                        "policyRevision": 5
                                       }
                                     }
                                     """
@@ -85,7 +82,7 @@ public interface NotificationSettingDocs {
     )
     @ApiResponse(
             responseCode = "400",
-            description = "유효하지 않은 그룹",
+            description = "유효하지 않은 그룹 또는 요청 값",
             content = @Content(
                     schema = @Schema(implementation = ApiResponseTemplate.class),
                     examples = @ExampleObject(
@@ -99,6 +96,10 @@ public interface NotificationSettingDocs {
                     )
             )
     )
+    @ApiResponse(
+            responseCode = "409",
+            description = "방장 안전 푸시 필수(FCM_4090) 또는 낡은 policyRevision(FCM_4091)"
+    )
     ApiResponseTemplate<NotificationSettingResponse> updateNotificationSetting(
             @RequestBody(
                     description = "알림 설정 변경 요청",
@@ -110,8 +111,9 @@ public interface NotificationSettingDocs {
                                             name = "그룹 알림 끄기",
                                             value = """
                                                     {
-                                                      "group": "ALBUM",
-                                                      "enabled": false
+                                                      "group": "GENERAL",
+                                                      "enabled": false,
+                                                      "policyRevision": 4
                                                     }
                                                     """
                                     ),
@@ -119,8 +121,9 @@ public interface NotificationSettingDocs {
                                             name = "그룹 알림 켜기",
                                             value = """
                                                     {
-                                                      "group": "ALBUM",
-                                                      "enabled": true
+                                                      "group": "GENERAL",
+                                                      "enabled": true,
+                                                      "policyRevision": 4
                                                     }
                                                     """
                                     )
@@ -129,4 +132,3 @@ public interface NotificationSettingDocs {
             ) UpdateNotificationSettingRequest request
     );
 }
-
