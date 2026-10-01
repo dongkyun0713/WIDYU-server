@@ -8,10 +8,9 @@ import com.widyu.album.repository.AlbumUnlockRepository;
 import com.widyu.fcm.event.album.dto.AlbumUnlockedEvent;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
-import com.widyu.member.PointHistory;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.application.FamilyAccessService;
-import com.widyu.member.repository.PointHistoryRepository;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
@@ -30,9 +29,9 @@ public class AlbumUnlockService {
     private final AlbumRepository albumRepository;
     private final MemberUtil memberUtil;
     private final ApplicationEventPublisher eventPublisher;
-    private final PointHistoryRepository pointHistoryRepository;
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyAccessService familyAccessService;
+    private final SeniorProfileService seniorProfileService;
 
     @Transactional
     public AlbumUnlockResponse unlockAlbum(Long albumId) {
@@ -72,8 +71,7 @@ public class AlbumUnlockService {
         }
 
         // 6. 포인트 차감 및 내역 기록
-        deductPoints(seniorProfile);
-        pointHistoryRepository.save(PointHistory.use(seniorProfile, Album.UNLOCK_PRICE, "앨범 해금"));
+        seniorProfileService.deductPointsFromMember(currentMember.getId(), Album.UNLOCK_PRICE, "앨범 해금");
 
         // 7. 해금 기록 생성
         AlbumUnlock albumUnlock = AlbumUnlock.createUnlock(album, currentMember);
@@ -97,7 +95,4 @@ public class AlbumUnlockService {
         return seniorProfile.hasEnoughPoints(Album.UNLOCK_PRICE);
     }
 
-    private void deductPoints(SeniorProfile seniorProfile) {
-        seniorProfile.deductPoints(Album.UNLOCK_PRICE);
-    }
 }

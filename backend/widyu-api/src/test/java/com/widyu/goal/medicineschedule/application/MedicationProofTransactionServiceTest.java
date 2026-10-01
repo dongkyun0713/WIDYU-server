@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 import com.widyu.global.entity.Status;
+import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.global.error.BusinessException;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
@@ -32,6 +33,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -43,6 +46,7 @@ class MedicationProofTransactionServiceTest {
     @Mock private MedicineScheduleRepository medicineScheduleRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private SeniorProfileService seniorProfileService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private MedicationProofTransactionService transactionService;
 
@@ -120,6 +124,7 @@ class MedicationProofTransactionServiceTest {
         assertThat(response.earnedPoints()).isEqualTo(10L);
         then(seniorProfileService).should()
                 .addPointsToMember(10L, 10L, "약 복용 인증", "MEDICATION_PROOF:55");
+        then(eventPublisher).shouldHaveNoInteractions();
     }
 
     @Test
@@ -141,7 +146,36 @@ class MedicationProofTransactionServiceTest {
         // then
         assertThat(response.earnedPoints()).isEqualTo(30L);
         then(seniorProfileService).should()
-                .addPointsToMember(10L, 30L, "약 복용 인증", "MEDICATION_PROOF:77");
+                .addGoalRewardPoints(10L, 30L, "약 복용 인증", "MEDICATION_PROOF:77");
+        ArgumentCaptor<GoalAchievedEvent> event = ArgumentCaptor.forClass(GoalAchievedEvent.class);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("G01:M:77");
+        assertThat(event.getValue().points()).isEqualTo(30L);
+    }
+
+    @Test
+    @DisplayName("하루 일정이 하나일 때 첫 인증을 마치면 30포인트 G01을 만든다")
+    void 하루_일정이_하나일_때_첫_인증을_마치면_G01을_만든다() {
+        // given
+        Member member = lockedMember();
+        MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
+        given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
+                .willReturn(Optional.of(schedule));
+        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(1L);
+        savedProofHasId(88L);
+
+        // when
+        var response = transactionService.verifyMedication(10L, 1L, List.of());
+
+        // then
+        assertThat(response.earnedPoints()).isEqualTo(30L);
+        then(seniorProfileService).should()
+                .addGoalRewardPoints(10L, 30L, "약 복용 인증", "MEDICATION_PROOF:88");
+        ArgumentCaptor<GoalAchievedEvent> event = ArgumentCaptor.forClass(GoalAchievedEvent.class);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("G01:M:88");
     }
 
     @Test

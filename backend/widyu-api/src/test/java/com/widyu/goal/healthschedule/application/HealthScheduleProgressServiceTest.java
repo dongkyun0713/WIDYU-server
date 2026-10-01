@@ -11,6 +11,7 @@ import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
 
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
+import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.healthschedule.HealthSchedule;
@@ -33,6 +34,8 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +48,7 @@ class HealthScheduleProgressServiceTest {
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private SeniorProfileService seniorProfileService;
     @Mock private MemberUtil memberUtil;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private HealthScheduleProgressService healthScheduleProgressService;
 
@@ -56,7 +60,9 @@ class HealthScheduleProgressServiceTest {
     }
 
     private HealthSchedule upcomingScheduleFor(Member member, LocalDateTime scheduledAt) {
-        return HealthSchedule.create(member, "건강검진", "서울시", 37.5, 127.0, scheduledAt);
+        HealthSchedule schedule = HealthSchedule.create(member, "건강검진", "서울시", 37.5, 127.0, scheduledAt);
+        ReflectionTestUtils.setField(schedule, "id", 1L);
+        return schedule;
     }
 
     private Member seniorMember() {
@@ -240,7 +246,10 @@ class HealthScheduleProgressServiceTest {
         assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
         assertThat(schedule.getIsReward()).isTrue();
         then(seniorProfileService).should()
-                .addPointsToMember(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+                .addGoalRewardPoints(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+        ArgumentCaptor<GoalAchievedEvent> event = ArgumentCaptor.forClass(GoalAchievedEvent.class);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("G01:H:1");
     }
 
     @Test
@@ -261,7 +270,10 @@ class HealthScheduleProgressServiceTest {
         assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
         assertThat(schedule.getIsReward()).isTrue();
         then(seniorProfileService).should()
-                .addPointsToMember(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+                .addGoalRewardPoints(senior.getId(), 100L, "건강 일정 방문", "HEALTH_SCHEDULE_REWARD:" + scheduleId);
+        ArgumentCaptor<GoalAchievedEvent> event = ArgumentCaptor.forClass(GoalAchievedEvent.class);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("G01:H:7");
     }
 
     @Test
@@ -283,7 +295,7 @@ class HealthScheduleProgressServiceTest {
         // then
         assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
         then(seniorProfileService).should(never())
-                .addPointsToMember(anyLong(), anyLong(), anyString(), any());
+                .addGoalRewardPoints(anyLong(), anyLong(), anyString(), any());
     }
 
     @Test
@@ -303,6 +315,6 @@ class HealthScheduleProgressServiceTest {
         assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
         assertThat(schedule.getIsReward()).isFalse();
         then(seniorProfileService).should(never())
-                .addPointsToMember(anyLong(), anyLong(), anyString(), any());
+                .addGoalRewardPoints(anyLong(), anyLong(), anyString(), any());
     }
 }

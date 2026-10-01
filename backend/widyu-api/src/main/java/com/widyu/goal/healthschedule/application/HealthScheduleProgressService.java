@@ -5,6 +5,7 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.retry.RetryOnPointConflict;
 import com.widyu.global.util.GeoUtils;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.healthschedule.HealthSchedule;
 import com.widyu.healthschedule.ProgressStatus;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,7 @@ public class HealthScheduleProgressService {
     private final FamilyMembershipRepository familyMembershipRepository;
     private final SeniorProfileService seniorProfileService;
     private final MemberUtil memberUtil;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 시니어가 건강 일정을 완료 처리
@@ -116,13 +119,15 @@ public class HealthScheduleProgressService {
             return;
         }
 
-        seniorProfileService.addPointsToMember(
+        seniorProfileService.addGoalRewardPoints(
                 owner.getId(),
                 schedule.getRewardPoint().longValue(),
                 VISIT_REWARD_DESCRIPTION,
                 VISIT_REWARD_OPERATION_KEY_PREFIX + schedule.getId()
         );
         schedule.claimReward();
+        eventPublisher.publishEvent(GoalAchievedEvent.forHealthSchedule(
+                owner.getId(), schedule.getId(), schedule.getRewardPoint().longValue()));
     }
 
     private void validateHealthScheduleAccess(HealthSchedule healthSchedule, Member currentMember) {

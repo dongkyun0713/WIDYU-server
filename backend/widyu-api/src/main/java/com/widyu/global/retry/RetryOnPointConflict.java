@@ -27,8 +27,10 @@ import org.springframework.retry.annotation.Retryable;
  * 에만 적용한다. (예: {@code SeniorProfileService}의 포인트 증감 메서드가 스케줄러·컨트롤러
  * 에서 직접 호출될 때, {@code WalkService.updateSteps}, {@code AdminPointGrantService.grant})
  *
- * <p>결제 경로는 포인트를 증감하지 않는다(ADR-0029). 외부 부수효과가 있는 경로
- * (예: {@code AlbumUnlockService.unlockAlbum}의 동기 FCM 이벤트)는 재시도 없이 409로 응답한다.
+ * <p>결제 경로는 포인트를 증감하지 않는다(ADR-0029). 포인트 변경과 같은 DB 트랜잭션에
+ * enqueue한 알림센터/outbox 행은 충돌한 시도와 함께 롤백되므로 재시도해도 중복되지 않는다.
+ * 반면 복약 증빙 S3 업로드처럼 트랜잭션 밖에서 이미 실행된 부수효과는 재실행할 수 없으므로
+ * 그 경로는 최외곽 재시도 없이 409로 응답한다. 앨범 해금에도 최외곽 재시도를 도입하지 않는다.
  */
 @Documented
 @Target(ElementType.METHOD)
