@@ -116,7 +116,8 @@ class NotificationCenterServiceIntegrationTest {
         // given
         Member senior = member(MemberType.SENIOR);
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        LocalDateTime now = LocalDateTime.now();
+        // DB의 TIMESTAMP 정밀도로 반올림되어 경계 행이 미래가 되지 않도록 맞춘다.
+        LocalDateTime now = LocalDateTime.now().withNano(0);
         notification(senior, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, now.minusDays(1));
         FcmNotification active = notification(senior, NotificationType.ALBUM_CREATED,
                 FcmCategory.ALBUM, now.plusDays(1));
