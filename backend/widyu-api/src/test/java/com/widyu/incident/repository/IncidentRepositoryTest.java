@@ -318,8 +318,77 @@ class IncidentRepositoryTest {
         assertThat(found.getInitialAlertSentAtMs()).isNull();
     }
 
+    @Test
+    @DisplayName("안심구역에 재진입하면 열린 사건의 상황 종료 시각만 한 번 기록한다")
+    void 안심구역에_재진입하면_열린_사건의_상황_종료_시각만_한_번_기록한다() {
+        // given
+        Incident safeZone = incidentRepository.save(safeZoneIncident());
+        Incident heart = incidentRepository.save(incident("inc-heart", SENIOR_ID, "dec-heart"));
+
+        // when
+        int ended = incidentRepository.endOpenSafeZoneSituation(SENIOR_ID, RESPOND_BY_MS + 1L);
+        int repeated = incidentRepository.endOpenSafeZoneSituation(SENIOR_ID, RESPOND_BY_MS + 2L);
+
+        // then
+        assertThat(ended).isEqualTo(1);
+        assertThat(repeated).isZero();
+        Incident found = incidentRepository.findById(safeZone.getId()).orElseThrow();
+        assertThat(found.getSituationEndedAtMs()).isEqualTo(RESPOND_BY_MS + 1L);
+        assertThat(found.getState()).isEqualTo(IncidentState.CHECKING);
+        assertThat(incidentRepository.findById(heart.getId()).orElseThrow().getSituationEndedAtMs()).isNull();
+    }
+
+    @Test
+    @DisplayName("안심구역에 재진입하면 OK로 닫힌 사건에도 상황 종료 시각을 기록한다")
+    void 안심구역에_재진입하면_OK로_닫힌_사건에도_상황_종료_시각을_기록한다() {
+        // given
+        Incident safeZone = incidentRepository.save(safeZoneIncident());
+        incidentRepository.respond(safeZone.getIncidentRef(), SENIOR_ID, IncidentResponseValue.OK,
+                ResponseVia.PHONE, RESPOND_BY_MS - 1_000L, null, IncidentState.OK_CLOSED);
+
+        // when
+        int ended = incidentRepository.endOpenSafeZoneSituation(SENIOR_ID, RESPOND_BY_MS + 1L);
+
+        // then
+        assertThat(ended).isEqualTo(1);
+        Incident found = incidentRepository.findById(safeZone.getId()).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.OK_CLOSED);
+        assertThat(found.getSituationEndedAtMs()).isEqualTo(RESPOND_BY_MS + 1L);
+    }
+
+    @Test
+    @DisplayName("안심구역 이탈 사건이 만료되면 공통 최초 알림 후보가 되고 한 번만 예약된다")
+    void 안심구역_이탈_사건이_만료되면_공통_최초_알림_후보가_되고_한_번만_예약된다() {
+        // given
+        Incident safeZone = incidentRepository.save(safeZoneIncident());
+
+        // when
+        var due = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, 0L, PageRequest.of(0, 10));
+        int escalated = incidentRepository.escalateTimedOutIfDue(safeZone.getId(), RESPOND_BY_MS + 1L);
+        int claimed = incidentRepository.claimInitialAlertIfDue(safeZone.getId(), RESPOND_BY_MS + 1L);
+        int repeated = incidentRepository.claimInitialAlertIfDue(safeZone.getId(), RESPOND_BY_MS + 2L);
+
+        // then
+        assertThat(due).containsExactly(safeZone.getId());
+        assertThat(escalated).isEqualTo(1);
+        assertThat(claimed).isEqualTo(1);
+        assertThat(repeated).isZero();
+        Incident found = incidentRepository.findById(safeZone.getId()).orElseThrow();
+        assertThat(found.getState()).isEqualTo(IncidentState.ESCALATED);
+        assertThat(found.getInitialAlertSentAtMs()).isEqualTo(RESPOND_BY_MS + 1L);
+    }
+
     private Incident checkingIncident() {
         Incident incident = incident(INCIDENT_REF, SENIOR_ID, "dec-01");
+        incident.markChecking();
+        return incident;
+    }
+
+    private Incident safeZoneIncident() {
+        Incident incident = Incident.builder()
+                .incidentRef("inc-safe-zone").memberId(SENIOR_ID)
+                .kind(IncidentKind.SAFE_ZONE_EXIT)
+                .openedAtMs(OPENED_AT_MS).respondByMs(RESPOND_BY_MS).build();
         incident.markChecking();
         return incident;
     }
