@@ -8,11 +8,13 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.never;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.fcm.application.FcmService;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
@@ -198,7 +200,7 @@ class MedicineScheduleServiceTest {
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         then(medicationProofRepository).should(never())
                 .findByMedicineScheduleAndVerifiedAtBetween(any(), any(), any());
-        then(fcmService).should().sendMessageToUser(
+        then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
     }
 
@@ -232,10 +234,15 @@ class MedicineScheduleServiceTest {
         assertThat(response.medicineScheduleId()).isEqualTo(101L);
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         ArgumentCaptor<FcmSendDto> messageCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(fcmService).should().sendMessageToUser(org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
-        assertThat(messageCaptor.getValue().data())
+        then(fcmService).should(times(2)).sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues().getFirst().data())
                 .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
                 .containsKey("revision");
+        assertThat(messageCaptor.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        assertThat(messageCaptor.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
@@ -260,8 +267,15 @@ class MedicineScheduleServiceTest {
         assertThat(existing.isEffectiveOn(today().plusDays(1))).isFalse();
         assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
-        then(fcmService).should().sendMessageToUser(
-                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
+        ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should(times(2)).sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
+        assertThat(messages.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_DELETED);
+        assertThat(messages.getAllValues().getFirst().content())
+                .isEqualTo("내일부터 이 알람은 울리지 않아요.");
+        assertThat(messages.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
@@ -270,6 +284,8 @@ class MedicineScheduleServiceTest {
         // given
         Long memberId = 1L;
         Member targetMember = seniorWithId(memberId);
+        Member actor = Member.createMember(MemberType.GUARDIAN, "방장", "01099998888");
+        given(memberUtil.getCurrentMember()).willReturn(actor);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
         given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
@@ -290,8 +306,18 @@ class MedicineScheduleServiceTest {
         assertThat(response.medicineScheduleId()).isEqualTo(1L);
         assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
-        then(fcmService).should().sendMessageToUser(
-                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
+        ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should(times(2)).sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
+        assertThat(messages.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CREATED);
+        assertThat(messages.getAllValues().getFirst().title())
+                .isEqualTo("방장 님이 새 약 알람을 등록했어요.");
+        assertThat(messages.getAllValues().getFirst().actorDisplayName()).isEqualTo("방장");
+        assertThat(messages.getAllValues().getFirst().effectiveFromDate())
+                .isEqualTo(today().plusDays(1).toString());
+        assertThat(messages.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
@@ -384,6 +410,7 @@ class MedicineScheduleServiceTest {
         // when & then
         assertThatThrownBy(() -> medicineScheduleService.updateSchedule(scheduleId, updateRequest("09:00"), memberId))
                 .isInstanceOf(BusinessException.class);
+        then(fcmService).shouldHaveNoInteractions();
     }
 
     @Test
@@ -404,6 +431,7 @@ class MedicineScheduleServiceTest {
         // when & then
         assertThatThrownBy(() -> medicineScheduleService.deleteSchedule(scheduleId, memberId))
                 .isInstanceOf(BusinessException.class);
+        then(fcmService).shouldHaveNoInteractions();
     }
 
     @Test

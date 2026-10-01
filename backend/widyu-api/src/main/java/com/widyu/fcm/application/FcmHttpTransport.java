@@ -186,7 +186,8 @@ public class FcmHttpTransport implements FcmTransport {
         if (type == null) {
             return;
         }
-        data.put("type", type.name());
+        data.put("notificationType", type.name());
+        data.put("type", type.dataTypeValue());
         data.put("priority", type.priority().wireValue());
         data.put("foregroundPresentation", type.foregroundPresentation());
         data.putIfAbsent("deepLink", "");

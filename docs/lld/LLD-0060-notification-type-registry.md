@@ -84,6 +84,8 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 
 괄호 안 센터 필터는 푸시 전용 타입의 목적지 분류이며 실제 센터 행이 없음을 뜻한다. `GENERAL` 등 설정 그룹은 W5부터 판정에 쓴다. 딥링크 문자열 전체는 FE 합의 전 제안이다. 표의 전달 방식은 최종 정책이며 W2에서 기존 발행자의 센터 생성 흐름을 바꾸지 않는다.
 
+`legacyDataType`은 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`만 `MEDICATION_SCHEDULE_CHANGED`이며 나머지는 null이다. 모든 typed FCM의 `data.notificationType`은 논리 타입 이름이고 `data.type`은 `legacyDataType`이 있으면 그 값, 없으면 논리 타입 이름이다.
+
 | # | `NotificationType` | `FcmCategory` | 센터 필터 | `DeliveryMode` | priority 제안 | `RetentionClass` | settingGroup | foreground | 딥링크 템플릿 제안 | 문구 코드 |
 | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `ALBUM_UPLOAD_COMPLETE` | ALBUM | (ALBUM) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | NONE | `widyu://albums/{entityId}` | A01 |

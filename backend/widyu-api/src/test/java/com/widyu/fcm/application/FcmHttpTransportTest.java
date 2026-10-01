@@ -51,6 +51,7 @@ class FcmHttpTransportTest {
             // then
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/data/type").asText()).isEqualTo("SAFETY_SELF_CHECK");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("SAFETY_SELF_CHECK");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
             assertThat(body.at("/message/data/deepLink").asText())
                     .isEqualTo("widyu://incident/inc-20261001-1");
@@ -111,10 +112,12 @@ class FcmHttpTransportTest {
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
-        FcmSendDto message = FcmSendDto.builder().title("복약 알람 변경").content("내일부터 적용돼요.")
-                .notificationType(NotificationType.MEDICATION_SCHEDULE_CHANGED)
-                .data(Map.of("eventId", "event-2", "revision", "42", "effectiveFromDate", "2026-10-02",
-                        "actorDisplayName", "보호자", "deepLink", "widyu://medication/schedules"))
+        FcmSendDto message = FcmSendDto.builder().title("복약 일정 등록").content("내일부터 적용돼요.")
+                .notificationType(NotificationType.MEDICATION_SCHEDULE_CREATED)
+                .data(Map.of("eventId", "event-2", "type", "stale-type",
+                        "revision", "42",
+                        "effectiveFromDate", "2026-10-02", "actorDisplayName", "보호자",
+                        "deepLink", "widyu://medication/schedules"))
                 .build();
         FcmDelivery delivery = new FcmDelivery(4073L, 1, "loopback-token", message,
                 Instant.now().plusSeconds(300));
@@ -124,6 +127,9 @@ class FcmHttpTransportTest {
 
             // then
             JsonNode body = bodies.getFirst();
+            assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+            assertThat(body.at("/message/data/notificationType").asText())
+                    .isEqualTo("MEDICATION_SCHEDULE_CREATED");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("interaction");
             assertThat(body.at("/message/data/revision").asText()).isEqualTo("42");
             assertThat(body.at("/message/data/effectiveFromDate").asText()).isEqualTo("2026-10-02");
@@ -157,7 +163,9 @@ class FcmHttpTransportTest {
             // then
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/notification").isMissingNode()).isTrue();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_SYNC");
+            assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+            assertThat(body.at("/message/data/notificationType").asText())
+                    .isEqualTo("MEDICATION_SCHEDULE_SYNC");
             assertThat(body.at("/message/data/revision").asText()).isEqualTo("43");
             assertThat(body.at("/message/data/notificationId").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("NONE");

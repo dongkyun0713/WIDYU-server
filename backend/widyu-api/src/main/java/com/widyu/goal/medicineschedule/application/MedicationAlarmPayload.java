@@ -1,6 +1,9 @@
 package com.widyu.goal.medicineschedule.application;
 
+import com.widyu.fcm.NotificationType;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 약 관련 FCM에 싣는 복약 알람 동기화 data. 앱은 받으면 alarm-sync API로 스냅샷을 다시 조회한다.
@@ -15,5 +18,14 @@ public final class MedicationAlarmPayload {
 
     public static Map<String, String> of(long revision) {
         return Map.of("type", TYPE, "revision", Long.toString(revision));
+    }
+
+    public static Map<String, String> of(long revision, NotificationType notificationType) {
+        return Map.of("type", notificationType.dataTypeValue(), "revision", Long.toString(revision),
+                "notificationType", notificationType.name());
+    }
+
+    public static String eventId(String key) {
+        return UUID.nameUUIDFromBytes(("medication:" + key).getBytes(StandardCharsets.UTF_8)).toString();
     }
 }
