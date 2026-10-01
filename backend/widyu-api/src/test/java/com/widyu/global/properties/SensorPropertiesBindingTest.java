@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -11,6 +12,7 @@ import org.springframework.boot.context.properties.bind.PropertySourcesPlacehold
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 
@@ -54,13 +56,34 @@ class SensorPropertiesBindingTest {
 
         // then
         assertThat(properties.followup().enabled()).isFalse();
+        assertThat(properties.followup().rewardEnabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("후속 보상 설정을 켜면 rewardEnabled에 참을 바인딩한다")
+    void 후속_보상_설정을_켜면_참을_바인딩한다() throws IOException {
+        // given
+        Binder binder = binderOf("application-sensor.yml",
+                Map.of("SENSOR_FOLLOWUP_REWARD_ENABLED", "true"));
+
+        // when
+        SensorProperties properties = binder.bind("sensor", SensorProperties.class).get();
+
+        // then
+        assertThat(properties.followup().enabled()).isFalse();
+        assertThat(properties.followup().rewardEnabled()).isTrue();
     }
 
     private Binder binderOf(String classpathLocation) throws IOException {
+        return binderOf(classpathLocation, Map.of());
+    }
+
+    private Binder binderOf(String classpathLocation, Map<String, Object> overrides) throws IOException {
         List<PropertySource<?>> loaded = new YamlPropertySourceLoader()
                 .load(classpathLocation, new ClassPathResource(classpathLocation));
         MutablePropertySources sources = new MutablePropertySources();
         loaded.forEach(sources::addLast);
+        sources.addFirst(new MapPropertySource("test-overrides", overrides));
         return new Binder(
                 ConfigurationPropertySources.from(sources),
                 new PropertySourcesPlaceholdersResolver(sources));
