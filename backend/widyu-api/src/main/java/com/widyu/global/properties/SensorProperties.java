@@ -9,7 +9,8 @@ public record SensorProperties(
         Export export,
         FallAi fallAi,
         HeartAi heartAi,
-        Incident incident
+        Incident incident,
+        Followup followup
 ) {
 
     /**
@@ -76,4 +77,7 @@ public record SensorProperties(
             boolean selfCheckFirst,
             int situationWindowMin
     ) {}
+
+    /** 종료 뒤 카드 기능. 활성화 전 기본값 false(LLD-0073). */
+    public record Followup(boolean enabled) {}
 }

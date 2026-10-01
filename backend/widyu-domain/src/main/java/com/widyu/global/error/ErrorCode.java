@@ -165,6 +165,14 @@ public enum ErrorCode {
     INCIDENT_ALREADY_RESOLVED(HttpStatus.CONFLICT, "INCIDENT_4091", "이미 사후 판정이 끝난 인시던트입니다."),
     INCIDENT_GUARDIAN_RESPONSE_ALREADY_RECORDED(HttpStatus.CONFLICT, "INCIDENT_4092", "이미 보호자 반응이 기록된 인시던트입니다."),
 
+    // 종료 뒤 후속 질문
+    FOLLOWUP_REQUEST_INVALID(HttpStatus.BAD_REQUEST, "FOLLOWUP_4000", "후속 질문 요청 값이 올바르지 않습니다."),
+    FOLLOWUP_NOT_FOUND(HttpStatus.NOT_FOUND, "FOLLOWUP_4040", "후속 질문을 찾을 수 없습니다."),
+    FOLLOWUP_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "FOLLOWUP_4090", "이미 제출한 후속 질문입니다."),
+    FOLLOWUP_EXPIRED(HttpStatus.GONE, "FOLLOWUP_4100", "후속 질문 제출 기한이 지났습니다."),
+    INCIDENT_LABEL_INVALID(HttpStatus.BAD_REQUEST, "INCIDENT_LABEL_4000", "판독 기록 값이 올바르지 않습니다."),
+    INCIDENT_LABEL_CONFLICT(HttpStatus.CONFLICT, "INCIDENT_LABEL_4090", "판독 기록이 변경되었습니다."),
+
     // 파일 업로드 관련
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_5000", "파일 업로드에 실패했습니다."),
     FILE_IS_EMPTY(HttpStatus.BAD_REQUEST, "FILE_4000", "파일이 비어있습니다."),

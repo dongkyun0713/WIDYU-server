@@ -9,7 +9,8 @@ final class SensorConfigFixture {
     }
 
     static SensorProperties properties() {
-        return new SensorProperties(32_768, config(), export(), fallAi(), heartAi(), incident());
+        return new SensorProperties(32_768, config(), export(), fallAi(), heartAi(), incident(),
+                new SensorProperties.Followup(false));
     }
 
     static SensorProperties.Config config() {
