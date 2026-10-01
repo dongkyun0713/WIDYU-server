@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-10-02 (LLD-0070 incident 확장) |
+| 코드 동기화 | 2026-10-02 (LLD-0072 OK 알림·감지 창) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -388,6 +388,8 @@ erDiagram
         Long respondedAtMs
         Long deviceRespondedAtMs "단말 클릭 시각"
         Long initialAlertSentAtMs "INITIAL_ALERT enqueue 시각·멱등 게이트"
+        Long okNoticeSentAtMs "S08/S09 enqueue 시각"
+        Long lastDetectedAtMs "마지막 감지 서버 시각·5분 창 기준"
         String lastDecisionId "마지막 연결 판정"
         Integer detectionCount "기본 1"
         Long situationEndedAtMs
@@ -813,6 +815,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-02 | `incident` | OK 정보성 알림 enqueue 시각·마지막 감지 시각 추가 및 기존 행 백필 (LLD-0072) | `scripts/mysql/alter_incident_ok_notice_grouping.sql` |
 | 2026-10-02 | `incident` | `decision_id` NULL 허용, 본인확인·보호자 최초 알림·후속 안전 상태 컬럼 및 후보 인덱스 추가 (LLD-0070) | `scripts/mysql/alter_incident_self_check_first.sql` |
 | 2026-10-02 | `member_notification_setting`·`member` | 설정 4분류로 매핑(기존 일반 다섯 항목이 모두 꺼진 회원만 `GENERAL=false`), `category VARCHAR(32)`, 회원별 `notification_policy_revision` 추가 (LLD-0065) | `scripts/mysql/migrate_notification_setting_group.sql` |
 | 2026-10-01 | `fcm_notification`·`fcm_outbox` | 센터 수신자×이벤트 행의 메타데이터·UK, 토큰 FK NULL 허용, outbox `notification_id` 참조 (LLD-0062) | `scripts/mysql/alter_fcm_notification_center.sql` |

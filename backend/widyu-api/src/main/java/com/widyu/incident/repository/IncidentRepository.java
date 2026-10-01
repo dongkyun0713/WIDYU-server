@@ -1,6 +1,7 @@
 package com.widyu.incident.repository;
 
 import com.widyu.incident.Incident;
+import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
@@ -22,11 +23,13 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
 
     Optional<Incident> findByIncidentRef(String incidentRef);
 
-    Optional<Incident> findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullAndOpenedAtMsGreaterThanEqualOrderByOpenedAtMsDesc(
-            Long memberId, IncidentKind kind, List<IncidentState> states, Long openedAtMsFrom);
+    Optional<Incident> findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+            Long memberId, IncidentKind kind, List<IncidentState> states);
 
     Optional<Incident> findFirstByMemberIdAndKindAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
             Long memberId, IncidentKind kind);
+
+    Optional<Incident> findFirstByMemberIdAndKindOrderByOpenedAtMsDesc(Long memberId, IncidentKind kind);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -37,6 +40,36 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                AND i.situationEndedAtMs IS NULL
             """)
     int endOpenSafeZoneSituation(@Param("memberId") Long memberId, @Param("endedAtMs") long endedAtMs);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.lastDecisionId = CASE WHEN :decisionId IS NULL THEN i.lastDecisionId ELSE :decisionId END,
+                   i.lastDetectedAtMs = :detectedAtMs,
+                   i.detectionCount = i.detectionCount + 1
+             WHERE i.id = :id
+               AND i.state IN (com.widyu.incident.IncidentState.CHECKING,
+                               com.widyu.incident.IncidentState.ESCALATED)
+               AND i.situationEndedAtMs IS NULL
+               AND (:decisionId IS NULL OR
+                    ((i.decisionId IS NULL OR i.decisionId <> :decisionId)
+                     AND (i.lastDecisionId IS NULL OR i.lastDecisionId <> :decisionId)))
+            """)
+    int attachDetection(@Param("id") Long id, @Param("decisionId") String decisionId,
+            @Param("detectedAtMs") long detectedAtMs);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.guardianResponseType = :type,
+                   i.guardianResponseAtMs = :respondedAtMs,
+                   i.guardianResponseBy = :guardianId
+             WHERE i.incidentRef = :incidentRef
+               AND i.guardianResponseType IS NULL
+            """)
+    int recordGuardianResponse(@Param("incidentRef") String incidentRef,
+            @Param("type") GuardianResponseType type, @Param("respondedAtMs") long respondedAtMs,
+            @Param("guardianId") Long guardianId);
 
     List<Incident> findTop50ByMemberIdOrderByOpenedAtMsDesc(Long memberId);
 

@@ -20,7 +20,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 위급 판정 하나가 연 사건(LLD-0054 4절, ADR-0035 결정 4).
+ * 같은 안전 상황의 감지를 묶는 사건(LLD-0072 5.2절).
  *
  * <p>판정 기록({@code decision_record})과 나눠 둔다. 저쪽은 「무엇을 보고 언제 그렇게 말했는가」이고
  * 여기는 「본인이 뭐라고 답했고 보호자가 나중에 뭐라고 판정했는가」다(정책 1.8.1). 사후 판정
@@ -100,6 +100,12 @@ public class Incident extends BaseTimeEntity {
     @Column(name = "initial_alert_sent_at_ms")
     private Long initialAlertSentAtMs;
 
+    @Column(name = "ok_notice_sent_at_ms")
+    private Long okNoticeSentAtMs;
+
+    @Column(name = "last_detected_at_ms")
+    private Long lastDetectedAtMs;
+
     @Column(name = "last_decision_id", length = 40)
     private String lastDecisionId;
 
@@ -109,8 +115,10 @@ public class Incident extends BaseTimeEntity {
     @Column(name = "situation_ended_at_ms")
     private Long situationEndedAtMs;
 
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "guardian_response_type", length = 20)
-    private String guardianResponseType;
+    private GuardianResponseType guardianResponseType;
 
     @Column(name = "guardian_response_at_ms")
     private Long guardianResponseAtMs;
@@ -155,6 +163,7 @@ public class Incident extends BaseTimeEntity {
         this.runId = runId;
         this.decisionId = decisionId;
         this.lastDecisionId = decisionId;
+        this.lastDetectedAtMs = openedAtMs;
         this.detectionCount = 1;
         this.kind = kind;
         this.level = level;
@@ -180,6 +189,25 @@ public class Incident extends BaseTimeEntity {
             return;
         }
         initialAlertSentAtMs = sentAtMs;
+    }
+
+    public void markOkNoticeSent(long sentAtMs) {
+        if (okNoticeSentAtMs == null) {
+            okNoticeSentAtMs = sentAtMs;
+        }
+    }
+
+    public long lastDetectedAtOrOpenedAt() {
+        if (lastDetectedAtMs == null) {
+            return openedAtMs;
+        }
+        return lastDetectedAtMs;
+    }
+
+    public void endSituation(long endedAtMs) {
+        if (situationEndedAtMs == null) {
+            situationEndedAtMs = endedAtMs;
+        }
     }
 
     /**

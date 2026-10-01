@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.incident.Incident;
+import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
@@ -126,6 +127,83 @@ class IncidentRepositoryTest {
         // then
         assertThat(updated).isZero();
         assertThat(incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getResponse()).isNull();
+    }
+
+    @Test
+    @DisplayName("정확히 마감 시각에 OK로 답하면 ESCALATED를 유지한다")
+    void 정확히_마감_시각에_OK로_답하면_ESCALATED를_유지한다() {
+        // given
+        incidentRepository.save(checkingIncident());
+
+        // when
+        int updated = incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK,
+                ResponseVia.PHONE, RESPOND_BY_MS, null, IncidentState.OK_CLOSED);
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        assertThat(incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow().getState())
+                .isEqualTo(IncidentState.ESCALATED);
+    }
+
+    @Test
+    @DisplayName("새 판정을 열린 사건에 붙이면 마지막 판정과 감지 수가 갱신된다")
+    void 새_판정을_열린_사건에_붙이면_마지막_판정과_감지_수가_갱신된다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+
+        // when
+        int attached = incidentRepository.attachDetection(incident.getId(), "dec-02", OPENED_AT_MS + 30_000L);
+        int repeated = incidentRepository.attachDetection(incident.getId(), "dec-02", OPENED_AT_MS + 31_000L);
+
+        // then
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(attached).isEqualTo(1);
+        assertThat(repeated).isZero();
+        assertThat(found.getLastDecisionId()).isEqualTo("dec-02");
+        assertThat(found.getLastDetectedAtMs()).isEqualTo(OPENED_AT_MS + 30_000L);
+        assertThat(found.getDetectionCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("배치 판정 뒤 단건 감지를 붙이면 마지막 판정을 유지하고 배치 재시도를 집계하지 않는다")
+    void 배치_판정_뒤_단건_감지를_붙이면_마지막_판정을_유지하고_재시도를_집계하지_않는다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+        int batchAttached = incidentRepository.attachDetection(incident.getId(), "dec-02", OPENED_AT_MS + 10_000L);
+
+        // when
+        int singleAttached = incidentRepository.attachDetection(incident.getId(), null, OPENED_AT_MS + 20_000L);
+        int batchRepeated = incidentRepository.attachDetection(incident.getId(), "dec-02", OPENED_AT_MS + 30_000L);
+
+        // then
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(batchAttached).isEqualTo(1);
+        assertThat(singleAttached).isEqualTo(1);
+        assertThat(batchRepeated).isZero();
+        assertThat(found.getLastDecisionId()).isEqualTo("dec-02");
+        assertThat(found.getLastDetectedAtMs()).isEqualTo(OPENED_AT_MS + 20_000L);
+        assertThat(found.getDetectionCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("보호자 둘이 반응을 기록하면 첫 보호자의 행동만 남는다")
+    void 보호자_둘이_반응을_기록하면_첫_보호자의_행동만_남는다() {
+        // given
+        incidentRepository.save(checkingIncident());
+
+        // when
+        int first = incidentRepository.recordGuardianResponse(INCIDENT_REF,
+                GuardianResponseType.MESSAGE_SENT, OPENED_AT_MS + 10_000L, OTHER_ID);
+        int second = incidentRepository.recordGuardianResponse(INCIDENT_REF,
+                GuardianResponseType.CALL_INITIATED, OPENED_AT_MS + 20_000L, SENIOR_ID);
+
+        // then
+        Incident found = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow();
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        assertThat(found.getGuardianResponseType()).isEqualTo(GuardianResponseType.MESSAGE_SENT);
+        assertThat(found.getGuardianResponseAtMs()).isEqualTo(OPENED_AT_MS + 10_000L);
+        assertThat(found.getGuardianResponseBy()).isEqualTo(OTHER_ID);
     }
 
     @Test
