@@ -5,6 +5,7 @@
 | 상태 | Accepted |
 | 날짜 | 2026-09-14 |
 | 관련 | [LLD-0036](../lld/LLD-0036-fcm-durable-delivery.md), #608, #604 |
+| 개정 | [ADR-0037](ADR-0037-notification-center-model.md)이 저장 단위(기기별 센터 행 → 수신자×이벤트 1건)와 설정 판정(카테고리 → 설정 그룹)을 개정한다. outbox·lease·fence·재시도 정책은 그대로다 |
 
 ## 맥락 (Context)
 
