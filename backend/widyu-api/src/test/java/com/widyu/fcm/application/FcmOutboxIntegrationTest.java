@@ -9,6 +9,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.goal.medicineschedule.application.MedicationAlarmPayload;
 import com.widyu.fcm.dto.request.UpdateNotificationSettingRequest;
 import com.widyu.fcm.dto.response.FcmNotificationResponse;
 import com.widyu.fcm.repository.*;
@@ -136,9 +137,10 @@ class FcmOutboxIntegrationTest {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
                         .token("mock-token-2").active(true).build()));
-        FcmSendDto message = FcmSendDto.builder().title("변경").content("내일부터 적용")
-                .notificationType(NotificationType.MEDICATION_SCHEDULE_CHANGED)
-                .data(Map.of("revision", "42")).actorDisplayName("보호자")
+        NotificationType type = NotificationType.MEDICATION_SCHEDULE_CREATED;
+        FcmSendDto message = FcmSendDto.builder().title("등록").content("내일부터 적용")
+                .notificationType(type)
+                .data(MedicationAlarmPayload.of(42L, type)).actorDisplayName("보호자")
                 .effectiveFromDate("2026-10-02").build();
 
         // when
@@ -150,19 +152,129 @@ class FcmOutboxIntegrationTest {
         FcmNotification center = notifications.findAll().getFirst();
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(rows).allMatch(row -> center.getId().equals(row.getNotificationId()));
-        assertThat(rows).allMatch(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        assertThat(rows).allMatch(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_CREATED);
         Map<String, String> first = transactions.claim(rows.get(0).getId()).message().data();
         Map<String, String> second = transactions.claim(rows.get(1).getId()).message().data();
         assertThat(first).isEqualTo(second);
         assertThat(center.getEventId()).isEqualTo(first.get("eventId"));
         assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
         assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("notificationType", "MEDICATION_SCHEDULE_CREATED")
                 .containsEntry("revision", "42")
                 .containsEntry("effectiveFromDate", "2026-10-02")
                 .containsEntry("actorDisplayName", "보호자")
                 .containsEntry("priority", "interaction")
                 .containsEntry("deepLink", "widyu://medication/schedules")
                 .containsEntry("foregroundPresentation", "BANNER");
+    }
+
+    @Test
+    @DisplayName("복약 후속 푸시를 같은 분에 다시 enqueue하면 센터 없이 기기 작업이 중복된다")
+    void 복약_후속_푸시를_같은_분에_다시_enqueue하면_기기_작업이_중복된다() {
+        // given
+        Long seniorId = memberWithToken();
+        NotificationType type = NotificationType.MEDICATION_REMINDER_10;
+        FcmSendDto reminder = FcmSendDto.builder().title("약 복용 인증이 아직 안 됐어요.")
+                .content("약을 복용하셨다면 인증해 주세요.").notificationType(type)
+                .eventId(MedicationAlarmPayload.eventId("reminder:" + seniorId + ":15:2026-10-02"))
+                .entityId("15").data(MedicationAlarmPayload.of(4L, type)).build();
+
+        // when
+        service.enqueue(seniorId, reminder);
+        service.enqueue(seniorId, reminder);
+
+        // then
+        assertThat(notifications.count()).isZero();
+        assertThat(outbox.count()).isEqualTo(2);
+        FcmOutbox row = outbox.findAll().getFirst();
+        assertThat(row.getNotificationId()).isNull();
+        assertThat(transactions.claim(row.getId()).message().data())
+                .containsEntry("type", "MEDICATION_REMINDER_10")
+                .containsEntry("notificationType", "MEDICATION_REMINDER_10");
+    }
+
+    @Test
+    @DisplayName("복약 확인 설정을 끄면 센터에 남기고 푸시만 취소한다")
+    void 복약_확인_설정을_끈_보호자도_센터에_남고_푸시만_취소한다() {
+        // given
+        Long seniorId = memberWithToken();
+        List<Long> guardians = new TransactionTemplate(transactionManager).execute(status -> {
+            Family family = families.save(Family.createFamily("MED001"));
+            Member senior = members.findById(seniorId).orElseThrow();
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(senior, family, "서울", "MEDINV1",
+                    LocalDate.of(1950, 1, 1)));
+            Member enabled = members.save(Member.createMember(MemberType.GUARDIAN, "보호자1", "01087654321"));
+            Member disabled = members.save(Member.createMember(MemberType.GUARDIAN, "보호자2", "01087654322"));
+            memberships.save(FamilyMembership.createMembership(family, enabled));
+            memberships.save(FamilyMembership.createMembership(family, disabled));
+            tokens.save(MemberFcmToken.builder().member(enabled).token("guardian-one").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(enabled).token("guardian-one-second").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(disabled).token("guardian-two").active(true).build());
+            settings.save(MemberNotificationSetting.create(disabled, PushSettingGroup.MEDICATION_CHECK, false));
+            return List.of(enabled.getId(), disabled.getId());
+        });
+        NotificationType type = NotificationType.MEDICATION_PROOF_MISSING;
+
+        // when
+        for (Long guardianId : guardians) {
+            FcmSendDto message = FcmSendDto.builder().title("인증이 아직 확인되지 않았어요.")
+                    .content("직접 확인해보세요.").notificationType(type)
+                    .eventId(MedicationAlarmPayload.eventId("missing:" + seniorId + ":15:" + guardianId))
+                    .entityId("15").seniorId(seniorId).relatedMemberId(seniorId)
+                    .data(MedicationAlarmPayload.of(0L, type)).build();
+            service.enqueue(guardianId, message);
+            service.enqueue(guardianId, message);
+        }
+
+        // then
+        assertThat(notifications.count()).isEqualTo(2);
+        assertThat(outbox.count()).isEqualTo(6);
+        FcmOutbox enabledRow = outbox.findAll().stream()
+                .filter(row -> row.getRecipientMember().getId().equals(guardians.getFirst()))
+                .findFirst().orElseThrow();
+        FcmOutbox disabledRow = outbox.findAll().stream()
+                .filter(row -> row.getRecipientMember().getId().equals(guardians.get(1)))
+                .findFirst().orElseThrow();
+        assertThat(transactions.claim(enabledRow.getId())).isNotNull();
+        assertThat(transactions.claim(disabledRow.getId())).isNull();
+        assertThat(notifications.findAll()).allSatisfy(row -> {
+            assertThat(row.getSeniorId()).isEqualTo(seniorId);
+            assertThat(row.getDeepLink()).isEqualTo("widyu-care://seniors/" + seniorId + "/medication");
+        });
+    }
+
+    @Test
+    @DisplayName("시니어가 일반 푸시를 끄면 일정 센터 행과 data-only 동기화를 유지한다")
+    void 시니어가_일반_푸시를_꺼도_일정_센터_행과_data_only_동기화를_유지한다() {
+        // given
+        Long seniorId = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                settings.save(MemberNotificationSetting.create(members.findById(seniorId).orElseThrow(),
+                        PushSettingGroup.GENERAL, false)));
+        NotificationType visibleType = NotificationType.MEDICATION_SCHEDULE_CREATED;
+        NotificationType syncType = NotificationType.MEDICATION_SCHEDULE_SYNC;
+
+        // when
+        service.enqueue(seniorId, FcmSendDto.builder().title("일정 등록").content("내일부터 적용")
+                .notificationType(visibleType).eventId("med-visible-1")
+                .data(MedicationAlarmPayload.of(7L, visibleType)).build());
+        service.enqueue(seniorId, FcmSendDto.builder().notificationType(syncType)
+                .eventId("med-sync-1").data(MedicationAlarmPayload.of(7L, syncType)).build());
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isEqualTo(2);
+        FcmOutbox visible = outbox.findAll().stream()
+                .filter(row -> row.getNotificationType() == visibleType).findFirst().orElseThrow();
+        FcmOutbox sync = outbox.findAll().stream()
+                .filter(row -> row.getNotificationType() == syncType).findFirst().orElseThrow();
+        assertThat(transactions.claim(visible.getId())).isNull();
+        FcmDelivery syncDelivery = transactions.claim(sync.getId());
+        assertThat(syncDelivery).isNotNull();
+        assertThat(syncDelivery.notificationId()).isNull();
+        assertThat(syncDelivery.message().data()).containsEntry("revision", "7")
+                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("notificationType", "MEDICATION_SCHEDULE_SYNC");
     }
 
     @Test

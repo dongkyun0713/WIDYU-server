@@ -58,6 +58,29 @@ class NotificationTypeTest {
     }
 
     @Test
+    @DisplayName("레지스트리의 wire 타입을 조회하면 네 일정 이벤트만 구 앱 값을 반환한다")
+    void 레지스트리의_wire_타입을_조회하면_네_일정_이벤트만_구_앱_값을_반환한다() {
+        // given / when
+        NotificationType[] legacyTypes = {
+                NotificationType.MEDICATION_SCHEDULE_CREATED,
+                NotificationType.MEDICATION_SCHEDULE_CHANGED,
+                NotificationType.MEDICATION_SCHEDULE_DELETED,
+                NotificationType.MEDICATION_SCHEDULE_SYNC
+        };
+
+        // then
+        assertThat(legacyTypes).allSatisfy(type -> {
+            assertThat(type.legacyDataType()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+            assertThat(type.dataTypeValue()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+        });
+        assertThat(Arrays.stream(NotificationType.values()).filter(type -> !Arrays.asList(legacyTypes).contains(type)))
+                .allSatisfy(type -> {
+                    assertThat(type.legacyDataType()).isNull();
+                    assertThat(type.dataTypeValue()).isEqualTo(type.name());
+                });
+    }
+
+    @Test
     @DisplayName("우선순위를 조회하면 iOS 표시 수준을 구분한다")
     void 우선순위를_조회하면_iOS_표시_수준을_구분한다() {
         // given / when / then
