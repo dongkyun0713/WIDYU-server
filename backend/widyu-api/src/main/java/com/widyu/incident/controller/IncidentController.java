@@ -6,6 +6,8 @@ import com.widyu.global.util.SecurityUtil;
 import com.widyu.incident.application.IncidentService;
 import com.widyu.incident.controller.docs.IncidentDocs;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
+import com.widyu.incident.dto.request.GuardianResponseRequest;
+import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import jakarta.validation.Valid;
@@ -38,6 +40,20 @@ public class IncidentController implements IncidentDocs {
         return ApiResponseTemplate.ok()
                 .code("INCIDENT_2001")
                 .message("본인확인 응답 완료")
+                .body(response);
+    }
+
+    @Override
+    @PostMapping("/{incidentId}/guardian-response")
+    public ApiResponseTemplate<GuardianResponseResult> recordGuardianResponse(
+            @PathVariable String incidentId,
+            @Valid @RequestBody GuardianResponseRequest request
+    ) {
+        GuardianResponseResult response = incidentService.recordGuardianResponse(
+                securityUtil.getCurrentMemberId(), incidentId, request.type());
+        return ApiResponseTemplate.ok()
+                .code("INCIDENT_2005")
+                .message("보호자 반응 기록 완료")
                 .body(response);
     }
 
