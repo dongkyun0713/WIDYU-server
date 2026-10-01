@@ -46,13 +46,16 @@ public class FamilyConnectionService {
         }
 
         boolean hasLeader = familyMembershipRepository.existsByFamilyIdAndIsLeaderTrue(family.getId());
+        int sortOrder = familyMembershipRepository.findMaxSortOrderByFamilyId(family.getId()) + 1;
         FamilyMembership membership;
         if (hasLeader) {
-            membership = FamilyMembership.createMembership(family, currentMember);
+            membership = FamilyMembership.createMembership(family, currentMember, sortOrder);
         } else {
             membership = FamilyMembership.createLeaderMembership(family, currentMember);
+            membership.updateSortOrder(sortOrder);
         }
         familyMembershipRepository.save(membership);
+        familyRepository.incrementOrderRevision(family.getId());
 
         List<SeniorProfile> seniors = seniorProfileRepository.findAllByFamilyIdWithMember(family.getId());
 

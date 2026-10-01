@@ -5,6 +5,8 @@ import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.mypage.dto.request.UpdateInviteCodeRequest;
+import com.widyu.mypage.dto.request.GuardianOrderUpdateRequest;
+import com.widyu.mypage.dto.response.GuardianOrderUpdateResponse;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
 import com.widyu.mypage.dto.request.UpdateSeniorAddressRequest;
@@ -72,6 +74,11 @@ public class GuardianMyPageCommandService {
     public void changeLeader(Long memberId) {
         verifyGuardianLeader();
         guardianMyPageService.changeLeader(memberId);
+    }
+
+    public GuardianOrderUpdateResponse updateGuardianOrder(GuardianOrderUpdateRequest request) {
+        verifyGuardianLeader();
+        return guardianMyPageService.updateGuardianOrder(request);
     }
 
     public void deleteFamilyMember(Long memberId) {

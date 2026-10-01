@@ -109,6 +109,7 @@ class MemberWithdrawServiceTest {
 
         // then
         verify(familyMembershipRepository).deleteByGuardianId(1L);
+        verify(familyRepository).incrementOrderRevision(100L);
         verify(familyRepository, never()).deleteById(any());
     }
 

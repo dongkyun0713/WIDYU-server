@@ -7,6 +7,7 @@ import java.util.List;
 
 public record FamilyMemberListResponse(
         boolean isCurrentUserLeader,
+        long familyOrderRevision,
         List<FamilyMemberItem> members
 ) {
     public record FamilyMemberItem(
@@ -21,7 +22,8 @@ public record FamilyMemberListResponse(
     public static FamilyMemberListResponse of(
             List<FamilyMembership> memberships,
             List<SeniorProfile> seniors,
-            Long currentGuardianId
+            Long currentGuardianId,
+            long familyOrderRevision
     ) {
         boolean isCurrentUserLeader = memberships.stream()
                 .anyMatch(m -> m.getGuardian().getId().equals(currentGuardianId) && m.isLeader());
@@ -52,6 +54,6 @@ public record FamilyMemberListResponse(
         allMembers.addAll(seniorItems);
         allMembers.addAll(guardianItems);
 
-        return new FamilyMemberListResponse(isCurrentUserLeader, allMembers);
+        return new FamilyMemberListResponse(isCurrentUserLeader, familyOrderRevision, allMembers);
     }
 }

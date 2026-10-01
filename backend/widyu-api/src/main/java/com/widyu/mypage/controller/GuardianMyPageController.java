@@ -7,6 +7,7 @@ import com.widyu.mypage.application.GuardianMyPageCommandService;
 import com.widyu.mypage.application.GuardianMyPageQueryService;
 import com.widyu.mypage.controller.docs.GuardianMyPageDocs;
 import com.widyu.mypage.dto.request.ProfileImageUploadRequest;
+import com.widyu.mypage.dto.request.GuardianOrderUpdateRequest;
 import com.widyu.mypage.dto.request.UpdateInviteCodeRequest;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
@@ -15,6 +16,7 @@ import com.widyu.mypage.dto.response.ConnectedSeniorResponse;
 import com.widyu.mypage.dto.response.FamilyCodeResponse;
 import com.widyu.mypage.dto.response.FamilyMemberListResponse;
 import com.widyu.mypage.dto.response.GuardianInfoResponse;
+import com.widyu.mypage.dto.response.GuardianOrderUpdateResponse;
 import com.widyu.mypage.dto.response.GuardianProfileDetailResponse;
 import com.widyu.mypage.dto.response.SeniorProfileForGuardianResponse;
 import jakarta.validation.Valid;
@@ -217,6 +219,16 @@ public class GuardianMyPageController implements GuardianMyPageDocs {
                 .code("MYPAGE_2020")
                 .message("방장 변경 성공")
                 .build();
+    }
+
+    @Override
+    @PatchMapping("/family/members/order")
+    public ApiResponseTemplate<GuardianOrderUpdateResponse> updateGuardianOrder(
+            @RequestBody @Valid GuardianOrderUpdateRequest request) {
+        return ApiResponseTemplate.ok()
+                .code("MYPAGE_2029")
+                .message("보호자 순서 변경 성공")
+                .body(guardianMyPageCommandService.updateGuardianOrder(request));
     }
 
     @Override

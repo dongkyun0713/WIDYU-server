@@ -20,12 +20,14 @@ import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.global.entity.Status;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.PointHistoryRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.parentlocation.LocationType;
 import com.widyu.parentlocation.ParentLocation;
 import com.widyu.mypage.dto.request.UpdateInviteCodeRequest;
+import com.widyu.mypage.dto.request.GuardianOrderUpdateRequest;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
 import com.widyu.mypage.dto.request.UpdateSeniorAddressRequest;
@@ -34,11 +36,19 @@ import com.widyu.mypage.dto.response.FamilyCodeResponse;
 import com.widyu.mypage.dto.response.FamilyMemberListResponse;
 import com.widyu.mypage.dto.response.GuardianInfoResponse;
 import com.widyu.mypage.dto.response.GuardianProfileDetailResponse;
+import com.widyu.mypage.dto.response.GuardianOrderUpdateResponse;
 import com.widyu.mypage.dto.response.SeniorProfileForGuardianResponse;
+import com.widyu.mypage.event.FamilyLeaderChangedEvent;
+import jakarta.persistence.EntityManager;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -56,6 +66,9 @@ public class GuardianMyPageService {
     private final AuthLimitStore authLimitStore;
     private final PhoneChangeVerifiedRepository phoneChangeVerifiedRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
+    private final FamilyRepository familyRepository;
+    private final EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
     private final SeniorProfileRepository seniorProfileRepository;
     private final MemberRepository memberRepository;
     private final PointHistoryRepository pointHistoryRepository;
@@ -233,24 +246,36 @@ public class GuardianMyPageService {
         Family family = getGuardianFamily(guardian.getId());
 
         List<FamilyMembership> memberships = familyMembershipRepository
-                .findAllByFamilyIdWithGuardian(family.getId());
+                .findAllByFamilyIdWithGuardianOrdered(family.getId());
         List<SeniorProfile> seniors = seniorProfileRepository.findAllByFamilyIdWithMember(family.getId());
 
-        return FamilyMemberListResponse.of(memberships, seniors, guardian.getId());
+        return FamilyMemberListResponse.of(memberships, seniors, guardian.getId(), family.getFamilyOrderRevision());
     }
 
     @Transactional
     public void changeLeader(Long targetMemberId) {
         Member guardian = MyPageProfileService.getCurrentMember(memberUtil);
-        FamilyMembership myMembership = familyMembershipRepository.findByGuardianId(guardian.getId())
+        Long guardianId = guardian.getId();
+        Long familyId = familyMembershipRepository.findFamilyIdByGuardianId(guardianId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND, "연결된 가족이 없습니다."));
 
-        if (!myMembership.isLeader()) {
+        // OSIV·선행 권한 조회로 적재된 membership 스냅샷을 버려 잠금 뒤 최신 상태로 검증한다.
+        entityManager.clear();
+        familyRepository.findByIdForUpdate(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBERSHIP_NOT_FOUND));
+        FamilyMembership currentMembership = familyMembershipRepository
+                .findByFamilyIdAndGuardianIdForUpdate(familyId, guardianId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+        if (!currentMembership.isLeader()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "방장만 방장을 변경할 수 있습니다.");
         }
 
+        if (guardianId.equals(targetMemberId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "본인을 새 방장으로 지정할 수 없습니다.");
+        }
+
         List<FamilyMembership> memberships = familyMembershipRepository
-                .findAllByFamilyIdWithGuardian(myMembership.getFamily().getId());
+                .findAllByFamilyIdForUpdate(familyId);
 
         boolean targetFound = memberships.stream()
                 .anyMatch(m -> m.getGuardian().getId().equals(targetMemberId));
@@ -259,6 +284,45 @@ public class GuardianMyPageService {
         }
 
         memberships.forEach(m -> m.setLeader(m.getGuardian().getId().equals(targetMemberId)));
+        eventPublisher.publishEvent(FamilyLeaderChangedEvent.of(targetMemberId));
+    }
+
+    @Transactional
+    public GuardianOrderUpdateResponse updateGuardianOrder(GuardianOrderUpdateRequest request) {
+        Member guardian = MyPageProfileService.getCurrentMember(memberUtil);
+        Long guardianId = guardian.getId();
+        Long familyId = familyMembershipRepository.findFamilyIdByGuardianId(guardianId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+        // OSIV·선행 권한 조회로 적재된 membership 스냅샷을 버려 잠금 뒤 최신 상태로 검증한다.
+        entityManager.clear();
+        Family family = familyRepository.findByIdForUpdate(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBERSHIP_NOT_FOUND));
+        FamilyMembership currentMembership = familyMembershipRepository
+                .findByFamilyIdAndGuardianIdForUpdate(familyId, guardianId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+        if (!currentMembership.isLeader()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "방장만 보호자 순서를 변경할 수 있습니다.");
+        }
+
+        List<FamilyMembership> memberships = familyMembershipRepository.findAllByFamilyIdForUpdate(familyId);
+        List<Long> guardianIds = request.guardianIds();
+        if (guardianIds == null || guardianIds.isEmpty() || guardianIds.size() != memberships.size()
+                || guardianIds.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(guardianIds).size() != guardianIds.size()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "가족 보호자 전원의 ID를 한 번씩 입력해야 합니다.");
+        }
+        Map<Long, FamilyMembership> byGuardianId = new HashMap<>();
+        for (FamilyMembership membership : memberships) {
+            byGuardianId.put(membership.getGuardian().getId(), membership);
+        }
+        if (!byGuardianId.keySet().equals(new HashSet<>(guardianIds))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "가족 보호자 전원의 ID를 한 번씩 입력해야 합니다.");
+        }
+        for (int index = 0; index < guardianIds.size(); index++) {
+            byGuardianId.get(guardianIds.get(index)).updateSortOrder(index);
+        }
+        family.incrementOrderRevision();
+        return GuardianOrderUpdateResponse.from(family);
     }
 
     @Transactional
@@ -290,6 +354,7 @@ public class GuardianMyPageService {
                 .findByFamilyIdAndGuardianId(familyId, targetMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND, "가족 구성원을 찾을 수 없습니다."));
         familyMembershipRepository.delete(membership);
+        familyRepository.incrementOrderRevision(familyId);
     }
 
     private void deleteSeniorFromFamily(Long targetMemberId, Long familyId) {

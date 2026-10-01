@@ -1,6 +1,7 @@
 package com.widyu.member.application;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -85,6 +87,28 @@ class FamilyConnectionServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_CONNECTED_TO_FAMILY)
                 .hasMessageContaining("이미 가족에 소속되어 있습니다.");
         then(familyMembershipRepository).should(never()).save(any(FamilyMembership.class));
+    }
+
+    @Test
+    @DisplayName("보호자가 가족에 가입하면 마지막 순서 다음에 배치하고 revision을 증가시킨다")
+    void 보호자가_가족에_가입하면_마지막_순서에_배치하고_revision을_증가시킨다() {
+        // given
+        Member guardian = member(2L, MemberType.GUARDIAN);
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(familyRepository.findByFamilyCode("ABC123")).willReturn(Optional.of(family));
+        given(familyMembershipRepository.existsByFamilyIdAndIsLeaderTrue(10L)).willReturn(true);
+        given(familyMembershipRepository.findMaxSortOrderByFamilyId(10L)).willReturn(3);
+        ArgumentCaptor<FamilyMembership> membership = ArgumentCaptor.forClass(FamilyMembership.class);
+
+        // when
+        familyConnectionService.joinFamily(new FamilyJoinRequest("ABC123"));
+
+        // then
+        then(familyMembershipRepository).should().save(membership.capture());
+        assertThat(membership.getValue().getSortOrder()).isEqualTo(4);
+        then(familyRepository).should().incrementOrderRevision(10L);
     }
 
     private Member member(Long id, MemberType type) {

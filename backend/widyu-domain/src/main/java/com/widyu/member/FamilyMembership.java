@@ -37,6 +37,9 @@ public class FamilyMembership extends BaseTimeEntity {
     @Column(name = "connected_at", nullable = false)
     private LocalDateTime connectedAt;
 
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder;
+
     private String nickname;
 
     @Column(name = "is_representative", nullable = false)
@@ -47,22 +50,28 @@ public class FamilyMembership extends BaseTimeEntity {
 
     @Builder(access = AccessLevel.PRIVATE)
     private FamilyMembership(Family family, Member guardian, LocalDateTime connectedAt, String nickname,
-                              boolean isRepresentative, boolean isLeader) {
+                              boolean isRepresentative, boolean isLeader, int sortOrder) {
         this.family = family;
         this.guardian = guardian;
         this.connectedAt = connectedAt;
         this.nickname = nickname;
         this.isRepresentative = isRepresentative;
         this.isLeader = isLeader;
+        this.sortOrder = sortOrder;
     }
 
     public static FamilyMembership createMembership(Family family, Member guardian) {
+        return createMembership(family, guardian, 0);
+    }
+
+    public static FamilyMembership createMembership(Family family, Member guardian, int sortOrder) {
         return FamilyMembership.builder()
                 .family(family)
                 .guardian(guardian)
                 .connectedAt(LocalDateTime.now())
                 .isRepresentative(false)
                 .isLeader(false)
+                .sortOrder(sortOrder)
                 .build();
     }
 
@@ -73,6 +82,7 @@ public class FamilyMembership extends BaseTimeEntity {
                 .connectedAt(LocalDateTime.now())
                 .isRepresentative(true)
                 .isLeader(true)
+                .sortOrder(0)
                 .build();
     }
 
@@ -86,5 +96,9 @@ public class FamilyMembership extends BaseTimeEntity {
 
     public void setLeader(boolean leader) {
         this.isLeader = leader;
+    }
+
+    public void updateSortOrder(int sortOrder) {
+        this.sortOrder = sortOrder;
     }
 }
