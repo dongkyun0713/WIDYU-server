@@ -42,6 +42,6 @@ final class SensorConfigFixture {
     }
 
     static SensorProperties.Incident incident() {
-        return new SensorProperties.Incident(45, 5000L);
+        return new SensorProperties.Incident(60, 5000L, false, 5);
     }
 }

@@ -1,65 +1,46 @@
 package com.widyu.heart.application;
 
-import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.application.FcmService;
-import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.decision.DecisionRecord;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
+import com.widyu.global.properties.SensorProperties;
+import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentEscalation;
+import com.widyu.incident.application.IncidentService;
 import io.micrometer.core.annotation.Timed;
-import com.widyu.member.FamilyMembership;
-import com.widyu.member.Member;
-import com.widyu.member.repository.FamilyMembershipRepository;
-import com.widyu.member.repository.MemberRepository;
-import com.widyu.member.repository.SeniorProfileRepository;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
-@Slf4j
+/** 심박 저장 커밋 뒤 사건을 열고 보호자 최초 알림을 사건에서만 발행한다. */
 @Service
 @RequiredArgsConstructor
 public class HeartRateEmergencyNotificationService {
 
-    private final FcmService fcmService;
-    private final MemberRepository memberRepository;
-    private final FamilyMembershipRepository familyMembershipRepository;
-    private final SeniorProfileRepository seniorProfileRepository;
+    private final DecisionRecordRepository decisionRecordRepository;
+    private final IncidentService incidentService;
+    private final IncidentEscalation incidentEscalation;
+    private final SensorProperties sensorProperties;
 
-    @EventListener
-    @Transactional
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Timed("heart.emergency.notification")
     public void handleHeartRateEmergency(HeartRateEmergencyEvent event) {
-        Member seniorMember = memberRepository.findById(event.memberId()).orElse(null);
-        if (seniorMember == null) {
+        Incident incident;
+        if (event.decisionId() == null) {
+            incident = incidentService.openForAlert(event.memberId(), IncidentKind.HR_ANOMALY);
+        } else {
+            DecisionRecord decision = decisionRecordRepository.findByDecisionId(event.decisionId())
+                    .orElseThrow(() -> new IllegalStateException("위급 판정 기록을 찾을 수 없습니다."));
+            incident = incidentService.openForAlert(decision, IncidentKind.HR_ANOMALY);
+        }
+        if (sensorProperties.incident().selfCheckFirst() || incident.getInitialAlertSentAtMs() != null) {
             return;
         }
-
-        Long familyId = seniorProfileRepository.findFamilyIdByMemberId(event.memberId()).orElse(null);
-        if (familyId == null) {
-            return;
-        }
-
-        List<FamilyMembership> memberships = familyMembershipRepository
-                .findAllByFamilyIdWithGuardian(familyId);
-        FcmSendDto notification = FcmSendDto.builder()
-                .title(seniorMember.getName() + "님의 심박수 이상이 감지되었습니다")
-                .content("현재 상태를 확인해주세요.")
-                .fcmCategory(FcmCategory.HEART_MESSAGE)
-                .scheme("")
-                .image(seniorMember.getProfileImage())
-                .relatedMemberId(event.memberId())
-                .emergency(true)
-                .decisionId(event.decisionId())
-                .build();
-
-        for (FamilyMembership membership : memberships) {
-            sendNotification(membership.getGuardian().getId(), notification);
-        }
-    }
-
-    private void sendNotification(Long guardianId, FcmSendDto notification) {
-        fcmService.sendMessageToUser(guardianId, notification);
+        incidentEscalation.sendImmediately(incident, System.currentTimeMillis());
     }
 }
