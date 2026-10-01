@@ -14,12 +14,15 @@ import static org.mockito.Mockito.times;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.goal.event.GuardianGoalChangedEvent;
+import com.widyu.goal.walk.dto.request.SetGoalRequest;
 import com.widyu.goal.walk.dto.request.UpdateStepsRequest;
 import com.widyu.goal.walk.dto.response.UpdateStepsResponse;
 import com.widyu.goal.walk.dto.response.WalkMonthlyResponse;
 import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.member.Family;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
@@ -32,8 +35,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
+import com.widyu.fcm.NotificationType;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("WalkService 월별 조회 단위 테스트")
@@ -43,8 +50,84 @@ class WalkServiceTest {
     @Mock private MemberRepository memberRepository;
     @Mock private MemberUtil memberUtil;
     @Mock private SeniorProfileService seniorProfileService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private WalkService walkService;
+
+    @Test
+    @DisplayName("보호자가 시니어 걷기 목표를 처음 설정하면 W02 이벤트를 한 번 발행한다")
+    void 보호자가_걷기_목표를_처음_설정하면_W02_이벤트를_발행한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        SeniorProfile profile = seniorProfile(senior);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+
+        // when
+        walkService.setOrUpdateGoal(2L, new SetGoalRequest(7000));
+
+        // then
+        assertThat(profile.getDefaultWalkGoal()).isEqualTo(7000);
+        ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
+        then(eventPublisher).should(times(1)).publishEvent(events.capture());
+        assertThat(events.getValue().seniorId()).isEqualTo(2L);
+        assertThat(events.getValue().type()).isEqualTo(NotificationType.WALK_GOAL_CHANGED);
+        assertThat(events.getValue().goalSteps()).isEqualTo(7000);
+    }
+
+    @Test
+    @DisplayName("보호자가 시니어 걷기 목표를 수정하면 기존 오늘 목표를 유지하고 새 목표를 알린다")
+    void 보호자가_걷기_목표를_수정하면_오늘_목표를_유지하고_새_목표를_알린다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        SeniorProfile profile = seniorProfile(senior);
+        profile.updateDefaultWalkGoal(5000);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+
+        // when
+        walkService.setOrUpdateGoal(2L, new SetGoalRequest(8000));
+
+        // then
+        assertThat(profile.getDefaultWalkGoal()).isEqualTo(8000);
+        ArgumentCaptor<Walk> todayWalk = ArgumentCaptor.forClass(Walk.class);
+        then(walkRepository).should(times(1)).save(todayWalk.capture());
+        assertThat(todayWalk.getValue().getGoalSteps()).isEqualTo(5000);
+        ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
+        then(eventPublisher).should(times(1)).publishEvent(events.capture());
+        assertThat(events.getValue().goalSteps()).isEqualTo(8000);
+    }
+
+    @Test
+    @DisplayName("시니어가 자기 걷기 목표를 설정하면 보호자 변경 이벤트를 발행하지 않는다")
+    void 시니어가_자기_걷기_목표를_설정하면_이벤트를_발행하지_않는다() {
+        // given
+        Member senior = member(2L, MemberType.SENIOR);
+        SeniorProfile profile = seniorProfile(senior);
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+
+        // when
+        walkService.setOrUpdateGoal(null, new SetGoalRequest(7000));
+
+        // then
+        assertThat(profile.getDefaultWalkGoal()).isEqualTo(7000);
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    private Member member(Long id, MemberType type) {
+        Member member = Member.createMember(type, type.name(), "01011112222");
+        ReflectionTestUtils.setField(member, "id", id);
+        return member;
+    }
+
+    private SeniorProfile seniorProfile(Member senior) {
+        SeniorProfile profile = SeniorProfile.createSeniorProfile(
+                senior, Family.createFamily("ABC123"), "서울시", "INV1234", LocalDate.of(1950, 1, 1));
+        ReflectionTestUtils.setField(senior, "seniorProfile", profile);
+        return profile;
+    }
 
     @Test
     @DisplayName("기록이 없는 과거 날짜는 기본 목표를 소급 적용하지 않고 오늘·미래만 기본 목표로 채운다")
