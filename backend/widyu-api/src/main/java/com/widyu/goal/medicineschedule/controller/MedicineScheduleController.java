@@ -1,7 +1,10 @@
 package com.widyu.goal.medicineschedule.controller;
 
 import com.widyu.global.annotation.ValidateFamilyAccess;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.response.ApiResponseTemplate;
+import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.medicineschedule.application.ExternalMedicineService;
 import com.widyu.goal.medicineschedule.application.MedicationProofService;
 import com.widyu.goal.medicineschedule.application.MedicineScheduleService;
@@ -14,9 +17,13 @@ import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDetailResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleIdResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleChangeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicationAlarmSyncResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineSearchResponse;
+import com.widyu.member.Member;
+import com.widyu.member.MemberType;
+import com.widyu.member.application.FamilyAccessService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -45,6 +52,8 @@ public class MedicineScheduleController implements MedicineScheduleDocs {
     private final MedicationAlarmSyncService medicationAlarmSyncService;
     private final MedicationProofService medicationProofService;
     private final ExternalMedicineService externalMedicineService;
+    private final FamilyAccessService familyAccessService;
+    private final MemberUtil memberUtil;
 
     @Override
     @GetMapping("/alarm-sync")
@@ -116,6 +125,7 @@ public class MedicineScheduleController implements MedicineScheduleDocs {
             @Valid @RequestBody CreateMedicineScheduleRequest request,
             @RequestParam(required = false) Long memberId
     ) {
+        verifyScheduleWriteAccess(memberId);
         MedicineScheduleIdResponse response = medicineScheduleService.createSchedule(request, memberId);
         return ApiResponseTemplate.ok()
                 .code("MEDICINE_2005")
@@ -126,30 +136,43 @@ public class MedicineScheduleController implements MedicineScheduleDocs {
     @Override
     @PutMapping("/{scheduleId}")
     @ValidateFamilyAccess(memberIdParam = "memberId")
-    public ApiResponseTemplate<Void> updateSchedule(
+    public ApiResponseTemplate<MedicineScheduleIdResponse> updateSchedule(
             @PathVariable Long scheduleId,
             @Valid @RequestBody UpdateMedicineScheduleRequest request,
             @RequestParam(required = false) Long memberId
     ) {
-        medicineScheduleService.updateSchedule(scheduleId, request, memberId);
+        verifyScheduleWriteAccess(memberId);
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(scheduleId, request, memberId);
         return ApiResponseTemplate.ok()
                 .code("MEDICINE_2006")
                 .message("약 복용 스케줄 수정 성공")
-                .build();
+                .body(response);
     }
 
     @Override
     @DeleteMapping("/{scheduleId}")
     @ValidateFamilyAccess(memberIdParam = "memberId")
-    public ApiResponseTemplate<Void> deleteSchedule(
+    public ApiResponseTemplate<MedicineScheduleChangeResponse> deleteSchedule(
             @PathVariable Long scheduleId,
             @RequestParam(required = false) Long memberId
     ) {
-        medicineScheduleService.deleteSchedule(scheduleId, memberId);
+        verifyScheduleWriteAccess(memberId);
+        MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
         return ApiResponseTemplate.ok()
                 .code("MEDICINE_2007")
                 .message("약 복용 스케줄 삭제 성공")
-                .build();
+                .body(response);
+    }
+
+    private void verifyScheduleWriteAccess(Long targetMemberId) {
+        Member currentMember = memberUtil.getCurrentMember();
+        if (currentMember.getType() != MemberType.GUARDIAN) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "복약 일정은 보호자 방장만 변경할 수 있습니다.");
+        }
+        if (targetMemberId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "대상 시니어 ID가 필요합니다.");
+        }
+        familyAccessService.verifyLeaderAccess(currentMember.getId(), targetMemberId);
     }
 
     @Override

@@ -159,6 +159,35 @@ class FamilyAccessServiceTest {
     }
 
     @Test
+    @DisplayName("비방장 보호자가 연결된 시니어의 복약 일정을 변경하면 FORBIDDEN 예외가 발생한다")
+    void 비방장_보호자가_연결된_시니어의_복약_일정을_변경하면_FORBIDDEN_예외가_발생한다() {
+        // given
+        Member senior = member(2L, MemberType.SENIOR);
+        seniorProfile(10L, senior);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+
+        // when / then
+        assertThatThrownBy(() -> familyAccessService.verifyLeaderAccess(1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("시니어가 자신의 복약 일정 방장 권한을 확인하면 FORBIDDEN 예외가 발생한다")
+    void 시니어가_자신의_복약_일정_방장_권한을_확인하면_FORBIDDEN_예외가_발생한다() {
+        // given
+        Member senior = member(2L, MemberType.SENIOR);
+        seniorProfile(10L, senior);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+
+        // when / then
+        assertThatThrownBy(() -> familyAccessService.verifyLeaderAccess(2L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+    }
+
+    @Test
     @DisplayName("방장이 아닌 보호자가 가족 변경을 시도하면 FORBIDDEN 예외를 던진다")
     void 비방장이_가족_변경을_시도하면_예외가_발생한다() {
         FamilyMembership membership = org.mockito.Mockito.mock(FamilyMembership.class);

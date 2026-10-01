@@ -1,9 +1,14 @@
 package com.widyu.goal.medicineschedule.dto.response;
 
+import java.time.LocalDate;
+
 public record MedicineScheduleIdResponse(
-        Long medicineScheduleId
+        Long medicineScheduleId,
+        long scheduleRevision,
+        LocalDate effectiveFromDate
 ) {
-    public static MedicineScheduleIdResponse of(Long medicineScheduleId) {
-        return new MedicineScheduleIdResponse(medicineScheduleId);
+    public static MedicineScheduleIdResponse of(Long medicineScheduleId, long scheduleRevision,
+                                                LocalDate effectiveFromDate) {
+        return new MedicineScheduleIdResponse(medicineScheduleId, scheduleRevision, effectiveFromDate);
     }
 }

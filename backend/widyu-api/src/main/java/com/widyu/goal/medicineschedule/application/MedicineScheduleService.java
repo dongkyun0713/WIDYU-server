@@ -12,6 +12,7 @@ import com.widyu.goal.medicineschedule.dto.request.UpdateMedicineScheduleRequest
 import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDetailResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleChangeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleIdResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
@@ -45,7 +46,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MedicineScheduleService {
-
     private final MedicineScheduleRepository medicineScheduleRepository;
     private final MedicineRepository medicineRepository;
     private final MedicationProofRepository medicationProofRepository;
@@ -121,7 +121,8 @@ public class MedicineScheduleService {
         Member targetMember = getMember(memberId);
 
         List<MedicineSchedule> schedules = medicineScheduleRepository
-                .findCurrentByMemberWithDetails(targetMember, Status.ACTIVE);
+                .findEffectiveByMemberAndDateWithDetails(targetMember, Status.ACTIVE,
+                        LocalDate.now());
 
         List<MedicineHomeResponse.ScheduleItem> scheduleItems = schedules.stream()
                 .map(MedicineHomeResponse.ScheduleItem::from)
@@ -149,9 +150,10 @@ public class MedicineScheduleService {
     @Transactional
     public MedicineScheduleIdResponse createSchedule(CreateMedicineScheduleRequest request, Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
+        LocalDate effectiveFromDate = LocalDate.now().plusDays(1);
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
-        MedicineSchedule schedule = MedicineSchedule.create(targetMember, alarmTime);
+        MedicineSchedule schedule = MedicineSchedule.create(targetMember, alarmTime, effectiveFromDate);
 
         for (CreateMedicineScheduleRequest.CategoryItem categoryItem : request.categories()) {
             MedicineCategory category = MedicineCategory.create(categoryItem.name());
@@ -169,15 +171,16 @@ public class MedicineScheduleService {
         }
 
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(schedule);
-        sendAlarmChanged(targetMember);
+        long revision = sendAlarmChanged(targetMember);
         log.info("약 복용 스케줄 생성: memberId={}, scheduleId={}",
                 targetMember.getId(), savedSchedule.getId());
 
-        return MedicineScheduleIdResponse.of(savedSchedule.getId());
+        return MedicineScheduleIdResponse.of(savedSchedule.getId(), revision, effectiveFromDate);
     }
 
     @Transactional
-    public void updateSchedule(Long scheduleId, UpdateMedicineScheduleRequest request, Long memberId) {
+    public MedicineScheduleIdResponse updateSchedule(Long scheduleId, UpdateMedicineScheduleRequest request,
+                                                     Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
 
         MedicineSchedule schedule = medicineScheduleRepository
@@ -197,28 +200,29 @@ public class MedicineScheduleService {
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
         LocalDate today = LocalDate.now();
+        LocalDate effectiveFromDate = today.plusDays(1);
 
-        if (schedule.startedOn(today)) {
-            // 오늘 생성됐거나 오늘 이미 수정된 버전 → 과거 의존이 없으므로 그대로 수정한다
+        if (schedule.startedOn(effectiveFromDate)) {
+            // 아직 시작하지 않은 내일 버전은 오늘 알람에 영향을 주지 않으므로 그대로 수정한다.
             schedule.updateAlarmTime(alarmTime);
             schedule.clearCategories();
             addCategories(schedule, request.categories());
-            sendAlarmChanged(targetMember);
-            log.info("약 복용 스케줄 당일 수정: scheduleId={}, memberId={}", scheduleId, targetMember.getId());
-            return;
+            long revision = sendAlarmChanged(targetMember);
+            log.info("약 복용 스케줄 시작 전 수정: scheduleId={}, memberId={}", scheduleId, targetMember.getId());
+            return MedicineScheduleIdResponse.of(scheduleId, revision, effectiveFromDate);
         }
 
-        // 과거부터 유효한 버전 → 어제까지로 마감하고 오늘부터 유효한 새 버전을 만든다 (과거 보존)
-        schedule.closeAsOf(today.minusDays(1));
+        // 오늘 알람과 인증은 기존 버전에 남기고 내일부터 새 버전을 적용한다.
+        schedule.closeAsOf(today);
 
-        MedicineSchedule newSchedule = MedicineSchedule.create(targetMember, alarmTime);
+        MedicineSchedule newSchedule = MedicineSchedule.create(targetMember, alarmTime, effectiveFromDate);
         addCategories(newSchedule, request.categories());
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(newSchedule);
-        moveTodayProofsToNewSchedule(schedule, savedSchedule, today);
-        sendAlarmChanged(targetMember);
+        long revision = sendAlarmChanged(targetMember);
 
         log.info("약 복용 스케줄 수정(새 버전 생성): oldScheduleId={}, newScheduleId={}, memberId={}",
                 scheduleId, savedSchedule.getId(), targetMember.getId());
+        return MedicineScheduleIdResponse.of(savedSchedule.getId(), revision, effectiveFromDate);
     }
 
     private void addCategories(
@@ -241,20 +245,8 @@ public class MedicineScheduleService {
         }
     }
 
-    private void moveTodayProofsToNewSchedule(
-            MedicineSchedule previousSchedule,
-            MedicineSchedule newSchedule,
-            LocalDate today
-    ) {
-        List<MedicationProof> proofs = medicationProofRepository.findByMedicineScheduleAndVerifiedAtBetween(
-                previousSchedule, today.atStartOfDay(), today.atTime(LocalTime.MAX));
-        for (MedicationProof proof : proofs) {
-            proof.moveTo(newSchedule);
-        }
-    }
-
     @Transactional
-    public void deleteSchedule(Long scheduleId, Long memberId) {
+    public MedicineScheduleChangeResponse deleteSchedule(Long scheduleId, Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
 
         MedicineSchedule schedule = medicineScheduleRepository.findById(scheduleId)
@@ -271,10 +263,12 @@ public class MedicineScheduleService {
                     "이미 종료된 과거 스케줄은 삭제할 수 없습니다.");
         }
 
-        // 오늘부터 중단하고 과거 날짜에는 그대로 보존한다 (오늘 생성분은 유효 구간이 비어 어디에도 노출되지 않음)
-        schedule.closeAsOf(LocalDate.now().minusDays(1));
-        sendAlarmChanged(targetMember);
-        log.info("약 복용 스케줄 삭제(오늘부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
+        // 오늘 알람은 유지하고 내일부터 중단한다. 내일 시작 버전은 빈 유효기간이 된다.
+        LocalDate today = LocalDate.now();
+        schedule.closeAsOf(today);
+        long revision = sendAlarmChanged(targetMember);
+        log.info("약 복용 스케줄 삭제(내일부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
+        return MedicineScheduleChangeResponse.of(revision, today.plusDays(1));
     }
 
     private LocalTime parseAlarmTime(String alarmTimeStr) {
@@ -313,7 +307,7 @@ public class MedicineScheduleService {
                         "존재하지 않는 사용자입니다."));
     }
 
-    private void sendAlarmChanged(Member member) {
+    private long sendAlarmChanged(Member member) {
         long revision = member.incrementMedicationAlarmRevision();
         fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
                 .title("복약 알람 변경")
@@ -323,6 +317,7 @@ public class MedicineScheduleService {
                 .image("")
                 .data(MedicationAlarmPayload.of(revision))
                 .build());
+        return revision;
     }
 
     // 그날 유효했던 스케줄을 모두 인증한 날만 달성일로 센다
