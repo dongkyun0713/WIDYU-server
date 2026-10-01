@@ -6,6 +6,7 @@ import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.global.entity.Status;
 import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentKind;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -59,8 +60,19 @@ public class IncidentEscalation {
         return incidentRepository.escalateFallTimedOut(nowMs);
     }
 
-    /** OFF 즉시 경로와 ON 스케줄러가 공유하는 유일한 보호자 S04 생성 경로다. */
+    /** OFF 즉시 경로와 ON 스케줄러가 공유하는 유일한 보호자 S04/S05 생성 경로다. */
     void enqueueInitialAlert(Incident incident) {
+        NotificationType type;
+        String copyCode;
+        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
+            type = NotificationType.HEART_RATE_EMERGENCY;
+            copyCode = "S04";
+        } else if (incident.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
+            type = NotificationType.SAFE_ZONE_EXITED;
+            copyCode = "S05";
+        } else {
+            throw new IllegalArgumentException("최초 보호자 알림을 지원하지 않는 사건 종류입니다.");
+        }
         Member senior = memberRepository.findById(incident.getMemberId())
                 .orElseThrow(() -> new IllegalStateException("사건 회원을 찾을 수 없습니다."));
         Long familyId = seniorProfileRepository.findFamilyIdByMemberId(incident.getMemberId()).orElse(null);
@@ -69,15 +81,14 @@ public class IncidentEscalation {
             return;
         }
         List<FamilyMembership> memberships = familyMembershipRepository.findAllByFamilyIdWithGuardian(familyId);
-        NotificationCopy copy = NotificationCopy.of(NotificationType.HEART_RATE_EMERGENCY,
-                "S04", Map.of("시니어 이름", senior.getName()));
+        NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
         Map<String, String> data = Map.of();
         if (incident.getDecisionId() != null) {
             data = Map.of("decisionId", incident.getDecisionId());
         }
         FcmSendDto notification = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
-                .notificationType(NotificationType.HEART_RATE_EMERGENCY)
+                .notificationType(type)
                 .eventId(incident.getIncidentRef())
                 .seniorId(incident.getMemberId())
                 .entityId(incident.getIncidentRef())

@@ -380,7 +380,7 @@ erDiagram
         Long memberId
         String runId
         String decisionId UK "NULL 허용: 단건 심박은 판정 없음"
-        String kind "HR_ANOMALY / FALL_SUSPECTED"
+        String kind "HR_ANOMALY / FALL_SUSPECTED / SAFE_ZONE_EXIT"
         String level "판정 severity 복사"
         Long openedAtMs
         Long respondByMs "openedAtMs + 60초 (설정값)"
@@ -718,7 +718,7 @@ erDiagram
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
 | `ConsentKey` | `PRIVACY_PERSONAL`, `PRIVACY_HEALTH`, `LOCATION`, `GUARDIAN_LOCATION_PROVIDE`, `LOCATION_NOTICE_BATCHED`, `RETENTION_NOTICE` |
 | `ConsentSource` | `APP`, `ADMIN` |
-| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED` |
+| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED`, `SAFE_ZONE_EXIT` |
 | `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
 | `IncidentResponseValue` | `OK`, `HELP` |
 | `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
