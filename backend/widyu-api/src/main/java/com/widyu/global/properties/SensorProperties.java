@@ -78,6 +78,6 @@ public record SensorProperties(
             int situationWindowMin
     ) {}
 
-    /** 종료 뒤 카드 기능. 활성화 전 기본값 false(LLD-0073). */
-    public record Followup(boolean enabled) {}
+    /** 종료 뒤 카드와 첫 제출 보상. 각각 활성화 전 기본값 false(LLD-0073·0075). */
+    public record Followup(boolean enabled, boolean rewardEnabled) {}
 }
