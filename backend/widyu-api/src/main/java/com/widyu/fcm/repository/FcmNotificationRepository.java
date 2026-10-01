@@ -12,8 +12,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface FcmNotificationRepository extends JpaRepository<FcmNotification, Long> {
 
+    Optional<FcmNotification> findByRecipientMemberIdAndEventId(Long recipientMemberId, String eventId);
+
     @Modifying(clearAutomatically = true)
-    @Query("update FcmNotification n set n.isRead = true where n.recipientMember.id = :memberId")
+    @Query("update FcmNotification n set n.isRead = true, n.readAt = CURRENT_TIMESTAMP where n.recipientMember.id = :memberId and n.isRead = false")
     void markAllAsReadByMemberId(@Param("memberId") Long memberId);
 
     @Query("select n from FcmNotification n where n.id = :id and n.recipientMember.id = :memberId")

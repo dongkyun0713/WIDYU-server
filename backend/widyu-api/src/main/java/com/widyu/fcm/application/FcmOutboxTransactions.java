@@ -1,9 +1,7 @@
 package com.widyu.fcm.application;
 
 import com.widyu.decision.repository.DecisionRecordRepository;
-import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
-import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import java.time.Duration;
@@ -19,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class FcmOutboxTransactions {
     private final FcmOutboxRepository outbox;
-    private final FcmNotificationRepository notifications;
     private final FcmEligibility eligibility;
     private final FcmDeliveryProperties properties;
     private final MemberFcmTokenRepository tokens;
@@ -76,10 +73,6 @@ public class FcmOutboxTransactions {
             return;
         }
         if (result.success()) {
-            notifications.save(FcmNotification.builder().recipientMember(row.getRecipientMember())
-                    .memberFcmToken(row.getMemberFcmToken()).title(row.getTitle()).body(row.getBody())
-                    .image(row.getImage()).fcmCategory(row.getFcmCategory())
-                    .decisionId(row.getDecisionId()).isRead(false).build());
             row.sent();
             markDecisionDelivered(row);
             return;

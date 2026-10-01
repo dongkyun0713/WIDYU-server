@@ -2,20 +2,16 @@ package com.widyu.fcm.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
-import static org.mockito.Mockito.never;
 
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
-import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.member.Member;
@@ -42,7 +38,6 @@ class FcmOutboxTransactionsTest {
     private static final String DECISION_ID = "dec-01";
 
     @Mock private FcmOutboxRepository outbox;
-    @Mock private FcmNotificationRepository notifications;
     @Mock private FcmEligibility eligibility;
     @Mock private MemberFcmTokenRepository tokens;
     @Mock private DecisionRecordRepository decisions;
@@ -61,9 +56,6 @@ class FcmOutboxTransactionsTest {
         // 보호자가 여럿이면 이 트랜잭션이 동시에 여럿 돈다. 읽고 나서 쓰면 나중 것이 앞선 시각을 덮으므로
         // 「비어 있을 때만」 조건을 UPDATE 문에 넣은 원자적 갱신 하나로 간다(ADR-0035 결정 3).
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.SENT);
-        ArgumentCaptor<FcmNotification> notification = ArgumentCaptor.forClass(FcmNotification.class);
-        then(notifications).should().save(notification.capture());
-        assertThat(notification.getValue().getDecisionId()).isEqualTo(DECISION_ID);
         ArgumentCaptor<Long> alertAtMs = ArgumentCaptor.forClass(Long.class);
         then(decisions).should().markDeliveredIfFirst(
                 eq(DECISION_ID), eq("fcm-7"), alertAtMs.capture());
@@ -82,9 +74,6 @@ class FcmOutboxTransactionsTest {
 
         // then
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.SENT);
-        ArgumentCaptor<FcmNotification> notification = ArgumentCaptor.forClass(FcmNotification.class);
-        then(notifications).should().save(notification.capture());
-        assertThat(notification.getValue().getDecisionId()).isNull();
         then(decisions).shouldHaveNoInteractions();
     }
 
@@ -101,7 +90,6 @@ class FcmOutboxTransactionsTest {
         // then
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.PENDING);
         then(decisions).shouldHaveNoInteractions();
-        then(notifications).should(never()).save(any());
     }
 
     @Test
@@ -171,7 +159,7 @@ class FcmOutboxTransactionsTest {
     }
 
     private FcmOutboxTransactions transactions() {
-        return new FcmOutboxTransactions(outbox, notifications, eligibility, properties(), tokens, decisions);
+        return new FcmOutboxTransactions(outbox, eligibility, properties(), tokens, decisions);
     }
 
     private FcmDeliveryProperties properties() {

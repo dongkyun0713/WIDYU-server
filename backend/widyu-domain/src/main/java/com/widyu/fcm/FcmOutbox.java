@@ -41,6 +41,8 @@ public class FcmOutbox extends BaseTimeEntity {
     private NotificationType notificationType;
     @Column(name = "data_payload", columnDefinition = "TEXT")
     private String dataPayload;
+    @Column(name = "notification_id")
+    private Long notificationId;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32)
     private FcmCategory fcmCategory;
     @Column(nullable = false)

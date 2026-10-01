@@ -81,7 +81,8 @@ public class FcmHttpTransport implements FcmTransport {
 
     @Override
     public Result send(FcmDelivery delivery, BooleanSupplier beforeSend) {
-        return send(delivery.token(), delivery.message(), beforeSend, delivery.id(), delivery.expiresAt());
+        return send(delivery.token(), delivery.message(), beforeSend,
+                delivery.notificationId(), delivery.expiresAt());
     }
 
     private Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend, Long notificationId, Instant expiresAt) {
@@ -130,7 +131,11 @@ public class FcmHttpTransport implements FcmTransport {
             // FCM은 최대 28일까지 받고 Android TTL을 초 단위로 내림한다.
             long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
             HashMap<String, String> data = new HashMap<>(dto.data());
-            data.put("notificationId", notificationId.toString());
+            if (notificationId != null) {
+                data.put("notificationId", notificationId.toString());
+            } else {
+                data.remove("notificationId");
+            }
             addTypeData(data, type);
             message.data(data);
             if (type == null) {

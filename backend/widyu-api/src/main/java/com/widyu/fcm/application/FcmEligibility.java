@@ -1,6 +1,7 @@
 package com.widyu.fcm.application;
 
 import com.widyu.fcm.FcmOutbox;
+import com.widyu.fcm.DeliveryMode;
 import com.widyu.global.entity.Status;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
@@ -25,19 +26,28 @@ public class FcmEligibility {
         return members.findById(memberId).filter(member -> member.getStatus() == Status.ACTIVE).isPresent();
     }
 
+    public boolean sameActiveFamily(Long recipientId, Long relatedMemberId, Long familyId) {
+        return active(relatedMemberId) && familyId != null
+                && familyId.equals(familyId(recipientId))
+                && familyId.equals(familyId(relatedMemberId));
+    }
+
     public boolean eligible(FcmOutbox outbox) {
         Long recipientId = outbox.getRecipientMember().getId();
         if (!active(recipientId) || !outbox.getMemberFcmToken().isActive()
-                || !recipientId.equals(outbox.getMemberFcmToken().getMember().getId())
-                || !settings.isNotificationEnabled(recipientId, outbox.getFcmCategory())) {
+                || !recipientId.equals(outbox.getMemberFcmToken().getMember().getId())) {
             return false;
+        }
+        if (outbox.getNotificationType() == null
+                || outbox.getNotificationType().deliveryMode() != DeliveryMode.DATA_ONLY) {
+            if (!settings.isNotificationEnabled(recipientId, outbox.getFcmCategory())) {
+                return false;
+            }
         }
         Long related = outbox.getRelatedMemberId();
         if (related == null || related.equals(recipientId)) {
             return true;
         }
-        Long family = outbox.getFamilyId();
-        return active(related) && family != null && family.equals(familyId(recipientId))
-                && family.equals(familyId(related));
+        return sameActiveFamily(recipientId, related, outbox.getFamilyId());
     }
 }
