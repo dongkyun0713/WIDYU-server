@@ -1,14 +1,12 @@
 package com.widyu.auth.application.guardian;
 
-import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategy;
-import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
+import com.widyu.auth.application.guardian.unlink.SocialUnlinkService;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
-import com.widyu.auth.OAuthProvider;
+import com.widyu.auth.event.MemberWithdrawnEvent;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
-import com.widyu.member.SocialAccount;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
@@ -21,6 +19,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,10 +33,11 @@ public class MemberWithdrawService {
     private final FamilyMembershipRepository familyMembershipRepository;
     private final FamilyRepository familyRepository;
     private final SeniorProfileRepository seniorProfileRepository;
-    private final SocialLoginStrategyFactory strategyFactory;
     private final MemberUtil memberUtil;
     private final MedicationProofDeletionService medicationProofDeletionService;
     private final S3ObjectDeletionTaskService s3ObjectDeletionTaskService;
+    private final SocialUnlinkService socialUnlinkService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
@@ -53,8 +53,8 @@ public class MemberWithdrawService {
         // 1. 리프레시 토큰 삭제
         refreshTokenRepository.deleteById(member.getId());
 
-        // 2. 연동된 모든 소셜 계정 탈퇴
-        withdrawAllSocialAccounts(member);
+        // 2. 소셜 연동 해제 작업 저장 (마스킹 전 oauthId·토큰으로, 외부 호출은 커밋 뒤)
+        socialUnlinkService.schedule(member);
 
         // 3. FamilyMembership 처리 (leader 정책 적용)
         handleFamilyMembershipWithdrawal(member.getId());
@@ -71,6 +71,9 @@ public class MemberWithdrawService {
 
         // 7. 프로필 사진 삭제 작업 저장 (커밋 뒤 삭제, 실패 시 재시도, 롤백되면 작업도 사라진다)
         s3ObjectDeletionTaskService.schedule(member.getId(), Stream.ofNullable(profileImage).toList());
+
+        // 8. 커밋 뒤 소셜 연동 해제·Redis 위치 삭제
+        eventPublisher.publishEvent(new MemberWithdrawnEvent(member.getId()));
 
         log.info("회원 탈퇴 완료: memberId={}", member.getId());
     }
@@ -100,48 +103,5 @@ public class MemberWithdrawService {
             return;
         }
         familyMembershipRepository.deleteByGuardianId(guardianId);
-    }
-
-    private void withdrawAllSocialAccounts(Member member) {
-        for (SocialAccount socialAccount : member.getSocialAccounts()) {
-            String provider = socialAccount.getProvider();
-            
-            // 카카오의 경우 어드민 키로 탈퇴하므로 액세스 토큰 불필요
-            if ("kakao".equals(provider)) {
-                try {
-                    withdrawSocialAccount(provider, null, socialAccount.getOauthId());
-                } catch (Exception e) {
-                    log.warn("카카오 계정 탈퇴 실패하지만 진행 계속: errorType={}",
-                            e.getClass().getSimpleName());
-                }
-            } 
-            // 애플, 네이버의 경우 저장된 리프레시 토큰 사용
-            else if (("apple".equals(provider) || "naver".equals(provider)) 
-                    && socialAccount.getRefreshToken() != null && !socialAccount.getRefreshToken().isBlank()) {
-                try {
-                    withdrawSocialAccount(provider, socialAccount.getRefreshToken(), socialAccount.getOauthId());
-                } catch (Exception e) {
-                    log.warn("{} 계정 탈퇴 실패하지만 진행 계속: errorType={}",
-                            provider, e.getClass().getSimpleName());
-                }
-            } else {
-                log.warn("소셜 계정 탈퇴를 위한 토큰 없음: provider={}", provider);
-            }
-        }
-    }
-
-    private void withdrawSocialAccount(String providerName, String accessToken, String oauthId) {
-        try {
-            OAuthProvider provider = OAuthProvider.from(providerName);
-            SocialLoginStrategy strategy = strategyFactory.getStrategy(providerName);
-            
-            strategy.withdrawSocialAccount(accessToken, oauthId);
-            
-            log.info("소셜 계정 탈퇴 성공: provider={}", providerName);
-        } catch (Exception e) {
-            log.error("소셜 계정 탈퇴 실패: provider={}, errorType={}",
-                    providerName, e.getClass().getSimpleName());
-            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
-        }
     }
 }
