@@ -57,11 +57,11 @@ public class NotificationCenterService {
     @Transactional
     public NotificationReadResponse markAsRead(Long notificationId) {
         Member member = memberUtil.getCurrentMember();
+        notifications.findByIdAndRecipientMemberId(notificationId, member.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FCM_NOTIFICATION_NOT_FOUND));
+        notifications.markAsReadIfUnread(notificationId, member.getId(), LocalDateTime.now());
         FcmNotification notification = notifications.findByIdAndRecipientMemberId(notificationId, member.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.FCM_NOTIFICATION_NOT_FOUND));
-        if (!notification.isRead()) {
-            notification.markAsRead();
-        }
         return NotificationReadResponse.from(notification);
     }
 

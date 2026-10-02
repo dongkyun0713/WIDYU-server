@@ -105,7 +105,7 @@ PATCH /api/v1/notifications/{id}/read
 2. 목록 메서드는 `@Transactional(readOnly = true)`의 같은 읽기 트랜잭션(DB 기본 RR)에서 `now`를 한 번 잡는다. 같은 `now`를 만료 조건과 응답 시각에 사용하고 items와 unreadCounts를 그 트랜잭션에서 조회한다. H2만으로 MySQL 격리 의미를 증명하지 않는다.
 3. `occurredAt`은 현재 저장 모델의 `createdAt`이다. 목록은 `id DESC`로 정렬하고 커서가 있으면 `id < :cursor`를 적용한다. 경계 행을 조회하지 않는다. 반환한 마지막 행 ID를 10진수 문자열로 만들어 `nextCursor`에 넣는다. 페이지를 잇는 동안 같은 행을 다시 반환하거나 건너뛰지 않아야 한다.
 4. `UNREAD` 목록은 `isRead=false`만 조회한다. 카테고리 목록은 읽은 행도 포함한다. 안 읽은 수는 커서와 선택 필터에 영향받지 않고 모든 허용 필터에 같은 만료 조건을 적용한다.
-5. 읽음 메서드는 쓰기 트랜잭션에서 `(id, recipient_member_id)` 행을 조회한다. 미열람일 때만 `markAsRead()`를 호출하고, 이미 읽은 행은 `readAt`을 바꾸지 않는다. 목록 노출로 읽음 상태를 변경하지 않는다.
+5. 읽음 메서드는 쓰기 트랜잭션에서 `(id, recipient_member_id)` 행을 먼저 조회해 존재·소유를 확인한다. 그 뒤 `isRead=false` 조건부 UPDATE를 1회 실행하고 재조회한 행으로 응답한다. UPDATE가 0건이어도 200이며 최초 `readAt`을 보존한다. 이 경로에서 엔티티 `markAsRead()`와 더티 체킹으로 읽음 상태를 변경하지 않는다. 목록 노출로 읽음 상태를 변경하지 않는다.
 
 새 이벤트 리스너·`@Async`·Facade는 없다. 기존 FCM 전송 경로에도 개입하지 않는다.
 
@@ -135,7 +135,7 @@ PATCH /api/v1/notifications/{id}/read
 - [x] N4 / 커서 계약: 문자·0·범위 초과 커서는 400 `FCM_4003`이다. 다른 회원 ID 또는 없는 ID를 유효한 숫자 커서로 보내면 200과 본인 행만 반환한다.
 - [x] N4 / DELIVERY §4·§8: `unreadCounts.UNREAD`는 전체 유효 미열람 수, 카테고리는 각 필터의 유효 미열람 수다. 커서·선택 필터와 무관하고 items와 같은 읽기 트랜잭션·기준 시각을 사용한다. `snapshotRevision/serverTime`을 반환한다.
 - [x] N4 / DELIVERY §7, UX §12.1: 새 타입 행의 envelope 필드와 enum 파생값이 일치하고 저장된 title/body를 반환한다. 푸시 설정 OFF인 센터 행도 숨기지 않는다.
-- [x] N5 / DELIVERY §5·§8, UX §6.2: 최초 읽음이 `readAt`을 저장하고 재요청은 200과 같은 `readAt`을 반환한다. 타인·없는 ID는 404다. 목록 조회만으로 읽음이 변하지 않는다. 모두 읽기 endpoint는 없다.
+- [x] N5 / DELIVERY §5·§8, UX §6.2: 읽음은 `isRead=false` 조건부 UPDATE 1회로 멱등 처리하고, 최초 읽음이 `readAt`을 저장한다. 재요청은 UPDATE 0건이어도 200과 최초 `readAt`을 반환한다. 엔티티 더티 체킹으로 읽음을 저장하지 않는다. 타인·없는 ID는 404다. 목록 조회만으로 읽음이 변하지 않는다. 모두 읽기 endpoint는 없다.
 - [x] 새 경로의 성공·400·404를 `NotificationCenterDocs`에 문서화하고 기존 `/api/v1/fcm` 동작은 유지한다.
 - [x] JUnit 5·Mockito BDD, 한글 언더스코어 메서드명과 행위형 `@DisplayName`, 상태 검증을 따른다. `bash scripts/harness/verify.sh`가 통과한다.
 

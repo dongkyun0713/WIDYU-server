@@ -18,6 +18,14 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
 
     Optional<FcmNotification> findByIdAndRecipientMemberId(Long id, Long recipientMemberId);
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        UPDATE FcmNotification n SET n.isRead = true, n.readAt = :now
+        WHERE n.id = :id AND n.recipientMember.id = :memberId AND n.isRead = false
+        """)
+    int markAsReadIfUnread(@Param("id") Long id, @Param("memberId") Long memberId,
+                           @Param("now") LocalDateTime now);
+
     @Query("""
         SELECT n FROM FcmNotification n
         WHERE n.recipientMember.id = :memberId
