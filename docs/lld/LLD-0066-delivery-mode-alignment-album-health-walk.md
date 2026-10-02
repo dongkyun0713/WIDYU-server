@@ -19,7 +19,7 @@
 ### In scope
 
 - `widyu-api`: `AlbumNotificationListener`, `HealthScheduleNotificationListener`, `WalkNotificationListener`, `AlbumUnlockRepository`; A04 식별에 필요한 `AlbumCommentService`·`AlbumCommentedEvent`.
-- H01 푸시와 센터의 문구 분리 및 A06 필드 보존에 필요한 `FcmSendDto`, `FcmOutboxService`; `widyu-domain`의 `FcmNotification` nullable 필드 2개와 운영 DDL·ERD. 알림센터 응답 DTO는 W4(#703, LLD-0067)가 소유한다.
+- H01 푸시와 센터의 문구 분리 및 A06 필드 보존에 필요한 `FcmSendDto`, `FcmOutboxService`; `widyu-domain`의 `FcmNotification` nullable 필드 2개와 운영 DDL·ERD. W4(#703, LLD-0067) 위 stack에서 알림센터 응답 DTO에도 두 필드를 반영한다.
 - E1·E4·E5·E14·E17과 같은 리스너의 A02·A03·A04·A07 역할·문구·딥링크 정합.
 
 ### Out of scope
@@ -45,12 +45,19 @@ HTTP 경로·요청·응답 래퍼는 바뀌지 않는다. 입력은 앨범 도�
 
 앨범 시니어 딥링크는 W2 제안 `widyu://albums/{entityId}`, 보호자 잠금 해제·A02 보호자 수신은 `widyu-care://albums/{entityId}`, 보호자 댓글·답글은 `widyu-care://albums/{entityId}/comments/{commentId}`, A07은 `widyu-care://albums`, H01 보호자 본인 일정은 `widyu-care://health/schedules/{entityId}`, W01은 `widyu://walk/goal`이다. 보호자 경로는 `FcmSendDto.deepLink`로 지정하고 리스너 상수에 모았다. 최종 FE 확인은 §9에 남긴다. `FcmCategory`는 기존 ALBUM/HEALTH_SCHEDULE/WALK를 사용한다.
 
+`GET /api/v1/notifications`의 `items`는 저장된 센터 행에서 다음 응답 필드를 그대로 반환한다. `ALBUM_UNLOCKED` 외의 행은 저장값이 없으면 null이며, 레거시 `type IS NULL` 행에도 같은 규칙을 적용한다.
+
+| 응답 필드 | 타입 | A06 값 | 값이 없는 행 |
+| --- | --- | --- | --- |
+| `seniorDisplayName` | nullable String | 잠금 해제한 시니어 표시명 | null |
+| `remainingLockedCount` | nullable Integer | 해금 직후 남은 잠금 수, 0 포함 | null |
+
 ## 4. 데이터 모델
 
 - `AlbumUnlockRepository`에 `countRemainingLockedByWriterAndSenior(writerId, seniorId, justUnlockedAlbumId)`를 추가한다. `Album.status=ACTIVE`, `Album.member.id=writerId`, `Album.id<>justUnlockedAlbumId`, `NOT EXISTS (AlbumUnlock where album=a and member.id=seniorId)`를 센다. 방금 해제한 게시물을 제외하므로 미커밋 unlock 행을 조회하지 않아도 잠금 해제 직후 수가 된다. 다른 작성자, PROCESSING/비활성/삭제, 이미 해제한 게시물은 세지 않는다.
 - `AlbumCommentedEvent`에 저장된 `commentId`와 답글 여부(예: `parentCommentId`)를 더한다. 현재 세 필드(`albumId`, `commenterMemberId`, `albumAuthorId`)로는 답글 구분과 댓글 딥링크가 불가능하다. `AlbumCommentService`는 저장된 댓글/답글에서 값을 가져온다.
 - `FcmSendDto`에 nullable `centerTitle`, `centerBody`, `seniorDisplayName`, `remainingLockedCount`를 둔다. H01 `title/content`는 OS 문구, `centerTitle/centerBody`는 INAPP 문구다. outbox는 OS 제목·본문을 보존하고 FCM data에 앱 안 문구를 함께 넣어 재시도에서도 유지한다. 센터 전용 문구가 없으면 기존 제목·본문을 사용한다.
-- `FcmNotification`에 nullable `senior_display_name VARCHAR(255)`와 `remaining_locked_count INT`를 추가한다. `FcmOutboxService.enqueue`가 A06 센터 행에 저장한다. 두 필드의 응답 노출은 W4 머지 뒤 W4 측 1줄 후속으로 처리한다. FCM data에도 두 값을 문자열로 보내며 **0은 생략하지 않는다.** 과거 행은 NULL이며 소급 계산하지 않는다. enum 컬럼 신설은 없다.
+- `FcmNotification`에 nullable `senior_display_name VARCHAR(255)`와 `remaining_locked_count INT`를 추가한다. `FcmOutboxService.enqueue`가 A06 센터 행에 저장한다. 두 필드의 응답 노출은 W4 위 stack에서 반영한다. FCM data에도 두 값을 문자열로 보내며 **0은 생략하지 않는다.** 과거 행은 NULL이며 소급 계산하지 않는다. enum 컬럼 신설은 없다.
 
 ## 5. 처리 흐름
 
@@ -88,10 +95,11 @@ HTTP 경로·요청·응답 래퍼는 바뀌지 않는다. 입력은 앨범 도�
 
 ## 8. 영향 범위 / 마이그레이션
 
-운영 `ddl-auto=validate`에 앞서 W3 DDL 다음으로 `scripts/mysql/alter_fcm_notification_album_unlock.sql`을 적용한다. 이 스크립트는 `fcm_notification`에 `senior_display_name VARCHAR(255) NULL`과 `remaining_locked_count INT NULL`을 추가한다. 신규 `NotificationType`·`FcmCategory` 값은 없어 기존 native ENUM은 수정하지 않는다. **두 필드의 응답 노출은 W4 머지 뒤 W4 측 1줄 후속**으로 처리한다. H01은 outbox의 OS 문구와 센터 행의 INAPP 문구를 재시도·다중 기기에서도 유지한다. W3 위에 스택 순서대로 병합한다. 운영 MySQL에서 DDL을 실제 실행하는 검증은 배포 단계에 남는다.
+운영 `ddl-auto=validate`에 앞서 W3 DDL 다음으로 `scripts/mysql/alter_fcm_notification_album_unlock.sql`을 적용한다. 이 스크립트는 `fcm_notification`에 `senior_display_name VARCHAR(255) NULL`과 `remaining_locked_count INT NULL`을 추가한다. 신규 `NotificationType`·`FcmCategory` 값은 없어 기존 native ENUM은 수정하지 않는다. **두 필드의 응답 노출은 W4 위 stack에서 반영한다.** H01은 outbox의 OS 문구와 센터 행의 INAPP 문구를 재시도·다중 기기에서도 유지한다. W3 위에 스택 순서대로 병합한다. 운영 MySQL에서 DDL을 실제 실행하는 검증은 배포 단계에 남는다.
 
 ## 9. 미결정 사항 (Open Questions)
 
+- A06 두 필드의 응답 DTO 반영은 W4 머지 뒤 후속 작업에서 W4 위 stack 작업으로 변경했다. 응답은 DB 저장값을 그대로 사용하고 0과 null을 구분한다.
 - 계획 §5 가정표 원문: `priority·channel·deepLink 문자열(문서에 없음) | LLD-W2에 제안표 수록 | 제안값 | —`. 코디네이터가 2026-10-02 보호자 경로 `widyu-care://albums/{albumId}`, `widyu-care://albums/{albumId}/comments/{commentId}`, `widyu-care://health/schedules/{scheduleId}`를 임시 계약으로 승인했다. FE 확인 대기이며 확정값이 다르면 리스너 상수의 문자열만 교체한다.
 - 계획 §5 가정표 원문: `시니어 푸시 설정 항목 | GENERAL 하나 | 그대로 | —`. 시니어 대상 A01·A02·H01·W01에도 이 가정을 따른다.
 - W01의 `신뢰 불가` 값 정의는 회신 대기다. 현재 `Walk.actualSteps`에 품질·출처 필드가 없으므로 **양수 동기화값을 신뢰**하는 작업 가정으로 구현한다(2026-10-02 코디네이터 답변). 0·Walk 행 없음은 발송하지 않으며 임의 상한·최신성 기준과 새 필드는 만들지 않는다. hemlo 회신이 다른 기준을 정하면 이 항목과 판정을 개정한다.
