@@ -104,6 +104,8 @@ W2의 `NotificationType.settingGroup()`이 반환하는 `PushSettingGroup`을 �
 
 ## 8. 영향 범위 / 마이그레이션
 
+현재 회원은 `MemberUtil`로만 조회한다(`SecurityUtil` 의존 없음). develop 통합 테스트 슬라이스와 호환된다.
+
 운영 `application-prod.yml`은 `ddl-auto=validate`다. **앱 배포 전에** `scripts/mysql/migrate_notification_setting_group.sql`을 적용하지 않으면 새 Java enum·컬럼 타입과 구 데이터가 맞지 않아 기동 또는 설정 조회가 실패한다. 로컬·dev의 `ddl-auto=update`에 의존하지 않는다.
 
 순서는 ① 운영 `SHOW CREATE TABLE member_notification_setting`, 카테고리별 건수·중복·미매핑 값 확인 및 백업 ② 구 앱의 설정 읽기·쓰기 트래픽 중지 ③ native ENUM이면 `MODIFY COLUMN category VARCHAR(32) NOT NULL` 선행 ④ 회원별 GENERAL 집계 후 구 행 삭제·새 행 삽입, 복약 행 개명, SAFE_ZONE 삭제 ⑤ `member.notification_policy_revision BIGINT NOT NULL DEFAULT 0` 추가 ⑥ 남은 구 값·UK·집계 수치 확인 ⑦ 새 앱 배포 후 설정 트래픽 재개다. MySQL DDL은 암묵적 커밋이 있으므로 전체 원자 트랜잭션으로 가정하지 않는다. SQL 주석에 단계별 재실행·복구 절차를 기록한다. `UK(member_id,category)`는 유지한다.

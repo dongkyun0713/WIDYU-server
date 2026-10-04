@@ -13,7 +13,6 @@ import com.widyu.fcm.repository.MemberNotificationSettingRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.global.util.SecurityUtil;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
@@ -35,7 +34,6 @@ class NotificationSettingServiceTest {
     @Mock private FamilyMembershipRepository memberships;
     @Mock private MemberRepository members;
     @Mock private MemberUtil memberUtil;
-    @Mock private SecurityUtil securityUtil;
     @InjectMocks private NotificationSettingService service;
 
     @Test
@@ -117,7 +115,7 @@ class NotificationSettingServiceTest {
         // given
         Member member = member(MemberType.GUARDIAN);
         FamilyMembership membership = mock(FamilyMembership.class);
-        given(securityUtil.getCurrentMemberId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
         given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
         given(memberships.findByGuardianId(1L)).willReturn(Optional.of(membership));
         given(membership.isLeader()).willReturn(true);
@@ -135,7 +133,7 @@ class NotificationSettingServiceTest {
     void 비방장이_안전_푸시를_끄면_자기_설정과_revision이_바뀐다() {
         // given
         Member member = member(MemberType.GUARDIAN);
-        given(securityUtil.getCurrentMemberId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
         given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
         given(settings.findByMemberIdAndCategory(1L, PushSettingGroup.SAFE_ZONE))
                 .willReturn(Optional.empty());
@@ -157,7 +155,7 @@ class NotificationSettingServiceTest {
         // given
         Member member = member(MemberType.GUARDIAN);
         MemberNotificationSetting setting = MemberNotificationSetting.create(member, PushSettingGroup.SAFE_ZONE, false);
-        given(securityUtil.getCurrentMemberId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
         given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
         given(settings.findByMemberIdAndCategory(1L, PushSettingGroup.SAFE_ZONE))
                 .willReturn(Optional.of(setting));
@@ -178,7 +176,7 @@ class NotificationSettingServiceTest {
         // given
         Member member = member(MemberType.GUARDIAN);
         member.incrementNotificationPolicyRevision();
-        given(securityUtil.getCurrentMemberId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
         given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
 
         // when / then
@@ -214,7 +212,7 @@ class NotificationSettingServiceTest {
     void 시니어가_안전_그룹을_저장하면_예외가_발생한다() {
         // given
         Member member = member(MemberType.SENIOR);
-        given(securityUtil.getCurrentMemberId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
         given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
 
         // when / then

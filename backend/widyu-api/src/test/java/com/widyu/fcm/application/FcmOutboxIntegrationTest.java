@@ -16,7 +16,6 @@ import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.global.util.SecurityUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.Family;
@@ -73,7 +72,6 @@ class FcmOutboxIntegrationTest {
     @MockBean FcmOutboxDispatcher immediate;
     @MockBean JPAQueryFactory queryFactory;
     @MockBean MemberUtil memberUtil;
-    @MockBean SecurityUtil securityUtil;
 
     @AfterEach
     void cleanup() {
@@ -403,7 +401,7 @@ class FcmOutboxIntegrationTest {
     void 같은_revision으로_동시에_설정하면_한_요청만_저장한다() throws Exception {
         // given
         Long member = memberWithToken();
-        given(securityUtil.getCurrentMemberId()).willReturn(member);
+        given(memberUtil.getCurrentMember()).willReturn(members.findById(member).orElseThrow());
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {

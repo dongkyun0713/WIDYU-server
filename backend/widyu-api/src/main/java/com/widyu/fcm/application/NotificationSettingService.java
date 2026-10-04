@@ -8,7 +8,6 @@ import com.widyu.fcm.repository.MemberNotificationSettingRepository;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
-import com.widyu.global.util.SecurityUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.FamilyMembershipRepository;
@@ -30,7 +29,6 @@ public class NotificationSettingService {
     private final FamilyMembershipRepository familyMembershipRepository;
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
-    private final SecurityUtil securityUtil;
 
     public List<NotificationSettingResponse> getNotificationSettings() {
         Member member = memberUtil.getCurrentMember();
@@ -52,7 +50,7 @@ public class NotificationSettingService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
-        Long memberId = securityUtil.getCurrentMemberId();
+        Long memberId = memberUtil.getCurrentMember().getId();
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         if (member.getNotificationPolicyRevision() != request.policyRevision()) {
