@@ -23,6 +23,7 @@ import com.widyu.fcm.application.NotificationSettingService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
 import com.widyu.fcm.repository.FcmOutboxRepository;
+import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.retry.TransientLockRetryListener;
@@ -88,6 +89,7 @@ class HeartRatePersistenceRetryIntegrationTest {
     @Autowired private HeartRateEventRepository heartRateEventRepository;
     @Autowired private DecisionRecordRepository decisionRecordRepository;
     @Autowired private FcmOutboxRepository outboxRepository;
+    @Autowired private FcmNotificationRepository fcmNotificationRepository;
     @Autowired private MemberFcmTokenRepository tokenRepository;
     @Autowired private MemberRepository memberRepository;
     @Autowired private MeterRegistry meterRegistry;
@@ -103,6 +105,7 @@ class HeartRatePersistenceRetryIntegrationTest {
     void cleanup() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             outboxRepository.deleteAll();
+            fcmNotificationRepository.deleteAll();
             tokenRepository.deleteAll();
             heartRateEmergencyRepository.deleteAll();
             heartRateEventRepository.deleteAll();
