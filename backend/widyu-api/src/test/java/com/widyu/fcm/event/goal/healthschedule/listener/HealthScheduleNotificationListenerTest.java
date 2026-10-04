@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.NotificationType;
@@ -57,24 +58,17 @@ class HealthScheduleNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("보호자 본인 일정이 임박하면 본인 일정 문구와 보호자 앱 딥링크를 넣는다")
-    void 보호자_본인_일정이_임박하면_보호자_앱_딥링크를_넣는다() {
+    @DisplayName("보호자 소유 일정이 임박하면 H01을 만들지 않는다")
+    void 보호자_소유_일정이_임박하면_H01을_만들지_않는다() {
         // given
         HealthSchedule schedule = schedule(MemberType.GUARDIAN, 2L);
         given(healthScheduleRepository.findUpcomingSchedulesInTimeRange(any(), any()))
                 .willReturn(List.of(schedule));
-        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
-
         // when
         listener.sendHealthScheduleReminder();
 
         // then
-        then(fcmService).should().sendMessageToUser(any(), captor.capture());
-        assertThat(captor.getValue().title()).isEqualTo("건강 일정이 곧 있어요.");
-        assertThat(captor.getValue().centerTitle()).isEqualTo("오후 3:30에 병원 진료 일정이 있어요.");
-        assertThat(captor.getValue().deepLink())
-                .isEqualTo(HealthScheduleNotificationListener.GUARDIAN_HEALTH_SCHEDULE_DETAIL + "10");
-        assertThat(captor.getValue().seniorId()).isNull();
+        then(fcmService).should(never()).sendMessageToUser(any(), any());
     }
 
     private HealthSchedule schedule(MemberType type, Long memberId) {

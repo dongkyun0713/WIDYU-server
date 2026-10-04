@@ -3,6 +3,7 @@ package com.widyu.fcm.event.goal.listener;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.fcm.event.point.dto.PointChangedEvent;
@@ -61,8 +62,7 @@ public class GoalPointNotificationListener {
                     "목표명", event.goalName(), "포인트", Long.toString(event.points()));
             NotificationCopy guardianCopy = NotificationCopy.of(
                     NotificationType.GOAL_ACHIEVED, "G01-C", guardianValues);
-            String guardianDeepLink = "widyu-care://seniors/" + event.seniorId()
-                    + "/goals/" + event.entityId();
+            String guardianDeepLink = GuardianDeepLinks.medicineGoal(event.seniorId());
             outboxService.enqueue(membership.getGuardian().getId(), FcmSendDto.builder()
                     .title(guardianCopy.title()).content(guardianCopy.body())
                     .notificationType(NotificationType.GOAL_ACHIEVED).eventId(event.eventId())

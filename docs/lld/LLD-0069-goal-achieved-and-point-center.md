@@ -39,7 +39,7 @@ HTTP 경로와 기존 요청·응답 JSON은 바뀌지 않는다. 내부 호출 
 | `SeniorProfileService.deductPointsFromMember` | 회원 ID, 양수 포인트, 사유, 선택적 `operationKey` | 잔액·`PointHistory(USE)` 저장 후 P02 센터 이벤트 1건. |
 | 목표 달성 동기 이벤트 | 시니어 ID, 목표 종류/표시명, 이번 적립 포인트, 목표 엔티티 ID, 목표 사건 키 | G01-S와 가족 보호자별 G01-C를 같은 트랜잭션에서 enqueue한다. |
 
-알림 문구는 `NotificationCopy.of(type, code, values)`와 문구표 v0.4 §4를 사용한다. G01-S 제목은 `{목표명} 목표를 달성했어요!`, G01-C는 `{시니어 이름} 님이 {목표명} 목표를 달성했어요!`, 공통 본문은 `{포인트}P가 자동으로 적립됐어요.`다. P01 제목은 `{포인트}P를 받았어요.`, P02 제목은 `{포인트}P를 사용했어요.`이며 본문은 각각 저장한 `PointHistory.description` 그대로다. P01/P02의 `deepLink`는 `widyu://points`다. G01은 달성 목표로 이동한다. 시니어는 `NotificationType.GOAL_ACHIEVED`의 `widyu://goals/{entityId}` 제안 템플릿을 사용하고, 보호자는 `FcmSendDto.deepLink`에 역할에 맞는 `widyu-care://seniors/{seniorId}/goals/{entityId}` 제안값을 명시한다. FE가 목표별 경로를 확정하기 전의 문자열은 §9 가정으로 취급한다.
+알림 문구는 `NotificationCopy.of(type, code, values)`와 문구표 v0.4 §4를 사용한다. G01-S 제목은 `{목표명} 목표를 달성했어요!`, G01-C는 `{시니어 이름} 님이 {목표명} 목표를 달성했어요!`, 공통 본문은 `{포인트}P가 자동으로 적립됐어요.`다. P01 제목은 `{포인트}P를 받았어요.`, P02 제목은 `{포인트}P를 사용했어요.`이며 본문은 각각 저장한 `PointHistory.description` 그대로다. P01/P02의 `deepLink`는 `widyu://points`다. 시니어 G01-S는 `NotificationType.GOAL_ACHIEVED`의 현행 `widyu://goals/{entityId}` 템플릿을 유지한다. 보호자 G01-C는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)에 따라 `FcmSendDto.deepLink=/goal/medicine?seniorId={seniorId}`를 명시한다. 걷기·건강일정 달성도 이 화면으로 보내며 FE 확인을 기다린다.
 
 G01은 `NotificationType.GOAL_ACHIEVED`(`FcmCategory.TARGET`, `PUSH_AND_CENTER`, `GENERAL`)를 쓴다. P01/P02는 각각 `POINT_EARNED`/`POINT_USED`(`CENTER_ONLY`, `NONE`)를 쓴다. 승인판에서 P01/P02는 위듀 `전체`·`안 읽음`에만 들어가며 `목표` 필터에는 들어가지 않는다. 현재 W3의 `NotificationType`에는 두 타입의 `centerFilter=GOAL`이 남아 있으므로 W4 레지스트리 정정(`null`)을 통합 전 확인한다. 발행자가 별도 필터 예외를 만들지 않는다.
 
@@ -93,7 +93,7 @@ G01은 `NotificationType.GOAL_ACHIEVED`(`FcmCategory.TARGET`, `PUSH_AND_CENTER`,
 | priority·channel·deepLink 문자열(문서에 없음) | LLD-W2에 제안표 수록 | 제안값 | — |
 | G02 동시 달성 묶음 | 단일 트리거가 목표 2개를 동시에 적립하는 경로가 없어 G01만 발생 | G01만 | — |
 
-구현은 W2 제안값 `widyu://goals/{entityId}`·`widyu-care://seniors/{seniorId}/goals/{entityId}`를 사용했다. 목표별 G01 딥링크의 FE 확정은 여전히 대기 중이다. G02는 레지스트리에 남지만 이 범위에서 발행하지 않는다. W4의 P01/P02 필터 정정과 W5의 `GENERAL` 설정 판정은 각 작업이 통합된 뒤 검증해야 한다.
+2026-10-02 구현은 W2 제안값을 사용했다. 이후 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)이 보호자 G01-C를 `/goal/medicine?seniorId={seniorId}`로 교체했다. 위듀 경로와 걷기·건강일정 달성의 보호자 목적 화면은 FE 확인 대기다. G02는 레지스트리에 남지만 이 범위에서 발행하지 않는다. W4의 P01/P02 필터 정정과 W5의 `GENERAL` 설정 판정은 각 작업이 통합된 뒤 검증해야 한다.
 
 코디네이터 게이트에서 이 설계를 Approved로 확인한 뒤 구현했다. P01 생략은 `addGoalRewardPoints`로 분리했고, 앨범은 직접 차감·내역 저장만 포인트 서비스 호출로 교체했다. 동기 record 이벤트와 typed DTO를 사용하며 보호자 G01에는 `relatedMemberId=seniorId`를 지정한다. P01/P02 문구는 `type.copyCode()`를 쓰고, G01은 역할별 `G01-S`/`G01-C`를 사용한다. eventId 다섯 형식의 40자 제한을 `Long.MAX_VALUE`로 검증했다. 구현·전체 테스트 후 상태를 Review로 전환했다.
 

@@ -8,6 +8,7 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.fcm.event.album.dto.AlbumCommentedEvent;
 import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
@@ -41,8 +42,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AlbumNotificationListener {
 
     private static final String ALBUM_DEFAULT_IMAGE = "album.png";
-    static final String GUARDIAN_ALBUM_DETAIL = "widyu-care://albums/";
-    static final String GUARDIAN_ALBUM_LIST = "widyu-care://albums";
 
     private final FcmService fcmService;
     private final FamilyMembershipRepository familyMembershipRepository;
@@ -61,7 +60,7 @@ public class AlbumNotificationListener {
         NotificationCopy uploadCopy = NotificationCopy.of(NotificationType.ALBUM_UPLOAD_COMPLETE, "A01", Map.of());
         String uploadDeepLink = null;
         if (author.getType() == MemberType.GUARDIAN) {
-            uploadDeepLink = guardianAlbumLink(albumId);
+            uploadDeepLink = GuardianDeepLinks.post(albumId);
         }
         send(author.getId(), FcmSendDto.of(NotificationType.ALBUM_UPLOAD_COMPLETE, uploadCopy,
                 albumId, uploadDeepLink, null, null, ALBUM_DEFAULT_IMAGE));
@@ -76,7 +75,7 @@ public class AlbumNotificationListener {
                 NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_CREATED, "A02-C",
                         Map.of("작성자 이름", author.getName()));
                 send(guardian.getId(), FcmSendDto.of(NotificationType.ALBUM_CREATED, copy, albumId,
-                        guardianAlbumLink(albumId), author.getId(), author.getId(), author.getProfileImage()));
+                        GuardianDeepLinks.post(albumId), author.getId(), author.getId(), author.getProfileImage()));
             }
             return;
         }
@@ -113,7 +112,7 @@ public class AlbumNotificationListener {
         NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_ALL_VIEWED, "A07",
                 Map.of("시니어 이름", viewer.getName()));
         send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_ALL_VIEWED, copy, null,
-                GUARDIAN_ALBUM_LIST, viewer.getId(), viewer.getId(), ALBUM_DEFAULT_IMAGE));
+                null, viewer.getId(), viewer.getId(), ALBUM_DEFAULT_IMAGE));
     }
 
     @Scheduled(cron = "0 0 10 * * *")
@@ -193,7 +192,7 @@ public class AlbumNotificationListener {
         String deepLink = null;
         Long seniorId = null;
         if (writer.getType() == MemberType.GUARDIAN) {
-            deepLink = guardianAlbumLink(albumId) + "/comments/" + commentId;
+            deepLink = GuardianDeepLinks.postComment(albumId, commentId);
             if (commenter.getType() == MemberType.SENIOR) {
                 seniorId = commenter.getId();
             }
@@ -219,7 +218,7 @@ public class AlbumNotificationListener {
         String albumId = event.albumId().toString();
         String deepLink = null;
         if (writer.getType() == MemberType.GUARDIAN) {
-            deepLink = guardianAlbumLink(albumId);
+            deepLink = GuardianDeepLinks.post(albumId);
         }
         send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_LIKED, copy, albumId,
                 deepLink, liker.getId(), null, liker.getProfileImage()));
@@ -242,7 +241,7 @@ public class AlbumNotificationListener {
         NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_UNLOCKED, code,
                 unlockCopyValues(senior.getName(), remaining));
         send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_UNLOCKED, copy,
-                album.getId().toString(), guardianAlbumLink(album.getId().toString()),
+                album.getId().toString(), null,
                 senior.getId(), senior.getId(), senior.getProfileImage())
                 .withSeniorUnlockDetails(senior.getName(), remaining));
     }
@@ -252,10 +251,6 @@ public class AlbumNotificationListener {
             return Map.of("남은 개수", Integer.toString(remaining));
         }
         return Map.of("시니어 이름", seniorName, "남은 개수", Integer.toString(remaining));
-    }
-
-    private String guardianAlbumLink(String albumId) {
-        return GUARDIAN_ALBUM_DETAIL + albumId;
     }
 
     private void send(Long recipientId, FcmSendDto dto) {

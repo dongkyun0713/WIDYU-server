@@ -232,6 +232,6 @@ class IncidentEscalationTest {
         assertThat(message.eventId()).isEqualTo("inc-1");
         assertThat(message.decisionId()).isNull();
         assertThat(message.dataForEnqueue("inc-1").get("deepLink"))
-                .isEqualTo("widyu-care://seniors/1/location");
+                .isEqualTo("/location?seniorId=1");
     }
 }

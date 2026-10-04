@@ -38,9 +38,9 @@ class FamilyLeaderChangedNotificationListenerTest {
         assertThat(sent.notificationType()).isEqualTo(NotificationType.FAMILY_LEADER_CHANGED);
         assertThat(sent.title()).isEqualTo("이제 가족 방장이 되었어요.");
         assertThat(sent.content()).isEqualTo("가족 관리와 중요한 알림을 확인해주세요.");
-        assertThat(sent.scheme()).isEqualTo("widyu-care://family/manage");
+        assertThat(sent.scheme()).isEqualTo("/family-manage");
         assertThat(sent.dataForEnqueue("event-1"))
                 .containsEntry("type", "FAMILY_LEADER_CHANGED")
-                .containsEntry("deepLink", "widyu-care://family/manage");
+                .containsEntry("deepLink", "/family-manage");
     }
 }

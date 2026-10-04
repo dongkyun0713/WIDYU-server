@@ -76,7 +76,7 @@ class FcmHttpTransportTest {
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("안전 알림").content("위치를 확인해주세요.")
                 .notificationType(NotificationType.HEART_RATE_EMERGENCY)
-                .data(Map.of("eventId", "event-1", "deepLink", "widyu-care://seniors/17/location",
+                .data(Map.of("eventId", "event-1", "deepLink", "/location?seniorId=17",
                         "seniorId", "17")).build();
         FcmDelivery delivery = new FcmDelivery(4072L, 1, "loopback-token", message,
                 Instant.now().plusSeconds(300), 8111L);
@@ -90,7 +90,7 @@ class FcmHttpTransportTest {
             assertThat(body.at("/message/data/type").asText()).isEqualTo("HEART_RATE_EMERGENCY");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
             assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
-            assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("widyu-care://seniors/17/location");
+            assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("/location?seniorId=17");
             assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("BANNER");
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");

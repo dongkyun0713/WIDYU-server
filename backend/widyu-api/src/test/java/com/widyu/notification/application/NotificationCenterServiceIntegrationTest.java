@@ -208,6 +208,26 @@ class NotificationCenterServiceIntegrationTest {
     }
 
     @Test
+    @DisplayName("보호자 앨범 행을 조회하면 저장된 앱 내부 경로를 반환한다")
+    void 보호자_앨범_행을_조회하면_앱_내부_경로를_반환한다() {
+        // given
+        Member guardian = member(MemberType.GUARDIAN);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        notifications.saveAndFlush(FcmNotification.builder().recipientMember(guardian)
+                .eventId(UUID.randomUUID().toString()).type(NotificationType.ALBUM_UNLOCKED)
+                .fcmCategory(FcmCategory.ALBUM).title("잠금 해제").isRead(false)
+                .deepLink("/post?postId=91").entityId("91")
+                .retentionPolicyVersion("v1").pushEligible(true)
+                .expiresAt(LocalDateTime.now().plusDays(90)).build());
+
+        // when
+        NotificationEnvelope envelope = service.list("ALBUM", null).items().getFirst();
+
+        // then
+        assertThat(envelope.deepLink()).isEqualTo("/post?postId=91");
+    }
+
+    @Test
     @DisplayName("커서로 다음 페이지를 조회하면 중복 없이 본인 행만 반환한다")
     void 커서로_다음_페이지를_조회하면_중복없이_본인_행만_반환한다() {
         // given

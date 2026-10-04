@@ -23,7 +23,7 @@ public interface NotificationCenterDocs {
                                     "eventId":"album-unlocked-4072","type":"ALBUM_UNLOCKED","category":"ALBUM",
                                     "priority":"interaction","title":"앨범 잠금이 해제됐어요","body":"게시물을 확인해보세요.",
                                     "imageUrl":null,"occurredAt":"2026-10-02T09:30:00","readAt":null,
-                                    "deepLink":"widyu-care://albums/91","entityId":"91","seniorId":12,
+                                    "deepLink":"/post?postId=91","entityId":"91","seniorId":12,
                                     "actorDisplayName":null,"seniorDisplayName":"민수","remainingLockedCount":0,
                                     "expiresAt":"2026-12-31T09:30:00","retentionClass":"ROUTINE_90D",
                                     "retentionPolicyVersion":"v1","centerStored":true,"pushEligible":true,
