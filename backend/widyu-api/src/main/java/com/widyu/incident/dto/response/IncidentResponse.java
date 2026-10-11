@@ -1,6 +1,7 @@
 package com.widyu.incident.dto.response;
 
 import com.widyu.incident.Incident;
+import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
@@ -27,7 +28,11 @@ public record IncidentResponse(
         IncidentOutcome outcome,
         Long resolvedBy,
         Long resolvedAtMs,
-        Long emergencyCalledAtMs
+        Long emergencyCalledAtMs,
+        Long okNoticeSentAtMs,
+        GuardianResponseType guardianResponseType,
+        Long guardianResponseAtMs,
+        Long guardianResponseBy
 ) {
 
     public static IncidentResponse from(Incident incident) {
@@ -46,6 +51,10 @@ public record IncidentResponse(
                 incident.getOutcome(),
                 incident.getResolvedBy(),
                 incident.getResolvedAtMs(),
-                incident.getEmergencyCalledAtMs());
+                incident.getEmergencyCalledAtMs(),
+                incident.getOkNoticeSentAtMs(),
+                incident.getGuardianResponseType(),
+                incident.getGuardianResponseAtMs(),
+                incident.getGuardianResponseBy());
     }
 }

@@ -134,6 +134,8 @@ UPDATE incident
 
 ## 8. 영향 범위 / 마이그레이션
 
+`opened_at_ms` 기준 5분 재사용은 임시 창이며 LLD-0072의 마지막 감지 시각 기준 `attachOrOpen`이 대체한다.
+
 `scripts/mysql/alter_incident_self_check_first.sql`은 `decision_id`를 NULL 허용으로 바꾸고 위 열·`idx_incident_alert_pending(initial_alert_sent_at_ms, respond_by_ms)`를 추가한다. 같은 인덱스를 엔티티 `@Table(indexes=…)`에도 둔다. 기존 UK와 행은 유지한다. 새 enum 저장 열은 VARCHAR이고 `FcmCategory` 값은 추가하지 않는다. 운영 DDL 적용 후 기동한다. 구현 PR에서 [ERD-0001](../erd/ERD-0001-initial-domain.md)의 Incident 열·인덱스·마이그레이션 이력도 갱신한다.
 
 기존 사건은 옛 흐름에서 보호자 최초 알림을 이미 보냈으므로, 열 추가 직후 `initial_alert_sent_at_ms=opened_at_ms`로 백필한다. 새 앱 배포 전 같은 배포 창에서 수행하고, 앱 기동 전 `SELECT COUNT(*) FROM incident WHERE initial_alert_sent_at_ms IS NULL AND state IN ('CHECKING','ESCALATED')`가 0인지 확인한다. 배포 뒤 같은 조회의 NULL 행은 새 흐름이 만든 사건만이어야 하며, H2 테스트를 운영 MySQL 백필 검증으로 간주하지 않는다.

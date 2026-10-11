@@ -26,6 +26,9 @@ import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentState;
+import com.widyu.incident.IncidentResponseValue;
+import com.widyu.incident.ResponseVia;
+import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.application.IncidentService;
 import com.widyu.incident.application.IncidentEscalation;
 import com.widyu.incident.repository.IncidentRepository;
@@ -74,6 +77,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
     @Autowired private FamilyMembershipRepository memberships;
     @Autowired private SeniorProfileRepository seniorProfiles;
     @Autowired private FcmOutboxService outboxService;
+    @Autowired private IncidentService incidentService;
     @MockBean private FcmService fcmService;
     @MockBean private FamilyAccessService familyAccessService;
     @MockBean private SensorProperties sensorProperties;
@@ -82,6 +86,64 @@ class HeartRateEmergencyAfterCommitOutboxTest {
     @MockBean private FcmOutboxDispatcher dispatcher;
     @MockBean private JPAQueryFactory jpaQueryFactory;
     @MockBean private RedisTemplate<String, Object> redisTemplate;
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("커밋 뒤 같은 심박 감지가 이어지고 OK로 답하면 사건 하나와 S08 센터 한 건이 남는다")
+    void 커밋_뒤_같은_심박_감지가_이어지고_OK로_답하면_사건_하나와_S08이_남는다() {
+        // given
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        Long[] ids = transactions.execute(status -> {
+            Family family = families.save(Family.createFamily("FAM708"));
+            Member senior = members.save(Member.createMember(MemberType.SENIOR, "시니어", "01000000708"));
+            Member guardian = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01000000709"));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(senior, family, "서울", "INV0708",
+                    LocalDate.of(1950, 1, 1)));
+            memberships.save(FamilyMembership.createMembership(family, guardian));
+            tokens.save(MemberFcmToken.builder().member(senior).token("senior-708").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(guardian).token("guardian-708").active(true).build());
+            return new Long[] {senior.getId(), guardian.getId(), family.getId()};
+        });
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
+        given(deliveryProperties.ttl(false)).willReturn(Duration.ofHours(1));
+        given(eligibility.familyId(ids[0])).willReturn(ids[2]);
+        given(eligibility.sameActiveFamily(ids[1], ids[0], ids[2])).willReturn(true);
+        willAnswer(invocation -> {
+            outboxService.enqueue(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).given(fcmService).sendMessageToUser(anyLong(), any());
+        long previousIncidents = incidents.count();
+
+        // when
+        transactions.executeWithoutResult(status -> {
+            Member senior = members.findById(ids[0]).orElseThrow();
+            heartEvents.save(HeartRateEvent.of(senior, 180, LocalDateTime.of(2026, 10, 2, 3, 1),
+                    HeartRateStatus.EMERGENCY, null, null));
+            publisher.publishEvent(new HeartRateEmergencyEvent(ids[0], null));
+        });
+        long firstOutboxCount = outbox.count();
+        transactions.executeWithoutResult(status -> {
+            Member senior = members.findById(ids[0]).orElseThrow();
+            heartEvents.save(HeartRateEvent.of(senior, 181, LocalDateTime.of(2026, 10, 2, 3, 2),
+                    HeartRateStatus.EMERGENCY, null, null));
+            publisher.publishEvent(new HeartRateEmergencyEvent(ids[0], null));
+        });
+        Incident incident = incidents.findAll().stream().filter(row -> row.getMemberId().equals(ids[0]))
+                .findFirst().orElseThrow();
+        transactions.executeWithoutResult(status -> incidentService.respond(ids[0], incident.getIncidentRef(),
+                new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.PHONE)));
+
+        // then
+        Incident answered = incidents.findById(incident.getId()).orElseThrow();
+        assertThat(incidents.count()).isEqualTo(previousIncidents + 1);
+        assertThat(answered.getDetectionCount()).isEqualTo(2);
+        assertThat(answered.getState()).isEqualTo(IncidentState.OK_CLOSED);
+        assertThat(answered.getOkNoticeSentAtMs()).isNotNull();
+        assertThat(outbox.count()).isEqualTo(firstOutboxCount + 1);
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef() + ":OK")
+                .orElseThrow().getType()).isEqualTo(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART);
+    }
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
