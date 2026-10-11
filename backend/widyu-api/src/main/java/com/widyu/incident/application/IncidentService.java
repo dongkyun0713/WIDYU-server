@@ -17,6 +17,7 @@ import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.repository.IncidentRepository;
+import com.widyu.location.realtime.dto.StayInfo;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.repository.MemberRepository;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,12 +42,15 @@ public class IncidentService {
     private static final String SELF_CHECK_SCHEME_PREFIX = "widyu://incident/";
     private static final long MILLIS_PER_SECOND = 1000L;
     private static final long MILLIS_PER_MINUTE = 60_000L;
+    private static final String LOCATION_STAY_KEY_PREFIX = "location:stay:";
 
     private final IncidentRepository incidentRepository;
     private final FcmService fcmService;
     private final FamilyAccessService familyAccessService;
     private final SensorProperties sensorProperties;
     private final MemberRepository memberRepository;
+    private final IncidentEscalation incidentEscalation;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     /**
      * 위급 판정이 사건을 연다(LLD-0054 5.1).
@@ -79,18 +84,32 @@ public class IncidentService {
         return incident;
     }
 
-    /** 판정 행이 없는 제품용 단건 위급. 회원 행 잠금으로 동시 사건 생성을 직렬화한다. */
+    /** 판정 행이 없는 제품용 단건 위급·안심구역 이탈. 회원 행 잠금으로 동시 사건 생성을 직렬화한다. */
     @Transactional
     public Incident openForAlert(Long memberId, IncidentKind kind) {
         memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (kind == IncidentKind.SAFE_ZONE_EXIT) {
+            Object stay = redisTemplate.opsForValue().get(LOCATION_STAY_KEY_PREFIX + memberId);
+            if (stay instanceof StayInfo stayInfo && stayInfo.locationType() != null) {
+                log.debug("안심구역 안의 이탈 이벤트 무시: memberId={}", memberId);
+                return null;
+            }
+        }
         long openedAtMs = System.currentTimeMillis();
-        long windowStartMs = openedAtMs
-                - sensorProperties.incident().situationWindowMin() * MILLIS_PER_MINUTE;
-        Optional<Incident> opened = incidentRepository
-                .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullAndOpenedAtMsGreaterThanEqualOrderByOpenedAtMsDesc(
-                        memberId, kind, List.of(IncidentState.OPEN, IncidentState.CHECKING,
-                                IncidentState.ESCALATED), windowStartMs);
+        List<IncidentState> openStates = List.of(IncidentState.OPEN, IncidentState.CHECKING,
+                IncidentState.ESCALATED);
+        Optional<Incident> opened;
+        if (kind == IncidentKind.SAFE_ZONE_EXIT) {
+            opened = incidentRepository.findFirstByMemberIdAndKindAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+                    memberId, kind);
+        } else {
+            long windowStartMs = openedAtMs
+                    - sensorProperties.incident().situationWindowMin() * MILLIS_PER_MINUTE;
+            opened = incidentRepository
+                    .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullAndOpenedAtMsGreaterThanEqualOrderByOpenedAtMsDesc(
+                            memberId, kind, openStates, windowStartMs);
+        }
         if (opened.isPresent()) {
             return opened.get();
         }
@@ -103,6 +122,9 @@ public class IncidentService {
                 .build());
         fcmService.sendMessageToUser(memberId, selfCheckMessage(incident));
         incident.markChecking();
+        if (kind == IncidentKind.SAFE_ZONE_EXIT && !sensorProperties.incident().selfCheckFirst()) {
+            incidentEscalation.sendImmediately(incident, System.currentTimeMillis());
+        }
         return incident;
     }
 
@@ -204,7 +226,11 @@ public class IncidentService {
                     .emergency(true)
                     .build();
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, "S01", null);
+        String copyCode = "S01";
+        if (incident.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
+            copyCode = "S02";
+        }
+        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, copyCode, null);
         return FcmSendDto.builder()
                 .title(copy.title())
                 .content(copy.body())

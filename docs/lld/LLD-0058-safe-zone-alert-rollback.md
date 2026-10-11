@@ -1,5 +1,7 @@
 # LLD-0058: 위치 갱신 롤백 시 안전구역 이탈 알림 복구
 
+> Redis 알림 키의 롤백 해제는 [LLD-0071](LLD-0071-safe-zone-incident.md)이 대체한다. 체류 정보의 커밋 후 저장은 유지한다.
+
 > Low-Level Design. 이 문서는 해당 기능 구현과 PR 본문의 **오라클(ground truth)** 이다.
 
 | 항목 | 값 |

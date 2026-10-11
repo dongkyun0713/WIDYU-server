@@ -32,6 +32,11 @@ import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.repository.MemberRepository;
+import com.widyu.member.Member;
+import com.widyu.location.realtime.dto.StayInfo;
+import java.time.LocalDateTime;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.List;
@@ -60,6 +65,28 @@ class IncidentServiceTest {
     @Mock private FcmService fcmService;
     @Mock private FamilyAccessService familyAccessService;
     @Mock private MemberRepository memberRepository;
+    @Mock private IncidentEscalation incidentEscalation;
+    @Mock private RedisTemplate<String, Object> redisTemplate;
+    @Mock private ValueOperations<String, Object> valueOperations;
+
+    @Test
+    @DisplayName("이탈 이벤트 처리 시 최신 위치가 안심구역 안이면 사건과 S02와 S05를 만들지 않는다")
+    void 이탈_이벤트_처리_시_최신_위치가_안이면_사건과_알림을_만들지_않는다() {
+        // given
+        given(memberRepository.findByIdForUpdate(SENIOR_ID)).willReturn(Optional.of(org.mockito.Mockito.mock(Member.class)));
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:" + SENIOR_ID)).willReturn(
+                new StayInfo(37.0, 127.0, LocalDateTime.now(), "HOME", "집"));
+
+        // when
+        Incident opened = service().openForAlert(SENIOR_ID, IncidentKind.SAFE_ZONE_EXIT);
+
+        // then
+        assertThat(opened).isNull();
+        then(incidentRepository).shouldHaveNoInteractions();
+        then(fcmService).shouldHaveNoInteractions();
+        then(incidentEscalation).shouldHaveNoInteractions();
+    }
 
     @Test
     @DisplayName("위급 판정으로 사건을 열면 60초 마감과 본인확인 푸시가 함께 만들어진다")
@@ -327,7 +354,8 @@ class IncidentServiceTest {
     private IncidentService service() {
         return new IncidentService(incidentRepository, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
-                        new SensorProperties.Incident(60, 5000L, false, 5)), memberRepository);
+                        new SensorProperties.Incident(60, 5000L, false, 5)), memberRepository,
+                incidentEscalation, redisTemplate);
     }
 
     private void givenResolveUpdates(int updated) {

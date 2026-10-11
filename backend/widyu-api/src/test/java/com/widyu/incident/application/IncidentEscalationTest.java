@@ -56,6 +56,47 @@ class IncidentEscalationTest {
     }
 
     @Test
+    @DisplayName("안심구역 이탈 사건을 즉시 알리면 보호자에게 S05를 enqueue한다")
+    void 안심구역_이탈_사건을_즉시_알리면_보호자에게_S05를_enqueue한다() {
+        // given
+        Incident incident = safeZoneIncident();
+        givenRecipients();
+
+        // when
+        escalation.sendImmediately(incident, 20L);
+
+        // then
+        assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
+        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), message.capture());
+        then(outbox).should().enqueue(eq(3L), message.capture());
+        assertSafeZoneMessage(message.getAllValues().get(0));
+        assertSafeZoneMessage(message.getAllValues().get(1));
+    }
+
+    @Test
+    @DisplayName("안심구역 이탈 사건의 확인 시간이 끝나면 공통 스케줄러가 S05를 enqueue한다")
+    void 안심구역_이탈_사건의_확인_시간이_끝나면_공통_스케줄러가_S05를_enqueue한다() {
+        // given
+        Incident incident = safeZoneIncident();
+        given(incidents.escalateTimedOutIfDue(3L, 61_000L)).willReturn(1);
+        given(incidents.claimInitialAlertIfDue(3L, 61_000L)).willReturn(1);
+        given(incidents.findById(3L)).willReturn(Optional.of(incident));
+        givenRecipients();
+
+        // when
+        boolean queued = escalation.escalateIfDue(3L, 61_000L);
+
+        // then
+        assertThat(queued).isTrue();
+        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), message.capture());
+        then(outbox).should().enqueue(eq(3L), message.capture());
+        assertSafeZoneMessage(message.getAllValues().get(0));
+        assertSafeZoneMessage(message.getAllValues().get(1));
+    }
+
+    @Test
     @DisplayName("플래그 ON 사건이 만료되면 상태 전환 뒤 최초 알림을 한 번 enqueue한다")
     void 플래그_ON_사건이_만료되면_전환_뒤_알림을_한_번_enqueue한다() {
         // given
@@ -151,6 +192,11 @@ class IncidentEscalationTest {
                 .kind(IncidentKind.HR_ANOMALY).openedAtMs(1L).respondByMs(60_001L).build();
     }
 
+    private Incident safeZoneIncident() {
+        return Incident.builder().incidentRef("inc-1").memberId(1L)
+                .kind(IncidentKind.SAFE_ZONE_EXIT).openedAtMs(1L).respondByMs(60_001L).build();
+    }
+
     private void givenRecipients() {
         Member senior = org.mockito.Mockito.mock(Member.class);
         Member firstGuardian = org.mockito.Mockito.mock(Member.class);
@@ -177,5 +223,15 @@ class IncidentEscalationTest {
         assertThat(message.relatedMemberId()).isEqualTo(1L);
         assertThat(message.seniorId()).isEqualTo(1L);
         assertThat(message.decisionId()).isEqualTo(decisionId);
+    }
+
+    private void assertSafeZoneMessage(FcmSendDto message) {
+        assertThat(message.notificationType()).isEqualTo(NotificationType.SAFE_ZONE_EXITED);
+        assertThat(message.title()).isEqualTo("시니어 님이 안심구역을 벗어났어요.");
+        assertThat(message.content()).isEqualTo("현재 위치와 상태를 확인해주세요.");
+        assertThat(message.eventId()).isEqualTo("inc-1");
+        assertThat(message.decisionId()).isNull();
+        assertThat(message.dataForEnqueue("inc-1").get("deepLink"))
+                .isEqualTo("widyu-care://seniors/1/location");
     }
 }

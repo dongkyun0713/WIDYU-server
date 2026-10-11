@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -168,6 +169,33 @@ class RealtimeLocationServiceTest {
         then(valueOperations).should().set(eq("location:stay:1"), any(StayInfo.class), eq(86400L), eq(TimeUnit.SECONDS));
         then(safeZoneAlertService).should().handleSafeZoneTransition(1L, null, null);
         then(messagingTemplate).should().convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+    }
+
+    @Test
+    @DisplayName("이탈 이벤트를 발행하면 최신 체류 정보 저장 콜백이 먼저 등록된다")
+    void 이탈_이벤트를_발행하면_체류_저장_콜백이_먼저_등록된다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile(10L, member)));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        willAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).hasSize(1);
+            return null;
+        }).given(safeZoneAlertService).handleSafeZoneTransition(1L, null, null);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            // when
+            realtimeLocationService.updateAndBroadcast(request, 1L);
+
+            // then
+            then(safeZoneAlertService).should().handleSafeZoneTransition(1L, null, null);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

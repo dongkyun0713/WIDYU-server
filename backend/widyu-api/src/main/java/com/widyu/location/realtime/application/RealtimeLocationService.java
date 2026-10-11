@@ -414,11 +414,11 @@ public class RealtimeLocationService {
         String locationType = getLocationTypeName(matchedZone);
         String locationName = getLocationName(matchedZone);
 
-        // 안전구역 이탈 감지 및 알림 전송
-        safeZoneAlertService.handleSafeZoneTransition(member.getId(), previousLocationType, locationType);
-
         StayInfo newStay = StayInfo.of(newLat, newLng, locationType, locationName);
+        // 이탈 리스너보다 먼저 등록해 커밋 직후 리스너가 새 체류 정보를 읽게 한다.
         saveStayAfterCommit(stayKey, newStay);
+        // 안전구역 전이 감지: 이탈 사건은 커밋 뒤 열고, 재진입은 열린 사건의 상황을 종료한다.
+        safeZoneAlertService.handleSafeZoneTransition(member.getId(), previousLocationType, locationType);
         log.debug("새로운 위치로 이동 - stayKey: {}, 체류 시작: {}, 위치 타입: {}",
                 stayKey, newStay.startTime(), locationType);
 

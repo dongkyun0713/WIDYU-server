@@ -1,5 +1,7 @@
 # LLD-0011: 안전구역 이탈 알림 중복 차단 원자화
 
+> Redis 30분 알림 키를 이용한 중복 차단은 [LLD-0071](LLD-0071-safe-zone-incident.md)이 대체한다.
+
 > Low-Level Design. 이 문서는 해당 기능 구현과 PR 본문의 **오라클(ground truth)** 이다.
 
 | 항목 | 값 |
