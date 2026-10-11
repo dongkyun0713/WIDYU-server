@@ -1,5 +1,7 @@
 # LLD-0073: 종료 후 질문 카드와 시니어 원답
 
+> **안심구역 `SAFE_ZONE_V1` 발급·질문은 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)이 제거한다.** 심박·낙상 카드 계약은 유지한다.
+
 > Low-Level Design. 이 문서는 이슈 #716 구현과 PR 검수 기준이다.
 
 | 항목 | 값 |

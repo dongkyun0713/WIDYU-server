@@ -1,5 +1,7 @@
 # LLD-0072: OK 정보성 알림·같은 사건 묶기·보호자 반응 기록
 
+> **안심구역 S09·OK 안내와 `SAFE_ZONE_EXIT` 사건 묶기 기대는 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)이 대체한다.** 심박 S08과 심박 사건 묶기·보호자 반응 기록은 유지한다.
+
 > Low-Level Design. 이 문서는 이슈 #708의 구현과 PR 검수 기준이다.
 
 | 항목 | 값 |

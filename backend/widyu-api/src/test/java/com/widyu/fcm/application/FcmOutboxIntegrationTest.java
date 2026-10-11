@@ -698,7 +698,7 @@ class FcmOutboxIntegrationTest {
                 .notificationType(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART)
                 .seniorId(member).eventId("incident:OK").build());
         service.enqueue(member, FcmSendDto.builder().title("안심구역 안내").content("본문")
-                .notificationType(NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE)
+                .notificationType(NotificationType.SAFE_ZONE_ENTERED)
                 .seniorId(member).eventId("zone:OK").build());
         FcmNotification legacy = new TransactionTemplate(transactionManager).execute(status ->
                 notifications.save(FcmNotification.builder().recipientMember(members.findById(member).orElseThrow())

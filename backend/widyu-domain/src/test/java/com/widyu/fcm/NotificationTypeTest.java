@@ -31,16 +31,21 @@ class NotificationTypeTest {
         // given / when
         NotificationType emergency = NotificationType.HEART_RATE_EMERGENCY;
         NotificationType heartOk = NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART;
-        NotificationType zoneOk = NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE;
+        NotificationType zoneExit = NotificationType.SAFE_ZONE_EXITED;
+        NotificationType zoneEnter = NotificationType.SAFE_ZONE_ENTERED;
 
         // then
         assertThat(emergency.centerFilter()).isEqualTo("LOCATION");
         assertThat(emergency.priority()).isEqualTo(NotificationPriority.CRITICAL);
         assertThat(emergency.settingGroup()).isEqualTo(PushSettingGroup.SAFETY);
         assertThat(heartOk.retentionClass()).isEqualTo(RetentionClass.HEART_EMERGENCY_180D);
-        assertThat(zoneOk.retentionClass()).isEqualTo(RetentionClass.SAFE_ZONE_90D);
+        assertThat(zoneExit.retentionClass()).isEqualTo(RetentionClass.SAFE_ZONE_90D);
+        assertThat(zoneEnter.retentionClass()).isEqualTo(RetentionClass.SAFE_ZONE_90D);
         assertThat(heartOk.priority()).isEqualTo(NotificationPriority.INTERACTION);
-        assertThat(zoneOk.settingGroup()).isEqualTo(PushSettingGroup.GENERAL);
+        assertThat(zoneExit.settingGroup()).isEqualTo(PushSettingGroup.SAFE_ZONE);
+        assertThat(zoneEnter.settingGroup()).isEqualTo(PushSettingGroup.SAFE_ZONE);
+        assertThat(zoneExit.priority()).isEqualTo(NotificationPriority.INTERACTION);
+        assertThat(zoneEnter.priority()).isEqualTo(NotificationPriority.INTERACTION);
         assertThat(NotificationType.SAFETY_SELF_CHECK.centerFilter()).isNull();
         assertThat(NotificationType.SAFETY_SELF_CHECK.settingGroup()).isEqualTo(PushSettingGroup.NONE);
         assertThat(NotificationType.FAMILY_LEADER_CHANGED.centerFilter()).isNull();

@@ -380,7 +380,7 @@ erDiagram
         Long memberId
         String runId
         String decisionId UK "NULL 허용: 단건 심박은 판정 없음"
-        String kind "HR_ANOMALY / FALL_SUSPECTED / SAFE_ZONE_EXIT"
+        String kind "HR_ANOMALY / FALL_SUSPECTED / SAFE_ZONE_EXIT(과거 행 호환)"
         String level "판정 severity 복사"
         Long openedAtMs
         Long respondByMs "openedAtMs + 60초 (설정값)"
@@ -388,7 +388,7 @@ erDiagram
         Long respondedAtMs
         Long deviceRespondedAtMs "단말 클릭 시각"
         Long initialAlertSentAtMs "INITIAL_ALERT enqueue 시각·멱등 게이트"
-        Long okNoticeSentAtMs "S08/S09 enqueue 시각"
+        Long okNoticeSentAtMs "심박 S08 enqueue 시각"
         Long lastDetectedAtMs "마지막 감지 서버 시각·5분 창 기준"
         String lastDecisionId "마지막 연결 판정"
         Integer detectionCount "기본 1"
@@ -772,7 +772,7 @@ erDiagram
 | `GyroMode` | `CONTINUOUS`, `TRIGGER` |
 | `ConsentKey` | `PRIVACY_PERSONAL`, `PRIVACY_HEALTH`, `LOCATION`, `GUARDIAN_LOCATION_PROVIDE`, `LOCATION_NOTICE_BATCHED`, `RETENTION_NOTICE` |
 | `ConsentSource` | `APP`, `ADMIN` |
-| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED`, `SAFE_ZONE_EXIT` |
+| `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED`, `SAFE_ZONE_EXIT`(과거 행 조회 호환, 신규 사건 생성 금지) |
 | `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
 | `IncidentResponseValue` | `OK`, `HELP` |
 | `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
