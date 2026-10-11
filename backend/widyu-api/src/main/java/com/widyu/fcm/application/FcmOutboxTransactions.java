@@ -8,12 +8,14 @@ import com.widyu.fcm.repository.FcmOutboxRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class FcmOutboxTransactions {
     private final FcmOutboxRepository outbox;
@@ -34,7 +36,17 @@ public class FcmOutboxTransactions {
             row.cancel();
             return null;
         }
-        return FcmDelivery.from(row);
+        try {
+            return FcmDelivery.from(row);
+        } catch (IllegalArgumentException exception) {
+            row.failed(false, Duration.ZERO, now, properties.maxRetries());
+            String typeName = null;
+            if (row.getNotificationType() != null) {
+                typeName = row.getNotificationType().name();
+            }
+            log.warn("FCM outbox 복원 실패: id={}, type={}", row.getId(), typeName);
+            return null;
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

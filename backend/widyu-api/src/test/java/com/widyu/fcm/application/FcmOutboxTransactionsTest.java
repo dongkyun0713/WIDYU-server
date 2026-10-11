@@ -1,6 +1,7 @@
 package com.widyu.fcm.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -12,6 +13,7 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("FcmOutboxTransactions 완료 처리 단위 테스트")
@@ -99,6 +102,72 @@ class FcmOutboxTransactionsTest {
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.PENDING);
         then(decisions).shouldHaveNoInteractions();
         then(notifications).should(never()).save(any());
+    }
+
+    @Test
+    @DisplayName("타입 알림을 선점하면 저장된 타입과 data를 복원한다")
+    void 타입_알림을_선점하면_저장된_타입과_data를_복원한다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
+        ReflectionTestUtils.setField(row, "notificationType", NotificationType.HEART_RATE_EMERGENCY);
+        ReflectionTestUtils.setField(row, "dataPayload", "{\"eventId\":\"event-1\",\"type\":\"HEART_RATE_EMERGENCY\"}");
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        given(eligibility.eligible(row)).willReturn(true);
+
+        // when
+        FcmDelivery delivery = transactions().claim(ROW_ID);
+
+        // then
+        assertThat(delivery.message().notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
+        assertThat(delivery.message().data()).containsEntry("eventId", "event-1");
+        assertThat(row.getState()).isEqualTo(FcmOutbox.State.CLAIMED);
+    }
+
+    @Test
+    @DisplayName("이전 outbox 행에 data 한 키만 있으면 존재하는 키를 복원한다")
+    void 이전_outbox_행에_data_한_키만_있으면_존재하는_키를_복원한다() {
+        // given
+        FcmOutbox typeOnly = row(null);
+        ReflectionTestUtils.setField(typeOnly, "dataType", "MEDICATION_SCHEDULE_CHANGED");
+        FcmOutbox revisionOnly = row(null);
+        ReflectionTestUtils.setField(revisionOnly, "dataRevision", 42L);
+
+        // when / then
+        assertThat(FcmDelivery.from(typeOnly).message().data())
+                .containsExactlyInAnyOrderEntriesOf(Map.of("type", "MEDICATION_SCHEDULE_CHANGED"));
+        assertThat(FcmDelivery.from(revisionOnly).message().data())
+                .containsExactlyInAnyOrderEntriesOf(Map.of("revision", "42"));
+    }
+
+    @Test
+    @DisplayName("저장된 data JSON이 손상되면 빈 data로 전송하지 않고 예외가 발생한다")
+    void 저장된_data_JSON이_손상되면_예외가_발생한다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "dataPayload", "{invalid");
+
+        // when / then
+        assertThatThrownBy(() -> FcmDelivery.from(row)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("손상된 data를 선점하면 재시도 없이 소진 상태로 바꾼다")
+    void 손상된_data를_선점하면_소진_상태로_바꾼다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
+        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+        ReflectionTestUtils.setField(row, "dataPayload", "{invalid");
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        given(eligibility.eligible(row)).willReturn(true);
+
+        // when
+        FcmDelivery delivery = transactions().claim(ROW_ID);
+
+        // then
+        assertThat(delivery).isNull();
+        assertThat(row.getState()).isEqualTo(FcmOutbox.State.EXHAUSTED);
     }
 
     private FcmOutboxTransactions transactions() {

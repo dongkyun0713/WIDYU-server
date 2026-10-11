@@ -2,6 +2,7 @@ package com.widyu.fcm.dto;
 
 import lombok.Builder;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 @Builder
@@ -20,9 +21,33 @@ public record FcmMessageDto(
             Apns apns
     ) {}
 
-    public record Android(String ttl) {}
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Android(String ttl, String priority, AndroidNotification notification) {
+        public Android(String ttl) {
+            this(ttl, null, null);
+        }
+    }
 
-    public record Apns(Map<String, String> headers) {}
+    public record AndroidNotification(@JsonProperty("channel_id") String channelId) {}
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Apns(Map<String, String> headers, ApnsPayload payload) {
+        public Apns(Map<String, String> headers) {
+            this(headers, null);
+        }
+    }
+
+    public record ApnsPayload(Aps aps) {}
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Aps(
+            @JsonProperty("interruption-level") String interruptionLevel,
+            @JsonProperty("content-available") Integer contentAvailable
+    ) {
+        public Aps(String interruptionLevel) {
+            this(interruptionLevel, null);
+        }
+    }
 
     @Builder
     public record Notification(

@@ -17,7 +17,9 @@ import com.widyu.member.repository.MemberRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.*;
@@ -101,6 +103,104 @@ class FcmOutboxIntegrationTest {
         // then
         assertThat(outbox.count()).isZero();
         then(immediate).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("타입 알림을 넣으면 두 기기가 같은 이벤트와 전체 data를 보관한다")
+    void 타입_알림을_넣으면_두_기기가_같은_이벤트와_전체_data를_보관한다() {
+        // given
+        Long member = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
+                        .token("mock-token-2").active(true).build()));
+        FcmSendDto message = FcmSendDto.builder().title("변경").content("내일부터 적용")
+                .notificationType(NotificationType.MEDICATION_SCHEDULE_CHANGED)
+                .data(Map.of("revision", "42")).actorDisplayName("보호자")
+                .effectiveFromDate("2026-10-02").build();
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        List<FcmOutbox> rows = outbox.findAll();
+        assertThat(rows).hasSize(2);
+        assertThat(rows).allMatch(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        Map<String, String> first = transactions.claim(rows.get(0).getId()).message().data();
+        Map<String, String> second = transactions.claim(rows.get(1).getId()).message().data();
+        assertThat(first).isEqualTo(second);
+        assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
+        assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("revision", "42")
+                .containsEntry("effectiveFromDate", "2026-10-02")
+                .containsEntry("actorDisplayName", "보호자")
+                .containsEntry("priority", "interaction")
+                .containsEntry("deepLink", "widyu://medication/schedules")
+                .containsEntry("foregroundPresentation", "BANNER");
+    }
+
+    @Test
+    @DisplayName("타입 알림을 두 번 재시도하면 저장된 data를 그대로 복원한다")
+    void 타입_알림을_두_번_재시도하면_저장된_data를_복원한다() {
+        // given
+        Long member = memberWithToken();
+        service.enqueue(member, FcmSendDto.builder().title("알림").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).entityId("31")
+                .eventId("940c15b9-79dc-4fa7-ab5d-27fca2cfa6cf").build());
+        Long id = outbox.findAll().getFirst().getId();
+
+        // when
+        FcmDelivery first = transactions.claim(id);
+        transactions.finish(first, FcmTransport.Result.retry(Duration.ZERO));
+        makeDue(id);
+        FcmDelivery second = transactions.claim(id);
+        transactions.finish(second, FcmTransport.Result.retry(Duration.ZERO));
+        makeDue(id);
+        FcmDelivery third = transactions.claim(id);
+
+        // then
+        assertThat(second.message().data()).isEqualTo(first.message().data());
+        assertThat(third.message().data()).isEqualTo(first.message().data());
+        assertThat(third.message().data()).containsEntry("deepLink", "widyu://albums/31");
+        assertThat(outbox.findById(id).orElseThrow().getAttempts()).isEqualTo(3);
+    }
+
+    private void makeDue(Long id) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                ReflectionTestUtils.setField(outbox.findById(id).orElseThrow(),
+                        "availableAt", LocalDateTime.now().minusSeconds(1)));
+    }
+
+    @Test
+    @DisplayName("타입 알림에 40자를 넘는 이벤트 ID를 주면 outbox를 저장하지 않는다")
+    void 타입_알림에_긴_이벤트_ID를_주면_outbox를_저장하지_않는다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("알림").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("x".repeat(41)).build();
+
+        // when / then
+        assertThatThrownBy(() -> service.enqueue(member, message)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(outbox.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("본인확인 알림에 사건 참조를 주면 UUID가 아니어도 그대로 저장한다")
+    void 본인확인_알림에_사건_참조를_주면_그대로_저장한다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
+                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-20261001-1")
+                .entityId("inc-20261001-1").build();
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        FcmOutbox row = outbox.findAll().getFirst();
+        assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(transactions.claim(row.getId()).message().data())
+                .containsEntry("eventId", "inc-20261001-1")
+                .containsEntry("deepLink", "widyu://incident/inc-20261001-1");
     }
 
     @Test
