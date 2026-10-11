@@ -9,6 +9,8 @@ import com.widyu.goal.healthschedule.dto.response.HealthScheduleDayResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailWithRewardResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleWeekListResponse;
+import com.widyu.goal.event.GuardianGoalChangedEvent;
+import com.widyu.fcm.NotificationType;
 import java.time.LocalDate;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleResponse;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -25,6 +27,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +39,7 @@ public class HealthScheduleService {
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
     private final MemberUtil memberUtil;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 시니어가 본인 일정 생성
@@ -93,6 +97,8 @@ public class HealthScheduleService {
 
         HealthSchedule saved = healthScheduleRepository.save(healthSchedule);
 
+        publishGuardianChange(currentMember, seniorMember, NotificationType.HEALTH_SCHEDULE_CREATED, saved.getId());
+
         return HealthScheduleResponse.from(saved);
     }
 
@@ -113,6 +119,9 @@ public class HealthScheduleService {
                 request.progressStatus()
         );
 
+        publishGuardianChange(memberUtil.getCurrentMember(), healthSchedule.getMember(),
+                NotificationType.HEALTH_SCHEDULE_UPDATED, healthSchedule.getId());
+
         return HealthScheduleResponse.from(healthSchedule);
     }
 
@@ -125,6 +134,17 @@ public class HealthScheduleService {
         validateHealthScheduleAccess(healthSchedule);
 
         healthScheduleRepository.delete(healthSchedule);
+        publishGuardianChange(memberUtil.getCurrentMember(), healthSchedule.getMember(),
+                NotificationType.HEALTH_SCHEDULE_DELETED, healthScheduleId);
+    }
+
+    private void publishGuardianChange(Member actor, Member target, NotificationType type, Long scheduleId) {
+        if (actor.getType() != MemberType.GUARDIAN || target.getType() != MemberType.SENIOR
+                || actor.getId().equals(target.getId())) {
+            return;
+        }
+        eventPublisher.publishEvent(GuardianGoalChangedEvent.healthSchedule(
+                target.getId(), type, scheduleId, actor.getName()));
     }
 
 
