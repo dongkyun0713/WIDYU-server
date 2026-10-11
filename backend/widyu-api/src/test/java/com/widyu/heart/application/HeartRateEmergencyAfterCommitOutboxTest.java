@@ -32,6 +32,8 @@ import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.ResponseVia;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.application.IncidentService;
+import com.widyu.incident.application.IncidentRejectedAttemptRecorder;
+import com.widyu.incident.application.IncidentRespondTransaction;
 import com.widyu.followup.application.FollowupCardService;
 import com.widyu.incident.application.IncidentEscalation;
 import com.widyu.incident.repository.IncidentRepository;
@@ -67,7 +69,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @DataJpaTest
 @ActiveProfiles("test")
 @Import({JpaAuditingConfig.class, HeartRateEmergencyNotificationService.class,
-        IncidentService.class, IncidentEscalation.class, FcmOutboxService.class})
+        IncidentService.class, IncidentRespondTransaction.class, IncidentEscalation.class, FcmOutboxService.class})
 class HeartRateEmergencyAfterCommitOutboxTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private ApplicationEventPublisher publisher;
@@ -84,6 +86,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
     @Autowired private IncidentEscalation escalation;
     @Autowired private IncidentService incidentService;
     @MockBean private FollowupCardService followupCardService;
+    @MockBean private IncidentRejectedAttemptRecorder rejectedAttemptRecorder;
     @MockBean private FcmService fcmService;
     @MockBean private FamilyAccessService familyAccessService;
     @MockBean private SensorProperties sensorProperties;

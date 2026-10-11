@@ -6,6 +6,7 @@ import com.widyu.incident.dto.request.GuardianResponseRequest;
 import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
+import com.widyu.incident.dto.response.IncidentStatusResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -27,11 +28,15 @@ public interface IncidentDocs {
                     - 마감 안의 심박 `OK`는 보호자에게 S08 일반 안내를 예약하고
                       `okNoticeSentAtMs`에 예약 시각을 기록합니다. 늦은 `OK`에는 안내가 없습니다.
                     - 운영 전환 플래그가 켜져 있으면 보호자 최초 알림은 마감 뒤 사건 스케줄러가 보냅니다.
-                    - 이미 답한 사건은 409(`INCIDENT_4090`)입니다.
+                    - 유효한 본인 사건의 모든 시도를 응답값·기기·단말/서버 시각과
+                      `ACCEPTED|LATE|DUPLICATE` 결과로 저장합니다. 늦은 첫 응답도 기록합니다.
+                    - 이미 답한 사건은 시도를 기록하고 409(`INCIDENT_4090`)입니다.
                     - 본인 사건이 아니면 404(`INCIDENT_4040`) — 존재 여부를 알리지 않습니다.
                     """
     )
     @ApiResponse(responseCode = "200", description = "응답 완료")
+    @ApiResponse(responseCode = "409", description = "이미 답한 사건, 시도 이력은 저장")
+    @ApiResponse(responseCode = "404", description = "사건 없음 또는 본인 사건 아님")
     ApiResponseTemplate<IncidentResponse> respond(
             @Parameter(description = "사건 식별자(`inc-`로 시작)") String incidentId,
             IncidentRespondRequest request);
@@ -39,7 +44,9 @@ public interface IncidentDocs {
     @Operation(summary = "보호자 멈춤 기록", description = """
             같은 가족의 활성 보호자가 `type=ACKNOWLEDGED|MESSAGE_SENT|CALL_INITIATED`를 기록합니다.
             사건×보호자×종류당 한 건이며 같은 종류를 다시 보내면 원래 기록 시각으로 200을 반환합니다.
-            한 건이라도 기록되면 아직 예약하지 않은 2차 알림을 취소하고 응답에 취소 여부를 담습니다.
+            한 건이라도 기록되면 진행 중인 상황의 미발송 2차 알림을 취소하고 응답에 취소 여부를 담습니다.
+            이미 끝난 사건에 늦게 도착한 확인도 활성 보호자라면 200으로 저장하되 2차 알림은 취소하지 않고
+            `incidentEnded=true`를 반환합니다. S12 화면의 확인은 이 API를 호출하지 않습니다.
             화면 열람·푸시 탭·읽음·메시지 작성 화면만 연 것은 멈춤이 아닙니다.
             잘못된 입력은 400(`REQ_4000`), 사건 없음·다른 가족·시니어 요청은 먼저
             404(`INCIDENT_4040`), 같은 가족의 비활성 보호자는 403(`AUTH_4030`)입니다.
@@ -51,6 +58,20 @@ public interface IncidentDocs {
     ApiResponseTemplate<GuardianResponseResult> recordGuardianResponse(
             @Parameter(description = "사건 식별자(`inc-`로 시작)") String incidentId,
             GuardianResponseRequest request);
+
+    @Operation(summary = "보호자 상황 상태 조회", description = """
+            알림의 사건이 이어지는지 조회합니다. `status=OPEN|ENDED`는 저장된 종료 시각,
+            OK_CLOSED/RESOLVED 상태 또는 마지막 감지 뒤 5분 경과로 계산하며 DB를 갱신하지 않습니다.
+            `endedAtMs`와 `endedReason`은 OPEN일 때 null입니다. `state`는 DB 원래 값이고
+            `myResponse`에는 요청 보호자 자신의 멈춤 종류만 담깁니다. 다른 보호자의 멈춤은
+            종료 조건이 아닙니다. 사건 없음·타 가족·시니어 요청은 404(`INCIDENT_4040`),
+            같은 가족의 비활성 보호자는 403(`AUTH_4030`)입니다.
+            """)
+    @ApiResponse(responseCode = "200", description = "상황 상태 조회 완료, INCIDENT_2006")
+    @ApiResponse(responseCode = "403", description = "같은 가족의 비활성 보호자")
+    @ApiResponse(responseCode = "404", description = "사건 없음 또는 접근 가능한 가족 없음")
+    ApiResponseTemplate<IncidentStatusResponse> getStatus(
+            @Parameter(description = "사건 식별자(`inc-`로 시작)") String incidentRef);
 
     @Operation(
             summary = "사후 판정",

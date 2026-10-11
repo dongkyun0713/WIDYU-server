@@ -9,11 +9,12 @@ public record GuardianResponseResult(
         GuardianResponseType guardianResponseType,
         Long guardianResponseAtMs,
         Long guardianResponseBy,
-        boolean secondAlertCancelled
+        boolean secondAlertCancelled,
+        boolean incidentEnded
 ) {
     public static GuardianResponseResult of(Incident incident, IncidentGuardianResponse response,
-            boolean secondAlertCancelled) {
+            boolean secondAlertCancelled, boolean incidentEnded) {
         return new GuardianResponseResult(incident.getIncidentRef(), response.getResponseType(),
-                response.getRespondedAtMs(), response.getGuardianMemberId(), secondAlertCancelled);
+                response.getRespondedAtMs(), response.getGuardianMemberId(), secondAlertCancelled, incidentEnded);
     }
 }

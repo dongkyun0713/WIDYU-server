@@ -10,6 +10,7 @@ import com.widyu.incident.dto.request.GuardianResponseRequest;
 import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
+import com.widyu.incident.dto.response.IncidentStatusResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +55,16 @@ public class IncidentController implements IncidentDocs {
         return ApiResponseTemplate.ok()
                 .code("INCIDENT_2005")
                 .message("보호자 반응 기록 완료")
+                .body(response);
+    }
+
+    @Override
+    @GetMapping("/{incidentRef}/status")
+    public ApiResponseTemplate<IncidentStatusResponse> getStatus(@PathVariable String incidentRef) {
+        IncidentStatusResponse response = incidentService.findStatus(securityUtil.getCurrentMemberId(), incidentRef);
+        return ApiResponseTemplate.ok()
+                .code("INCIDENT_2006")
+                .message("인시던트 상황 상태 조회 완료")
                 .body(response);
     }
 

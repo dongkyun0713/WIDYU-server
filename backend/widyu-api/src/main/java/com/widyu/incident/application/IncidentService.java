@@ -15,15 +15,19 @@ import com.widyu.global.properties.SensorProperties;
 import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentResponseValue;
+import com.widyu.incident.IncidentResponseAttempt;
 import com.widyu.incident.IncidentState;
+import com.widyu.incident.ResponseAttemptOutcome;
 import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentGuardianResponse;
 import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
+import com.widyu.incident.dto.response.IncidentStatusResponse;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.incident.repository.IncidentGuardianResponseRepository;
+import com.widyu.incident.repository.IncidentResponseAttemptRepository;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -57,6 +61,9 @@ public class IncidentService {
 
     private final IncidentRepository incidentRepository;
     private final IncidentGuardianResponseRepository guardianResponses;
+    private final IncidentResponseAttemptRepository responseAttempts;
+    private final IncidentRejectedAttemptRecorder rejectedAttemptRecorder;
+    private final IncidentRespondTransaction respondTransaction;
     private final FcmService fcmService;
     private final FamilyAccessService familyAccessService;
     private final SensorProperties sensorProperties;
@@ -181,15 +188,37 @@ public class IncidentService {
      * 상태를 덮고, 마감을 넘긴 응답을 정상 종료로 적을 수 있다. 갱신이 0건이면 이미 답했거나
      * 종결된 사건이다.
      */
-    @Transactional
     public IncidentResponse respond(Long memberId, String incidentRef, IncidentRespondRequest request) {
-        findOwned(memberId, incidentRef);
+        RespondResult result = respondTransaction.execute(this, memberId, incidentRef, request);
+        if (result.rejectedOutcome() != null) {
+            rejectedAttemptRecorder.record(result.incidentId(), request.response(), request.via(),
+                    request.deviceRespondedAtMs(), result.receivedAtMs(), result.rejectedOutcome());
+            throw new BusinessException(ErrorCode.INCIDENT_ALREADY_ANSWERED);
+        }
+        return result.response();
+    }
+
+    RespondResult applyRespond(Long memberId, String incidentRef, IncidentRespondRequest request) {
+        Incident owned = findOwned(memberId, incidentRef);
         long respondedAtMs = System.currentTimeMillis();
         int updated = incidentRepository.respond(incidentRef, memberId, request.response(), request.via(),
                 respondedAtMs, request.deviceRespondedAtMs(), answeredState(request.response()));
         if (updated == 0) {
-            throw new BusinessException(ErrorCode.INCIDENT_ALREADY_ANSWERED);
+            // 선행 일반 SELECT의 REPEATABLE READ 스냅샷 대신 잠금 읽기로 먼저 커밋된 응답을 본다.
+            Incident latest = incidentRepository.findByIdForUpdate(owned.getId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
+            ResponseAttemptOutcome outcome = ResponseAttemptOutcome.LATE;
+            if (latest.getResponse() != null) {
+                outcome = ResponseAttemptOutcome.DUPLICATE;
+            }
+            return RespondResult.rejected(owned.getId(), outcome, respondedAtMs);
         }
+        ResponseAttemptOutcome outcome = ResponseAttemptOutcome.ACCEPTED;
+        if (respondedAtMs >= owned.getRespondByMs()) {
+            outcome = ResponseAttemptOutcome.LATE;
+        }
+        responseAttempts.save(IncidentResponseAttempt.of(owned.getId(), request.response(), request.via(),
+                request.deviceRespondedAtMs(), respondedAtMs, outcome));
         Incident answered = findOwned(memberId, incidentRef);
         if (request.response() == IncidentResponseValue.OK && answered.getState() == IncidentState.OK_CLOSED) {
             followupCardService.issueIfEnabled(answered);
@@ -203,7 +232,18 @@ public class IncidentService {
         }
         log.info("인시던트 응답: memberId={}, incidentRef={}, state={}",
                 memberId, incidentRef, answered.getState());
-        return IncidentResponse.from(answered);
+        return RespondResult.accepted(IncidentResponse.from(answered));
+    }
+
+    record RespondResult(IncidentResponse response, Long incidentId, ResponseAttemptOutcome rejectedOutcome,
+            long receivedAtMs) {
+        static RespondResult accepted(IncidentResponse response) {
+            return new RespondResult(response, null, null, 0L);
+        }
+
+        static RespondResult rejected(Long incidentId, ResponseAttemptOutcome outcome, long receivedAtMs) {
+            return new RespondResult(null, incidentId, outcome, receivedAtMs);
+        }
     }
 
     /** 마감 안에 답했을 때의 상태. 마감을 넘겼는지는 행을 보는 UPDATE가 정한다. */
@@ -244,6 +284,43 @@ public class IncidentService {
     @Transactional
     public GuardianResponseResult recordGuardianResponse(Long guardianId, String incidentRef,
             GuardianResponseType type) {
+        Incident incident = findAccessibleToGuardian(guardianId, incidentRef);
+        // 선행 가족 조회가 적재한 사건을 버리고 잠금 읽기의 최신 행을 사용한다.
+        entityManager.clear();
+        Incident locked = incidentRepository.findByIdForUpdate(incident.getId()).orElseThrow();
+        Optional<IncidentGuardianResponse> existing = guardianResponses
+                .findByIncidentIdAndGuardianMemberIdAndResponseType(locked.getId(), guardianId, type);
+        long nowMs = System.currentTimeMillis();
+        long windowMs = situationWindowMs();
+        boolean incidentEnded = IncidentStatusResponse.isEnded(locked, nowMs, windowMs);
+        if (existing.isPresent()) {
+            return GuardianResponseResult.of(locked, existing.get(),
+                    locked.getSecondAlertCancelledAtMs() != null, incidentEnded);
+        }
+        IncidentGuardianResponse response = guardianResponses.save(
+                IncidentGuardianResponse.of(locked.getId(), guardianId, type, nowMs));
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(locked.getId(), nowMs, windowMs);
+        return GuardianResponseResult.of(locked, response,
+                cancelled == 1 || locked.getSecondAlertCancelledAtMs() != null, incidentEnded);
+    }
+
+    /** S11/S12 진입 판단. 가족 검사 뒤 자기 멈춤만 조회하며 사건은 고치지 않는다. */
+    @Transactional(readOnly = true)
+    public IncidentStatusResponse findStatus(Long guardianId, String incidentRef) {
+        Incident incident = findAccessibleToGuardian(guardianId, incidentRef);
+        List<GuardianResponseType> myResponses = guardianResponses
+                .findByIncidentIdAndGuardianMemberId(incident.getId(), guardianId).stream()
+                .map(IncidentGuardianResponse::getResponseType)
+                .sorted()
+                .toList();
+        return IncidentStatusResponse.from(incident, System.currentTimeMillis(), situationWindowMs(), myResponses);
+    }
+
+    private long situationWindowMs() {
+        return sensorProperties.incident().situationWindowMin() * MILLIS_PER_MINUTE;
+    }
+
+    private Incident findAccessibleToGuardian(Long guardianId, String incidentRef) {
         Incident incident = incidentRepository.findByIncidentRef(incidentRef)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
         Member guardian = memberRepository.findById(guardianId)
@@ -259,21 +336,7 @@ public class IncidentService {
         if (guardian.getStatus() != Status.ACTIVE) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-        // 선행 가족 조회가 적재한 사건을 버리고 잠금 읽기의 최신 행을 사용한다.
-        entityManager.clear();
-        Incident locked = incidentRepository.findByIdForUpdate(incident.getId()).orElseThrow();
-        Optional<IncidentGuardianResponse> existing = guardianResponses
-                .findByIncidentIdAndGuardianMemberIdAndResponseType(locked.getId(), guardianId, type);
-        if (existing.isPresent()) {
-            return GuardianResponseResult.of(locked, existing.get(),
-                    locked.getSecondAlertCancelledAtMs() != null);
-        }
-        long nowMs = System.currentTimeMillis();
-        IncidentGuardianResponse response = guardianResponses.save(
-                IncidentGuardianResponse.of(locked.getId(), guardianId, type, nowMs));
-        int cancelled = incidentRepository.cancelSecondAlertIfPending(locked.getId(), nowMs);
-        return GuardianResponseResult.of(locked, response,
-                cancelled == 1 || locked.getSecondAlertCancelledAtMs() != null);
+        return incident;
     }
 
     private void enqueueOkNotice(Incident incident) {

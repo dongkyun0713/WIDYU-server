@@ -4,11 +4,14 @@ import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentGuardianResponse;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.util.List;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface IncidentGuardianResponseRepository extends JpaRepository<IncidentGuardianResponse, Long> {
     boolean existsByIncidentId(Long incidentId);
+
+    List<IncidentGuardianResponse> findByIncidentIdAndGuardianMemberId(Long incidentId, Long guardianMemberId);
 
     // 사건 잠금 뒤에도 MySQL REPEATABLE READ의 선행 일반 SELECT 스냅샷을 사용하지 않는다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

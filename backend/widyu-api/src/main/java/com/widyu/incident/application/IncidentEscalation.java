@@ -84,7 +84,7 @@ public class IncidentEscalation {
                     && incident.getState() != IncidentState.ESCALATED)
                 || incident.lastDetectedAtOrOpenedAt() + windowMs <= nowMs
                 || guardianResponses.existsByIncidentId(id)) {
-            incidentRepository.cancelSecondAlertIfPending(id, nowMs);
+            incidentRepository.closeSecondAlertIfPending(id, nowMs);
             return false;
         }
         if (incidentRepository.claimSecondAlertIfDue(id, nowMs) == 0) {
