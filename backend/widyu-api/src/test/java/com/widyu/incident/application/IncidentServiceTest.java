@@ -19,6 +19,7 @@ import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.followup.application.FollowupCardService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.SensorProperties;
@@ -79,6 +80,7 @@ class IncidentServiceTest {
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private RedisTemplate<String, Object> redisTemplate;
     @Mock private ValueOperations<String, Object> valueOperations;
+    @Mock private FollowupCardService followupCardService;
 
     @Test
     @DisplayName("이탈 이벤트 처리 시 최신 위치가 안심구역 안이면 사건과 S02와 S05를 만들지 않는다")
@@ -259,6 +261,7 @@ class IncidentServiceTest {
 
         // then
         assertThat(response.state()).isEqualTo(IncidentState.OK_CLOSED);
+        then(followupCardService).should().issueIfEnabled(answered);
         assertThat(answered.getOkNoticeSentAtMs()).isNotNull();
         assertThat(answered.getSituationEndedAtMs()).isNotNull();
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
@@ -636,9 +639,10 @@ class IncidentServiceTest {
     private IncidentService service() {
         return new IncidentService(incidentRepository, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
-                        new SensorProperties.Incident(60, 5000L, false, 5)), memberRepository,
+                        new SensorProperties.Incident(60, 5000L, false, 5),
+                        new SensorProperties.Followup(false)), memberRepository,
                 incidentEscalation, redisTemplate, outboxService, seniorProfileRepository,
-                familyMembershipRepository);
+                familyMembershipRepository, followupCardService);
     }
 
     private void givenResolveUpdates(int updated) {

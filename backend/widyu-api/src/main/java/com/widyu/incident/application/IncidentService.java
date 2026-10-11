@@ -7,6 +7,7 @@ import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.followup.application.FollowupCardService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.entity.Status;
@@ -64,6 +65,7 @@ public class IncidentService {
     private final FcmOutboxService outboxService;
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
+    private final FollowupCardService followupCardService;
 
     /** 배치 판정을 같은 심박 상황의 사건에 붙인다. 낙상은 기존 경로를 유지한다. */
     @Transactional
@@ -198,6 +200,7 @@ public class IncidentService {
         }
         Incident answered = findOwned(memberId, incidentRef);
         if (request.response() == IncidentResponseValue.OK && answered.getState() == IncidentState.OK_CLOSED) {
+            followupCardService.issueIfEnabled(answered);
             if (answered.getKind() == IncidentKind.HR_ANOMALY) {
                 answered.endSituation(respondedAtMs);
             }

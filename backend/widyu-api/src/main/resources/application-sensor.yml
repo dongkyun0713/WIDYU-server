@@ -58,6 +58,9 @@ sensor:
     self-check-first: ${SENSOR_INCIDENT_SELF_CHECK_FIRST:false}
     situation-window-min: ${SENSOR_INCIDENT_SITUATION_WINDOW_MIN:5}
 
+  followup:
+    enabled: ${SENSOR_FOLLOWUP_ENABLED:false}
+
   fall-ai:
     enabled: ${SENSOR_FALL_AI_ENABLED:false}
     path: ${SENSOR_FALL_AI_PATH:/api/fall}

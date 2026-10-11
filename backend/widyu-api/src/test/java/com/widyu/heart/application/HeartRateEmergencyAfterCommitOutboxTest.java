@@ -30,6 +30,7 @@ import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.ResponseVia;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.application.IncidentService;
+import com.widyu.followup.application.FollowupCardService;
 import com.widyu.incident.application.IncidentEscalation;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.member.Member;
@@ -78,6 +79,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
     @Autowired private SeniorProfileRepository seniorProfiles;
     @Autowired private FcmOutboxService outboxService;
     @Autowired private IncidentService incidentService;
+    @MockBean private FollowupCardService followupCardService;
     @MockBean private FcmService fcmService;
     @MockBean private FamilyAccessService familyAccessService;
     @MockBean private SensorProperties sensorProperties;

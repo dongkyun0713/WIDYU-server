@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-10-02 (LLD-0072 OK 알림·감지 창) |
+| 코드 동기화 | 2026-10-02 (LLD-0073·0074 후속 카드·판독 라벨) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -405,6 +405,54 @@ erDiagram
         Long emergencyCalledAtMs "보호자가 입력한 119 신고 시각"
     }
 
+    FollowupCard {
+        Long id PK
+        String incidentRef UK "사건당 하나"
+        Long seniorId
+        Long issuedAtMs
+        Long eventAtMs "사건 개시 시각·문항 머리말"
+        Long expiresAtMs "발급 + 12시간"
+        String state "ISSUED / ANSWERED / DECLINED / EXPIRED_NO_RESPONSE"
+        String questionSetVersion
+        String visitKey "시니어×방문 키 유일"
+    }
+
+    FollowupAnswer {
+        Long id PK
+        Long cardId FK,UK "첫 제출 하나"
+        String questionSetVersion
+        String q1 "모름·거절 원값"
+        String q2 "모름·거절 원값"
+        String q3 "선택 코드 최대 2개"
+        Long deviceSubmittedAtMs
+        Long serverReceivedAtMs
+    }
+
+    IncidentLabel {
+        Long id PK
+        String incidentRef UK "운영 outcome과 별도"
+        String eventOccurrence "PRESENT / ABSENT / UNDETERMINED / NOT_ASSESSED"
+        String helpNeed "NEEDED / NOT_NEEDED / UNDETERMINED / NOT_ASSESSED"
+        Long labeledAt
+        String source "HUMAN / LLM_JUDGE / UNREVIEWED / LEGACY_UNREVIEWED"
+        Long currentAnnotationId
+    }
+
+    LabelAnnotation {
+        Long id PK
+        Long labelId FK
+        String annotatorType "HUMAN / LLM_JUDGE"
+        String rubricVersion
+        Long reviewerId
+        String annotatorRef
+        String eventOccurrence
+        String helpNeed
+        String note
+        String sourceEvidenceRef
+        Integer revision
+        Long supersedesAnnotationId
+    }
+
     RunMarker {
         Long id PK
         String markerId UK "앱 발급, 멱등"
@@ -647,6 +695,10 @@ erDiagram
     Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     Member ||--o{ Incident : "위급 사건 (본인확인·사후 판정)"
+    Incident ||--o| FollowupCard : "OK 종료 후 카드"
+    FollowupCard ||--o| FollowupAnswer : "첫 제출"
+    Incident ||--o| IncidentLabel : "두 라벨 축"
+    IncidentLabel ||--o{ LabelAnnotation : "불변 판독 revision"
     DecisionRecord ||--o| Incident : "decision_id 참조 (FK 없음)"
     CollectionRun ||--o{ RunDeviceAssignment : "기기 배정"
     CollectionRun ||--o{ RunMarker : "마커 (정답 라벨)"
@@ -771,6 +823,14 @@ erDiagram
 | `decision_record` | `idx_decision_record_member_time` | `(member_id, decision_at_ms)` | 회원별 판정 이력 조회 |
 | `decision_record` | `idx_decision_record_trigger_batch` | `(trigger_batch_id)` | 충격 배치 근거 추적 |
 | `incident` | UK `uk_incident_incident_ref` | `(incident_ref)` | 외부 식별자 |
+| `followup_card` | UK `uk_followup_card_incident` | `(incident_ref)` | 사건당 카드 한 건 |
+| `followup_card` | UK `uk_followup_card_visit` | `(senior_id, visit_key)` | 방문당 카드 한 건; NULL 중복 허용 |
+| `followup_card` | `idx_followup_card_senior_state_expiry` | `(senior_id, state, expires_at_ms)` | 현재 카드 후보 |
+| `followup_card` | `idx_followup_card_expiry` | `(state, expires_at_ms, id)` | 만료 키셋 폴링 |
+| `followup_answer` | UK `uk_followup_answer_card` | `(card_id)` | 첫 제출 한 건 |
+| `incident_label` | UK `uk_incident_label_ref` | `(incident_ref)` | 사건당 현재 라벨 한 건 |
+| `label_annotation` | UK `uk_label_annotation_revision` | `(label_id, revision)` | 판독 불변 revision |
+| `label_annotation` | `idx_label_annotation_reviewer` | `(reviewer_id, created_at)` | 사람 판독 이력 |
 | `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 배치 판정 1 = 사건 1. 단건의 NULL은 여러 행 허용 |
 | `incident` | `idx_incident_alert_pending` | `(initial_alert_sent_at_ms, respond_by_ms)` | 보호자 최초 알림 후보 조회·멱등 게이트 (LLD-0070) |
 | `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
@@ -815,6 +875,8 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-02 | `followup_card`·`followup_answer` | OK 종료 후 카드와 시니어 원답·두 제출 시각 (LLD-0073) | `scripts/mysql/create_followup_card.sql` |
+| 2026-10-02 | `incident_label`·`label_annotation` | 두 라벨 축과 판독 revision (LLD-0074) | `scripts/mysql/create_incident_label.sql` |
 | 2026-10-02 | `incident` | OK 정보성 알림 enqueue 시각·마지막 감지 시각 추가 및 기존 행 백필 (LLD-0072) | `scripts/mysql/alter_incident_ok_notice_grouping.sql` |
 | 2026-10-02 | `incident` | `decision_id` NULL 허용, 본인확인·보호자 최초 알림·후속 안전 상태 컬럼 및 후보 인덱스 추가 (LLD-0070) | `scripts/mysql/alter_incident_self_check_first.sql` |
 | 2026-10-02 | `member_notification_setting`·`member` | 설정 4분류로 매핑(기존 일반 다섯 항목이 모두 꺼진 회원만 `GENERAL=false`), `category VARCHAR(32)`, 회원별 `notification_policy_revision` 추가 (LLD-0065) | `scripts/mysql/migrate_notification_setting_group.sql` |
