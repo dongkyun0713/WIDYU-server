@@ -22,7 +22,6 @@ import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.repository.IncidentRepository;
-import com.widyu.location.realtime.dto.StayInfo;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -36,7 +35,6 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,7 +51,6 @@ public class IncidentService {
     private static final String SELF_CHECK_SCHEME_PREFIX = "widyu://incident/";
     private static final long MILLIS_PER_SECOND = 1000L;
     private static final long MILLIS_PER_MINUTE = 60_000L;
-    private static final String LOCATION_STAY_KEY_PREFIX = "location:stay:";
 
     private final IncidentRepository incidentRepository;
     private final FcmService fcmService;
@@ -61,7 +58,6 @@ public class IncidentService {
     private final SensorProperties sensorProperties;
     private final MemberRepository memberRepository;
     private final IncidentEscalation incidentEscalation;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final FcmOutboxService outboxService;
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
@@ -72,6 +68,9 @@ public class IncidentService {
     public Incident openForAlert(DecisionRecord decision, IncidentKind kind) {
         if (kind == IncidentKind.HR_ANOMALY) {
             return attachOrOpen(decision.getMemberId(), kind, decision);
+        }
+        if (kind != IncidentKind.FALL_SUSPECTED) {
+            throw new IllegalArgumentException("판정 사건은 심박 위급과 낙상만 지원합니다.");
         }
         Optional<Incident> opened = incidentRepository.findByDecisionId(decision.getDecisionId());
         if (opened.isPresent()) {
@@ -97,9 +96,12 @@ public class IncidentService {
         return incident;
     }
 
-    /** 판정 행이 없는 제품용 단건 위급·안심구역 이탈. 회원 행 잠금으로 동시 사건 생성을 직렬화한다. */
+    /** 판정 행이 없는 단건 심박 위급. 회원 행 잠금으로 동시 사건 생성을 직렬화한다. */
     @Transactional
     public Incident openForAlert(Long memberId, IncidentKind kind) {
+        if (kind != IncidentKind.HR_ANOMALY) {
+            throw new IllegalArgumentException("단건 사건은 심박 위급만 지원합니다.");
+        }
         return attachOrOpen(memberId, kind, null);
     }
 
@@ -114,23 +116,11 @@ public class IncidentService {
                 return repeated.get();
             }
         }
-        if (kind == IncidentKind.SAFE_ZONE_EXIT) {
-            Object stay = redisTemplate.opsForValue().get(LOCATION_STAY_KEY_PREFIX + memberId);
-            if (stay instanceof StayInfo stayInfo && stayInfo.locationType() != null) {
-                log.debug("안심구역 안의 이탈 이벤트 무시: memberId={}", memberId);
-                return null;
-            }
-        }
         long openedAtMs = System.currentTimeMillis();
         List<IncidentState> openStates = List.of(IncidentState.CHECKING, IncidentState.ESCALATED);
-        Optional<Incident> opened;
-        if (kind == IncidentKind.SAFE_ZONE_EXIT) {
-            opened = incidentRepository.findFirstByMemberIdAndKindAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
-                    memberId, kind);
-        } else {
-            opened = incidentRepository.findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
-                    memberId, kind, openStates);
-        }
+        Optional<Incident> opened = incidentRepository
+                .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+                        memberId, kind, openStates);
         if (decisionId != null) {
             Optional<Incident> repeatCandidate = opened;
             if (repeatCandidate.isEmpty()) {
@@ -145,9 +135,6 @@ public class IncidentService {
         }
         if (opened.isPresent()) {
             Incident current = opened.get();
-            if (kind == IncidentKind.SAFE_ZONE_EXIT) {
-                return current;
-            }
             long windowMs = sensorProperties.incident().situationWindowMin() * MILLIS_PER_MINUTE;
             long lastDetectedAtMs = current.lastDetectedAtOrOpenedAt();
             if (openedAtMs - lastDetectedAtMs < windowMs) {
@@ -204,8 +191,7 @@ public class IncidentService {
             if (answered.getKind() == IncidentKind.HR_ANOMALY) {
                 answered.endSituation(respondedAtMs);
             }
-            if (answered.getKind() == IncidentKind.HR_ANOMALY
-                    || answered.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
+            if (answered.getKind() == IncidentKind.HR_ANOMALY) {
                 enqueueOkNotice(answered);
                 answered.markOkNoticeSent(respondedAtMs);
             }
@@ -279,15 +265,7 @@ public class IncidentService {
     }
 
     private void enqueueOkNotice(Incident incident) {
-        NotificationType type;
-        String copyCode;
-        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
-            type = NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART;
-            copyCode = "S08";
-        } else {
-            type = NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE;
-            copyCode = "S09";
-        }
+        NotificationType type = NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART;
         Member senior = memberRepository.findById(incident.getMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         Long familyId = seniorProfileRepository.findFamilyIdByMemberId(senior.getId()).orElse(null);
@@ -295,7 +273,7 @@ public class IncidentService {
             log.warn("OK 안내 수신자 없음: incidentRef={}", incident.getIncidentRef());
             return;
         }
-        NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
+        NotificationCopy copy = NotificationCopy.of(type, "S08", Map.of("시니어 이름", senior.getName()));
         FcmSendDto message = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body()).notificationType(type)
                 .eventId(incident.getIncidentRef() + ":OK")
@@ -360,11 +338,7 @@ public class IncidentService {
                     .emergency(true)
                     .build();
         }
-        String copyCode = "S01";
-        if (incident.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
-            copyCode = "S02";
-        }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, copyCode, null);
+        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, "S01", null);
         return FcmSendDto.builder()
                 .title(copy.title())
                 .content(copy.body())

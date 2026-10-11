@@ -26,20 +26,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     Optional<Incident> findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
             Long memberId, IncidentKind kind, List<IncidentState> states);
 
-    Optional<Incident> findFirstByMemberIdAndKindAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
-            Long memberId, IncidentKind kind);
-
     Optional<Incident> findFirstByMemberIdAndKindOrderByOpenedAtMsDesc(Long memberId, IncidentKind kind);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE Incident i
-               SET i.situationEndedAtMs = :endedAtMs
-             WHERE i.memberId = :memberId
-               AND i.kind = com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT
-               AND i.situationEndedAtMs IS NULL
-            """)
-    int endOpenSafeZoneSituation(@Param("memberId") Long memberId, @Param("endedAtMs") long endedAtMs);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -149,8 +136,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     @Query("""
             SELECT i.id FROM Incident i
              WHERE i.id > :afterId
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND ((i.state IN (com.widyu.incident.IncidentState.OPEN,
                                  com.widyu.incident.IncidentState.CHECKING)
                      AND i.respondByMs < :nowMs)
@@ -166,8 +152,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             UPDATE Incident i
                SET i.state = com.widyu.incident.IncidentState.ESCALATED
              WHERE i.id = :id
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING)
                AND i.respondByMs < :nowMs
@@ -181,8 +166,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                SET i.initialAlertSentAtMs = :nowMs
              WHERE i.id = :id
                AND i.initialAlertSentAtMs IS NULL
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING,
                                com.widyu.incident.IncidentState.ESCALATED)

@@ -1,5 +1,7 @@
 # LLD-0060: 알림 타입 레지스트리·outbox type·긴급 표현
 
+> 안심구역 타입·문구·우선순위는 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)이 개정한다. 아래 표와 인수조건은 W19 반영값이며, 안전 채널은 심박 위급과 시니어 본인확인에만 적용한다.
+
 > Low-Level Design. 이 문서는 해당 기능 구현과 PR 본문의 **오라클(ground truth)** 이다.
 > LLD 하나 = PR 하나가 원칙. "하나의 PR에 넣기엔 diff가 너무 많다(파일 15개 이상)"면 LLD를 분리한다.
 
@@ -111,11 +113,11 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 15b | `POINT_USED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P02 |
 | 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X01-OS/INAPP |
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X02-OS/INAPP |
-| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01/S02 |
+| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01 |
 | 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
-| 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | critical | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | S02/S03/S05/S07 |
+| 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | Z01 |
+| 19a | `SAFE_ZONE_ENTERED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | Z02 |
 | 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S08 |
-| 20b | `SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S09 |
 | 21 | `FAMILY_LEADER_CHANGED` | ETC | — (ALL·UNREAD만) | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/family-manage` | R01 |
 | 22 | `MEDICATION_SCHEDULE_CREATED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M08 |
 | 23 | `MEDICATION_SCHEDULE_DELETED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M09 |
@@ -125,14 +127,14 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 27 | `HEALTH_SCHEDULE_DELETED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals` | H04 |
 | 28 | `WALK_GOAL_CHANGED` | WALK | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W02 |
 
-매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08/S09는 원문의 단일 제안명 `SAFETY_SENIOR_OK_NOTICE`를 보존등급·문구별 두 상수로 나눈다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
+매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08은 심박 OK 안내다. 안심구역은 사건이 아니며 S02·S05·S07·S09 대신 제목만 있는 Z01·Z02를 쓴다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
 
 ## 5. 처리 흐름
 
 1. 기존 호출자는 type 없이 현재 `FcmSendDto`를 만든다. 새 호출자는 type과 동적 data를 준다. `NotificationCopy`가 문구표 변형을 골라 OS용 문구와 앱 내부/센터용 문구를 구분한다.
 2. 기존 `FcmOutboxService.enqueue` 트랜잭션에서 type이 있고 `eventId`가 null·빈 문자열·공백이면 수신자별 UUID를 한 번 생성한다. 호출자 값이 있으면 UUID 형식을 강제하지 않고 공백만인 값이 아니며 40자 이하인지 확인해 그대로 보존한다. 안전 이벤트의 `incident_ref`(예: `inc-…`)도 허용한다. type명은 typed 행에만 저장하고, 최종 data JSON은 type 유무와 관계없이 모든 새 토큰 행에 저장한다. `dataType`·`dataRevision`도 전환기 호환을 위해 계속 채운다. 커밋 후 dispatcher 제출 시점은 그대로다.
 3. 기존 claim 트랜잭션에서 lease를 얻은 뒤 `FcmDelivery.from(row)`은 행의 `notificationType`·`dataPayload`로 DTO를 복원한다. 복원이 `IllegalArgumentException`으로 실패하면 `failed(false, Duration.ZERO, now, maxRetries)`로 EXHAUSTED 처리하고 전송하지 않는다. WARN에는 outbox ID·type명만 기록한다. 지금은 `dataType`·`dataRevision` 중 하나라도 NULL이면 data 전체가 `Map.of()`로 사라진다. `dataPayload=NULL`인 옛 행은 두 키 중 존재하는 것만 각각 복원해 이 유실을 고친다.
-4. `FcmHttpTransport.execute`는 DB 트랜잭션 밖에서 data와 플랫폼 헤더를 조립한다. 안전 세 타입(본인확인 포함)은 Android high·안전 채널, APNs priority 10·time-sensitive를 쓴다. S08/S09는 일반 표시다. `DATA_ONLY`는 top-level `notification` 없이 data만 싣는다. 레거시 `emergency` TTL·preflight·fence는 유지한다.
+4. `FcmHttpTransport.execute`는 DB 트랜잭션 밖에서 data와 플랫폼 헤더를 조립한다. 심박 위급·본인확인은 Android high·안전 채널, APNs priority 10·time-sensitive를 쓴다. S08·Z01·Z02는 일반 표시다. `DATA_ONLY`는 top-level `notification` 없이 data만 싣는다. 레거시 `emergency` TTL·preflight·fence는 유지한다.
 5. 동일 outbox 행의 재시도는 저장된 eventId·data를 그대로 쓴다. W3가 이 eventId를 센터 행에 저장하고 notificationId 의미를 전환한다. W3 전에는 `finish()`의 기존 센터 행 생성이 유지된다. 새 동기 `@EventListener`나 `@Async` 경로는 만들지 않는다.
 
 ## 6. 예외 / 에러 처리
@@ -144,12 +146,12 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·`widyu://incident/{entityId}`·S01/S02를 사용한다. `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
+- [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·`widyu://incident/{entityId}`·S01을 사용한다. `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
 - [x] N7: 네 `DeliveryMode`를 타입별로 조회할 수 있으며 4절 전달 정책과 일치한다. W2 구현은 기존 호출자의 센터 저장 단위를 바꾸지 않는다.
 - [x] N8: type 있는 enqueue는 eventId가 비어 있을 때 수신자별 UUID를 생성한다. 명시값이 있으면 UUID 형식과 무관하게 40자 이하의 공백 아닌 값(예: `inc-…`)을 보존하며, 40자 초과는 행을 저장하지 않는다. 같은 수신자의 여러 토큰 행에 동일한 값을 기록한다. FCM data의 `eventId/type/priority/notificationId/deepLink/foregroundPresentation`과 해당 이벤트의 `revision/effectiveFromDate/actorDisplayName`이 문자열로 보존된다. W2 notificationId는 outbox ID다.
 - [x] N8: `FcmDelivery.from`은 `data_payload` 전체를 복원한다. 같은 행의 재시도 2회 뒤에도 key/value가 같고, 이전 행은 `dataType`·`dataRevision` 중 존재하는 키를 각각 복원한다.
 - [x] 복원 시 `IllegalArgumentException`이 발생하면 claim 행은 EXHAUSTED가 되고 전송하지 않는다. WARN에는 outbox ID·type 문자열만 남긴다.
-- [x] N9: 안전 세 타입(`SAFETY_SELF_CHECK` 포함)은 Android high·안전 채널과 APNs priority 10·time-sensitive를 포함한다. S08/S09는 일반 우선순위·일반 채널이다.
+- [x] N9: 심박 위급과 본인확인은 Android high·안전 채널과 APNs priority 10·time-sensitive를 포함한다. S08·Z01·Z02는 일반 우선순위·일반 채널이다.
 - [x] `NotificationCopy`는 문구표 v0.4 변형과 이름 부재 시 `가족`을 적용하며 OS 문구에 민감 정보·메시지 원문을 넣지 않는다.
 - [x] type 없는 호출자의 title/body/유효한 data, TTL, `emergency`, notificationId, 센터 저장 동작은 불변이다. 레거시 부분 data는 존재하는 키를 전송하는 버그 수정만 허용한다.
 - [x] `FcmHttpTransportTest`는 본인확인을 포함한 안전·일반·data-only JSON을, `FcmOutboxTransactionsTest`와 복원 테스트는 type·data의 claim/재시도·손상 payload EXHAUSTED·레거시 폴백을 검증한다. JUnit 5·BDDMockito `given/willReturn`, 한글 언더스코어 메서드, 행위형 `@DisplayName`, 상태 검증을 우선한다.
