@@ -77,6 +77,10 @@ public enum ErrorCode {
     SENIOR_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4042", "시니어 프로필을 찾을 수 없습니다."),
     TEMPORARY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "AUTH_4041", "임시 회원을 찾을 수 없습니다."),
 
+    // 건강 일정 관련
+    HEALTH_SCHEDULE_INVALID_PROGRESS_TRANSITION(HttpStatus.BAD_REQUEST, "HEALTH_SCHEDULE_4000", "완료는 방문 인증으로만 처리됩니다."),
+    HEALTH_SCHEDULE_EDIT_LOCKED(HttpStatus.CONFLICT, "HEALTH_SCHEDULE_4090", "방문 인증을 마친 건강 일정은 수정하거나 삭제할 수 없습니다."),
+
     // fcm 관련
     FCM_TOKEN_NOT_FOUND(HttpStatus.NOT_FOUND, "FCM_4040", "FCM 토큰이 존재하지 않습니다."),
     FCM_NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "FCM_4041", "FCM 알림이 존재하지 않습니다."),

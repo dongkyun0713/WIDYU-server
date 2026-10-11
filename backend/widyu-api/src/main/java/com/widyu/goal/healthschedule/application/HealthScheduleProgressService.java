@@ -51,7 +51,7 @@ public class HealthScheduleProgressService {
     public void completeSchedule(Long healthScheduleId) {
         Member currentMember = memberUtil.getCurrentMember();
 
-        HealthSchedule healthSchedule = healthScheduleRepository.findById(healthScheduleId)
+        HealthSchedule healthSchedule = healthScheduleRepository.findByIdForUpdate(healthScheduleId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "건강 일정을 찾을 수 없습니다."));
 
         // 권한 체크

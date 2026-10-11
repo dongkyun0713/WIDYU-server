@@ -122,7 +122,7 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "건강 일정 수정",
-            description = "건강 일정을 수정합니다. 시니어는 본인의 일정만, 보호자는 연결된 시니어의 일정만 수정 가능합니다."
+            description = "방문 인증 전 건강 일정을 수정합니다. 당일에도 가능하며, 완료 상태는 방문 인증으로만 만들 수 있습니다. 시니어는 본인, 보호자는 연결된 시니어 일정만 수정할 수 있습니다."
     )
     @Parameter(name = "healthScheduleId", description = "건강 일정 ID", required = true, example = "1")
     @RequestBody(
@@ -166,6 +166,26 @@ public interface HealthScheduleDocs {
                     )
             )
     )
+    @ApiResponse(
+            responseCode = "400",
+            description = "수정 요청으로 완료 상태 전이 불가 (HEALTH_SCHEDULE_4000)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(value = """
+                            {"code":"HEALTH_SCHEDULE_4000","message":"완료는 방문 인증으로만 처리됩니다.","data":null}
+                            """)
+            )
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "방문 인증 완료 일정 수정 불가 (HEALTH_SCHEDULE_4090)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(value = """
+                            {"code":"HEALTH_SCHEDULE_4090","message":"방문 인증을 마친 건강 일정은 수정하거나 삭제할 수 없습니다.","data":null}
+                            """)
+            )
+    )
     ApiResponseTemplate<HealthScheduleResponse> updateHealthSchedule(
             Long healthScheduleId,
             HealthScheduleUpdateRequest request
@@ -173,7 +193,7 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "건강 일정 삭제 (논리 삭제)",
-            description = "건강 일정을 논리 삭제합니다. 시니어는 본인의 일정만, 보호자는 연결된 시니어의 일정만 삭제 가능합니다."
+            description = "방문 인증 전 건강 일정을 논리 삭제합니다. 당일에도 가능하며 완료된 일정은 삭제할 수 없습니다. 시니어는 본인, 보호자는 연결된 시니어 일정만 삭제할 수 있습니다."
     )
     @Parameter(name = "healthScheduleId", description = "건강 일정 ID", required = true, example = "1")
     @ApiResponse(
@@ -190,6 +210,16 @@ public interface HealthScheduleDocs {
                                     }
                                     """
                     )
+            )
+    )
+    @ApiResponse(
+            responseCode = "409",
+            description = "방문 인증 완료 일정 삭제 불가 (HEALTH_SCHEDULE_4090)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(value = """
+                            {"code":"HEALTH_SCHEDULE_4090","message":"방문 인증을 마친 건강 일정은 수정하거나 삭제할 수 없습니다.","data":null}
+                            """)
             )
     )
     ApiResponseTemplate<Void> deleteHealthSchedule(Long healthScheduleId);
