@@ -82,9 +82,9 @@
 
 각 ID를 별도 빈 `IncidentEscalation.escalateIfDue(id, now)`에 전달한다. 같은 `@Transactional(REQUIRES_NEW)`에서 먼저 무응답 전환 UPDATE를 실행하고, 알림 여부와 관계없이 기한 지난 `OPEN`·`CHECKING`을 `ESCALATED`로 바꾼다. 이어서 별도 게이트 UPDATE가 1건을 바꿀 때에만 **같은 트랜잭션**에서 package-private `enqueueInitialAlert`를 호출한다. 플래그 OFF에서 이미 발송한 사건은 첫 UPDATE만 성공하고 게이트 UPDATE 0건으로 끝나는 정상 경로다. 게이트 반환값이 0이면 추가 발송·로그 없이 끝나며, enqueue 실패 시 두 UPDATE도 롤백돼 다음 폴링에서 재시도한다.
 
-`enqueueInitialAlert`는 시니어 가족의 활성 보호자 전원에게 `FcmOutboxService.enqueue(guardianId, FcmSendDto)`를 호출하는 유일한 S04 생성 경로다. 제목은 `{시니어 이름} 님의 심박 상태를 확인해주세요.`, 본문은 `평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요.`다. `NotificationType.HEART_RATE_EMERGENCY`, `eventId=incident_ref`, `decisionId=incident.decisionId`(단건은 null), `relatedMemberId=seniorId`, `seniorId`를 함께 싣는다. outbox의 가족 검사를 통과한 수신자는 W5의 `PushSettingGroup.SAFETY` 정책으로 센터 행을 얻고, 설정 OFF이면 센터 행은 남되 claim에서 푸시가 취소된다.
+`enqueueInitialAlert`는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)에 따라 시니어 가족의 **현재 활성 방장 한 명**에게 `FcmOutboxService.enqueue(guardianId, FcmSendDto)`를 호출하는 유일한 심박 S04 생성 경로다. 제목은 `{시니어 이름} 님의 심박 상태를 확인해주세요.`, 본문은 `평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요.`다. `NotificationType.HEART_RATE_EMERGENCY`, `eventId=safetyEventId=incident_ref`, `deliveryStage=INITIAL_ALERT`, `decisionId=incident.decisionId`(단건은 null), `relatedMemberId=seniorId`, `seniorId`를 함께 싣는다. outbox의 가족 검사를 통과한 수신자는 W5의 `PushSettingGroup.SAFETY` 정책으로 센터 행을 얻고, 설정 OFF이면 센터 행은 남되 claim에서 푸시가 취소된다.
 
-가족 연결이 없거나 활성 보호자가 0명이면 S04 enqueue 없이 incident_ref만 WARN으로 남기고, OFF 경로는 `initial_alert_sent_at_ms`를 기록하며 ON 경로는 조건부 UPDATE에서 이미 기록한 게이트를 유지해 사건·S01을 보존한다.
+가족 연결이 없거나 활성 방장이 0명이면 S04 enqueue 없이 incident_ref만 WARN으로 남기고, OFF 경로는 `initial_alert_sent_at_ms`를 기록하며 ON 경로는 조건부 UPDATE에서 이미 기록한 게이트를 유지해 사건·S01을 보존한다. 활성 방장이 둘 이상이면 membership ID가 가장 작은 한 명에게 보내고 incident ref·가족 ID만 WARN으로 남긴다(LLD-0077 §6).
 
 ```sql
 UPDATE incident
@@ -112,20 +112,20 @@ UPDATE incident
 | 사건이 없거나 본인 사건이 아님 | 기존 `INCIDENT_NOT_FOUND`·404 |
 | 이미 응답했거나 종결됨 | 기존 `INCIDENT_ALREADY_ANSWERED`·409, 최초 응답 유지 |
 | 사건 열기·INITIAL_ALERT enqueue 실패 | 해당 새 트랜잭션 롤백. 심박 저장 유지. 미발송 기존 사건은 다음 폴링 재시도. 신규 사건 자체가 생성되지 못한 경우 자동 재시도 경로는 없으므로 식별자 없는 오류 건수를 운영 경보로 남긴다 |
-| 가족 미연결·활성 보호자 0명 | S04 enqueue 0건, incident_ref만 WARN 1줄. 사건·S01을 유지하고 `initial_alert_sent_at_ms`로 게이트를 닫는다 |
+| 가족 미연결·활성 방장 0명 | S04 enqueue 0건, incident_ref만 WARN 1줄. 사건·S01을 유지하고 `initial_alert_sent_at_ms`로 게이트를 닫는다 |
 | 시니어 FCM 전달 실패 | 전달 실패와 무응답을 구별한다. 본인확인 푸시 5분 TTL 소진에도 INITIAL_ALERT는 60초 게이트대로 보낸다(T1-③ 가정) |
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [ ] 플래그 OFF의 배치 위급 1건은 사건 1, 시니어 S01 푸시 1, 안전 수신 보호자별 S04 INITIAL_ALERT 즉시 1을 만들고 `initial_alert_sent_at_ms`를 기록한다. `eventId=incident_ref`, 배치 `decisionId`를 전달한다.
-- [ ] 플래그 ON의 배치 위급 직후 INITIAL_ALERT는 0이고, 60초 뒤 스케줄러가 `ESCALATED`와 `initial_alert_sent_at_ms`를 기록하며 보호자별 1회 enqueue한다.
+- [ ] 플래그 OFF의 배치 위급 1건은 사건 1, 시니어 S01 푸시 1, 현재 방장에게 S04 INITIAL_ALERT 즉시 1을 만들고 `initial_alert_sent_at_ms`를 기록한다. `eventId=incident_ref`, 배치 `decisionId`를 전달한다.
+- [ ] 플래그 ON의 배치 위급 직후 INITIAL_ALERT는 0이고, 60초 뒤 스케줄러가 `ESCALATED`와 `initial_alert_sent_at_ms`를 기록하며 현재 방장에게 1회 enqueue한다.
 - [ ] 61초의 OK는 응답·`device_responded_at_ms`를 저장하고 `ESCALATED`를 유지하며 다음 폴링에서 INITIAL_ALERT를 1회 보낸다. 정확히 60초의 OK도 늦은 응답이다.
 - [ ] HELP는 `ESCALATED`만 기록하고 다음 폴링에서 INITIAL_ALERT를 1회 보낸다. watch/phone 동시 응답은 첫 건만 반영하고 다음 응답은 409다.
 - [ ] REST·WebSocket 단건 위급은 `decision_id=NULL` 사건을 연다. 동일 회원의 1초 간격 단건 3건은 사건·본인확인 푸시 각 1건이다.
 - [ ] 6분 전에 열린 `ESCALATED` 사건이 있어도 새 단건 위급은 새 사건을 열고 S01과 플래그 OFF의 S04를 각 1회 enqueue한다. 오래된 사건은 그대로 남는다.
 - [ ] `escalateIfDue` 반복·동시 호출에도 조건부 UPDATE 성공과 INITIAL_ALERT enqueue는 사건당 1회다. 기한 전 OK_CLOSED·RESOLVED는 발송하지 않는다.
 - [ ] 사건 열기 실패가 심박 저장을 되돌리지 않는다. `@DataJpaTest` + `TransactionTemplate`의 실제 커밋으로 AFTER_COMMIT을 검증하고 새 트랜잭션의 outbox INSERT도 확인한다.
-- [ ] S01·S04 문구, 시니어 가족의 활성 보호자 전원, FCM data의 `eventId`·`type`·`decisionId`(있을 때), `relatedMemberId`·`seniorId`를 검증한다. 플래그 OFF와 스케줄러가 같은 S04 조립 메서드를 쓰고, `FcmOutboxService.enqueue`의 가족 검사 및 수신자×사건 센터 행 멱등을 거친다. 설정 OFF 수신자의 센터 행은 유지되고 outbox는 claim에서 취소된다. Swagger에 선택 입력 필드와 기존 오류가 반영된다.
+- [ ] S01·S04 문구, 시니어 가족의 현재 활성 방장 1명과 비방장 0건, FCM data의 `eventId`·`safetyEventId`·`deliveryStage`·`type`·`decisionId`(있을 때), `relatedMemberId`·`seniorId`를 검증한다. 플래그 OFF와 스케줄러가 같은 S04 조립 메서드를 쓰고, `FcmOutboxService.enqueue`의 가족 검사 및 수신자×사건 센터 행 멱등을 거친다. 설정 OFF 수신자의 센터 행은 유지되고 outbox는 claim에서 취소된다. Swagger에 선택 입력 필드와 기존 오류가 반영된다.
 - [ ] 보호자가 없는 시니어의 위급은 사건·S01을 남기고 INITIAL_ALERT 0건과 `initial_alert_sent_at_ms` 기록을 검증한다.
 - [ ] 앞 페이지 사건의 enqueue가 실패해도 키셋의 다음 페이지 사건을 같은 폴링에서 처리하고 실패 사건은 다음 폴링 재시도 대상으로 남긴다.
 - [ ] 플래그 OFF로 이미 INITIAL_ALERT를 보낸 사건은 60초 무응답 뒤 `ESCALATED`로 바뀌고 추가 INITIAL_ALERT는 0건이다.

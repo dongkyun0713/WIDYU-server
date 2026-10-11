@@ -26,8 +26,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class IncidentEscalationTest {
     @Mock private IncidentRepository incidents;
     @Mock private FcmOutboxService outbox;
@@ -37,11 +39,11 @@ class IncidentEscalationTest {
     @InjectMocks private IncidentEscalation escalation;
 
     @Test
-    @DisplayName("플래그 OFF에서 사건을 열면 활성 보호자 전원에게 S04를 enqueue한다")
-    void 플래그_OFF에서_사건을_열면_활성_보호자_전원에게_S04를_enqueue한다() {
+    @DisplayName("플래그 OFF에서 심박 사건을 열면 현재 방장 한 명에게 S04를 enqueue한다")
+    void 플래그_OFF에서_심박_사건을_열면_현재_방장에게만_S04를_enqueue한다() {
         // given
         Incident incident = incident("dec-1");
-        givenRecipients();
+        givenHeartRecipients();
 
         // when
         escalation.sendImmediately(incident, 20L);
@@ -50,9 +52,8 @@ class IncidentEscalationTest {
         assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), message.capture());
-        then(outbox).should().enqueue(eq(3L), message.capture());
-        assertMessage(message.getAllValues().get(0), "dec-1");
-        assertMessage(message.getAllValues().get(1), "dec-1");
+        then(outbox).shouldHaveNoMoreInteractions();
+        assertMessage(message.getValue(), "dec-1");
     }
 
     @Test
@@ -60,7 +61,7 @@ class IncidentEscalationTest {
     void 안심구역_이탈_사건을_즉시_알리면_보호자에게_S05를_enqueue한다() {
         // given
         Incident incident = safeZoneIncident();
-        givenRecipients();
+        givenZoneRecipients();
 
         // when
         escalation.sendImmediately(incident, 20L);
@@ -75,6 +76,26 @@ class IncidentEscalationTest {
     }
 
     @Test
+    @DisplayName("안심구역 이탈 사건에 판정 ID가 있으면 기존 S05 data를 유지한다")
+    void 안심구역_이탈_사건에_판정_ID가_있으면_기존_S05_data를_유지한다() {
+        // given
+        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L).decisionId("dec-zone")
+                .kind(IncidentKind.SAFE_ZONE_EXIT).openedAtMs(1L).respondByMs(60_001L).build();
+        givenZoneRecipients();
+
+        // when
+        escalation.sendImmediately(incident, 20L);
+
+        // then
+        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), message.capture());
+        then(outbox).should().enqueue(eq(3L), message.capture());
+        assertThat(message.getAllValues()).allSatisfy(value -> assertThat(value.dataForEnqueue("inc-1"))
+                .containsEntry("decisionId", "dec-zone")
+                .doesNotContainKeys("deliveryStage", "safetyEventId"));
+    }
+
+    @Test
     @DisplayName("안심구역 이탈 사건의 확인 시간이 끝나면 공통 스케줄러가 S05를 enqueue한다")
     void 안심구역_이탈_사건의_확인_시간이_끝나면_공통_스케줄러가_S05를_enqueue한다() {
         // given
@@ -82,7 +103,7 @@ class IncidentEscalationTest {
         given(incidents.escalateTimedOutIfDue(3L, 61_000L)).willReturn(1);
         given(incidents.claimInitialAlertIfDue(3L, 61_000L)).willReturn(1);
         given(incidents.findById(3L)).willReturn(Optional.of(incident));
-        givenRecipients();
+        givenZoneRecipients();
 
         // when
         boolean queued = escalation.escalateIfDue(3L, 61_000L);
@@ -104,7 +125,7 @@ class IncidentEscalationTest {
         given(incidents.escalateTimedOutIfDue(3L, 61_000L)).willReturn(1);
         given(incidents.claimInitialAlertIfDue(3L, 61_000L)).willReturn(1);
         given(incidents.findById(3L)).willReturn(Optional.of(incident));
-        givenRecipients();
+        givenHeartRecipients();
 
         // when
         boolean queued = escalation.escalateIfDue(3L, 61_000L);
@@ -115,9 +136,8 @@ class IncidentEscalationTest {
         then(incidents).should().claimInitialAlertIfDue(3L, 61_000L);
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), message.capture());
-        then(outbox).should().enqueue(eq(3L), message.capture());
-        assertMessage(message.getAllValues().get(0), null);
-        assertMessage(message.getAllValues().get(1), null);
+        then(outbox).shouldHaveNoMoreInteractions();
+        assertMessage(message.getValue(), null);
     }
 
     @Test
@@ -145,7 +165,7 @@ class IncidentEscalationTest {
         Incident incident = incident(null);
         given(incidents.claimInitialAlertIfDue(3L, 20L)).willReturn(1);
         given(incidents.findById(3L)).willReturn(Optional.of(incident));
-        givenRecipients();
+        givenHeartRecipients();
 
         // when
         boolean queued = escalation.escalateIfDue(3L, 20L);
@@ -155,16 +175,15 @@ class IncidentEscalationTest {
         then(incidents).should().escalateTimedOutIfDue(3L, 20L);
         then(incidents).should().claimInitialAlertIfDue(3L, 20L);
         then(outbox).should().enqueue(eq(2L), org.mockito.ArgumentMatchers.any(FcmSendDto.class));
-        then(outbox).should().enqueue(eq(3L), org.mockito.ArgumentMatchers.any(FcmSendDto.class));
+        then(outbox).shouldHaveNoMoreInteractions();
     }
 
     @Test
-    @DisplayName("보호자가 비활성이면 그 보호자에게 최초 알림을 enqueue하지 않는다")
-    void 보호자가_비활성이면_그_보호자에게_최초_알림을_enqueue하지_않는다() {
+    @DisplayName("방장이 비활성이면 활성 비방장이 있어도 최초 알림 없이 게이트를 기록한다")
+    void 방장이_비활성이면_활성_비방장이_있어도_게이트만_기록한다(CapturedOutput output) {
         // given
         Incident incident = incident(null);
         Member senior = org.mockito.Mockito.mock(Member.class);
-        Member activeGuardian = org.mockito.Mockito.mock(Member.class);
         Member inactiveGuardian = org.mockito.Mockito.mock(Member.class);
         FamilyMembership active = org.mockito.Mockito.mock(FamilyMembership.class);
         FamilyMembership inactive = org.mockito.Mockito.mock(FamilyMembership.class);
@@ -172,9 +191,7 @@ class IncidentEscalationTest {
         given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
         given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(active, inactive));
         given(senior.getName()).willReturn("시니어");
-        given(active.getGuardian()).willReturn(activeGuardian);
-        given(activeGuardian.getStatus()).willReturn(Status.ACTIVE);
-        given(activeGuardian.getId()).willReturn(2L);
+        given(inactive.isLeader()).willReturn(true);
         given(inactive.getGuardian()).willReturn(inactiveGuardian);
         given(inactiveGuardian.getStatus()).willReturn(Status.INACTIVE);
 
@@ -183,8 +200,63 @@ class IncidentEscalationTest {
 
         // then
         assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
-        then(outbox).should().enqueue(eq(2L), org.mockito.ArgumentMatchers.any(FcmSendDto.class));
+        then(outbox).shouldHaveNoInteractions();
+        assertThat(output).contains("보호자 최초 안전 알림 수신자 없음: incidentRef=inc-1");
+    }
+
+    @Test
+    @DisplayName("가족에 방장이 없으면 최초 알림을 건너뛰고 게이트를 기록한다")
+    void 가족에_방장이_없으면_최초_알림_없이_게이트를_기록한다(CapturedOutput output) {
+        // given
+        Incident incident = incident(null);
+        Member senior = org.mockito.Mockito.mock(Member.class);
+        FamilyMembership nonLeader = org.mockito.Mockito.mock(FamilyMembership.class);
+        given(members.findById(1L)).willReturn(Optional.of(senior));
+        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
+        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(nonLeader));
+        given(senior.getName()).willReturn("시니어");
+
+        // when
+        escalation.sendImmediately(incident, 20L);
+
+        // then
+        assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
+        then(outbox).shouldHaveNoInteractions();
+        assertThat(output).contains("보호자 최초 안전 알림 수신자 없음: incidentRef=inc-1");
+    }
+
+    @Test
+    @DisplayName("활성 방장이 둘이면 membership ID가 작은 방장에게만 보내고 WARN을 남긴다")
+    void 활성_방장이_둘이면_작은_membership_ID의_방장에게만_보낸다(CapturedOutput output) {
+        // given
+        Incident incident = incident(null);
+        Member senior = org.mockito.Mockito.mock(Member.class);
+        Member firstGuardian = org.mockito.Mockito.mock(Member.class);
+        Member secondGuardian = org.mockito.Mockito.mock(Member.class);
+        FamilyMembership first = org.mockito.Mockito.mock(FamilyMembership.class);
+        FamilyMembership second = org.mockito.Mockito.mock(FamilyMembership.class);
+        given(members.findById(1L)).willReturn(Optional.of(senior));
+        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
+        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(first, second));
+        given(senior.getName()).willReturn("시니어");
+        given(first.isLeader()).willReturn(true);
+        given(first.getGuardian()).willReturn(firstGuardian);
+        given(firstGuardian.getStatus()).willReturn(Status.ACTIVE);
+        given(first.getId()).willReturn(12L);
+        given(second.isLeader()).willReturn(true);
+        given(second.getGuardian()).willReturn(secondGuardian);
+        given(secondGuardian.getStatus()).willReturn(Status.ACTIVE);
+        given(second.getId()).willReturn(11L);
+        given(secondGuardian.getId()).willReturn(3L);
+
+        // when
+        escalation.sendImmediately(incident, 20L);
+
+        // then
+        assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
+        then(outbox).should().enqueue(eq(3L), org.mockito.ArgumentMatchers.any(FcmSendDto.class));
         then(outbox).shouldHaveNoMoreInteractions();
+        assertThat(output).contains("보호자 최초 안전 알림 복수 방장: incidentRef=inc-1, familyId=10");
     }
 
     private Incident incident(String decisionId) {
@@ -197,7 +269,22 @@ class IncidentEscalationTest {
                 .kind(IncidentKind.SAFE_ZONE_EXIT).openedAtMs(1L).respondByMs(60_001L).build();
     }
 
-    private void givenRecipients() {
+    private void givenHeartRecipients() {
+        Member senior = org.mockito.Mockito.mock(Member.class);
+        Member leaderGuardian = org.mockito.Mockito.mock(Member.class);
+        FamilyMembership leader = org.mockito.Mockito.mock(FamilyMembership.class);
+        FamilyMembership nonLeader = org.mockito.Mockito.mock(FamilyMembership.class);
+        given(members.findById(1L)).willReturn(Optional.of(senior));
+        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
+        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(leader, nonLeader));
+        given(senior.getName()).willReturn("시니어");
+        given(leader.isLeader()).willReturn(true);
+        given(leader.getGuardian()).willReturn(leaderGuardian);
+        given(leaderGuardian.getStatus()).willReturn(Status.ACTIVE);
+        given(leaderGuardian.getId()).willReturn(2L);
+    }
+
+    private void givenZoneRecipients() {
         Member senior = org.mockito.Mockito.mock(Member.class);
         Member firstGuardian = org.mockito.Mockito.mock(Member.class);
         Member secondGuardian = org.mockito.Mockito.mock(Member.class);
@@ -223,6 +310,16 @@ class IncidentEscalationTest {
         assertThat(message.relatedMemberId()).isEqualTo(1L);
         assertThat(message.seniorId()).isEqualTo(1L);
         assertThat(message.decisionId()).isEqualTo(decisionId);
+        assertThat(message.dataForEnqueue("inc-1"))
+                .containsEntry("deliveryStage", "INITIAL_ALERT")
+                .containsEntry("safetyEventId", "inc-1")
+                .containsEntry("eventId", "inc-1")
+                .containsEntry("foregroundPresentation", "MODAL");
+        if (decisionId != null) {
+            assertThat(message.dataForEnqueue("inc-1")).containsEntry("decisionId", decisionId);
+        } else {
+            assertThat(message.dataForEnqueue("inc-1")).doesNotContainKey("decisionId");
+        }
     }
 
     private void assertSafeZoneMessage(FcmSendDto message) {
@@ -233,5 +330,7 @@ class IncidentEscalationTest {
         assertThat(message.decisionId()).isNull();
         assertThat(message.dataForEnqueue("inc-1").get("deepLink"))
                 .isEqualTo("/location?seniorId=1");
+        assertThat(message.dataForEnqueue("inc-1"))
+                .doesNotContainKeys("deliveryStage", "safetyEventId");
     }
 }

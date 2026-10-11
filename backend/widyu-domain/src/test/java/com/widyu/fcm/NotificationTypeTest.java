@@ -89,4 +89,23 @@ class NotificationTypeTest {
         assertThat(NotificationPriority.INTERACTION.interruptionLevel()).isEqualTo("active");
         assertThat(NotificationPriority.PASSIVE.interruptionLevel()).isEqualTo("passive");
     }
+
+    @Test
+    @DisplayName("초기 안전 알림과 일정 알림 정책을 조회하면 모달과 조정된 시간 민감 범위를 반환한다")
+    void 초기_안전_알림과_일정_정책을_조회하면_모달과_시간_민감_범위를_반환한다() {
+        // given / when
+        NotificationType emergency = NotificationType.HEART_RATE_EMERGENCY;
+
+        // then
+        assertThat(emergency.foregroundPresentation()).isEqualTo("MODAL");
+        assertThat(emergency.priority()).isEqualTo(NotificationPriority.CRITICAL);
+        assertThat(emergency.deliveryMode()).isEqualTo(DeliveryMode.PUSH_AND_CENTER);
+        assertThat(emergency.deepLinkTemplate()).isEqualTo("/location?seniorId={seniorId}");
+        assertThat(NotificationType.MEDICATION_REMINDER_10.priority()).isEqualTo(NotificationPriority.INTERACTION);
+        assertThat(NotificationType.MEDICATION_REMINDER_20.priority()).isEqualTo(NotificationPriority.INTERACTION);
+        assertThat(NotificationType.HEALTH_SCHEDULE_UPCOMING.priority())
+                .isEqualTo(NotificationPriority.INTERACTION);
+        assertThat(NotificationType.MEDICATION_PROOF_MISSING.priority())
+                .isEqualTo(NotificationPriority.TIME_SENSITIVE);
+    }
 }

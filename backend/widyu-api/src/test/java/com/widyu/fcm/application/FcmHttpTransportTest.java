@@ -91,7 +91,7 @@ class FcmHttpTransportTest {
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
             assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
             assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("/location?seniorId=17");
-            assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("BANNER");
+            assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("MODAL");
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("10");
@@ -180,20 +180,23 @@ class FcmHttpTransportTest {
     }
 
     @Test
-    @DisplayName("시간 민감과 수동 타입을 전송하면 서로 다른 플랫폼 우선순위를 포함한다")
-    void 시간_민감과_수동_타입을_전송하면_우선순위를_구분한다() throws Exception {
+    @DisplayName("복약 미인증과 후속 안내와 수동 타입을 전송하면 각 우선순위를 포함한다")
+    void 복약_미인증과_후속_안내와_수동_타입을_전송하면_우선순위를_구분한다() throws Exception {
         // given
         ObjectMapper mapper = new ObjectMapper();
         List<JsonNode> bodies = new CopyOnWriteArrayList<>();
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
+        FcmSendDto missing = FcmSendDto.builder().title("복약 미인증").content("확인해주세요.")
+                .notificationType(NotificationType.MEDICATION_PROOF_MISSING).build();
         FcmSendDto reminder = FcmSendDto.builder().title("복약 확인").content("인증해주세요.")
                 .notificationType(NotificationType.MEDICATION_REMINDER_10).build();
         FcmSendDto walk = FcmSendDto.builder().title("걷기 목표").content("확인해주세요.")
                 .notificationType(NotificationType.WALK_GOAL_UNMET).build();
         try {
             // when
+            assertThat(transport.send("loopback-token", missing).success()).isTrue();
             assertThat(transport.send("loopback-token", reminder).success()).isTrue();
             assertThat(transport.send("loopback-token", walk).success()).isTrue();
 
@@ -203,6 +206,9 @@ class FcmHttpTransportTest {
                     .isEqualTo("time-sensitive");
             assertThat(bodies.get(1).at("/message/android/priority").asText()).isEqualTo("normal");
             assertThat(bodies.get(1).at("/message/apns/payload/aps/interruption-level").asText())
+                    .isEqualTo("active");
+            assertThat(bodies.get(2).at("/message/android/priority").asText()).isEqualTo("normal");
+            assertThat(bodies.get(2).at("/message/apns/payload/aps/interruption-level").asText())
                     .isEqualTo("passive");
         } finally {
             transport.close();
