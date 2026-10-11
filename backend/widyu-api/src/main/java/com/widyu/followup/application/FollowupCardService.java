@@ -43,12 +43,13 @@ public class FollowupCardService {
         if (cardRepository.existsByIncidentRef(incident.getIncidentRef())) {
             return;
         }
+        if (incident.getKind() != IncidentKind.HR_ANOMALY
+                && incident.getKind() != IncidentKind.FALL_SUSPECTED) {
+            return;
+        }
         String version = "HR_V1";
         if (incident.getKind() == IncidentKind.FALL_SUSPECTED) {
             version = "FALL_V1";
-        }
-        if (incident.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
-            version = "SAFE_ZONE_V1";
         }
         cardRepository.save(FollowupCard.issue(incident.getIncidentRef(), incident.getMemberId(),
                 version, incident.getOpenedAtMs(), System.currentTimeMillis()));

@@ -42,10 +42,6 @@ import com.widyu.member.Member;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.MemberType;
 import com.widyu.global.entity.Status;
-import com.widyu.location.realtime.dto.StayInfo;
-import java.time.LocalDateTime;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.List;
@@ -78,27 +74,26 @@ class IncidentServiceTest {
     @Mock private FcmOutboxService outboxService;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
-    @Mock private RedisTemplate<String, Object> redisTemplate;
-    @Mock private ValueOperations<String, Object> valueOperations;
     @Mock private FollowupCardService followupCardService;
 
     @Test
-    @DisplayName("이탈 이벤트 처리 시 최신 위치가 안심구역 안이면 사건과 S02와 S05를 만들지 않는다")
-    void 이탈_이벤트_처리_시_최신_위치가_안이면_사건과_알림을_만들지_않는다() {
-        // given
-        given(memberRepository.findByIdForUpdate(SENIOR_ID)).willReturn(Optional.of(org.mockito.Mockito.mock(Member.class)));
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("location:stay:" + SENIOR_ID)).willReturn(
-                new StayInfo(37.0, 127.0, LocalDateTime.now(), "HOME", "집"));
-
-        // when
-        Incident opened = service().openForAlert(SENIOR_ID, IncidentKind.SAFE_ZONE_EXIT);
-
-        // then
-        assertThat(opened).isNull();
+    @DisplayName("안심구역 종류로 단건 사건을 열면 새 사건 없이 예외가 발생한다")
+    void 안심구역_종류로_단건_사건을_열면_예외가_발생한다() {
+        // when / then
+        assertThatThrownBy(() -> service().openForAlert(SENIOR_ID, IncidentKind.SAFE_ZONE_EXIT))
+                .isInstanceOf(IllegalArgumentException.class);
         then(incidentRepository).shouldHaveNoInteractions();
         then(fcmService).shouldHaveNoInteractions();
-        then(incidentEscalation).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("안심구역 종류로 판정 사건을 열면 새 사건 없이 예외가 발생한다")
+    void 안심구역_종류로_판정_사건을_열면_예외가_발생한다() {
+        // when / then
+        assertThatThrownBy(() -> service().openForAlert(alertDecision(), IncidentKind.SAFE_ZONE_EXIT))
+                .isInstanceOf(IllegalArgumentException.class);
+        then(incidentRepository).shouldHaveNoInteractions();
+        then(fcmService).shouldHaveNoInteractions();
     }
 
     @Test
@@ -275,8 +270,8 @@ class IncidentServiceTest {
     }
 
     @Test
-    @DisplayName("안심구역 사건에 기한 안 OK로 답하면 S09를 예약하고 재진입 전 상황은 유지한다")
-    void 안심구역_사건에_기한_안_OK로_답하면_S09를_예약한다() {
+    @DisplayName("과거 안심구역 사건에 OK로 답하면 보호자 안내 없이 응답만 저장한다")
+    void 과거_안심구역_사건에_OK로_답하면_보호자_안내를_만들지_않는다() {
         // given
         Incident checking = openIncident();
         Incident answered = openIncident();
@@ -286,30 +281,15 @@ class IncidentServiceTest {
         given(incidentRepository.findByIncidentRef(INCIDENT_REF))
                 .willReturn(Optional.of(checking), Optional.of(answered));
         givenRespondUpdates(1);
-        Member senior = org.mockito.Mockito.mock(Member.class);
-        given(senior.getId()).willReturn(SENIOR_ID);
-        given(senior.getName()).willReturn("시니어");
-        given(memberRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
-        given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
-        FamilyMembership membership = org.mockito.Mockito.mock(FamilyMembership.class);
-        Member guardian = org.mockito.Mockito.mock(Member.class);
-        given(membership.getGuardian()).willReturn(guardian);
-        given(guardian.getStatus()).willReturn(Status.ACTIVE);
-        given(guardian.getId()).willReturn(GUARDIAN_ID);
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(7L)).willReturn(List.of(membership));
 
         // when
         service().respond(SENIOR_ID, INCIDENT_REF,
                 new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.PHONE));
 
         // then
-        assertThat(answered.getOkNoticeSentAtMs()).isNotNull();
+        assertThat(answered.getOkNoticeSentAtMs()).isNull();
         assertThat(answered.getSituationEndedAtMs()).isNull();
-        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(outboxService).should().enqueue(eq(GUARDIAN_ID), message.capture());
-        assertThat(message.getValue().notificationType())
-                .isEqualTo(NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE);
-        assertThat(message.getValue().eventId()).isEqualTo(INCIDENT_REF + ":OK");
+        then(outboxService).shouldHaveNoInteractions();
     }
 
     @Test
@@ -643,7 +623,7 @@ class IncidentServiceTest {
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(60, 5000L, false, 5),
                         new SensorProperties.Followup(false, false)), memberRepository,
-                incidentEscalation, redisTemplate, outboxService, seniorProfileRepository,
+                incidentEscalation, outboxService, seniorProfileRepository,
                 familyMembershipRepository, followupCardService);
     }
 

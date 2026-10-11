@@ -60,19 +60,12 @@ public class IncidentEscalation {
         return incidentRepository.escalateFallTimedOut(nowMs);
     }
 
-    /** OFF 즉시 경로와 ON 스케줄러가 공유하는 유일한 보호자 S04/S05 생성 경로다. */
+    /** OFF 즉시 경로와 ON 스케줄러가 공유하는 심박 보호자 S04 생성 경로다. */
     void enqueueInitialAlert(Incident incident) {
-        NotificationType type;
-        String copyCode;
-        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
-            type = NotificationType.HEART_RATE_EMERGENCY;
-            copyCode = "S04";
-        } else if (incident.getKind() == IncidentKind.SAFE_ZONE_EXIT) {
-            type = NotificationType.SAFE_ZONE_EXITED;
-            copyCode = "S05";
-        } else {
+        if (incident.getKind() != IncidentKind.HR_ANOMALY) {
             throw new IllegalArgumentException("최초 보호자 알림을 지원하지 않는 사건 종류입니다.");
         }
+        NotificationType type = NotificationType.HEART_RATE_EMERGENCY;
         Member senior = memberRepository.findById(incident.getMemberId())
                 .orElseThrow(() -> new IllegalStateException("사건 회원을 찾을 수 없습니다."));
         Long familyId = seniorProfileRepository.findFamilyIdByMemberId(incident.getMemberId()).orElse(null);
@@ -81,19 +74,13 @@ public class IncidentEscalation {
             return;
         }
         List<FamilyMembership> memberships = familyMembershipRepository.findAllByFamilyIdWithGuardian(familyId);
-        NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
-        Map<String, String> data = Map.of();
+        NotificationCopy copy = NotificationCopy.of(type, "S04", Map.of("시니어 이름", senior.getName()));
+        Map<String, String> data = Map.of("deliveryStage", "INITIAL_ALERT",
+                "safetyEventId", incident.getIncidentRef());
         if (incident.getDecisionId() != null) {
-            data = Map.of("decisionId", incident.getDecisionId());
-        }
-        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
             data = Map.of("deliveryStage", "INITIAL_ALERT",
-                    "safetyEventId", incident.getIncidentRef());
-            if (incident.getDecisionId() != null) {
-                data = Map.of("deliveryStage", "INITIAL_ALERT",
-                        "safetyEventId", incident.getIncidentRef(),
-                        "decisionId", incident.getDecisionId());
-            }
+                    "safetyEventId", incident.getIncidentRef(),
+                    "decisionId", incident.getDecisionId());
         }
         FcmSendDto notification = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
@@ -107,43 +94,26 @@ public class IncidentEscalation {
                 .data(data)
                 .emergency(true)
                 .build();
-        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
-            FamilyMembership leader = null;
-            int activeLeaders = 0;
-            for (FamilyMembership membership : memberships) {
-                if (!membership.isLeader() || membership.getGuardian().getStatus() != Status.ACTIVE) {
-                    continue;
-                }
-                activeLeaders++;
-                if (leader == null || membership.getId() < leader.getId()) {
-                    leader = membership;
-                }
-            }
-            if (leader == null) {
-                log.warn("보호자 최초 안전 알림 수신자 없음: incidentRef={}", incident.getIncidentRef());
-                return;
-            }
-            if (activeLeaders > 1) {
-                log.warn("보호자 최초 안전 알림 복수 방장: incidentRef={}, familyId={}",
-                        incident.getIncidentRef(), familyId);
-            }
-            outboxService.enqueue(leader.getGuardian().getId(), notification);
-            log.info("보호자 최초 안전 알림 enqueue: incidentRef={}, recipients=1", incident.getIncidentRef());
-            return;
-        }
-        int recipients = 0;
+        FamilyMembership leader = null;
+        int activeLeaders = 0;
         for (FamilyMembership membership : memberships) {
-            if (membership.getGuardian().getStatus() != Status.ACTIVE) {
+            if (!membership.isLeader() || membership.getGuardian().getStatus() != Status.ACTIVE) {
                 continue;
             }
-            outboxService.enqueue(membership.getGuardian().getId(), notification);
-            recipients++;
+            activeLeaders++;
+            if (leader == null || membership.getId() < leader.getId()) {
+                leader = membership;
+            }
         }
-        if (recipients == 0) {
+        if (leader == null) {
             log.warn("보호자 최초 안전 알림 수신자 없음: incidentRef={}", incident.getIncidentRef());
             return;
         }
-        log.info("보호자 최초 안전 알림 enqueue: incidentRef={}, recipients={}",
-                incident.getIncidentRef(), recipients);
+        if (activeLeaders > 1) {
+            log.warn("보호자 최초 안전 알림 복수 방장: incidentRef={}, familyId={}",
+                    incident.getIncidentRef(), familyId);
+        }
+        outboxService.enqueue(leader.getGuardian().getId(), notification);
+        log.info("보호자 최초 안전 알림 enqueue: incidentRef={}, recipients=1", incident.getIncidentRef());
     }
 }

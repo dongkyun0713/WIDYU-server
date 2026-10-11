@@ -49,14 +49,12 @@ public record NotificationCopy(String title, String body) {
             copy("X02-OS", "{보낸 사람 이름} 님이 응원메시지를 보냈어요!", "앱에서 응원메시지를 확인해주세요."),
             copy("X02-INAPP", "{보낸 사람 이름} 님이 응원메시지를 보냈어요!", "{메시지 미리보기}"),
             copy("S01", "평소와 다른 심박이 감지됐어요.", "괜찮으시면 취소를 눌러주세요. 시간 안에 누르지 않으면 보호자에게 알려드려요."),
-            copy("S02", "안심구역을 벗어났어요.", "괜찮으시면 취소를 눌러주세요. 시간 안에 누르지 않으면 보호자에게 알려드려요."),
             copy("S03", "보호자에게 알렸어요.", "연락을 기다리는 동안 안전한 곳에서 잠시 기다려주세요."),
             copy("S04", "{시니어 이름} 님의 심박 상태를 확인해주세요.", "평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요."),
-            copy("S05", "{시니어 이름} 님이 안심구역을 벗어났어요.", "현재 위치와 상태를 확인해주세요."),
             copy("S06", "아직 보호자 대응이 확인되지 않았어요.", "{시니어 이름} 님의 심박 상태와 위치를 바로 확인해주세요."),
-            copy("S07", "아직 보호자 대응이 확인되지 않았어요.", "{시니어 이름} 님의 현재 위치와 상태를 바로 확인해주세요."),
             copy("S08", "{시니어 이름} 님의 신체 지표가 평소와 달랐어요.", "본인은 괜찮다고 하셨어요. 필요하면 연락해보세요."),
-            copy("S09", "{시니어 이름} 님이 안심구역을 벗어났어요.", "본인은 괜찮다고 하셨어요. 필요하면 연락해보세요."),
+            copy("Z01", "{시니어 이름} 님이 안심구역을 벗어났어요.", null),
+            copy("Z02", "{시니어 이름} 님이 안심구역으로 돌아왔어요.", null),
             copy("S10", "괜찮다고 보호자에게 전해드렸어요.", null),
             copy("R01", "이제 가족 방장이 되었어요.", "가족 관리와 중요한 알림을 확인해주세요."));
 
@@ -80,19 +78,19 @@ public record NotificationCopy(String title, String body) {
 
     private static boolean allowed(NotificationType type, String code) {
         if (type == NotificationType.SAFETY_SELF_CHECK) {
-            return code.equals("S01") || code.equals("S02");
+            return code.equals("S01");
         }
         if (type == NotificationType.HEART_RATE_EMERGENCY) {
             return code.equals("S01") || code.equals("S03") || code.equals("S04") || code.equals("S06");
         }
         if (type == NotificationType.SAFE_ZONE_EXITED) {
-            return code.equals("S02") || code.equals("S03") || code.equals("S05") || code.equals("S07");
+            return code.equals("Z01");
+        }
+        if (type == NotificationType.SAFE_ZONE_ENTERED) {
+            return code.equals("Z02");
         }
         if (type == NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART) {
             return code.equals("S08");
-        }
-        if (type == NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE) {
-            return code.equals("S09");
         }
         return code.startsWith(type.copyCode().substring(0, 3));
     }

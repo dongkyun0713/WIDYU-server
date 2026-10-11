@@ -172,14 +172,14 @@ class FcmEligibilityTest {
     }
 
     @Test
-    @DisplayName("괜찮다는 안내를 판정하면 안전 카테고리보다 일반 그룹을 따른다")
-    void 괜찮다는_안내를_판정하면_일반_그룹을_따른다() {
+    @DisplayName("안심구역 돌아옴을 판정하면 안심구역 그룹 설정을 따른다")
+    void 안심구역_돌아옴을_판정하면_안심구역_그룹을_따른다() {
         // given
         FcmOutbox outbox = outbox(null);
-        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.SAFE_ZONE_ENTERED);
         ReflectionTestUtils.setField(outbox, "fcmCategory", FcmCategory.SAFE_ZONE);
         activeRecipient(outbox);
-        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.SAFE_ZONE)).willReturn(false);
 
         // when
         boolean allowed = eligibility.eligible(outbox);

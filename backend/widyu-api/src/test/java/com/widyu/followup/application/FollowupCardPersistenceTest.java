@@ -110,13 +110,28 @@ class FollowupCardPersistenceTest {
     }
 
     @Test
+    @DisplayName("과거 안심구역 사건에 OK로 답해도 후속 카드를 발급하지 않는다")
+    void 과거_안심구역_사건에_OK로_답해도_카드를_발급하지_않는다() {
+        // given
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
+        Member senior = senior("01098110012");
+        Incident incident = incident(senior.getId(), "inc-followup-zone", IncidentKind.SAFE_ZONE_EXIT);
+
+        // when
+        service.issueIfEnabled(incident);
+
+        // then
+        assertThat(cards.count()).isZero();
+    }
+
+    @Test
     @DisplayName("한 방문에서 카드를 제출하면 같은 방문의 다음 카드를 노출하지 않는다")
     void 한_방문에서_제출하면_다음_카드를_노출하지_않는다() {
         // given
         given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110002");
         service.issueIfEnabled(incident(senior.getId(), "inc-followup-2", IncidentKind.HR_ANOMALY));
-        service.issueIfEnabled(incident(senior.getId(), "inc-followup-3", IncidentKind.SAFE_ZONE_EXIT));
+        service.issueIfEnabled(incident(senior.getId(), "inc-followup-3", IncidentKind.FALL_SUSPECTED));
         String visit = "AAAAAAAA-0000-0000-0000-000000000002";
 
         // when

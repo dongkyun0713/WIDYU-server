@@ -7,6 +7,7 @@ import com.widyu.fcm.dto.FcmSendDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.net.InetSocketAddress;
@@ -31,6 +32,37 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
+    @ParameterizedTest
+    @EnumSource(value = NotificationType.class, names = {"SAFE_ZONE_EXITED", "SAFE_ZONE_ENTERED"})
+    @DisplayName("안심구역 소식을 전송하면 일반 채널과 보통 우선순위를 사용한다")
+    void 안심구역_소식을_전송하면_일반_채널을_사용한다(NotificationType type) throws Exception {
+        // given
+        ObjectMapper mapper = new ObjectMapper();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
+                () -> "loopback-access-token", Duration.ofSeconds(2));
+        FcmSendDto message = FcmSendDto.builder().title("안심구역 소식")
+                .notificationType(type).seniorId(17L).eventId("zone-event-1").build();
+        try {
+            // when
+            assertThat(transport.send("loopback-token", message).success()).isTrue();
+
+            // then
+            JsonNode body = bodies.getFirst();
+            assertThat(body.at("/message/data/type").asText()).isEqualTo(type.name());
+            assertThat(body.at("/message/data/priority").asText()).isEqualTo("interaction");
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("normal");
+            assertThat(body.at("/message/android/notification/channel_id").asText())
+                    .isEqualTo("widyu_general");
+            assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
+                    .isEqualTo("active");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
     @Test
     @DisplayName("본인확인 푸시를 전송하면 안전 채널과 시간 민감 표시를 포함한다")
     void 본인확인_푸시를_전송하면_안전_표시를_포함한다() throws Exception {

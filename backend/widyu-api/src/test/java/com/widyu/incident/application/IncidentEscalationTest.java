@@ -1,6 +1,7 @@
 package com.widyu.incident.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -57,64 +58,16 @@ class IncidentEscalationTest {
     }
 
     @Test
-    @DisplayName("안심구역 이탈 사건을 즉시 알리면 보호자에게 S05를 enqueue한다")
-    void 안심구역_이탈_사건을_즉시_알리면_보호자에게_S05를_enqueue한다() {
+    @DisplayName("과거 안심구역 사건을 즉시 알리려 하면 보호자 알림 없이 예외가 발생한다")
+    void 과거_안심구역_사건을_즉시_알리려_하면_예외가_발생한다() {
         // given
         Incident incident = safeZoneIncident();
-        givenZoneRecipients();
 
-        // when
-        escalation.sendImmediately(incident, 20L);
-
-        // then
-        assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
-        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(outbox).should().enqueue(eq(2L), message.capture());
-        then(outbox).should().enqueue(eq(3L), message.capture());
-        assertSafeZoneMessage(message.getAllValues().get(0));
-        assertSafeZoneMessage(message.getAllValues().get(1));
-    }
-
-    @Test
-    @DisplayName("안심구역 이탈 사건에 판정 ID가 있으면 기존 S05 data를 유지한다")
-    void 안심구역_이탈_사건에_판정_ID가_있으면_기존_S05_data를_유지한다() {
-        // given
-        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L).decisionId("dec-zone")
-                .kind(IncidentKind.SAFE_ZONE_EXIT).openedAtMs(1L).respondByMs(60_001L).build();
-        givenZoneRecipients();
-
-        // when
-        escalation.sendImmediately(incident, 20L);
-
-        // then
-        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(outbox).should().enqueue(eq(2L), message.capture());
-        then(outbox).should().enqueue(eq(3L), message.capture());
-        assertThat(message.getAllValues()).allSatisfy(value -> assertThat(value.dataForEnqueue("inc-1"))
-                .containsEntry("decisionId", "dec-zone")
-                .doesNotContainKeys("deliveryStage", "safetyEventId"));
-    }
-
-    @Test
-    @DisplayName("안심구역 이탈 사건의 확인 시간이 끝나면 공통 스케줄러가 S05를 enqueue한다")
-    void 안심구역_이탈_사건의_확인_시간이_끝나면_공통_스케줄러가_S05를_enqueue한다() {
-        // given
-        Incident incident = safeZoneIncident();
-        given(incidents.escalateTimedOutIfDue(3L, 61_000L)).willReturn(1);
-        given(incidents.claimInitialAlertIfDue(3L, 61_000L)).willReturn(1);
-        given(incidents.findById(3L)).willReturn(Optional.of(incident));
-        givenZoneRecipients();
-
-        // when
-        boolean queued = escalation.escalateIfDue(3L, 61_000L);
-
-        // then
-        assertThat(queued).isTrue();
-        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(outbox).should().enqueue(eq(2L), message.capture());
-        then(outbox).should().enqueue(eq(3L), message.capture());
-        assertSafeZoneMessage(message.getAllValues().get(0));
-        assertSafeZoneMessage(message.getAllValues().get(1));
+        // when / then
+        assertThatThrownBy(() -> escalation.sendImmediately(incident, 20L))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(incident.getInitialAlertSentAtMs()).isNull();
+        then(outbox).shouldHaveNoInteractions();
     }
 
     @Test
@@ -284,24 +237,6 @@ class IncidentEscalationTest {
         given(leaderGuardian.getId()).willReturn(2L);
     }
 
-    private void givenZoneRecipients() {
-        Member senior = org.mockito.Mockito.mock(Member.class);
-        Member firstGuardian = org.mockito.Mockito.mock(Member.class);
-        Member secondGuardian = org.mockito.Mockito.mock(Member.class);
-        FamilyMembership first = org.mockito.Mockito.mock(FamilyMembership.class);
-        FamilyMembership second = org.mockito.Mockito.mock(FamilyMembership.class);
-        given(members.findById(1L)).willReturn(Optional.of(senior));
-        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
-        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(first, second));
-        given(senior.getName()).willReturn("시니어");
-        given(first.getGuardian()).willReturn(firstGuardian);
-        given(firstGuardian.getStatus()).willReturn(Status.ACTIVE);
-        given(firstGuardian.getId()).willReturn(2L);
-        given(second.getGuardian()).willReturn(secondGuardian);
-        given(secondGuardian.getStatus()).willReturn(Status.ACTIVE);
-        given(secondGuardian.getId()).willReturn(3L);
-    }
-
     private void assertMessage(FcmSendDto message, String decisionId) {
         assertThat(message.notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
         assertThat(message.title()).isEqualTo("시니어 님의 심박 상태를 확인해주세요.");
@@ -322,15 +257,4 @@ class IncidentEscalationTest {
         }
     }
 
-    private void assertSafeZoneMessage(FcmSendDto message) {
-        assertThat(message.notificationType()).isEqualTo(NotificationType.SAFE_ZONE_EXITED);
-        assertThat(message.title()).isEqualTo("시니어 님이 안심구역을 벗어났어요.");
-        assertThat(message.content()).isEqualTo("현재 위치와 상태를 확인해주세요.");
-        assertThat(message.eventId()).isEqualTo("inc-1");
-        assertThat(message.decisionId()).isNull();
-        assertThat(message.dataForEnqueue("inc-1").get("deepLink"))
-                .isEqualTo("/location?seniorId=1");
-        assertThat(message.dataForEnqueue("inc-1"))
-                .doesNotContainKeys("deliveryStage", "safetyEventId");
-    }
 }
