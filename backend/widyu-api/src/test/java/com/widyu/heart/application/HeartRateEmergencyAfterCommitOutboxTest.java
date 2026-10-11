@@ -276,7 +276,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
                 .findFirst().orElseThrow().getDecisionId()).isNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
     }
 
     @Test
@@ -338,7 +338,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(incident.getInitialAlertSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 2);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(ids[0]))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
         assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
         var center = notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())
                 .orElseThrow();
@@ -386,7 +386,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(incident.getInitialAlertSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
         assertThat(notifications.count()).isEqualTo(previousNotifications);
     }
 }

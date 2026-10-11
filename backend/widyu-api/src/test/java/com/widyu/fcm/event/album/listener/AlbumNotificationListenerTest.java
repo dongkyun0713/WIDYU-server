@@ -86,7 +86,7 @@ class AlbumNotificationListenerTest {
         FcmSendDto created = captor.getValue();
         assertThat(created.notificationType()).isEqualTo(NotificationType.ALBUM_CREATED);
         assertThat(created.title()).isEqualTo("보호자 님이 게시물을 올렸어요!");
-        assertThat(created.dataForEnqueue("event-2")).containsEntry("deepLink", "widyu://albums/10");
+        assertThat(created.dataForEnqueue("event-2")).containsEntry("deepLink", "/album/post?postId=10");
     }
 
     @Test
@@ -109,7 +109,7 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
         assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_UPLOAD_COMPLETE);
         assertThat(captor.getValue().dataForEnqueue("event-1").get("deepLink"))
-                .isEqualTo("widyu://albums/10");
+                .isEqualTo("/album/post?postId=10");
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 새로운 소식을 전했어요!");
         assertThat(captor.getValue().seniorId()).isEqualTo(1L);

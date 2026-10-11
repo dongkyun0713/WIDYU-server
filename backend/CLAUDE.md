@@ -91,7 +91,7 @@
 - **판정 기록과 나눠 둔다**. `decision_record`는 「무엇을 보고 언제 그렇게 말했는가」이고 `incident`는 「본인이 뭐라고 답했고 보호자가 나중에 뭐라고 판정했는가」다(정책 1.8.1). 사후 판정 `outcome`이 실증의 지도학습 라벨이다
 - **보호자 도달 시각은 여기 저장하지 않는다**. 그건 판정 기록의 `alert_at_ms`가 답한다(형식서 §3.7)
 - 열기는 `HeartRateBatchService`(심박 `HR_ANOMALY`)와 `FallAssessmentService`(낙상 `FALL_SUSPECTED`)의 판정 저장 직후다. 둘 다 `try/catch`라 **사건을 못 열어도 심박 저장·보호자 알림은 그대로 간다**
-- 여는 즉시 시니어 본인에게 확인 푸시(`FcmCategory.INCIDENT_SELF_CHECK`, `scheme=widyu://incident/{incidentRef}`)를 보내고 상태를 `CHECKING`으로 둔다. 제목·본문에 건강값을 담지 않는다
+- 여는 즉시 시니어 본인에게 확인 푸시(`FcmCategory.INCIDENT_SELF_CHECK`, `data.type=EMERGENCY_CONFIRM_REQUEST`, `data.entityId={incidentRef}`, 딥링크 없음)를 보내고 상태를 `CHECKING`으로 둔다. 위듀 앱은 이 `type`으로 본인확인 화면을 띄운다(LLD-0076 §11). 제목·본문에 건강값을 담지 않는다
 - **무응답은 서버가 판정한다**(`respond_by_ms = opened_at_ms + 45초`, `sensor.incident.self-check-sec`). `IncidentTimeoutScheduler`가 `sensor.incident.timeout-poll-ms`마다 벌크 UPDATE 한 문장으로 `ESCALATED`로 올린다. 여기서 보호자에게 다시 알리지 않는다 — 판정 시점에 이미 나갔다
 - **마감을 넘긴 `OK`는 응답만 남기고 상태는 `ESCALATED`다**. 스케줄러가 아직 돌지 않아 상태가 `CHECKING`이어도 마찬가지다 — `OK_CLOSED`로 적으면 무응답이던 사건이 정상 종료로 둔갑하고 그 뒤 스케줄러 대상에서도 빠진다. 보호자에게 이미 알림이 나간 사건을 「괜찮았던 일」로 되돌리면 그 알림을 설명할 자료가 없어진다
 - **응답·사후 판정 저장은 리포지토리의 조건부 UPDATE 한 문장**이다(`respond`: `response is null`·`state <> RESOLVED` / `resolve`: `state <> RESOLVED`. 갱신 0건이면 409). 읽고 고쳐 저장하면 응답은 스케줄러의 벌크 `ESCALATED`와 경합해 stale 상태가 덮고, 사후 판정은 보호자 둘이 동시에 넣을 때 나중 요청이 앞선 라벨과 판정자를 덮는다. 사후 판정 조회는 **가족 접근 확인용**이고 종결 여부는 UPDATE 조건이 정한다

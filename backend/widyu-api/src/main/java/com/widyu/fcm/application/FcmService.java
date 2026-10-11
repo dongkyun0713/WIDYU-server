@@ -1,7 +1,6 @@
 package com.widyu.fcm.application;
 
 import com.widyu.fcm.dto.FcmSendDto;
-import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.fcm.dto.request.SendNotificationRequest;
 import com.widyu.fcm.dto.response.FcmCategoryResponse;
 import com.widyu.fcm.dto.response.FcmNotificationResponses;
@@ -9,6 +8,7 @@ import com.widyu.fcm.dto.response.ToastResDto;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.MemberFcmToken;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.album.repository.AlbumViewRepository;
@@ -21,7 +21,6 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
-import com.widyu.member.MemberType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -200,10 +199,8 @@ public class FcmService {
 
         // 알림 제목: "보내는사람님이 받는사람님에게 응원메시지를 보냈어요."
         String title = sender.getName() + "님이 " + receiver.getName() + "님에게 응원메시지를 보냈어요.";
-        Map<String, String> data = Map.of();
-        if (receiver.getType() == MemberType.GUARDIAN) {
-            data = Map.of("deepLink", GuardianDeepLinks.notification());
-        }
+        NotificationType type = NotificationType.CHEER_MESSAGE_RECEIVED;
+        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "type", type.name());
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)

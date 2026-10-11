@@ -51,7 +51,7 @@ class WalkNotificationListenerTest {
         assertThat(captor.getValue().title()).isEqualTo("오늘 6500걸음 걸으셨어요.");
         assertThat(captor.getValue().content()).isEqualTo("가능하다면 조금 더 걸어보는 건 어떨까요?");
         assertThat(captor.getValue().dataForEnqueue("event-1"))
-                .containsEntry("deepLink", "widyu://walk/goal");
+                .containsEntry("deepLink", "/goal");
     }
 
     @Test
