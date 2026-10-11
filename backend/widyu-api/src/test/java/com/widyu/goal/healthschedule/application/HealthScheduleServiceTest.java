@@ -107,7 +107,7 @@ class HealthScheduleServiceTest {
         HealthSchedule schedule = schedule(senior);
         ReflectionTestUtils.setField(schedule, "id", 100L);
         given(memberUtil.getCurrentMember()).willReturn(guardian);
-        given(healthScheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
         given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(profile));
         given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
 
@@ -133,7 +133,7 @@ class HealthScheduleServiceTest {
         HealthSchedule schedule = schedule(senior);
         ReflectionTestUtils.setField(schedule, "id", 100L);
         given(memberUtil.getCurrentMember()).willReturn(guardian);
-        given(healthScheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
         given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(profile));
         given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
 
@@ -157,7 +157,7 @@ class HealthScheduleServiceTest {
         HealthSchedule schedule = schedule(senior);
         ReflectionTestUtils.setField(schedule, "id", 100L);
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
 
         // when
         healthScheduleService.updateHealthSchedule(100L, updateRequest());
@@ -231,7 +231,7 @@ class HealthScheduleServiceTest {
         Member otherSenior = member(2L, MemberType.SENIOR);
         HealthSchedule schedule = schedule(otherSenior);
         given(memberUtil.getCurrentMember()).willReturn(currentSenior);
-        given(healthScheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
 
         // when & then
         assertThatThrownBy(() -> healthScheduleService.updateHealthSchedule(100L, updateRequest()))
@@ -256,6 +256,117 @@ class HealthScheduleServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN)
                 .hasMessageContaining("해당 시니어의 일정을 조회할 권한이 없습니다.");
+    }
+
+    @Test
+    @DisplayName("보호자가 완료된 건강 일정을 수정하면 409가 발생하고 일정과 알림이 유지된다")
+    void 보호자가_완료된_건강_일정을_수정하면_409와_불변_상태가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        HealthSchedule schedule = schedule(senior);
+        schedule.complete();
+        schedule.claimReward();
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile(10L, senior)));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        String originalName = schedule.getScheduleName();
+        LocalDateTime originalTime = schedule.getScheduledAt();
+
+        // when & then
+        assertThatThrownBy(() -> healthScheduleService.updateHealthSchedule(100L, updateRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.HEALTH_SCHEDULE_EDIT_LOCKED);
+        assertThat(schedule.getScheduleName()).isEqualTo(originalName);
+        assertThat(schedule.getScheduledAt()).isEqualTo(originalTime);
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        assertThat(schedule.getIsReward()).isTrue();
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("보호자가 완료된 건강 일정을 삭제하면 409가 발생하고 삭제와 알림이 없다")
+    void 보호자가_완료된_건강_일정을_삭제하면_409와_무삭제가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        HealthSchedule schedule = schedule(senior);
+        schedule.complete();
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile(10L, senior)));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> healthScheduleService.deleteHealthSchedule(100L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.HEALTH_SCHEDULE_EDIT_LOCKED);
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.COMPLETED);
+        then(healthScheduleRepository).should(never()).delete(any(HealthSchedule.class));
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("보호자가 수정 요청으로 완료를 만들면 400이 발생하고 다른 필드와 알림도 유지된다")
+    void 보호자가_수정_요청으로_완료를_만들면_400과_불변_상태가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        Member senior = member(2L, MemberType.SENIOR);
+        HealthSchedule schedule = schedule(senior);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile(10L, senior)));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        HealthScheduleUpdateRequest request = new HealthScheduleUpdateRequest(
+                "수정 불가", "다른 장소", 37.4, 127.1, LocalDateTime.now(), ProgressStatus.COMPLETED);
+        LocalDateTime originalTime = schedule.getScheduledAt();
+
+        // when & then
+        assertThatThrownBy(() -> healthScheduleService.updateHealthSchedule(100L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.HEALTH_SCHEDULE_INVALID_PROGRESS_TRANSITION);
+        assertThat(schedule.getScheduleName()).isEqualTo("병원 방문");
+        assertThat(schedule.getScheduledAt()).isEqualTo(originalTime);
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.UPCOMING);
+        then(eventPublisher).should(never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("시니어가 당일 미완료 일정을 수정하면 내용을 변경한다")
+    void 시니어가_당일_미완료_일정을_수정하면_내용을_변경한다() {
+        // given
+        Member senior = member(2L, MemberType.SENIOR);
+        HealthSchedule schedule = HealthSchedule.create(senior, "병원 방문", "서울시", 37.5, 127.0,
+                LocalDateTime.now().withHour(14));
+        schedule.markIncomplete();
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
+
+        // when
+        healthScheduleService.updateHealthSchedule(100L, updateRequest());
+
+        // then
+        assertThat(schedule.getScheduleName()).isEqualTo("수정");
+        assertThat(schedule.getProgressStatus()).isEqualTo(ProgressStatus.UPCOMING);
+    }
+
+    @Test
+    @DisplayName("시니어가 당일 인증 전 일정을 삭제하면 논리 삭제를 요청한다")
+    void 시니어가_당일_인증_전_일정을_삭제하면_논리_삭제를_요청한다() {
+        // given
+        Member senior = member(2L, MemberType.SENIOR);
+        HealthSchedule schedule = HealthSchedule.create(senior, "병원 방문", "서울시", 37.5, 127.0,
+                LocalDateTime.now().withHour(14));
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findByIdForUpdate(100L)).willReturn(Optional.of(schedule));
+
+        // when
+        healthScheduleService.deleteHealthSchedule(100L);
+
+        // then
+        then(healthScheduleRepository).should().delete(schedule);
+        then(eventPublisher).should(never()).publishEvent(any());
     }
 
     private HealthScheduleCreateForSeniorRequest createRequest(Long memberId) {

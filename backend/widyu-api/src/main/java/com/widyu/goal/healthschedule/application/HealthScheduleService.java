@@ -2,6 +2,7 @@ package com.widyu.goal.healthschedule.application;
 
 import com.widyu.global.util.MemberUtil;
 import com.widyu.healthschedule.HealthSchedule;
+import com.widyu.healthschedule.ProgressStatus;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateForSeniorRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleCreateRequest;
 import com.widyu.goal.healthschedule.dto.request.HealthScheduleUpdateRequest;
@@ -104,11 +105,16 @@ public class HealthScheduleService {
 
     @Transactional
     public HealthScheduleResponse updateHealthSchedule(Long healthScheduleId, HealthScheduleUpdateRequest request) {
-        HealthSchedule healthSchedule = healthScheduleRepository.findById(healthScheduleId)
+        HealthSchedule healthSchedule = healthScheduleRepository.findByIdForUpdate(healthScheduleId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "건강 일정을 찾을 수 없습니다."));
 
         // 권한 체크
         validateHealthScheduleAccess(healthSchedule);
+
+        validateEditable(healthSchedule);
+        if (request.progressStatus() == ProgressStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.HEALTH_SCHEDULE_INVALID_PROGRESS_TRANSITION);
+        }
 
         healthSchedule.update(
                 request.scheduleName(),
@@ -127,15 +133,23 @@ public class HealthScheduleService {
 
     @Transactional
     public void deleteHealthSchedule(Long healthScheduleId) {
-        HealthSchedule healthSchedule = healthScheduleRepository.findById(healthScheduleId)
+        HealthSchedule healthSchedule = healthScheduleRepository.findByIdForUpdate(healthScheduleId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "건강 일정을 찾을 수 없습니다."));
 
         // 권한 체크
         validateHealthScheduleAccess(healthSchedule);
 
+        validateEditable(healthSchedule);
+
         healthScheduleRepository.delete(healthSchedule);
         publishGuardianChange(memberUtil.getCurrentMember(), healthSchedule.getMember(),
                 NotificationType.HEALTH_SCHEDULE_DELETED, healthScheduleId);
+    }
+
+    private void validateEditable(HealthSchedule healthSchedule) {
+        if (healthSchedule.getProgressStatus() == ProgressStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.HEALTH_SCHEDULE_EDIT_LOCKED);
+        }
     }
 
     private void publishGuardianChange(Member actor, Member target, NotificationType type, Long scheduleId) {

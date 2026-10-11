@@ -129,7 +129,7 @@ class HealthScheduleProgressServiceTest {
         // 완료 허용창 안(예정 시각 직후)이 되도록 과거 5분으로 고정해 자정 경계에서도 안정적으로 통과시킨다.
         HealthSchedule schedule = upcomingScheduleFor(senior, LocalDateTime.now().minusMinutes(5));
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
         given(seniorLocationRepository.findBySeniorId(senior.getId()))
                 .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.5, 127.0)));
 
@@ -148,7 +148,7 @@ class HealthScheduleProgressServiceTest {
         Member senior = seniorMember();
         HealthSchedule schedule = upcomingScheduleFor(senior, LocalDateTime.now().plusDays(1));
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
 
         // when & then
         assertThatThrownBy(() -> healthScheduleProgressService.completeSchedule(scheduleId))
@@ -165,7 +165,7 @@ class HealthScheduleProgressServiceTest {
         Member senior = seniorMember();
         HealthSchedule schedule = upcomingScheduleFor(senior, LocalDateTime.now().minusMinutes(31));
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
 
         // when & then
         assertThatThrownBy(() -> healthScheduleProgressService.completeSchedule(scheduleId))
@@ -182,7 +182,7 @@ class HealthScheduleProgressServiceTest {
         Member senior = seniorMember();
         HealthSchedule schedule = upcomingScheduleFor(senior, LocalDateTime.now().minusMinutes(5));
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
         given(seniorLocationRepository.findBySeniorId(senior.getId()))
                 .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.0, 127.0)));
 
@@ -235,7 +235,7 @@ class HealthScheduleProgressServiceTest {
         Member senior = seniorMember();
         HealthSchedule schedule = scheduleWithId(senior, LocalDateTime.now().minusMinutes(5), scheduleId);
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
         given(seniorLocationRepository.findBySeniorId(senior.getId()))
                 .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.5, 127.0)));
 
@@ -285,7 +285,7 @@ class HealthScheduleProgressServiceTest {
         HealthSchedule schedule = scheduleWithId(senior, LocalDateTime.now().minusMinutes(5), scheduleId);
         schedule.claimReward();
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        given(healthScheduleRepository.findById(scheduleId)).willReturn(Optional.of(schedule));
+        given(healthScheduleRepository.findByIdForUpdate(scheduleId)).willReturn(Optional.of(schedule));
         given(seniorLocationRepository.findBySeniorId(senior.getId()))
                 .willReturn(Optional.of(SeniorLocation.of(senior.getId(), 37.5, 127.0)));
 
