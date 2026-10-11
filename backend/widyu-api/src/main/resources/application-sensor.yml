@@ -51,10 +51,12 @@ sensor:
     decider-id: ${SENSOR_HEART_AI_DECIDER_ID:widyu-ai-hr}
     decider-version: ${SENSOR_HEART_AI_DECIDER_VERSION:ver7}
 
-  # 본인확인 마감과 무응답 폴링(LLD-0054). 45초는 형식서 §3.7의 계약값이다.
+  # 본인확인 선행은 시니어 앱 준비 뒤 운영에서 켠다(LLD-0070).
   incident:
-    self-check-sec: ${SENSOR_INCIDENT_SELF_CHECK_SEC:45}
+    self-check-sec: ${SENSOR_INCIDENT_SELF_CHECK_SEC:60}
     timeout-poll-ms: ${SENSOR_INCIDENT_TIMEOUT_POLL_MS:5000}
+    self-check-first: ${SENSOR_INCIDENT_SELF_CHECK_FIRST:false}
+    situation-window-min: ${SENSOR_INCIDENT_SITUATION_WINDOW_MIN:5}
 
   fall-ai:
     enabled: ${SENSOR_FALL_AI_ENABLED:false}

@@ -1,53 +1,86 @@
 package com.widyu.incident.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 import com.widyu.incident.repository.IncidentRepository;
+import java.util.List;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("IncidentTimeoutScheduler 단위 테스트")
 class IncidentTimeoutSchedulerTest {
-
     @Mock private IncidentRepository incidentRepository;
+    @Mock private IncidentEscalation escalation;
 
     @Test
-    @DisplayName("폴링하면 마감을 넘긴 사건을 현재 시각 기준으로 한 번에 올린다")
-    void 폴링하면_마감을_넘긴_사건을_한_번에_올린다() {
+    @DisplayName("무응답 전환과 미발송 후보를 조회하면 각 사건을 별도 처리 경로로 넘긴다")
+    void 무응답_전환과_미발송_후보를_조회하면_각_사건을_처리한다() {
         // given
         long before = System.currentTimeMillis();
-        given(incidentRepository.escalateTimedOut(anyLong())).willReturn(2);
+        // 첫 사건은 플래그 OFF로 이미 발송한 무응답, 둘째는 플래그 ON의 미발송 후보다.
+        given(incidentRepository.findDueIds(anyLong(), eq(0L), any(Pageable.class)))
+                .willReturn(List.of(1L, 2L));
 
         // when
-        new IncidentTimeoutScheduler(incidentRepository).escalateTimedOut();
+        new IncidentTimeoutScheduler(incidentRepository, escalation).escalateTimedOut();
 
         // then
-        ArgumentCaptor<Long> nowMs = ArgumentCaptor.forClass(Long.class);
-        then(incidentRepository).should().escalateTimedOut(nowMs.capture());
-        // 마감 판정의 기준 시각은 서버다. 단말은 무응답을 보내지 않는다(ADR-0035 결정 5).
-        assertThat(nowMs.getValue()).isBetween(before, System.currentTimeMillis());
+        ArgumentCaptor<Long> now = ArgumentCaptor.forClass(Long.class);
+        then(incidentRepository).should().findDueIds(now.capture(), eq(0L), any(Pageable.class));
+        assertThat(now.getValue()).isBetween(before, System.currentTimeMillis());
+        then(escalation).should().escalateIfDue(eq(1L), eq(now.getValue()));
+        then(escalation).should().escalateIfDue(eq(2L), eq(now.getValue()));
+        then(escalation).should().escalateFallTimedOut(eq(now.getValue()));
     }
 
     @Test
-    @DisplayName("올릴 사건이 없으면 조용히 끝난다")
-    void 올릴_사건이_없으면_조용히_끝난다() {
+    @DisplayName("마감 후보가 없으면 발송 경로를 호출하지 않는다")
+    void 마감_후보가_없으면_발송_경로를_호출하지_않는다() {
         // given
-        given(incidentRepository.escalateTimedOut(anyLong())).willReturn(0);
+        given(incidentRepository.findDueIds(anyLong(), eq(0L), any(Pageable.class)))
+                .willReturn(List.of());
 
         // when
-        new IncidentTimeoutScheduler(incidentRepository).escalateTimedOut();
+        new IncidentTimeoutScheduler(incidentRepository, escalation).escalateTimedOut();
 
         // then
-        // 폴링은 5초마다 돈다. 0건까지 로그로 남기면 운영 로그가 이 한 줄로 덮인다.
-        then(incidentRepository).should().escalateTimedOut(anyLong());
-        then(incidentRepository).shouldHaveNoMoreInteractions();
+        then(escalation).should(never()).escalateIfDue(anyLong(), anyLong());
+        then(escalation).should().escalateFallTimedOut(anyLong());
+    }
+
+    @Test
+    @DisplayName("앞 페이지 사건의 발송이 실패해도 다음 페이지 사건을 같은 폴링에서 처리한다")
+    void 앞_페이지_발송이_실패해도_다음_페이지를_처리한다() {
+        // given
+        List<Long> firstPage = LongStream.rangeClosed(1, 100).boxed().toList();
+        given(incidentRepository.findDueIds(anyLong(), eq(0L), any(Pageable.class)))
+                .willReturn(firstPage);
+        given(incidentRepository.findDueIds(anyLong(), eq(100L), any(Pageable.class)))
+                .willReturn(List.of(101L));
+        given(escalation.escalateIfDue(eq(1L), anyLong()))
+                .willThrow(new IllegalStateException("enqueue failed"));
+
+        // when
+        new IncidentTimeoutScheduler(incidentRepository, escalation).escalateTimedOut();
+
+        // then
+        ArgumentCaptor<Long> now = ArgumentCaptor.forClass(Long.class);
+        then(incidentRepository).should().findDueIds(now.capture(), eq(0L), any(Pageable.class));
+        then(incidentRepository).should().findDueIds(eq(now.getValue()), eq(100L), any(Pageable.class));
+        then(escalation).should().escalateIfDue(eq(2L), eq(now.getValue()));
+        then(escalation).should().escalateIfDue(eq(101L), eq(now.getValue()));
+        then(escalation).should().escalateFallTimedOut(eq(now.getValue()));
     }
 }

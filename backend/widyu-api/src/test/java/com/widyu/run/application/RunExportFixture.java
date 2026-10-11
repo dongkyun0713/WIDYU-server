@@ -330,7 +330,7 @@ final class RunExportFixture {
                 new com.widyu.global.properties.SensorProperties.FallAi(
                         false, "/api/fall", 2, "widyu-server", "abstain-v1"),
                 new com.widyu.global.properties.SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
-                new com.widyu.global.properties.SensorProperties.Incident(45, 5000L));
+                new com.widyu.global.properties.SensorProperties.Incident(60, 5000L, false, 5));
     }
 
     // ── 현실 분량 합성 회차(LLD-0050 7절) ──────────────────────────

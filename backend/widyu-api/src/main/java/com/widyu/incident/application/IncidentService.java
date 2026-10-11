@@ -2,8 +2,10 @@ package com.widyu.incident.application;
 
 import com.widyu.decision.DecisionRecord;
 import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.SensorProperties;
@@ -16,6 +18,7 @@ import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.member.application.FamilyAccessService;
+import com.widyu.member.repository.MemberRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,15 +37,15 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class IncidentService {
 
-    private static final String SELF_CHECK_TITLE = "괜찮으세요?";
-    private static final String SELF_CHECK_CONTENT = "지금 상태를 알려주세요. 답이 없으면 가족에게 알립니다.";
     private static final String SELF_CHECK_SCHEME_PREFIX = "widyu://incident/";
     private static final long MILLIS_PER_SECOND = 1000L;
+    private static final long MILLIS_PER_MINUTE = 60_000L;
 
     private final IncidentRepository incidentRepository;
     private final FcmService fcmService;
     private final FamilyAccessService familyAccessService;
     private final SensorProperties sensorProperties;
+    private final MemberRepository memberRepository;
 
     /**
      * 위급 판정이 사건을 연다(LLD-0054 5.1).
@@ -76,6 +79,33 @@ public class IncidentService {
         return incident;
     }
 
+    /** 판정 행이 없는 제품용 단건 위급. 회원 행 잠금으로 동시 사건 생성을 직렬화한다. */
+    @Transactional
+    public Incident openForAlert(Long memberId, IncidentKind kind) {
+        memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        long openedAtMs = System.currentTimeMillis();
+        long windowStartMs = openedAtMs
+                - sensorProperties.incident().situationWindowMin() * MILLIS_PER_MINUTE;
+        Optional<Incident> opened = incidentRepository
+                .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullAndOpenedAtMsGreaterThanEqualOrderByOpenedAtMsDesc(
+                        memberId, kind, List.of(IncidentState.OPEN, IncidentState.CHECKING,
+                                IncidentState.ESCALATED), windowStartMs);
+        if (opened.isPresent()) {
+            return opened.get();
+        }
+        Incident incident = incidentRepository.save(Incident.builder()
+                .incidentRef("inc-" + UUID.randomUUID().toString().replace("-", ""))
+                .memberId(memberId)
+                .kind(kind)
+                .openedAtMs(openedAtMs)
+                .respondByMs(openedAtMs + sensorProperties.incident().selfCheckSec() * MILLIS_PER_SECOND)
+                .build());
+        fcmService.sendMessageToUser(memberId, selfCheckMessage(incident));
+        incident.markChecking();
+        return incident;
+    }
+
     /**
      * 본인 응답(LLD-0054 5.2). 다른 회원이 부르면 사건의 존재를 알리지 않고 404다.
      *
@@ -87,7 +117,7 @@ public class IncidentService {
     public IncidentResponse respond(Long memberId, String incidentRef, IncidentRespondRequest request) {
         findOwned(memberId, incidentRef);
         int updated = incidentRepository.respond(incidentRef, memberId, request.response(), request.via(),
-                System.currentTimeMillis(), answeredState(request.response()));
+                System.currentTimeMillis(), request.deviceRespondedAtMs(), answeredState(request.response()));
         if (updated == 0) {
             throw new BusinessException(ErrorCode.INCIDENT_ALREADY_ANSWERED);
         }
@@ -165,11 +195,24 @@ public class IncidentService {
 
     /** 본인확인 푸시. 건강값을 담지 않고 사건 식별자만 들려 보낸다. */
     private FcmSendDto selfCheckMessage(Incident incident) {
+        if (incident.getKind() == IncidentKind.FALL_SUSPECTED) {
+            return FcmSendDto.builder()
+                    .title("괜찮으세요?")
+                    .content("지금 상태를 알려주세요. 답이 없으면 가족에게 알립니다.")
+                    .fcmCategory(FcmCategory.INCIDENT_SELF_CHECK)
+                    .scheme(SELF_CHECK_SCHEME_PREFIX + incident.getIncidentRef())
+                    .emergency(true)
+                    .build();
+        }
+        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, "S01", null);
         return FcmSendDto.builder()
-                .title(SELF_CHECK_TITLE)
-                .content(SELF_CHECK_CONTENT)
+                .title(copy.title())
+                .content(copy.body())
                 .fcmCategory(FcmCategory.INCIDENT_SELF_CHECK)
                 .scheme(SELF_CHECK_SCHEME_PREFIX + incident.getIncidentRef())
+                .notificationType(NotificationType.SAFETY_SELF_CHECK)
+                .eventId(incident.getIncidentRef())
+                .entityId(incident.getIncidentRef())
                 .emergency(true)
                 .build();
     }

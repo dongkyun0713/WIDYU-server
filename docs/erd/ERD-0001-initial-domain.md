@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-09-16 (study 도메인 추가) |
+| 코드 동기화 | 2026-10-02 (LLD-0070 incident 확장) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -379,13 +379,22 @@ erDiagram
         String incidentRef UK "외부 식별자. 내보내기의 incident_id"
         Long memberId
         String runId
-        String decisionId UK "이 사건을 연 판정. 판정 1 = 사건 1"
+        String decisionId UK "NULL 허용: 단건 심박은 판정 없음"
         String kind "HR_ANOMALY / FALL_SUSPECTED"
         String level "판정 severity 복사"
         Long openedAtMs
-        Long respondByMs "openedAtMs + 45초 (설정값)"
+        Long respondByMs "openedAtMs + 60초 (설정값)"
         String response "OK / HELP"
         Long respondedAtMs
+        Long deviceRespondedAtMs "단말 클릭 시각"
+        Long initialAlertSentAtMs "INITIAL_ALERT enqueue 시각·멱등 게이트"
+        String lastDecisionId "마지막 연결 판정"
+        Integer detectionCount "기본 1"
+        Long situationEndedAtMs
+        String guardianResponseType "MESSAGE_SENT / CALL_INITIATED"
+        Long guardianResponseAtMs
+        Long guardianResponseBy
+        Long policyRevision
         String responseVia "WATCH / PHONE"
         String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
         String outcome "TRUE_EMERGENCY / FALSE_ALARM / UNKNOWN. 실증 학습 라벨"
@@ -760,7 +769,8 @@ erDiagram
 | `decision_record` | `idx_decision_record_member_time` | `(member_id, decision_at_ms)` | 회원별 판정 이력 조회 |
 | `decision_record` | `idx_decision_record_trigger_batch` | `(trigger_batch_id)` | 충격 배치 근거 추적 |
 | `incident` | UK `uk_incident_incident_ref` | `(incident_ref)` | 외부 식별자 |
-| `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 판정 1 = 사건 1. 재시도가 사건을 늘리지 못하게 막는다 |
+| `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 배치 판정 1 = 사건 1. 단건의 NULL은 여러 행 허용 |
+| `incident` | `idx_incident_alert_pending` | `(initial_alert_sent_at_ms, respond_by_ms)` | 보호자 최초 알림 후보 조회·멱등 게이트 (LLD-0070) |
 | `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
 | `incident` | `idx_incident_run_time` | `(run_id, opened_at_ms)` | 회차 내보내기 |
 | `incident` | `idx_incident_state_deadline` | `(state, respond_by_ms)` | 무응답 스케줄러가 매 폴링마다 타는 경로 |
@@ -803,6 +813,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-02 | `incident` | `decision_id` NULL 허용, 본인확인·보호자 최초 알림·후속 안전 상태 컬럼 및 후보 인덱스 추가 (LLD-0070) | `scripts/mysql/alter_incident_self_check_first.sql` |
 | 2026-10-02 | `member_notification_setting`·`member` | 설정 4분류로 매핑(기존 일반 다섯 항목이 모두 꺼진 회원만 `GENERAL=false`), `category VARCHAR(32)`, 회원별 `notification_policy_revision` 추가 (LLD-0065) | `scripts/mysql/migrate_notification_setting_group.sql` |
 | 2026-10-01 | `fcm_notification`·`fcm_outbox` | 센터 수신자×이벤트 행의 메타데이터·UK, 토큰 FK NULL 허용, outbox `notification_id` 참조 (LLD-0062) | `scripts/mysql/alter_fcm_notification_center.sql` |
 | 2026-10-01 | `family_membership`·`family` | `sort_order INT NOT NULL`(가족별 `connected_at, id` 순서 백필)·`family_order_revision BIGINT NOT NULL DEFAULT 0` 추가 (LLD-0064) | `scripts/mysql/alter_family_membership_sort_order.sql` |

@@ -1,12 +1,14 @@
 package com.widyu.incident.repository;
 
 import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -19,6 +21,9 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     Optional<Incident> findByDecisionId(String decisionId);
 
     Optional<Incident> findByIncidentRef(String incidentRef);
+
+    Optional<Incident> findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullAndOpenedAtMsGreaterThanEqualOrderByOpenedAtMsDesc(
+            Long memberId, IncidentKind kind, List<IncidentState> states, Long openedAtMsFrom);
 
     List<Incident> findTop50ByMemberIdOrderByOpenedAtMsDesc(Long memberId);
 
@@ -45,9 +50,10 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             UPDATE Incident i
                SET i.response = :response,
                    i.respondedAtMs = :respondedAtMs,
+                   i.deviceRespondedAtMs = :deviceRespondedAtMs,
                    i.responseVia = :responseVia,
                    i.state = CASE
-                       WHEN :respondedAtMs > i.respondByMs
+                       WHEN :respondedAtMs >= i.respondByMs
                            THEN com.widyu.incident.IncidentState.ESCALATED
                        WHEN i.state = com.widyu.incident.IncidentState.ESCALATED
                            THEN com.widyu.incident.IncidentState.ESCALATED
@@ -64,6 +70,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             @Param("response") IncidentResponseValue response,
             @Param("responseVia") ResponseVia responseVia,
             @Param("respondedAtMs") long respondedAtMs,
+            @Param("deviceRespondedAtMs") Long deviceRespondedAtMs,
             @Param("answeredState") IncidentState answeredState);
 
     /**
@@ -93,19 +100,57 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             @Param("resolvedAtMs") long resolvedAtMs,
             @Param("emergencyCalledAtMs") Long emergencyCalledAtMs);
 
-    /**
-     * 마감을 넘긴 미응답 사건을 한 문장으로 올린다(ADR-0035 결정 5).
-     *
-     * <p>행을 읽어 하나씩 고치면 폴링 주기마다 건수만큼 쿼리가 늘고, 두 워커가 같은 행을 잡으면
-     * 상태가 엇갈린다. 조건이 상태에 들어 있어 이 UPDATE는 몇 번 돌아도 결과가 같다.
-     */
-    @Modifying
+    @Query("""
+            SELECT i.id FROM Incident i
+             WHERE i.id > :afterId
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND ((i.state IN (com.widyu.incident.IncidentState.OPEN,
+                                 com.widyu.incident.IncidentState.CHECKING)
+                     AND i.respondByMs < :nowMs)
+                    OR (i.state = com.widyu.incident.IncidentState.ESCALATED
+                        AND i.initialAlertSentAtMs IS NULL))
+             ORDER BY i.id
+            """)
+    List<Long> findDueIds(@Param("nowMs") long nowMs, @Param("afterId") long afterId, Pageable limit);
+
+    /** 알림 발송 여부와 독립적으로 만료된 본인확인 상태를 올린다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Incident i
                SET i.state = com.widyu.incident.IncidentState.ESCALATED
-             WHERE i.state IN (com.widyu.incident.IncidentState.OPEN,
+             WHERE i.id = :id
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING)
                AND i.respondByMs < :nowMs
             """)
-    int escalateTimedOut(@Param("nowMs") long nowMs);
+    int escalateTimedOutIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
+
+    /** 이 게이트 UPDATE가 한 건을 바꾼 트랜잭션만 보호자 최초 알림을 enqueue한다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.initialAlertSentAtMs = :nowMs
+             WHERE i.id = :id
+               AND i.initialAlertSentAtMs IS NULL
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
+                               com.widyu.incident.IncidentState.CHECKING,
+                               com.widyu.incident.IncidentState.ESCALATED)
+               AND (i.respondByMs < :nowMs
+                    OR i.state = com.widyu.incident.IncidentState.ESCALATED)
+            """)
+    int claimInitialAlertIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
+
+    /** 낙상 판정 경로는 이 PR에서 보호자 알림 순서를 바꾸지 않는다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.state = com.widyu.incident.IncidentState.ESCALATED
+             WHERE i.kind = com.widyu.incident.IncidentKind.FALL_SUSPECTED
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
+                               com.widyu.incident.IncidentState.CHECKING)
+               AND i.respondByMs < :nowMs
+            """)
+    int escalateFallTimedOut(@Param("nowMs") long nowMs);
 }

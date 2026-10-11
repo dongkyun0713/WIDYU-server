@@ -1,106 +1,105 @@
 package com.widyu.heart.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 
-import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.application.FcmService;
-import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.decision.DecisionRecord;
+import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
-import com.widyu.member.FamilyMembership;
-import com.widyu.member.Member;
-import com.widyu.member.repository.FamilyMembershipRepository;
-import com.widyu.member.repository.MemberRepository;
-import com.widyu.member.repository.SeniorProfileRepository;
-import java.util.List;
+import com.widyu.global.properties.SensorProperties;
+import com.widyu.incident.Incident;
+import com.widyu.incident.IncidentKind;
+import com.widyu.incident.application.IncidentEscalation;
+import com.widyu.incident.application.IncidentService;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("HeartRateEmergencyNotificationService 단위 테스트")
 class HeartRateEmergencyNotificationServiceTest {
-
-    @Mock private FcmService fcmService;
-    @Mock private MemberRepository memberRepository;
-    @Mock private FamilyMembershipRepository familyMembershipRepository;
-    @Mock private SeniorProfileRepository seniorProfileRepository;
-
-    @InjectMocks
-    private HeartRateEmergencyNotificationService heartRateEmergencyNotificationService;
+    @Mock private DecisionRecordRepository decisionRecordRepository;
+    @Mock private IncidentService incidentService;
+    @Mock private IncidentEscalation incidentEscalation;
+    @Mock private SensorProperties sensorProperties;
+    @InjectMocks private HeartRateEmergencyNotificationService service;
 
     @Test
-    @DisplayName("심박 긴급 상태가 발생하면 가족 보호자에게 알림을 발송한다")
-    void 심박_긴급_상태가_발생하면_가족_보호자에게_알림을_발송한다() {
+    @DisplayName("플래그 OFF에서 단건 위급을 받으면 사건을 열고 공통 최초 알림 경로를 호출한다")
+    void 플래그_OFF에서_단건_위급을_받으면_공통_최초_알림_경로를_호출한다() {
         // given
-        Member senior = mock(Member.class);
-        FamilyMembership membership = mock(FamilyMembership.class);
-        Member guardian = mock(Member.class);
-        ArgumentCaptor<FcmSendDto> notificationCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
-
-        given(memberRepository.findById(1L)).willReturn(Optional.of(senior));
-        given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(membership));
-        given(membership.getGuardian()).willReturn(guardian);
-        given(guardian.getId()).willReturn(2L);
-        given(senior.getName()).willReturn("시니어");
-        given(senior.getProfileImage()).willReturn("profile-image");
+        Incident incident = incident(null);
+        given(incidentService.openForAlert(1L, IncidentKind.HR_ANOMALY)).willReturn(incident);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
 
         // when
-        heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));
+        service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));
 
         // then
-        then(fcmService).should().sendMessageToUser(eq(2L), notificationCaptor.capture());
-        FcmSendDto notification = notificationCaptor.getValue();
-        assertThat(notification.title()).isEqualTo("시니어님의 심박수 이상이 감지되었습니다");
-        assertThat(notification.content()).isEqualTo("현재 상태를 확인해주세요.");
-        assertThat(notification.fcmCategory()).isEqualTo(FcmCategory.HEART_MESSAGE);
-        assertThat(notification.emergency()).isTrue();
-        assertThat(notification.relatedMemberId()).isEqualTo(1L);
+        then(incidentEscalation).should().sendImmediately(eq(incident), anyLong());
     }
 
     @Test
-    @DisplayName("보호자 알림 저장이 실패하면 업무 롤백을 위해 예외를 전파한다")
-    void 보호자_알림_저장이_실패하면_예외를_전파한다() {
+    @DisplayName("플래그 OFF에서 배치 위급을 받으면 판정 사건으로 공통 최초 알림 경로를 호출한다")
+    void 플래그_OFF에서_배치_위급을_받으면_공통_최초_알림_경로를_호출한다() {
         // given
-        Member senior = mock(Member.class);
-        FamilyMembership firstMembership = guardianMembership(2L);
-        FamilyMembership secondMembership = mock(FamilyMembership.class);
+        DecisionRecord decision = DecisionRecord.builder().decisionId("dec-1").memberId(1L).build();
+        Incident incident = incident("dec-1");
+        given(decisionRecordRepository.findByDecisionId("dec-1")).willReturn(Optional.of(decision));
+        given(incidentService.openForAlert(decision, IncidentKind.HR_ANOMALY)).willReturn(incident);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
 
-        given(memberRepository.findById(1L)).willReturn(Optional.of(senior));
-        given(seniorProfileRepository.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L))
-                .willReturn(List.of(firstMembership, secondMembership));
-        given(senior.getName()).willReturn("시니어");
-        given(senior.getProfileImage()).willReturn("profile-image");
-        willThrow(new RuntimeException("FCM 실패"))
-                .given(fcmService).sendMessageToUser(eq(2L), any());
+        // when
+        service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, "dec-1"));
 
-        // when & then
-        assertThatThrownBy(() ->
-                heartRateEmergencyNotificationService.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null)))
-                .isInstanceOf(RuntimeException.class).hasMessage("FCM 실패");
-        then(fcmService).should().sendMessageToUser(eq(2L), any());
-        then(secondMembership).should(never()).getGuardian();
+        // then
+        assertThat(incident.getDecisionId()).isEqualTo("dec-1");
+        then(incidentEscalation).should().sendImmediately(eq(incident), anyLong());
     }
 
-    private FamilyMembership guardianMembership(Long guardianId) {
-        FamilyMembership membership = mock(FamilyMembership.class);
-        Member guardian = mock(Member.class);
-        given(membership.getGuardian()).willReturn(guardian);
-        given(guardian.getId()).willReturn(guardianId);
-        return membership;
+    @Test
+    @DisplayName("플래그 ON에서 배치 위급을 받으면 사건만 열고 최초 알림은 기다린다")
+    void 플래그_ON에서_배치_위급을_받으면_최초_알림은_기다린다() {
+        // given
+        DecisionRecord decision = DecisionRecord.builder().decisionId("dec-1").memberId(1L).build();
+        Incident incident = incident("dec-1");
+        given(decisionRecordRepository.findByDecisionId("dec-1")).willReturn(Optional.of(decision));
+        given(incidentService.openForAlert(decision, IncidentKind.HR_ANOMALY)).willReturn(incident);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+
+        // when
+        service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, "dec-1"));
+
+        // then
+        assertThat(incident.getInitialAlertSentAtMs()).isNull();
+        then(incidentEscalation).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("플래그 OFF에서 이미 보낸 사건을 다시 받으면 최초 알림을 중복 발송하지 않는다")
+    void 플래그_OFF에서_이미_보낸_사건을_다시_받으면_중복_발송하지_않는다() {
+        // given
+        Incident incident = incident(null);
+        incident.markInitialAlertSent(1_000L);
+        given(incidentService.openForAlert(1L, IncidentKind.HR_ANOMALY)).willReturn(incident);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+
+        // when
+        service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));
+
+        // then
+        assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(1_000L);
+        then(incidentEscalation).shouldHaveNoInteractions();
+    }
+
+    private Incident incident(String decisionId) {
+        return Incident.builder().incidentRef("inc-1").memberId(1L).decisionId(decisionId)
+                .kind(IncidentKind.HR_ANOMALY).openedAtMs(1_000L).respondByMs(61_000L).build();
     }
 }
