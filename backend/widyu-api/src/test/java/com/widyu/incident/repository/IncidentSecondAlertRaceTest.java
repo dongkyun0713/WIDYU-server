@@ -77,7 +77,7 @@ class IncidentSecondAlertRaceTest {
                     incidents.findByIdForUpdate(id).orElseThrow();
                     responses.saveAndFlush(IncidentGuardianResponse.of(id, 77L,
                             GuardianResponseType.ACKNOWLEDGED, nowMs));
-                    return incidents.cancelSecondAlertIfPending(id, nowMs);
+                    return incidents.cancelSecondAlertIfPending(id, nowMs, 300_000L);
                 });
             });
 

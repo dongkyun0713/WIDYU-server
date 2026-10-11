@@ -29,13 +29,17 @@ import com.widyu.incident.IncidentGuardianResponse;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
+import com.widyu.incident.IncidentResponseAttempt;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
+import com.widyu.incident.ResponseAttemptOutcome;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
+import com.widyu.incident.dto.response.IncidentStatusResponse;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.incident.repository.IncidentGuardianResponseRepository;
+import com.widyu.incident.repository.IncidentResponseAttemptRepository;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
@@ -71,6 +75,8 @@ class IncidentServiceTest {
 
     @Mock private IncidentRepository incidentRepository;
     @Mock private IncidentGuardianResponseRepository guardianResponses;
+    @Mock private IncidentResponseAttemptRepository responseAttempts;
+    @Mock private IncidentRejectedAttemptRecorder rejectedAttemptRecorder;
     @Mock private FcmService fcmService;
     @Mock private FamilyAccessService familyAccessService;
     @Mock private MemberRepository memberRepository;
@@ -224,6 +230,7 @@ class IncidentServiceTest {
     void 본인이_OK로_답하면_마감_안_종료_상태로_응답_저장을_요청한다() {
         // given
         Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "respondByMs", System.currentTimeMillis() + 60_000L);
         given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
         givenRespondUpdates(1);
 
@@ -235,6 +242,9 @@ class IncidentServiceTest {
         // 마감을 넘겼는지는 행을 보는 UPDATE가 정한다. 서비스는 마감 안에 답했을 때의 상태만 넘긴다.
         then(incidentRepository).should().respond(eq(INCIDENT_REF), eq(SENIOR_ID),
                 eq(IncidentResponseValue.OK), eq(ResponseVia.WATCH), anyLong(), isNull(), eq(IncidentState.OK_CLOSED));
+        ArgumentCaptor<IncidentResponseAttempt> attempt = ArgumentCaptor.forClass(IncidentResponseAttempt.class);
+        then(responseAttempts).should().save(attempt.capture());
+        assertThat(attempt.getValue().getOutcome()).isEqualTo(ResponseAttemptOutcome.ACCEPTED);
         assertThat(response.incidentId()).isEqualTo(INCIDENT_REF);
     }
 
@@ -335,7 +345,7 @@ class IncidentServiceTest {
         given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
         given(guardianResponses.save(any(IncidentGuardianResponse.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        given(incidentRepository.cancelSecondAlertIfPending(eq(3L), anyLong())).willReturn(1);
+        given(incidentRepository.cancelSecondAlertIfPending(eq(3L), anyLong(), eq(300_000L))).willReturn(1);
 
         // when
         var response = service().recordGuardianResponse(GUARDIAN_ID, INCIDENT_REF,
@@ -469,6 +479,156 @@ class IncidentServiceTest {
     }
 
     @Test
+    @DisplayName("마감 전 첫 HELP를 보내면 ACCEPTED 시도 한 행을 저장한다")
+    void 마감_전_첫_HELP를_보내면_ACCEPTED_시도를_저장한다() {
+        // given
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "respondByMs", System.currentTimeMillis() + 60_000L);
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        givenRespondUpdates(1);
+
+        // when
+        service().respond(SENIOR_ID, INCIDENT_REF,
+                new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.WATCH, 123L));
+
+        // then
+        ArgumentCaptor<IncidentResponseAttempt> attempt = ArgumentCaptor.forClass(IncidentResponseAttempt.class);
+        then(responseAttempts).should().save(attempt.capture());
+        assertThat(attempt.getValue().getIncidentId()).isEqualTo(3L);
+        assertThat(attempt.getValue().getOutcome()).isEqualTo(ResponseAttemptOutcome.ACCEPTED);
+        assertThat(attempt.getValue().getResponseVia()).isEqualTo(ResponseVia.WATCH);
+        assertThat(attempt.getValue().getDeviceRespondedAtMs()).isEqualTo(123L);
+    }
+
+    @Test
+    @DisplayName("마감 뒤 첫 HELP를 보내면 LATE 시도 한 행을 저장한다")
+    void 마감_뒤_첫_HELP를_보내면_LATE_시도를_저장한다() {
+        // given
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        givenRespondUpdates(1);
+
+        // when
+        service().respond(SENIOR_ID, INCIDENT_REF,
+                new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.PHONE));
+
+        // then
+        ArgumentCaptor<IncidentResponseAttempt> attempt = ArgumentCaptor.forClass(IncidentResponseAttempt.class);
+        then(responseAttempts).should().save(attempt.capture());
+        assertThat(attempt.getValue().getOutcome()).isEqualTo(ResponseAttemptOutcome.LATE);
+    }
+
+    @Test
+    @DisplayName("이미 답한 사건에 두 번째 기기가 응답하면 DUPLICATE를 저장하고 409를 반환한다")
+    void 두번째_기기가_응답하면_DUPLICATE를_저장하고_예외가_발생한다() {
+        // given
+        Incident first = openIncident();
+        Incident answered = openIncident();
+        ReflectionTestUtils.setField(first, "id", 3L);
+        ReflectionTestUtils.setField(answered, "id", 3L);
+        ReflectionTestUtils.setField(answered, "response", IncidentResponseValue.OK);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(first));
+        given(incidentRepository.findByIdForUpdate(3L)).willReturn(Optional.of(answered));
+        givenRespondUpdates(0);
+
+        // when / then
+        assertThatThrownBy(() -> service().respond(SENIOR_ID, INCIDENT_REF,
+                new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.WATCH)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_ALREADY_ANSWERED);
+        then(rejectedAttemptRecorder).should().record(eq(first.getId()), eq(IncidentResponseValue.OK),
+                eq(ResponseVia.WATCH), isNull(), anyLong(), eq(ResponseAttemptOutcome.DUPLICATE));
+    }
+
+    @Test
+    @DisplayName("다른 보호자가 멈춘 사건의 상태를 조회하면 내 멈춤 목록은 비어 있고 종료되지 않는다")
+    void 다른_보호자가_멈춘_사건을_조회하면_내_멈춤은_비어_있다() {
+        // given
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        ReflectionTestUtils.setField(incident, "lastDetectedAtMs", System.currentTimeMillis());
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        Member guardian = org.mockito.Mockito.mock(Member.class);
+        given(guardian.getType()).willReturn(MemberType.GUARDIAN);
+        given(guardian.getStatus()).willReturn(Status.ACTIVE);
+        given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
+        given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
+        given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
+
+        // when
+        IncidentStatusResponse response = service().findStatus(GUARDIAN_ID, INCIDENT_REF);
+
+        // then
+        assertThat(response.status()).isEqualTo(IncidentStatusResponse.Status.OPEN);
+        assertThat(response.myResponse()).isEmpty();
+        then(guardianResponses).should().findByIncidentIdAndGuardianMemberId(3L, GUARDIAN_ID);
+    }
+
+    @Test
+    @DisplayName("다른 가족 보호자가 상태를 조회하면 사건을 찾을 수 없다고 한다")
+    void 다른_가족_보호자가_상태를_조회하면_사건을_찾을_수_없다고_한다() {
+        // given
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        Member guardian = org.mockito.Mockito.mock(Member.class);
+        given(guardian.getType()).willReturn(MemberType.GUARDIAN);
+        given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
+        given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
+
+        // when / then
+        assertThatThrownBy(() -> service().findStatus(GUARDIAN_ID, INCIDENT_REF))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
+        then(guardianResponses).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("같은 가족의 비활성 보호자가 상태를 조회하면 권한 오류가 발생한다")
+    void 같은_가족의_비활성_보호자가_상태를_조회하면_권한_오류가_발생한다() {
+        // given
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        Member guardian = org.mockito.Mockito.mock(Member.class);
+        given(guardian.getType()).willReturn(MemberType.GUARDIAN);
+        given(guardian.getStatus()).willReturn(Status.INACTIVE);
+        given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
+        given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
+        given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
+
+        // when / then
+        assertThatThrownBy(() -> service().findStatus(GUARDIAN_ID, INCIDENT_REF))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        then(guardianResponses).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("끝난 사건에 늦은 확인이 오면 멈춤을 저장하고 2차 알림 취소를 하지 않는다")
+    void 끝난_사건에_늦은_확인이_오면_저장하고_취소하지_않는다() {
+        // given
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        Member guardian = org.mockito.Mockito.mock(Member.class);
+        given(guardian.getType()).willReturn(MemberType.GUARDIAN);
+        given(guardian.getStatus()).willReturn(Status.ACTIVE);
+        given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
+        given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
+        given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
+        given(guardianResponses.save(any(IncidentGuardianResponse.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        var response = service().recordGuardianResponse(GUARDIAN_ID, INCIDENT_REF,
+                GuardianResponseType.ACKNOWLEDGED);
+
+        // then
+        assertThat(response.incidentEnded()).isTrue();
+        assertThat(response.guardianResponseType()).isEqualTo(GuardianResponseType.ACKNOWLEDGED);
+        assertThat(response.secondAlertCancelled()).isFalse();
+        then(incidentRepository).should().cancelSecondAlertIfPending(eq(3L), anyLong(), eq(300_000L));
+    }
+
+    @Test
     @DisplayName("응답 시각은 서버 시각으로 넘긴다")
     void 응답_시각은_서버_시각으로_넘긴다() {
         // given
@@ -492,7 +652,10 @@ class IncidentServiceTest {
     @DisplayName("이미 답했거나 종결된 사건이라 갱신된 행이 없으면 예외가 발생한다")
     void 갱신된_행이_없으면_예외가_발생한다() {
         // given
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
         givenRespondUpdates(0);
         IncidentService service = service();
         IncidentRespondRequest request = new IncidentRespondRequest(IncidentResponseValue.HELP, ResponseVia.WATCH);
@@ -639,7 +802,9 @@ class IncidentServiceTest {
     }
 
     private IncidentService service() {
-        return new IncidentService(incidentRepository, guardianResponses, fcmService, familyAccessService,
+        return new IncidentService(incidentRepository, guardianResponses, responseAttempts, rejectedAttemptRecorder,
+                new IncidentRespondTransaction(),
+                fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(60, 5000L, false, 5),
                         new SensorProperties.Followup(false, false),

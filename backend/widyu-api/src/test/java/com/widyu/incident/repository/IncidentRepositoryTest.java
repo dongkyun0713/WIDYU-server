@@ -257,7 +257,7 @@ class IncidentRepositoryTest {
         // when
         int sent = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
         int repeated = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
-        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs);
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs, 300_000L);
 
         // then
         entityManager.clear();
@@ -279,7 +279,7 @@ class IncidentRepositoryTest {
         long dueMs = OPENED_AT_MS + 181_000L;
 
         // when
-        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs);
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs, 300_000L);
         int sent = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
 
         // then
@@ -289,6 +289,25 @@ class IncidentRepositoryTest {
         assertThat(sent).isZero();
         assertThat(found.getSecondAlertCancelledAtMs()).isEqualTo(dueMs);
         assertThat(found.getSecondAlertSentAtMs()).isNull();
+    }
+
+    @Test
+    @DisplayName("마지막 감지 뒤 5분이 지나면 멈춤 취소 UPDATE는 사건을 바꾸지 않는다")
+    void 마지막_감지_뒤_오분이_지나면_멈춤_취소는_사건을_바꾸지_않는다() {
+        // given
+        Incident incident = checkingIncident();
+        incident.markInitialAlertSent(OPENED_AT_MS + 1_000L);
+        incident = incidentRepository.save(incident);
+
+        // when
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(
+                incident.getId(), OPENED_AT_MS + 300_000L, 300_000L);
+
+        // then
+        entityManager.clear();
+        assertThat(cancelled).isZero();
+        assertThat(incidentRepository.findById(incident.getId()).orElseThrow()
+                .getSecondAlertCancelledAtMs()).isNull();
     }
 
     @Test

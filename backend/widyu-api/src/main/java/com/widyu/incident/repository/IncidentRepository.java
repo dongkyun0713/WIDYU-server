@@ -189,13 +189,29 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             """)
     int claimSecondAlertIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
 
+    /** 보호자 멈춤은 아직 열린 상황의 미발송 ②만 취소한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i SET i.secondAlertCancelledAtMs = :nowMs
+             WHERE i.id = :id AND i.secondAlertSentAtMs IS NULL
+               AND i.secondAlertCancelledAtMs IS NULL
+               AND i.situationEndedAtMs IS NULL
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
+                               com.widyu.incident.IncidentState.CHECKING,
+                               com.widyu.incident.IncidentState.ESCALATED)
+               AND COALESCE(i.lastDetectedAtMs, i.openedAtMs) + :windowMs > :nowMs
+            """)
+    int cancelSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs,
+            @Param("windowMs") long windowMs);
+
+    /** 스케줄러는 이미 끝난 사건의 후보 게이트를 닫아 재조회되지 않게 한다. */
     @Modifying(flushAutomatically = true)
     @Query("""
             UPDATE Incident i SET i.secondAlertCancelledAtMs = :nowMs
              WHERE i.id = :id AND i.secondAlertSentAtMs IS NULL
                AND i.secondAlertCancelledAtMs IS NULL
             """)
-    int cancelSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs);
+    int closeSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs);
 
     /** 낙상 판정 경로는 이 PR에서 보호자 알림 순서를 바꾸지 않는다. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

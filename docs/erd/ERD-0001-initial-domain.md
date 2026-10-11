@@ -416,6 +416,16 @@ erDiagram
         Long respondedAtMs "서버 기록 시각"
     }
 
+    IncidentResponseAttempt {
+        Long id PK
+        Long incidentId FK
+        String response "OK / HELP"
+        String responseVia "PHONE / WATCH"
+        Long deviceRespondedAtMs "단말 클릭 시각, nullable"
+        Long receivedAtMs "서버 수신 시각"
+        String outcome "ACCEPTED / LATE / DUPLICATE"
+    }
+
     FollowupCard {
         Long id PK
         String incidentRef UK "사건당 하나"
@@ -707,6 +717,7 @@ erDiagram
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     Member ||--o{ Incident : "위급 사건 (본인확인·사후 판정)"
     Incident ||--o{ IncidentGuardianResponse : "보호자별 멈춤"
+    Incident ||--o{ IncidentResponseAttempt : "시니어 본인확인 시도"
     Member ||--o{ IncidentGuardianResponse : "멈춤 기록자"
     Incident ||--o| FollowupCard : "OK 종료 후 카드"
     FollowupCard ||--o| FollowupAnswer : "첫 제출"
@@ -788,6 +799,7 @@ erDiagram
 | `IncidentKind` | `HR_ANOMALY`, `FALL_SUSPECTED`, `SAFE_ZONE_EXIT`(과거 행 조회 호환, 신규 사건 생성 금지) |
 | `IncidentState` | `OPEN`, `CHECKING`, `OK_CLOSED`, `ESCALATED`, `RESOLVED` |
 | `IncidentResponseValue` | `OK`, `HELP` |
+| `ResponseAttemptOutcome` | `ACCEPTED`, `LATE`, `DUPLICATE` |
 | `IncidentOutcome` | `TRUE_EMERGENCY`, `FALSE_ALARM`, `UNKNOWN` |
 | `ResponseVia` | `WATCH`, `PHONE` |
 | `FcmCategory` | `ALL`, `ALBUM`, `TARGET`, `HEALTH_SCHEDULE`, `WALK`, `MEDICINE_SCHEDULE`, `HEART_MESSAGE`, `SAFE_ZONE`, `INCIDENT_SELF_CHECK`, `LOCATION_NOTICE`, `ETC` |
@@ -848,6 +860,7 @@ erDiagram
 | `incident` | `idx_incident_alert_pending` | `(initial_alert_sent_at_ms, respond_by_ms)` | 보호자 최초 알림 후보 조회·멱등 게이트 (LLD-0070) |
 | `incident` | `idx_incident_second_alert_pending` | `(second_alert_sent_at_ms, second_alert_due_at_ms)` | ② 마감 후보 조회·멱등 게이트 (LLD-0081) |
 | `incident_guardian_response` | UK `uk_incident_guardian_response_kind` | `(incident_id, guardian_member_id, response_type)` | 사건×보호자×종류당 한 번 |
+| `incident_response_attempt` | `idx_incident_response_attempt_incident` | `(incident_id)` | 사건별 본인확인 시도 이력 |
 | `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
 | `incident` | `idx_incident_run_time` | `(run_id, opened_at_ms)` | 회차 내보내기 |
 | `incident` | `idx_incident_state_deadline` | `(state, respond_by_ms)` | 무응답 스케줄러가 매 폴링마다 타는 경로 |
@@ -890,6 +903,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-11 | `incident_response_attempt` | 본인확인 수락·지각·중복 시도 이력 (LLD-0082) | `scripts/mysql/create_incident_response_attempt.sql` |
 | 2026-10-02 | `followup_card`·`followup_answer` | OK 종료 후 카드와 시니어 원답·두 제출 시각 (LLD-0073) | `scripts/mysql/create_followup_card.sql` |
 | 2026-10-02 | `incident_label`·`label_annotation` | 두 라벨 축과 판독 revision (LLD-0074) | `scripts/mysql/create_incident_label.sql` |
 | 2026-10-11 | `incident`·`incident_guardian_response` | ② due/sent/cancelled와 보호자별 멈춤 기록, 구 사건 ② 억제 (LLD-0081) | `scripts/mysql/alter_incident_second_alert.sql` |

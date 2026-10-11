@@ -109,7 +109,7 @@ class IncidentEscalationTest {
 
         // then
         assertThat(sent).isFalse();
-        then(incidents).should().cancelSecondAlertIfPending(eq(3L), anyLong());
+        then(incidents).should().closeSecondAlertIfPending(eq(3L), anyLong());
         then(outbox).shouldHaveNoInteractions();
     }
 
@@ -136,7 +136,7 @@ class IncidentEscalationTest {
         // then
         assertThat(sent).isFalse();
         ArgumentCaptor<Long> cancelledAt = ArgumentCaptor.forClass(Long.class);
-        then(incidents).should().cancelSecondAlertIfPending(eq(3L), cancelledAt.capture());
+        then(incidents).should().closeSecondAlertIfPending(eq(3L), cancelledAt.capture());
         assertThat(cancelledAt.getValue()).isBetween(before, System.currentTimeMillis());
         then(outbox).shouldHaveNoInteractions();
     }
@@ -158,7 +158,7 @@ class IncidentEscalationTest {
 
         // then
         assertThat(sent).isFalse();
-        then(incidents).should().cancelSecondAlertIfPending(eq(3L), anyLong());
+        then(incidents).should().closeSecondAlertIfPending(eq(3L), anyLong());
         then(outbox).shouldHaveNoInteractions();
     }
 

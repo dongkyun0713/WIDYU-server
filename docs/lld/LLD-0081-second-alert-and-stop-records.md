@@ -132,6 +132,8 @@ Content-Type: application/json
 
 ## 8. 영향 범위 / 마이그레이션
 
+후속 [LLD-0082](LLD-0082-response-attempts-and-incident-status.md)는 계산상 끝난 사건의 늦은 `ACKNOWLEDGED`도 저장하되, 이 문서의 `cancelSecondAlertIfPending`에 종료 상태·마지막 감지 5분 창 조건을 추가해 ② 취소 UPDATE를 0건으로 제한한다.
+
 LLD-0072 §5.3의 “사건당 첫 건·중복 409·모달 확인은 멈춤 아님”은 이 문서의 guardian-response 계약으로 대체한다. LLD-0077의 ① 수신자와 LLD-0070의 ① 게이트·키셋 폴링은 유지하면서 due만 더한다. W19 비사건 안심구역은 건드리지 않는다. 기존 알림센터 UK가 방장 센터 재사용을 보장하므로 별도 센터 migration은 없다.
 
 DDL을 앱 전환 전에 실행한다. 구 기록은 `guardian_response_type/at_ms/by`가 모두 있는 행만 새 테이블로 이관하고 UK 기준으로 중복 실행을 피한다. 배포 전 사건의 cancelled 시각은 사용자 멈춤이 아니라 migration 억제일 수 있으므로 운영 해석에는 migration 시각과 새 기록 테이블을 함께 본다. 인덱스의 실제 쿼리 계획과 배포 창의 기존 사건 억제는 운영 유사 데이터로 점검한다.
