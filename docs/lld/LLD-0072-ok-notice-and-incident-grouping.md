@@ -98,6 +98,8 @@ Content-Type: application/json
 
 ### 5.3 보호자의 첫 실제 연락 행동
 
+> 이 절의 사건당 첫 1건·중복 409·모달 확인 제외 규칙은 [LLD-0081](LLD-0081-second-alert-and-stop-records.md) §3·§4·§6으로 대체된다. 기존 사건 열 3개는 읽기 전용이며 새 기록은 사건×보호자×종류 테이블에 남긴다.
+
 1. Controller는 인증 보호자 ID와 `{ref}`·요청 type을 `IncidentService.recordGuardianResponse`에 넘긴다. 서비스는 사건을 조회해 시니어 ID를 얻고 요청자의 `GUARDIAN` 타입과 같은 가족 연결을 먼저 검증한다. 사건 없음·시니어 본인·타 가족은 계정 활성 여부와 관계없이 404로 응답한 뒤, 같은 가족 보호자의 계정 활성 상태를 검사해 비활성이면 403으로 응답한다. 가족 연결은 행 존재로 활성 여부를 판단한다.
 2. `IncidentRepository.recordGuardianResponse`는 `guardian_response_type IS NULL`을 조건으로 type·서버 시각·보호자 ID를 한 UPDATE에서 기록한다. 영향 행 1건이면 재조회한 값으로 DTO를 반환한다. 0건이면 409이며 첫 기록은 덮지 않는다. 보호자 둘의 동시 요청도 한 건만 성공한다.
 3. 기록 성공 지점에 `// W12: 미실행 자동전화·FINAL_ESCALATION 예약 취소` 훅 자리만 남긴다. 이번 변경에서 스케줄러·제공자 호출·예약 상태 전이를 추가하지 않는다. 알림 열람, 팝업 확인, provider `answered`는 이 API를 호출하지 않는다.

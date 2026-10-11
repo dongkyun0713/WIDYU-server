@@ -2,6 +2,7 @@ package com.widyu.incident.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -10,8 +11,11 @@ import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.entity.Status;
+import com.widyu.global.properties.SensorProperties;
 import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
+import com.widyu.incident.IncidentState;
+import com.widyu.incident.repository.IncidentGuardianResponseRepository;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -22,22 +26,141 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class IncidentEscalationTest {
     @Mock private IncidentRepository incidents;
+    @Mock private IncidentGuardianResponseRepository guardianResponses;
+    @Mock private SensorProperties sensorProperties;
     @Mock private FcmOutboxService outbox;
     @Mock private MemberRepository members;
     @Mock private FamilyMembershipRepository memberships;
     @Mock private SeniorProfileRepository seniorProfiles;
     @InjectMocks private IncidentEscalation escalation;
+
+    @Test
+    @DisplayName("멈춤 없이 2차 마감이 지나면 활성 보호자 전원에게 2차 알림을 예약한다")
+    void 멈춤_없이_이차_마감이_지나면_활성_보호자_전원에게_예약한다() {
+        // given
+        Incident incident = dueActiveIncident("dec-1");
+        Member senior = Mockito.mock(Member.class);
+        Member leader = Mockito.mock(Member.class);
+        Member other = Mockito.mock(Member.class);
+        FamilyMembership leaderLink = Mockito.mock(FamilyMembership.class);
+        FamilyMembership otherLink = Mockito.mock(FamilyMembership.class);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        given(incidents.claimSecondAlertIfDue(eq(3L), anyLong())).willReturn(1);
+        given(members.findById(1L)).willReturn(Optional.of(senior));
+        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
+        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(leaderLink, otherLink));
+        given(senior.getName()).willReturn("시니어");
+        given(leaderLink.getGuardian()).willReturn(leader);
+        given(otherLink.getGuardian()).willReturn(other);
+        given(leader.getStatus()).willReturn(Status.ACTIVE);
+        given(other.getStatus()).willReturn(Status.ACTIVE);
+        given(leader.getId()).willReturn(2L);
+        given(other.getId()).willReturn(3L);
+
+        // when
+        long before = System.currentTimeMillis();
+        boolean sent = escalation.sendSecondAlertIfDue(3L);
+
+        // then
+        assertThat(sent).isTrue();
+        ArgumentCaptor<Long> claimedAt = ArgumentCaptor.forClass(Long.class);
+        then(incidents).should().claimSecondAlertIfDue(eq(3L), claimedAt.capture());
+        assertThat(claimedAt.getValue()).isBetween(before, System.currentTimeMillis());
+        ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), messages.capture());
+        then(outbox).should().enqueue(eq(3L), messages.capture());
+        assertThat(messages.getAllValues()).allSatisfy(message -> {
+            assertThat(message.eventId()).isEqualTo("inc-1");
+            assertThat(message.dataForEnqueue("inc-1"))
+                    .containsEntry("deliveryStage", "SECOND_ALERT")
+                    .containsEntry("safetyEventId", "inc-1")
+                    .containsEntry("incidentRef", "inc-1")
+                    .containsEntry("decisionId", "dec-1")
+                    .containsEntry("deepLink", "/location?seniorId=1");
+        });
+    }
+
+    @Test
+    @DisplayName("2차 마감 전에 멈춤이 생기면 2차 게이트를 취소한다")
+    void 이차_마감_전에_멈춤이_생기면_게이트를_취소한다() {
+        // given
+        Incident incident = dueActiveIncident(null);
+        given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(guardianResponses.existsByIncidentId(3L)).willReturn(true);
+
+        // when
+        boolean sent = escalation.sendSecondAlertIfDue(3L);
+
+        // then
+        assertThat(sent).isFalse();
+        then(incidents).should().cancelSecondAlertIfPending(eq(3L), anyLong());
+        then(outbox).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("마지막 감지 뒤 5분이 지나면 2차 알림을 취소한다")
+    void 마지막_감지_뒤_오분이_지나면_이차_알림을_취소한다() {
+        // given
+        long nowMs = System.currentTimeMillis();
+        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L)
+                .kind(IncidentKind.HR_ANOMALY).openedAtMs(nowMs - 420_000L)
+                .respondByMs(nowMs - 360_000L).build();
+        incident.markChecking();
+        incident.markInitialAlertSent(nowMs - 400_000L);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                incident, "lastDetectedAtMs", nowMs - 360_000L);
+        org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+
+        // when
+        long before = System.currentTimeMillis();
+        boolean sent = escalation.sendSecondAlertIfDue(3L);
+
+        // then
+        assertThat(sent).isFalse();
+        ArgumentCaptor<Long> cancelledAt = ArgumentCaptor.forClass(Long.class);
+        then(incidents).should().cancelSecondAlertIfPending(eq(3L), cancelledAt.capture());
+        assertThat(cancelledAt.getValue()).isBetween(before, System.currentTimeMillis());
+        then(outbox).shouldHaveNoInteractions();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = IncidentState.class, names = {"OK_CLOSED", "RESOLVED"})
+    @DisplayName("종료된 심박 사건의 2차 마감이 지나면 알림을 취소한다")
+    void 종료된_심박_사건의_이차_마감이_지나면_알림을_취소한다(IncidentState state) {
+        // given
+        Incident incident = incident(null);
+        incident.markInitialAlertSent(20L);
+        org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
+        org.springframework.test.util.ReflectionTestUtils.setField(incident, "state", state);
+        given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+
+        // when
+        boolean sent = escalation.sendSecondAlertIfDue(3L);
+
+        // then
+        assertThat(sent).isFalse();
+        then(incidents).should().cancelSecondAlertIfPending(eq(3L), anyLong());
+        then(outbox).shouldHaveNoInteractions();
+    }
 
     @Test
     @DisplayName("플래그 OFF에서 심박 사건을 열면 현재 방장 한 명에게 S04를 enqueue한다")
@@ -51,6 +174,7 @@ class IncidentEscalationTest {
 
         // then
         assertThat(incident.getInitialAlertSentAtMs()).isEqualTo(20L);
+        assertThat(incident.getSecondAlertDueAtMs()).isEqualTo(180_020L);
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), message.capture());
         then(outbox).shouldHaveNoMoreInteractions();
@@ -215,6 +339,17 @@ class IncidentEscalationTest {
     private Incident incident(String decisionId) {
         return Incident.builder().incidentRef("inc-1").memberId(1L).decisionId(decisionId)
                 .kind(IncidentKind.HR_ANOMALY).openedAtMs(1L).respondByMs(60_001L).build();
+    }
+
+    private Incident dueActiveIncident(String decisionId) {
+        long nowMs = System.currentTimeMillis();
+        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L).decisionId(decisionId)
+                .kind(IncidentKind.HR_ANOMALY).openedAtMs(nowMs - 240_000L)
+                .respondByMs(nowMs - 180_000L).build();
+        incident.markChecking();
+        incident.markInitialAlertSent(nowMs - 181_000L);
+        org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
+        return incident;
     }
 
     private Incident safeZoneIncident() {
