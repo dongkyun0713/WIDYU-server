@@ -1,8 +1,10 @@
 package com.widyu.fcm.event.medicineschedule.listener;
 
 import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.global.entity.Status;
 import com.widyu.goal.medicineschedule.application.MedicationAlarmPayload;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
@@ -13,8 +15,10 @@ import com.widyu.medicine.MedicineSchedule;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,34 +39,25 @@ public class MedicineScheduleNotificationListener {
 
     /**
      * 매 분마다 실행하여 의약품 복용 알림 발송
-     * - 알람 시간 (정시): 1차 알림 (시니어)
-     * - 알람 시간 + 10분: 2차 알림 (시니어)
-     * - 알람 시간 + 20분: 3차 알림 (시니어)
-     * - 알람 시간 + 30분: 보호자 알림
+     * 정시 알람은 기기가 실행한다. 서버는 +10분·+20분 미인증 푸시와 +30분 보호자 알림만 보낸다.
      */
     @Scheduled(cron = "0 * * * * *")
     public void checkMedicineSchedules() {
-        LocalTime currentTime = LocalTime.now();
-        LocalDate today = LocalDate.now();
-
-        log.debug("의약품 복용 알림 체크 시작: {}", currentTime);
-
-        // 1차 알림: 알람 시간 (정시)
-        sendNotificationForTime(currentTime, today, 1);
-
-        // 2차 알림: 알람 시간 + 10분
-        sendNotificationForTime(currentTime.minusMinutes(10), today, 2);
-
-        // 3차 알림: 알람 시간 + 20분
-        sendNotificationForTime(currentTime.minusMinutes(20), today, 3);
-
-        // 보호자 알림: 알람 시간 + 30분
-        sendGuardianAlertOnly(currentTime.minusMinutes(30), today);
+        checkMedicineSchedulesAt(LocalDateTime.now());
     }
 
-    private void sendNotificationForTime(LocalTime alarmTime, LocalDate date, int attemptNumber) {
+    void checkMedicineSchedulesAt(LocalDateTime now) {
+        LocalDateTime minute = now.truncatedTo(ChronoUnit.MINUTES);
+        log.debug("의약품 복용 후속 알림 체크 시작: {}", minute);
+        sendNotificationForTime(minute.minusMinutes(10), NotificationType.MEDICATION_REMINDER_10);
+        sendNotificationForTime(minute.minusMinutes(20), NotificationType.MEDICATION_REMINDER_20);
+        sendGuardianAlertOnly(minute.minusMinutes(30));
+    }
+
+    private void sendNotificationForTime(LocalDateTime dueAt, NotificationType type) {
+        LocalDate date = dueAt.toLocalDate();
         List<MedicineSchedule> schedules = medicineScheduleRepository
-                .findByAlarmTimeAndStatusEffectiveOn(alarmTime, Status.ACTIVE, date);
+                .findByAlarmTimeAndStatusEffectiveOn(dueAt.toLocalTime(), Status.ACTIVE, date);
 
         if (schedules.isEmpty()) {
             return;
@@ -82,14 +77,15 @@ public class MedicineScheduleNotificationListener {
         // 인증되지 않은 스케줄만 알림 발송
         for (MedicineSchedule schedule : schedules) {
             if (!verifiedScheduleIds.contains(schedule.getId())) {
-                sendMedicineNotification(schedule, attemptNumber);
+                sendMedicineNotification(schedule, date, type);
             }
         }
     }
 
-    private void sendGuardianAlertOnly(LocalTime alarmTime, LocalDate date) {
+    private void sendGuardianAlertOnly(LocalDateTime dueAt) {
+        LocalDate date = dueAt.toLocalDate();
         List<MedicineSchedule> schedules = medicineScheduleRepository
-                .findByAlarmTimeAndStatusEffectiveOn(alarmTime, Status.ACTIVE, date);
+                .findByAlarmTimeAndStatusEffectiveOn(dueAt.toLocalTime(), Status.ACTIVE, date);
 
         if (schedules.isEmpty()) {
             return;
@@ -109,33 +105,29 @@ public class MedicineScheduleNotificationListener {
         // 인증되지 않은 스케줄만 보호자에게 알림 발송
         for (MedicineSchedule schedule : schedules) {
             if (!verifiedScheduleIds.contains(schedule.getId())) {
-                sendGuardianNotification(schedule);
+                sendGuardianNotification(schedule, date);
             }
         }
     }
 
-    private void sendMedicineNotification(MedicineSchedule schedule, int attemptNumber) {
-        String title = "약 복용 알림 (" + attemptNumber + "차)";
-        if (attemptNumber == 1) {
-            title = "약 복용 시간이에요!";
-        }
-        String content = "지금 약을 복용하고 인증해주세요.";
+    private void sendMedicineNotification(MedicineSchedule schedule, LocalDate date, NotificationType type) {
+        Long seniorId = schedule.getMember().getId();
+        NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), Map.of());
+        FcmSendDto dto = FcmSendDto.builder()
+                .title(copy.title()).content(copy.body())
+                .fcmCategory(FcmCategory.MEDICINE_SCHEDULE).image(MEDICINE_DEFAULT_IMAGE)
+                .notificationType(type).entityId(schedule.getId().toString())
+                .eventId(timedEventId(type, schedule.getId(), seniorId, date))
+                .data(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision(), type))
+                .build();
 
-        FcmSendDto dto = new FcmSendDto(
-                title,
-                content,
-                FcmCategory.MEDICINE_SCHEDULE,
-                "",
-                MEDICINE_DEFAULT_IMAGE
-        ).withData(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision()));
+        fcmService.sendMessageToUser(seniorId, dto);
 
-        fcmService.sendMessageToUser(schedule.getMember().getId(), dto);
-
-        log.info("의약품 복용 알림 발송: scheduleId={}, memberId={}, attempt={}, alarmTime={}",
-                schedule.getId(), schedule.getMember().getId(), attemptNumber, schedule.getAlarmTime());
+        log.info("의약품 복용 인증 요청: scheduleId={}, memberId={}, type={}, alarmTime={}",
+                schedule.getId(), seniorId, type, schedule.getAlarmTime());
     }
 
-    private void sendGuardianNotification(MedicineSchedule schedule) {
+    private void sendGuardianNotification(MedicineSchedule schedule, LocalDate date) {
         Long seniorMemberId = schedule.getMember().getId();
 
         // 시니어 프로필이 있는지 확인
@@ -154,23 +146,35 @@ public class MedicineScheduleNotificationListener {
             return;
         }
 
-        String title = schedule.getMember().getName() + "님이 약을 복용하지 않았어요";
-        String content = "3회 알림에도 복용 인증을 하지 않았습니다. 확인해주세요.";
+        NotificationType type = NotificationType.MEDICATION_PROOF_MISSING;
+        Map<String, String> values = Map.of();
+        String seniorName = schedule.getMember().getName();
+        if (seniorName != null && !seniorName.isBlank()) {
+            values = Map.of("시니어 이름", seniorName);
+        }
+        NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), values);
 
         for (FamilyMembership membership : memberships) {
-            FcmSendDto dto = new FcmSendDto(
-                    title,
-                    content,
-                    FcmCategory.MEDICINE_SCHEDULE,
-                    "",
-                    schedule.getMember().getProfileImage()
-            ).withData(MedicationAlarmPayload.of(membership.getGuardian().getMedicationAlarmRevision()));
+            Long guardianId = membership.getGuardian().getId();
+            FcmSendDto dto = FcmSendDto.builder()
+                    .title(copy.title()).content(copy.body())
+                    .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
+                    .image(schedule.getMember().getProfileImage())
+                    .notificationType(type).entityId(schedule.getId().toString())
+                    .seniorId(seniorMemberId).relatedMemberId(seniorMemberId)
+                    .eventId(timedEventId(type, schedule.getId(), guardianId, date))
+                    .data(MedicationAlarmPayload.of(membership.getGuardian().getMedicationAlarmRevision(), type))
+                    .build();
 
-            fcmService.sendMessageToUser(membership.getGuardian().getId(), dto.withRelatedMember(seniorMemberId));
+            fcmService.sendMessageToUser(guardianId, dto);
 
             log.info("보호자 미인증 알림 발송: seniorMemberId={}, guardianId={}, scheduleId={}, alarmTime={}",
-                    seniorMemberId, membership.getGuardian().getId(),
+                    seniorMemberId, guardianId,
                     schedule.getId(), schedule.getAlarmTime());
         }
+    }
+
+    private String timedEventId(NotificationType type, Long scheduleId, Long recipientId, LocalDate date) {
+        return MedicationAlarmPayload.eventId(type.name() + ":" + scheduleId + ":" + recipientId + ":" + date);
     }
 }
