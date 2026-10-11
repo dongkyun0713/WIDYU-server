@@ -42,7 +42,7 @@ class FcmHttpTransportTest {
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
                 .notificationType(NotificationType.SAFETY_SELF_CHECK)
-                .data(Map.of("eventId", "inc-20261001-1", "deepLink", "widyu://incident/inc-20261001-1"))
+                .data(Map.of("eventId", "inc-20261001-1"))
                 .build();
         try {
             // when
@@ -50,11 +50,10 @@ class FcmHttpTransportTest {
 
             // then
             JsonNode body = bodies.getFirst();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("SAFETY_SELF_CHECK");
+            assertThat(body.at("/message/data/type").asText()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
             assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("SAFETY_SELF_CHECK");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
-            assertThat(body.at("/message/data/deepLink").asText())
-                    .isEqualTo("widyu://incident/inc-20261001-1");
+            assertThat(body.at("/message/data/deepLink").asText()).isEmpty();
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
@@ -117,7 +116,7 @@ class FcmHttpTransportTest {
                 .data(Map.of("eventId", "event-2", "type", "stale-type",
                         "revision", "42",
                         "effectiveFromDate", "2026-10-02", "actorDisplayName", "보호자",
-                        "deepLink", "widyu://medication/schedules"))
+                        "deepLink", "/goal"))
                 .build();
         FcmDelivery delivery = new FcmDelivery(4073L, 1, "loopback-token", message,
                 Instant.now().plusSeconds(300));

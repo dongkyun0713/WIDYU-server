@@ -51,8 +51,8 @@ class FcmServiceTest {
     }
 
     @Test
-    @DisplayName("시니어에게 응원 메시지를 보내면 종전 data를 유지한다")
-    void 시니어에게_응원_메시지를_보내면_종전_data를_유지한다() {
+    @DisplayName("시니어에게 응원 메시지를 보내면 알림센터 경로와 응원 타입을 전달한다")
+    void 시니어에게_응원_메시지를_보내면_알림센터_경로와_응원_타입을_전달한다() {
         // given
         Member sender = member(1L, MemberType.GUARDIAN);
         Member receiver = member(2L, MemberType.SENIOR);
@@ -65,7 +65,8 @@ class FcmServiceTest {
 
         // then
         then(outboxService).should().enqueue(eq(2L), captor.capture());
-        assertThat(captor.getValue().dataForEnqueue("cheer-senior")).isEqualTo(Map.of());
+        assertThat(captor.getValue().dataForEnqueue("cheer-senior"))
+                .isEqualTo(Map.of("deepLink", "/notification", "type", "CHEER_MESSAGE_RECEIVED"));
     }
 
     private Member member(Long id, MemberType type) {

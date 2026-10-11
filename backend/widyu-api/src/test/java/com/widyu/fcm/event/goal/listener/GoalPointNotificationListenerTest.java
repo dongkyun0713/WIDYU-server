@@ -76,7 +76,7 @@ class GoalPointNotificationListenerTest {
         assertThat(message.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
         assertThat(message.getValue().title()).isEqualTo("10P를 받았어요.");
         assertThat(message.getValue().content()).isEqualTo("약 복용 인증");
-        assertThat(message.getValue().deepLink()).isEqualTo("widyu://points");
+        assertThat(message.getValue().dataForEnqueue("event-1")).containsEntry("deepLink", "/my/point");
         assertThat(message.getValue().eventId()).isEqualTo("POINT:E:9");
     }
 
@@ -97,7 +97,7 @@ class GoalPointNotificationListenerTest {
         assertThat(message.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
         assertThat(message.getValue().title()).isEqualTo("50P를 사용했어요.");
         assertThat(message.getValue().content()).isEqualTo("앨범 해금");
-        assertThat(message.getValue().deepLink()).isEqualTo("widyu://points");
+        assertThat(message.getValue().dataForEnqueue("event-1")).containsEntry("deepLink", "/my/point");
     }
 
     @Test
@@ -127,7 +127,7 @@ class GoalPointNotificationListenerTest {
         assertThat(message.getAllValues()).allMatch(item -> item.content().equals("25P가 자동으로 적립됐어요."));
         assertThat(message.getAllValues().get(0).title()).isEqualTo("걷기 목표를 달성했어요!");
         assertThat(message.getAllValues().get(0).dataForEnqueue("G01:W:7"))
-                .containsEntry("deepLink", "widyu://goals/7");
+                .containsEntry("deepLink", "/goal");
         assertThat(message.getAllValues().get(1).title()).isEqualTo("부모님 님이 걷기 목표를 달성했어요!");
         assertThat(message.getAllValues().get(1).relatedMemberId()).isEqualTo(1L);
         assertThat(message.getAllValues().get(1).deepLink())

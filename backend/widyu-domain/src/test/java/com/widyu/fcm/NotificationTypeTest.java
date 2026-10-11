@@ -3,6 +3,7 @@ package com.widyu.fcm;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -58,8 +59,25 @@ class NotificationTypeTest {
     }
 
     @Test
-    @DisplayName("레지스트리의 wire 타입을 조회하면 네 일정 이벤트만 구 앱 값을 반환한다")
-    void 레지스트리의_wire_타입을_조회하면_네_일정_이벤트만_구_앱_값을_반환한다() {
+    @DisplayName("레지스트리의 딥링크 템플릿을 조회하면 커스텀 스킴 없이 앱 내부 경로만 반환한다")
+    void 레지스트리의_딥링크_템플릿을_조회하면_앱_내부_경로만_반환한다() {
+        // given / when
+        List<String> templates = Arrays.stream(NotificationType.values())
+                .map(NotificationType::deepLinkTemplate)
+                .filter(template -> template != null)
+                .toList();
+
+        // then
+        assertThat(templates).allSatisfy(template -> assertThat(template).startsWith("/"));
+        assertThat(NotificationType.ALBUM_COMMENTED.deepLinkTemplate())
+                .isEqualTo("/album/post?postId={entityId}&commentId={commentId}");
+        assertThat(NotificationType.POINT_EARNED.deepLinkTemplate()).isEqualTo("/my/point");
+        assertThat(NotificationType.SAFETY_SELF_CHECK.deepLinkTemplate()).isNull();
+    }
+
+    @Test
+    @DisplayName("레지스트리의 wire 타입을 조회하면 네 일정 이벤트와 본인확인 요청만 앱 약속 값을 반환한다")
+    void 레지스트리의_wire_타입을_조회하면_네_일정_이벤트와_본인확인_요청만_앱_약속_값을_반환한다() {
         // given / when
         NotificationType[] legacyTypes = {
                 NotificationType.MEDICATION_SCHEDULE_CREATED,
@@ -73,7 +91,10 @@ class NotificationTypeTest {
             assertThat(type.legacyDataType()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
             assertThat(type.dataTypeValue()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
         });
-        assertThat(Arrays.stream(NotificationType.values()).filter(type -> !Arrays.asList(legacyTypes).contains(type)))
+        assertThat(NotificationType.SAFETY_SELF_CHECK.dataTypeValue()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
+        assertThat(Arrays.stream(NotificationType.values())
+                .filter(type -> type != NotificationType.SAFETY_SELF_CHECK)
+                .filter(type -> !Arrays.asList(legacyTypes).contains(type)))
                 .allSatisfy(type -> {
                     assertThat(type.legacyDataType()).isNull();
                     assertThat(type.dataTypeValue()).isEqualTo(type.name());

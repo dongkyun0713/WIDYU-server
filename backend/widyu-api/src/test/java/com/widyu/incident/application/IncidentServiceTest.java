@@ -127,7 +127,10 @@ class IncidentServiceTest {
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
         assertThat(message.getValue().fcmCategory()).isEqualTo(FcmCategory.INCIDENT_SELF_CHECK);
-        assertThat(message.getValue().scheme()).isEqualTo("widyu://incident/" + opened.getIncidentRef());
+        assertThat(message.getValue().dataForEnqueue(opened.getIncidentRef()))
+                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
+                .containsEntry("entityId", opened.getIncidentRef())
+                .containsEntry("deepLink", "");
         assertThat(message.getValue().emergency()).isTrue();
     }
 

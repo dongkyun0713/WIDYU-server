@@ -165,7 +165,7 @@ class FcmOutboxIntegrationTest {
                 .containsEntry("effectiveFromDate", "2026-10-02")
                 .containsEntry("actorDisplayName", "보호자")
                 .containsEntry("priority", "interaction")
-                .containsEntry("deepLink", "widyu://medication/schedules")
+                .containsEntry("deepLink", "/goal")
                 .containsEntry("foregroundPresentation", "BANNER");
     }
 
@@ -361,8 +361,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto message = FcmSendDto.builder().title("50P를 사용했어요.").content("앨범 해금")
-                .notificationType(NotificationType.POINT_USED).eventId("POINT:U:9")
-                .deepLink("widyu://points").build();
+                .notificationType(NotificationType.POINT_USED).eventId("POINT:U:9").build();
 
         // when
         service.enqueue(member, message);
@@ -375,7 +374,7 @@ class FcmOutboxIntegrationTest {
         assertThat(center.getType()).isEqualTo(NotificationType.POINT_USED);
         assertThat(center.getEventId()).isEqualTo("POINT:U:9");
         assertThat(center.getBody()).isEqualTo("앨범 해금");
-        assertThat(center.getDeepLink()).isEqualTo("widyu://points");
+        assertThat(center.getDeepLink()).isEqualTo("/my/point");
     }
 
     @Test
@@ -744,7 +743,7 @@ class FcmOutboxIntegrationTest {
         // then
         assertThat(second.message().data()).isEqualTo(first.message().data());
         assertThat(third.message().data()).isEqualTo(first.message().data());
-        assertThat(third.message().data()).containsEntry("deepLink", "widyu://albums/31");
+        assertThat(third.message().data()).containsEntry("deepLink", "/album/post?postId=31");
         assertThat(outbox.findById(id).orElseThrow().getAttempts()).isEqualTo(3);
     }
 
@@ -784,7 +783,8 @@ class FcmOutboxIntegrationTest {
         assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
         assertThat(transactions.claim(row.getId()).message().data())
                 .containsEntry("eventId", "inc-20261001-1")
-                .containsEntry("deepLink", "widyu://incident/inc-20261001-1");
+                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
+                .containsEntry("deepLink", "");
     }
 
     @Test

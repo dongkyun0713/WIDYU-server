@@ -64,7 +64,7 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
     "data": {
       "eventId": "940c15b9-79dc-4fa7-ab5d-27fca2cfa6cf",
       "type": "MEDICATION_SCHEDULE_CHANGED", "priority": "interaction",
-      "notificationId": "4073", "deepLink": "widyu://medication/schedules",
+      "notificationId": "4073", "deepLink": "/goal",
       "foregroundPresentation": "BANNER", "revision": "42",
       "effectiveFromDate": "2026-10-02", "actorDisplayName": "김보호"
     },
@@ -88,42 +88,42 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 
 괄호 안 센터 필터는 푸시 전용 타입의 목적지 분류이며 실제 센터 행이 없음을 뜻한다. `GENERAL` 등 설정 그룹은 W5부터 판정에 쓴다. 위듀케어 전용 템플릿은 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)에 따라 2026-10-03 FE 문서의 앱 내부 경로로 확정했다. 역할별 보호자 링크는 `GuardianDeepLinks`가 명시하고, 위듀 경로는 FE 확정 대기다. 표의 전달 방식은 최종 정책이며 W2에서 기존 발행자의 센터 생성 흐름을 바꾸지 않는다.
 
-`legacyDataType`은 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`만 `MEDICATION_SCHEDULE_CHANGED`이며 나머지는 null이다. 모든 typed FCM의 `data.notificationType`은 논리 타입 이름이고 `data.type`은 `legacyDataType`이 있으면 그 값, 없으면 논리 타입 이름이다.
+`legacyDataType`은 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`가 `MEDICATION_SCHEDULE_CHANGED`, `SAFETY_SELF_CHECK`가 위듀 FE의 화면 트리거 값 `EMERGENCY_CONFIRM_REQUEST`이며 나머지는 null이다(2026-10-11, #746). 모든 typed FCM의 `data.notificationType`은 논리 타입 이름이고 `data.type`은 `legacyDataType`이 있으면 그 값, 없으면 논리 타입 이름이다.
 
 | # | `NotificationType` | `FcmCategory` | 센터 필터 | `DeliveryMode` | priority 제안 | `RetentionClass` | settingGroup | foreground | 딥링크 템플릿 | 문구 코드 |
 | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `ALBUM_UPLOAD_COMPLETE` | ALBUM | (ALBUM) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | NONE | `widyu://albums/{entityId}` | A01 |
-| 2 | `ALBUM_CREATED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}` | A02-S/C |
-| 3a | `ALBUM_COMMENTED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}/comments/{commentId}` | A03 |
-| 3b | `ALBUM_REPLIED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}/comments/{commentId}` | A04 |
-| 4 | `ALBUM_LIKED` | ALBUM | ALBUM | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://albums/{entityId}` | A05 |
+| 1 | `ALBUM_UPLOAD_COMPLETE` | ALBUM | (ALBUM) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | NONE | `/album/post?postId={entityId}` | A01 |
+| 2 | `ALBUM_CREATED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album/post?postId={entityId}` | A02-S/C |
+| 3a | `ALBUM_COMMENTED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album/post?postId={entityId}&commentId={commentId}` | A03 |
+| 3b | `ALBUM_REPLIED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album/post?postId={entityId}&commentId={commentId}` | A04 |
+| 4 | `ALBUM_LIKED` | ALBUM | ALBUM | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `/album/post?postId={entityId}` | A05 |
 | 5 | `ALBUM_UNLOCKED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/post?postId={entityId}` | A06-L/Z |
 | 6 | `ALBUM_ALL_VIEWED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album` | A07 |
-| 8 | `MEDICATION_REMINDER_10` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M02 |
-| 9 | `MEDICATION_REMINDER_20` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M03 |
+| 8 | `MEDICATION_REMINDER_10` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | M02 |
+| 9 | `MEDICATION_REMINDER_20` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | M03 |
 | 10 | `MEDICATION_PROOF_MISSING` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | MEDICATION_CHECK | BANNER | `/goal/medicine?seniorId={seniorId}` | M04 |
-| 11 | `MEDICATION_SCHEDULE_CHANGED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M05 |
-| 12 | `HEALTH_SCHEDULE_UPCOMING` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H01-S/C-SELF/C-SENIOR-OS/INAPP |
-| 13 | `WALK_GOAL_UNMET` | WALK | (GOAL) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W01 |
-| 14a | `GOAL_ACHIEVED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals/{entityId}` | G01-S/C |
-| 14b | `GOALS_ACHIEVED_GROUPED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals` | G02-S/C |
-| 15a | `POINT_EARNED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P01 |
-| 15b | `POINT_USED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://points` | P02 |
-| 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X01-OS/INAPP |
-| 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X02-OS/INAPP |
-| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01/S02 |
+| 11 | `MEDICATION_SCHEDULE_CHANGED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | M05 |
+| 12 | `HEALTH_SCHEDULE_UPCOMING` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H01-S/C-SELF/C-SENIOR-OS/INAPP |
+| 13 | `WALK_GOAL_UNMET` | WALK | (GOAL) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | BANNER | `/goal` | W01 |
+| 14a | `GOAL_ACHIEVED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | G01-S/C |
+| 14b | `GOALS_ACHIEVED_GROUPED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | G02-S/C |
+| 15a | `POINT_EARNED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `/my/point` | P01 |
+| 15b | `POINT_USED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `/my/point` | P02 |
+| 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/notification` | X01-OS/INAPP |
+| 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/notification` | X02-OS/INAPP |
+| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | 없음(화면 트리거 전용, `data.type=EMERGENCY_CONFIRM_REQUEST`) | S01/S02 |
 | 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
 | 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | critical | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | S02/S03/S05/S07 |
 | 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S08 |
 | 20b | `SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S09 |
 | 21 | `FAMILY_LEADER_CHANGED` | ETC | — (ALL·UNREAD만) | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/family-manage` | R01 |
-| 22 | `MEDICATION_SCHEDULE_CREATED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M08 |
-| 23 | `MEDICATION_SCHEDULE_DELETED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M09 |
+| 22 | `MEDICATION_SCHEDULE_CREATED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | M08 |
+| 23 | `MEDICATION_SCHEDULE_DELETED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | M09 |
 | 24 | `MEDICATION_SCHEDULE_SYNC` | MEDICINE_SCHEDULE | — | DATA_ONLY | passive | ROUTINE_90D | NONE | NONE | — | 없음 |
-| 25 | `HEALTH_SCHEDULE_CREATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H02 |
-| 26 | `HEALTH_SCHEDULE_UPDATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H03 |
-| 27 | `HEALTH_SCHEDULE_DELETED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals` | H04 |
-| 28 | `WALK_GOAL_CHANGED` | WALK | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W02 |
+| 25 | `HEALTH_SCHEDULE_CREATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H02 |
+| 26 | `HEALTH_SCHEDULE_UPDATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H03 |
+| 27 | `HEALTH_SCHEDULE_DELETED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H04 |
+| 28 | `WALK_GOAL_CHANGED` | WALK | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | W02 |
 
 매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08/S09는 원문의 단일 제안명 `SAFETY_SENIOR_OK_NOTICE`를 보존등급·문구별 두 상수로 나눈다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
 
@@ -144,7 +144,7 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·`widyu://incident/{entityId}`·S01/S02를 사용한다. `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
+- [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·딥링크 없음·`data.type=EMERGENCY_CONFIRM_REQUEST`·S01/S02를 사용한다(2026-10-11 #746 개정). `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
 - [x] N7: 네 `DeliveryMode`를 타입별로 조회할 수 있으며 4절 전달 정책과 일치한다. W2 구현은 기존 호출자의 센터 저장 단위를 바꾸지 않는다.
 - [x] N8: type 있는 enqueue는 eventId가 비어 있을 때 수신자별 UUID를 생성한다. 명시값이 있으면 UUID 형식과 무관하게 40자 이하의 공백 아닌 값(예: `inc-…`)을 보존하며, 40자 초과는 행을 저장하지 않는다. 같은 수신자의 여러 토큰 행에 동일한 값을 기록한다. FCM data의 `eventId/type/priority/notificationId/deepLink/foregroundPresentation`과 해당 이벤트의 `revision/effectiveFromDate/actorDisplayName`이 문자열로 보존된다. W2 notificationId는 outbox ID다.
 - [x] N8: `FcmDelivery.from`은 `data_payload` 전체를 복원한다. 같은 행의 재시도 2회 뒤에도 key/value가 같고, 이전 행은 `dataType`·`dataRevision` 중 존재하는 키를 각각 복원한다.
@@ -174,7 +174,7 @@ ALTER TABLE fcm_outbox
 - [ ] **FE 합의 필요:** Android 채널 ID `widyu_safety`·`widyu_general`, iOS `time-sensitive`·`active`·`passive` interruption-level, priority 매핑은 계획 §5의 제안값이다. 구현 제안은 `critical/timeSensitive→time-sensitive`, `interaction→active`, `passive→passive`이며 Android 전달 priority는 앞의 두 등급에 high, 나머지에 normal이다. iOS `critical` 권한은 사용하지 않는다.
 - [ ] **FE 합의 필요:** 위듀(시니어) 경로는 여전히 제안값이며 FE의 앱 내부 경로 전달을 기다린다. 위듀케어 경로는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)과 2026-10-03 FE 문서로 확정했다. G01-C의 목표별 목적 화면과 심박 위급 최초 알림의 `type` 값은 FE 확인 대기다.
 - [ ] **FE 합의 필요:** R01 `FAMILY_LEADER_CHANGED`의 센터 필터는 null로 두어 ALL·UNREAD에만 노출한다. FE와 노출 필터 계약을 고정한다.
-- [ ] **FE 합의 필요:** `SAFETY_SELF_CHECK`의 딥링크 `widyu://incident/{entityId}`에서 `entityId=incident_ref`로 사용한다. IncidentService의 현재 scheme과 같으며 FE router 계약을 고정한다.
+- [x] **FE 합의 완료(2026-10-11, #746):** `SAFETY_SELF_CHECK`는 딥링크 없이 `data.type=EMERGENCY_CONFIRM_REQUEST`로 본인확인 화면을 띄운다. 사건은 `data.entityId=incident_ref`로 찾는다.
 - [ ] **FE 합의 필요:** 원 제안명 `SAFETY_SENIOR_OK_NOTICE`를 보존등급·문구별 `SAFETY_SENIOR_OK_NOTICE_HEART`(S08)·`SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE`(S09) wire type으로 분리했다. 앱 수신 파서·라우터와 합의한다.
 
 계획 §5의 회신 대기 항목과 작업 가정을 아래에 옮긴다. W2 밖의 항목도 후속 LLD가 같은 기준을 확인할 수 있도록 유지한다. 가정을 바꾸는 회신이 오면 담당 Task의 결정 게이트에서 갱신한다.

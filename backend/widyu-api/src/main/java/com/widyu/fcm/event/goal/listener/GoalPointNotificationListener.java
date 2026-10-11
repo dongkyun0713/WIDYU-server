@@ -37,7 +37,7 @@ public class GoalPointNotificationListener {
         NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), values);
         outboxService.enqueue(event.seniorId(), FcmSendDto.builder()
                 .title(copy.title()).content(copy.body()).notificationType(type)
-                .eventId(event.eventId()).deepLink("widyu://points").build());
+                .eventId(event.eventId()).build());
     }
 
     @EventListener

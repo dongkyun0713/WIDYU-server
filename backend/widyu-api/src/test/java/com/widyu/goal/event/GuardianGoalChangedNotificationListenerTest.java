@@ -44,7 +44,7 @@ class GuardianGoalChangedNotificationListenerTest {
         assertThat(message.dataForEnqueue("event-1"))
                 .containsEntry("entityId", "100")
                 .containsEntry("actorDisplayName", "홍길동")
-                .containsEntry("deepLink", "widyu://health/schedules/100")
+                .containsEntry("deepLink", "/goal")
                 .containsEntry("type", "HEALTH_SCHEDULE_CREATED")
                 .containsEntry("eventId", "event-1");
     }
@@ -66,7 +66,7 @@ class GuardianGoalChangedNotificationListenerTest {
         assertThat(messages.getValue().title()).isEqualTo("홍길동 님이 건강 일정을 변경했어요.");
         assertThat(messages.getValue().dataForEnqueue("event-2"))
                 .containsEntry("entityId", "100")
-                .containsEntry("deepLink", "widyu://health/schedules/100");
+                .containsEntry("deepLink", "/goal");
     }
 
     @Test
@@ -88,7 +88,7 @@ class GuardianGoalChangedNotificationListenerTest {
         assertThat(message.content()).isEqualTo("앱에서 남은 일정을 확인해보세요.");
         assertThat(message.dataForEnqueue("event-3"))
                 .containsEntry("entityId", "100")
-                .containsEntry("deepLink", "widyu://goals");
+                .containsEntry("deepLink", "/goal");
     }
 
     @Test
@@ -108,7 +108,7 @@ class GuardianGoalChangedNotificationListenerTest {
         assertThat(message.title()).isEqualTo("홍길동 님이 걷기 목표를 변경했어요.");
         assertThat(message.content()).isEqualTo("새 목표는 하루 8000걸음이에요.");
         assertThat(message.dataForEnqueue("event-4"))
-                .containsEntry("deepLink", "widyu://walk/goal")
+                .containsEntry("deepLink", "/goal")
                 .doesNotContainKey("entityId");
     }
 
