@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
 import com.widyu.global.error.BusinessException;
+import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.event.GuardianGoalChangedEvent;
@@ -41,6 +42,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.widyu.fcm.NotificationType;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("WalkService 월별 조회 단위 테스트")
@@ -178,6 +180,7 @@ class WalkServiceTest {
         given(memberUtil.getCurrentMember()).willReturn(member);
 
         Walk walk = Walk.createWithGoal(member, LocalDate.now(), 5000);
+        ReflectionTestUtils.setField(walk, "id", 7L);
         given(walkRepository.findByMemberAndWalkDate(any(), any())).willReturn(Optional.of(walk));
 
         // when
@@ -190,7 +193,11 @@ class WalkServiceTest {
         assertThat(walk.getActualSteps()).isEqualTo(8000);
         assertThat(walk.isRewarded()).isTrue();
         then(seniorProfileService).should(times(1))
-                .addPointsToMember(eq(memberId), eq(25L), eq("걷기 목표 달성"), startsWith("WALK_REWARD:"));
+                .addGoalRewardPoints(eq(memberId), eq(25L), eq("걷기 목표 달성"), startsWith("WALK_REWARD:"));
+        ArgumentCaptor<GoalAchievedEvent> event = ArgumentCaptor.forClass(GoalAchievedEvent.class);
+        then(eventPublisher).should(times(1)).publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("G01:W:7");
+        assertThat(event.getValue().points()).isEqualTo(25L);
     }
 
     @Test
@@ -212,7 +219,7 @@ class WalkServiceTest {
         assertThat(walk.getActualSteps()).isEqualTo(6000);
         assertThat(walk.isRewarded()).isFalse();
         then(seniorProfileService).should(never())
-                .addPointsToMember(any(), any(), any(), any());
+                .addGoalRewardPoints(any(), any(), any(), any());
     }
 
     @Test

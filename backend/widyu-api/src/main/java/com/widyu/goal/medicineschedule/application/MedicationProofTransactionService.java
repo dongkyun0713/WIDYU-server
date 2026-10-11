@@ -3,6 +3,7 @@ package com.widyu.goal.medicineschedule.application;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
 import com.widyu.goal.medicineschedule.dto.response.MedicationProofResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
@@ -13,13 +14,13 @@ import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class MedicationProofTransactionService {
     private final MedicineScheduleRepository medicineScheduleRepository;
     private final MemberRepository memberRepository;
     private final SeniorProfileService seniorProfileService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public void validateBeforeUpload(Long memberId, Long scheduleId) {
         Member currentMember = memberRepository.findById(memberId)
@@ -73,8 +75,12 @@ public class MedicationProofTransactionService {
         saveProof(proof, scheduleId);
         currentMember.incrementMedicationAlarmRevision();
 
-        long earnedPoints = calculateEarnedPoints(currentMember, now.toLocalDate());
-        rewardPoints(currentMember, proof, earnedPoints);
+        long proofCount = medicationProofRepository.countByMemberAndVerifiedAtBetween(
+                currentMember, now.toLocalDate().atStartOfDay(), now.toLocalDate().atTime(LocalTime.MAX));
+        long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
+                currentMember, Status.ACTIVE, now.toLocalDate());
+        long earnedPoints = MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
+        rewardPoints(currentMember, proof, earnedPoints, proofCount == totalSchedules && totalSchedules > 0);
         log.info("약 복용 인증 완료: scheduleId={}, memberId={}, verifiedAt={}, earnedPoints={}",
                 scheduleId, currentMember.getId(), now, earnedPoints);
         return MedicationProofResponse.of(currentPoints(currentMember), earnedPoints);
@@ -115,25 +121,24 @@ public class MedicationProofTransactionService {
         }
     }
 
-    private long calculateEarnedPoints(Member member, LocalDate date) {
-        long proofCount = medicationProofRepository.countByMemberAndVerifiedAtBetween(
-                member, date.atStartOfDay(), date.atTime(LocalTime.MAX));
-        long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
-                member, Status.ACTIVE, date);
-        return MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
-    }
-
     /**
      * 인증 즉시 적립. 낙관적 락 충돌 시 재시도하지 않는다.
-     * 호출 대상 {@code addPointsToMember}의 {@code @RetryOnPointConflict}는 이 트랜잭션 안에 참여하므로 동작하지 않는다.
+     * 호출 대상 포인트 서비스의 {@code @RetryOnPointConflict}는 이 트랜잭션 안에 참여하므로 동작하지 않는다.
      * 이 트랜잭션 밖에서 이미 S3 업로드가 끝나 재실행이 불가하므로 롤백 후 409로 응답한다(LLD-0003 §8).
      */
-    private void rewardPoints(Member member, MedicationProof proof, long earnedPoints) {
+    private void rewardPoints(Member member, MedicationProof proof, long earnedPoints, boolean completedDay) {
         if (earnedPoints <= 0) {
             return;
         }
         if (member.getSeniorProfile() == null) {
             log.warn("시니어 프로필이 없어 복약 인증 포인트를 적립하지 않습니다: memberId={}", member.getId());
+            return;
+        }
+        if (completedDay) {
+            seniorProfileService.addGoalRewardPoints(member.getId(), earnedPoints, POINT_DESCRIPTION,
+                    POINT_OPERATION_KEY_PREFIX + proof.getId());
+            eventPublisher.publishEvent(GoalAchievedEvent.forMedicationDay(
+                    member.getId(), proof.getId(), earnedPoints));
             return;
         }
         seniorProfileService.addPointsToMember(member.getId(), earnedPoints, POINT_DESCRIPTION,

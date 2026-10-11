@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -21,10 +22,9 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
-import com.widyu.member.PointHistory;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.application.FamilyAccessService;
-import com.widyu.member.repository.PointHistoryRepository;
+import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -45,9 +45,9 @@ class AlbumUnlockServiceTest {
     @Mock private AlbumRepository albumRepository;
     @Mock private MemberUtil memberUtil;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private PointHistoryRepository pointHistoryRepository;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private FamilyAccessService familyAccessService;
+    @Mock private SeniorProfileService seniorProfileService;
 
     @InjectMocks
     private AlbumUnlockService albumUnlockService;
@@ -83,8 +83,7 @@ class AlbumUnlockServiceTest {
         albumUnlockService.unlockAlbum(10L);
 
         // then
-        verify(seniorProfile).deductPoints(50L);
-        verify(pointHistoryRepository).save(any(PointHistory.class));
+        verify(seniorProfileService).deductPointsFromMember(1L, 50L, "앨범 해금");
         verify(albumUnlockRepository).save(any(AlbumUnlock.class));
         verify(eventPublisher).publishEvent(any(AlbumUnlockedEvent.class));
     }
@@ -115,6 +114,10 @@ class AlbumUnlockServiceTest {
         given(albumUnlockRepository.existsByAlbumAndMember(album, senior)).willReturn(false);
         given(albumUnlockRepository.save(any(AlbumUnlock.class)))
                 .willReturn(AlbumUnlock.createUnlock(album, senior));
+        willAnswer(invocation -> {
+            seniorProfile.deductPoints(Album.UNLOCK_PRICE);
+            return null;
+        }).given(seniorProfileService).deductPointsFromMember(1L, Album.UNLOCK_PRICE, "앨범 해금");
 
         // when
         AlbumUnlockResponse response = albumUnlockService.unlockAlbum(10L);
@@ -217,6 +220,7 @@ class AlbumUnlockServiceTest {
         assertThatThrownBy(() -> albumUnlockService.unlockAlbum(10L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALBUM_ALREADY_UNLOCKED);
+        verify(seniorProfileService, never()).deductPointsFromMember(any(), any(), any());
     }
 
     @Test
@@ -245,6 +249,7 @@ class AlbumUnlockServiceTest {
         assertThatThrownBy(() -> albumUnlockService.unlockAlbum(10L))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALBUM_UNLOCK_INSUFFICIENT_BALANCE);
+        verify(seniorProfileService, never()).deductPointsFromMember(any(), any(), any());
     }
 
     @Test
@@ -291,6 +296,6 @@ class AlbumUnlockServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALBUM_UNLOCK_NOT_REQUIRED);
         verify(albumUnlockRepository, never()).save(any(AlbumUnlock.class));
-        verify(pointHistoryRepository, never()).save(any(PointHistory.class));
+        verify(seniorProfileService, never()).deductPointsFromMember(any(), any(), any());
     }
 }

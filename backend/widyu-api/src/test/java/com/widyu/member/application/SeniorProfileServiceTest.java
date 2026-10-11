@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 
 import com.widyu.album.repository.AlbumUnlockRepository;
@@ -12,6 +13,7 @@ import com.widyu.album.dto.response.UnlockedAlbumIdsResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.fcm.event.point.dto.PointChangedEvent;
 import com.widyu.member.Family;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.Member;
@@ -29,6 +31,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +44,7 @@ class SeniorProfileServiceTest {
     @Mock private FamilyAccessService familyAccessService;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private PointHistoryRepository pointHistoryRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private SeniorProfileService seniorProfileService;
@@ -106,6 +111,73 @@ class SeniorProfileServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_REQUEST)
                 .hasMessageContaining("결제 취소에 필요한 포인트가 부족합니다.");
         then(pointHistoryRepository).should(never()).save(any(PointHistory.class));
+    }
+
+    @Test
+    @DisplayName("일반 포인트를 적립하면 내역과 P01 사건을 함께 만든다")
+    void 일반_포인트를_적립하면_내역과_P01_사건을_만든다() {
+        // given
+        SeniorProfile profile = profile();
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(profile));
+        savedHistoryHasId(9L);
+        ArgumentCaptor<PointChangedEvent> event = ArgumentCaptor.forClass(PointChangedEvent.class);
+
+        // when
+        seniorProfileService.addPointsToMember(1L, 10L, "약 복용 인증", "MEDICATION_PROOF:5");
+
+        // then
+        assertThat(profile.getPoints()).isEqualTo(110L);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("POINT:E:9");
+        assertThat(event.getValue().description()).isEqualTo("약 복용 인증");
+    }
+
+    @Test
+    @DisplayName("목표 보상 포인트를 적립하면 P01 사건을 만들지 않는다")
+    void 목표_보상_포인트를_적립하면_P01_사건을_만들지_않는다() {
+        // given
+        SeniorProfile profile = profile();
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(profile));
+
+        // when
+        seniorProfileService.addGoalRewardPoints(1L, 25L, "걷기 목표 달성", "WALK_REWARD:7");
+
+        // then
+        assertThat(profile.getPoints()).isEqualTo(125L);
+        then(pointHistoryRepository).should().save(any(PointHistory.class));
+        then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("포인트를 사용하면 내역과 P02 사건을 함께 만든다")
+    void 포인트를_사용하면_내역과_P02_사건을_만든다() {
+        // given
+        SeniorProfile profile = profile();
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(profile));
+        savedHistoryHasId(10L);
+        ArgumentCaptor<PointChangedEvent> event = ArgumentCaptor.forClass(PointChangedEvent.class);
+
+        // when
+        seniorProfileService.deductPointsFromMember(1L, 50L, "앨범 해금");
+
+        // then
+        assertThat(profile.getPoints()).isEqualTo(50L);
+        then(eventPublisher).should().publishEvent(event.capture());
+        assertThat(event.getValue().eventId()).isEqualTo("POINT:U:10");
+        assertThat(event.getValue().description()).isEqualTo("앨범 해금");
+    }
+
+    private SeniorProfile profile() {
+        return SeniorProfile.createSeniorProfile(member(1L, MemberType.SENIOR),
+                Family.createFamily("ABC123"), "서울시", "INV1234", LocalDate.of(1950, 1, 1));
+    }
+
+    private void savedHistoryHasId(Long historyId) {
+        willAnswer(invocation -> {
+            PointHistory history = invocation.getArgument(0);
+            ReflectionTestUtils.setField(history, "id", historyId);
+            return history;
+        }).given(pointHistoryRepository).save(any(PointHistory.class));
     }
 
     private Member member(Long id, MemberType type) {

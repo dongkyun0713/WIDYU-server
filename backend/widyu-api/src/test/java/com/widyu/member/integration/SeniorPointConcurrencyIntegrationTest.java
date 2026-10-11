@@ -1,22 +1,33 @@
 package com.widyu.member.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
 
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
 import com.widyu.fcm.application.FcmTransport;
+import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.repository.FcmNotificationRepository;
+import com.widyu.goal.walk.application.WalkService;
+import com.widyu.goal.walk.dto.request.UpdateStepsRequest;
+import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
+import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.PointHistoryType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.FamilyRepository;
+import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.PointHistoryRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
+import com.widyu.walk.Walk;
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +41,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import software.amazon.awssdk.services.s3.S3Client;
 
 @SpringBootTest
@@ -57,6 +70,11 @@ class SeniorPointConcurrencyIntegrationTest {
     @Autowired private SeniorProfileRepository seniorProfileRepository;
     @Autowired private FamilyRepository familyRepository;
     @Autowired private PointHistoryRepository pointHistoryRepository;
+    @Autowired private FcmNotificationRepository notificationRepository;
+    @Autowired private FamilyMembershipRepository familyMembershipRepository;
+    @Autowired private WalkRepository walkRepository;
+    @Autowired private WalkService walkService;
+    @Autowired private PlatformTransactionManager transactionManager;
 
     @MockBean private MemberUtil memberUtil;
     @MockBean private TemporaryMemberRepository temporaryMemberRepository;
@@ -67,8 +85,11 @@ class SeniorPointConcurrencyIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        notificationRepository.deleteAll();
         pointHistoryRepository.deleteAll();
+        walkRepository.deleteAll();
         seniorProfileRepository.deleteAll();
+        familyMembershipRepository.deleteAll();
         familyRepository.deleteAll();
         memberRepository.deleteAll();
     }
@@ -97,6 +118,8 @@ class SeniorPointConcurrencyIntegrationTest {
 
         long earnHistoryCount = countHistoriesByType(seniorProfileId, PointHistoryType.EARN);
         assertThat(earnHistoryCount).isEqualTo(threadCount);
+        assertThat(notificationRepository.findAll()).hasSize(threadCount)
+                .allMatch(notification -> notification.getType() == NotificationType.POINT_EARNED);
     }
 
     @Test
@@ -124,6 +147,57 @@ class SeniorPointConcurrencyIntegrationTest {
 
         long useHistoryCount = countHistoriesByType(seniorProfileId, PointHistoryType.USE);
         assertThat(useHistoryCount).isEqualTo(expectedSuccess);
+        assertThat(notificationRepository.findAll()).hasSize(expectedSuccess)
+                .allMatch(notification -> notification.getType() == NotificationType.POINT_USED);
+    }
+
+    @Test
+    @DisplayName("걷기 목표를 달성하면 시니어와 보호자에게 G01을 하나씩 만들고 P01은 만들지 않는다")
+    void 걷기_목표를_달성하면_가족에게_G01을_만들고_P01은_만들지_않는다() {
+        // given
+        Long seniorId = createSeniorMember("홍길동", "01012345678", "FAM300", "INV3003");
+        Member senior = memberRepository.findById(seniorId).orElseThrow();
+        Family family = seniorProfileRepository.findByMemberId(seniorId).orElseThrow().getFamily();
+        Member guardian = memberRepository.save(Member.createMember(MemberType.GUARDIAN,
+                "보호자", "01033334444"));
+        familyMembershipRepository.save(FamilyMembership.createMembership(family, guardian));
+        Walk walk = walkRepository.save(Walk.createWithGoal(senior, LocalDate.now(), 5000));
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+
+        // when
+        walkService.updateSteps(new UpdateStepsRequest(6000, LocalDate.now()));
+        walkService.updateSteps(new UpdateStepsRequest(7000, LocalDate.now()));
+
+        // then
+        assertThat(walkRepository.findById(walk.getId()).orElseThrow().isRewarded()).isTrue();
+        assertThat(pointHistoryRepository.count()).isEqualTo(1L);
+        var centers = notificationRepository.findAll();
+        assertThat(centers).hasSize(2)
+                .allMatch(center -> center.getType() == NotificationType.GOAL_ACHIEVED)
+                .allMatch(center -> center.getBody().equals("25P가 자동으로 적립됐어요."));
+        assertThat(centers.stream().map(center -> center.getRecipientMember().getId()).collect(java.util.stream.Collectors.toSet()))
+                .isEqualTo(Set.of(seniorId, guardian.getId()));
+    }
+
+    @Test
+    @DisplayName("걷기 목표 달성 거래를 롤백하면 포인트와 G01을 함께 되돌린다")
+    void 걷기_목표_달성을_롤백하면_포인트와_G01을_함께_되돌린다() {
+        // given
+        Long seniorId = createSeniorMember("김영희", "01099998888", "FAM400", "INV4004");
+        Member senior = memberRepository.findById(seniorId).orElseThrow();
+        Walk walk = walkRepository.save(Walk.createWithGoal(senior, LocalDate.now(), 5000));
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+
+        // when
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            walkService.updateSteps(new UpdateStepsRequest(6000, LocalDate.now()));
+            throw new IllegalStateException("rollback");
+        })).isInstanceOf(IllegalStateException.class);
+
+        // then
+        assertThat(walkRepository.findById(walk.getId()).orElseThrow().isRewarded()).isFalse();
+        assertThat(pointHistoryRepository.count()).isZero();
+        assertThat(notificationRepository.count()).isZero();
     }
 
     private long countHistoriesByType(long seniorProfileId, PointHistoryType type) {

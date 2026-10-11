@@ -177,6 +177,29 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("포인트 사용 알림을 같은 사건으로 다시 넣으면 센터 한 건만 남기고 푸시는 만들지 않는다")
+    void 포인트_사용_알림을_다시_넣으면_센터_한_건만_남긴다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("50P를 사용했어요.").content("앨범 해금")
+                .notificationType(NotificationType.POINT_USED).eventId("POINT:U:9")
+                .deepLink("widyu://points").build();
+
+        // when
+        service.enqueue(member, message);
+        service.enqueue(member, message);
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isZero();
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(center.getType()).isEqualTo(NotificationType.POINT_USED);
+        assertThat(center.getEventId()).isEqualTo("POINT:U:9");
+        assertThat(center.getBody()).isEqualTo("앨범 해금");
+        assertThat(center.getDeepLink()).isEqualTo("widyu://points");
+    }
+
+    @Test
     @DisplayName("가족이 아닌 관련 회원의 알림을 넣으면 센터와 기기 작업을 남기지 않는다")
     void 가족이_아닌_관련_회원의_알림을_넣으면_센터와_기기_작업을_남기지_않는다() {
         // given
