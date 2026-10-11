@@ -43,6 +43,7 @@ class SensorPropertiesBindingTest {
         assertThat(properties.incident().timeoutPollMs()).isEqualTo(5000L);
         assertThat(properties.incident().selfCheckFirst()).isFalse();
         assertThat(properties.incident().situationWindowMin()).isEqualTo(5);
+        assertThat(properties.medication().onTimePush()).isTrue();
     }
 
     @Test
@@ -72,6 +73,20 @@ class SensorPropertiesBindingTest {
         // then
         assertThat(properties.followup().enabled()).isFalse();
         assertThat(properties.followup().rewardEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("정각 서버 푸시 설정을 끄면 거짓을 바인딩한다")
+    void 정각_서버_푸시_설정을_끄면_거짓을_바인딩한다() throws IOException {
+        // given
+        Binder binder = binderOf("application-sensor.yml",
+                Map.of("SENSOR_MEDICATION_ON_TIME_PUSH", "false"));
+
+        // when
+        SensorProperties properties = binder.bind("sensor", SensorProperties.class).get();
+
+        // then
+        assertThat(properties.medication().onTimePush()).isFalse();
     }
 
     private Binder binderOf(String classpathLocation) throws IOException {

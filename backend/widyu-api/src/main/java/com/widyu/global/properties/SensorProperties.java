@@ -10,7 +10,8 @@ public record SensorProperties(
         FallAi fallAi,
         HeartAi heartAi,
         Incident incident,
-        Followup followup
+        Followup followup,
+        Medication medication
 ) {
 
     /**
@@ -80,4 +81,7 @@ public record SensorProperties(
 
     /** 종료 뒤 카드와 첫 제출 보상. 각각 활성화 전 기본값 false(LLD-0073·0075). */
     public record Followup(boolean enabled, boolean rewardEnabled) {}
+
+    /** 앱 기기 알람 배포 전 정각 서버 푸시를 유지한다(LLD-0080). */
+    public record Medication(boolean onTimePush) {}
 }
