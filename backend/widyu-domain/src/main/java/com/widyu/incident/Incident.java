@@ -46,7 +46,8 @@ import org.hibernate.type.SqlTypes;
         @Index(name = "idx_incident_member_time", columnList = "member_id, opened_at_ms"),
         @Index(name = "idx_incident_run_time", columnList = "run_id, opened_at_ms"),
         @Index(name = "idx_incident_state_deadline", columnList = "state, respond_by_ms"),
-        @Index(name = "idx_incident_alert_pending", columnList = "initial_alert_sent_at_ms, respond_by_ms")
+        @Index(name = "idx_incident_alert_pending", columnList = "initial_alert_sent_at_ms, respond_by_ms"),
+        @Index(name = "idx_incident_second_alert_pending", columnList = "second_alert_sent_at_ms, second_alert_due_at_ms")
     }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -101,6 +102,15 @@ public class Incident extends BaseTimeEntity {
 
     @Column(name = "initial_alert_sent_at_ms")
     private Long initialAlertSentAtMs;
+
+    @Column(name = "second_alert_due_at_ms")
+    private Long secondAlertDueAtMs;
+
+    @Column(name = "second_alert_sent_at_ms")
+    private Long secondAlertSentAtMs;
+
+    @Column(name = "second_alert_cancelled_at_ms")
+    private Long secondAlertCancelledAtMs;
 
     @Column(name = "ok_notice_sent_at_ms")
     private Long okNoticeSentAtMs;
@@ -192,6 +202,7 @@ public class Incident extends BaseTimeEntity {
             return;
         }
         initialAlertSentAtMs = sentAtMs;
+        secondAlertDueAtMs = sentAtMs + 180_000L;
     }
 
     public void markOkNoticeSent(long sentAtMs) {

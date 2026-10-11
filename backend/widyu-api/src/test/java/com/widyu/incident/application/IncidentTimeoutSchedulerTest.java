@@ -25,6 +25,22 @@ class IncidentTimeoutSchedulerTest {
     @Mock private IncidentEscalation escalation;
 
     @Test
+    @DisplayName("재시작 뒤 마감된 2차 후보를 조회하면 같은 스케줄러가 발송 경로로 넘긴다")
+    void 재시작_뒤_마감된_이차_후보를_조회하면_발송_경로로_넘긴다() {
+        // given
+        given(incidentRepository.findSecondAlertDueIds(anyLong(), eq(0L), any(Pageable.class)))
+                .willReturn(List.of(7L));
+
+        // when
+        new IncidentTimeoutScheduler(incidentRepository, escalation).escalateTimedOut();
+
+        // then
+        ArgumentCaptor<Long> now = ArgumentCaptor.forClass(Long.class);
+        then(incidentRepository).should().findSecondAlertDueIds(now.capture(), eq(0L), any(Pageable.class));
+        then(escalation).should().sendSecondAlertIfDue(7L);
+    }
+
+    @Test
     @DisplayName("무응답 전환과 미발송 후보를 조회하면 각 사건을 별도 처리 경로로 넘긴다")
     void 무응답_전환과_미발송_후보를_조회하면_각_사건을_처리한다() {
         // given

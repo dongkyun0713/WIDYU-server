@@ -42,5 +42,29 @@ public class IncidentTimeoutScheduler {
             }
         }
         incidentEscalation.escalateFallTimedOut(nowMs);
+        pollSecondAlerts(nowMs);
+    }
+
+    private void pollSecondAlerts(long nowMs) {
+        long afterId = 0L;
+        for (int page = 0; page < MAX_PAGES; page++) {
+            List<Long> ids = incidentRepository.findSecondAlertDueIds(nowMs, afterId,
+                    PageRequest.of(0, POLL_LIMIT));
+            if (ids.isEmpty()) {
+                break;
+            }
+            afterId = ids.getLast();
+            for (Long id : ids) {
+                try {
+                    incidentEscalation.sendSecondAlertIfDue(id);
+                } catch (RuntimeException e) {
+                    log.warn("사건 2차 알림 처리 실패: incidentId={}, errorType={}",
+                            id, e.getClass().getSimpleName());
+                }
+            }
+            if (ids.size() < POLL_LIMIT) {
+                break;
+            }
+        }
     }
 }

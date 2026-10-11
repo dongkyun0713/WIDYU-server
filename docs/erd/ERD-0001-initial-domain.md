@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | Accepted |
 | 날짜 | 2026-07-05 |
-| 코드 동기화 | 2026-10-02 (LLD-0073·0074 후속 카드·판독 라벨) |
+| 코드 동기화 | 2026-10-11 (LLD-0081 2차 알림·보호자별 멈춤 기록) |
 | 관련 | ADR-0001 |
 
 ## 목적
@@ -388,14 +388,17 @@ erDiagram
         Long respondedAtMs
         Long deviceRespondedAtMs "단말 클릭 시각"
         Long initialAlertSentAtMs "INITIAL_ALERT enqueue 시각·멱등 게이트"
+        Long secondAlertDueAtMs "① enqueue + 180000ms"
+        Long secondAlertSentAtMs "② enqueue 게이트 시각"
+        Long secondAlertCancelledAtMs "멈춤·종료·배포 억제 시각"
         Long okNoticeSentAtMs "심박 S08 enqueue 시각"
         Long lastDetectedAtMs "마지막 감지 서버 시각·5분 창 기준"
         String lastDecisionId "마지막 연결 판정"
         Integer detectionCount "기본 1"
         Long situationEndedAtMs
-        String guardianResponseType "MESSAGE_SENT / CALL_INITIATED"
-        Long guardianResponseAtMs
-        Long guardianResponseBy
+        String guardianResponseType "구 첫 기록 읽기 전용"
+        Long guardianResponseAtMs "구 첫 기록 읽기 전용"
+        Long guardianResponseBy "구 첫 기록 읽기 전용"
         Long policyRevision "신규 사건 정책판 20261005; 기존 NULL 허용"
         String responseVia "WATCH / PHONE"
         String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
@@ -403,6 +406,14 @@ erDiagram
         Long resolvedBy "보호자 member_id"
         Long resolvedAtMs
         Long emergencyCalledAtMs "보호자가 입력한 119 신고 시각"
+    }
+
+    IncidentGuardianResponse {
+        Long id PK
+        Long incidentId FK
+        Long guardianMemberId FK
+        String responseType "ACKNOWLEDGED / MESSAGE_SENT / CALL_INITIATED"
+        Long respondedAtMs "서버 기록 시각"
     }
 
     FollowupCard {
@@ -695,6 +706,8 @@ erDiagram
     Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
     Member ||--o{ CollectionRun : "측정회차 (대상 참가자)"
     Member ||--o{ Incident : "위급 사건 (본인확인·사후 판정)"
+    Incident ||--o{ IncidentGuardianResponse : "보호자별 멈춤"
+    Member ||--o{ IncidentGuardianResponse : "멈춤 기록자"
     Incident ||--o| FollowupCard : "OK 종료 후 카드"
     FollowupCard ||--o| FollowupAnswer : "첫 제출"
     Incident ||--o| IncidentLabel : "두 라벨 축"
@@ -833,6 +846,8 @@ erDiagram
 | `label_annotation` | `idx_label_annotation_reviewer` | `(reviewer_id, created_at)` | 사람 판독 이력 |
 | `incident` | UK `uk_incident_decision_id` | `(decision_id)` | 배치 판정 1 = 사건 1. 단건의 NULL은 여러 행 허용 |
 | `incident` | `idx_incident_alert_pending` | `(initial_alert_sent_at_ms, respond_by_ms)` | 보호자 최초 알림 후보 조회·멱등 게이트 (LLD-0070) |
+| `incident` | `idx_incident_second_alert_pending` | `(second_alert_sent_at_ms, second_alert_due_at_ms)` | ② 마감 후보 조회·멱등 게이트 (LLD-0081) |
+| `incident_guardian_response` | UK `uk_incident_guardian_response_kind` | `(incident_id, guardian_member_id, response_type)` | 사건×보호자×종류당 한 번 |
 | `incident` | `idx_incident_member_time` | `(member_id, opened_at_ms)` | 가족 조회·본인 대기 목록 |
 | `incident` | `idx_incident_run_time` | `(run_id, opened_at_ms)` | 회차 내보내기 |
 | `incident` | `idx_incident_state_deadline` | `(state, respond_by_ms)` | 무응답 스케줄러가 매 폴링마다 타는 경로 |
@@ -877,6 +892,7 @@ erDiagram
 |------|--------|-----------|-----|
 | 2026-10-02 | `followup_card`·`followup_answer` | OK 종료 후 카드와 시니어 원답·두 제출 시각 (LLD-0073) | `scripts/mysql/create_followup_card.sql` |
 | 2026-10-02 | `incident_label`·`label_annotation` | 두 라벨 축과 판독 revision (LLD-0074) | `scripts/mysql/create_incident_label.sql` |
+| 2026-10-11 | `incident`·`incident_guardian_response` | ② due/sent/cancelled와 보호자별 멈춤 기록, 구 사건 ② 억제 (LLD-0081) | `scripts/mysql/alter_incident_second_alert.sql` |
 | 2026-10-02 | `incident` | OK 정보성 알림 enqueue 시각·마지막 감지 시각 추가 및 기존 행 백필 (LLD-0072) | `scripts/mysql/alter_incident_ok_notice_grouping.sql` |
 | 2026-10-02 | `incident` | `decision_id` NULL 허용, 본인확인·보호자 최초 알림·후속 안전 상태 컬럼 및 후보 인덱스 추가 (LLD-0070) | `scripts/mysql/alter_incident_self_check_first.sql` |
 | 2026-10-02 | `member_notification_setting`·`member` | 설정 4분류로 매핑(기존 일반 다섯 항목이 모두 꺼진 회원만 `GENERAL=false`), `category VARCHAR(32)`, 회원별 `notification_policy_revision` 추가 (LLD-0065) | `scripts/mysql/migrate_notification_setting_group.sql` |

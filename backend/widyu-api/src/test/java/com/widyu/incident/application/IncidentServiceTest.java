@@ -25,6 +25,7 @@ import com.widyu.global.error.ErrorCode;
 import com.widyu.global.properties.SensorProperties;
 import com.widyu.incident.Incident;
 import com.widyu.incident.GuardianResponseType;
+import com.widyu.incident.IncidentGuardianResponse;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
@@ -34,6 +35,7 @@ import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.repository.IncidentRepository;
+import com.widyu.incident.repository.IncidentGuardianResponseRepository;
 import com.widyu.member.application.FamilyAccessService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
@@ -42,6 +44,7 @@ import com.widyu.member.Member;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.MemberType;
 import com.widyu.global.entity.Status;
+import jakarta.persistence.EntityManager;
 import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.List;
@@ -67,6 +70,7 @@ class IncidentServiceTest {
     private static final long SELF_CHECK_MS = 60_000L;
 
     @Mock private IncidentRepository incidentRepository;
+    @Mock private IncidentGuardianResponseRepository guardianResponses;
     @Mock private FcmService fcmService;
     @Mock private FamilyAccessService familyAccessService;
     @Mock private MemberRepository memberRepository;
@@ -75,6 +79,7 @@ class IncidentServiceTest {
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private FollowupCardService followupCardService;
+    @Mock private EntityManager entityManager;
 
     @Test
     @DisplayName("안심구역 종류로 단건 사건을 열면 새 사건 없이 예외가 발생한다")
@@ -312,24 +317,22 @@ class IncidentServiceTest {
     }
 
     @Test
-    @DisplayName("같은 가족 보호자가 실제 연락을 기록하면 첫 행동을 반환한다")
-    void 같은_가족_보호자가_실제_연락을_기록하면_첫_행동을_반환한다() {
+    @DisplayName("같은 가족 보호자가 멈춤을 기록하면 취소 여부와 첫 시각을 반환한다")
+    void 같은_가족_보호자가_멈춤을_기록하면_취소_여부와_첫_시각을_반환한다() {
         // given
         Incident incident = openIncident();
-        Incident recorded = openIncident();
-        ReflectionTestUtils.setField(recorded, "guardianResponseType", GuardianResponseType.MESSAGE_SENT);
-        ReflectionTestUtils.setField(recorded, "guardianResponseAtMs", OPENED_AT_MS + 10_000L);
-        ReflectionTestUtils.setField(recorded, "guardianResponseBy", GUARDIAN_ID);
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF))
-                .willReturn(Optional.of(incident), Optional.of(recorded));
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
         Member guardian = org.mockito.Mockito.mock(Member.class);
         given(guardian.getType()).willReturn(MemberType.GUARDIAN);
         given(guardian.getStatus()).willReturn(Status.ACTIVE);
         given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
         given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
         given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
-        given(incidentRepository.recordGuardianResponse(eq(INCIDENT_REF), eq(GuardianResponseType.MESSAGE_SENT),
-                anyLong(), eq(GUARDIAN_ID))).willReturn(1);
+        given(guardianResponses.save(any(IncidentGuardianResponse.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+        given(incidentRepository.cancelSecondAlertIfPending(eq(3L), anyLong())).willReturn(1);
 
         // when
         var response = service().recordGuardianResponse(GUARDIAN_ID, INCIDENT_REF,
@@ -338,6 +341,9 @@ class IncidentServiceTest {
         // then
         assertThat(response.guardianResponseType()).isEqualTo(GuardianResponseType.MESSAGE_SENT);
         assertThat(response.guardianResponseBy()).isEqualTo(GUARDIAN_ID);
+        assertThat(response.secondAlertCancelled()).isTrue();
+        assertThat(response.guardianResponseAtMs()).isPositive();
+        then(entityManager).should().clear();
     }
 
     @Test
@@ -355,7 +361,7 @@ class IncidentServiceTest {
                 GuardianResponseType.MESSAGE_SENT))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
-        then(incidentRepository).should(never()).recordGuardianResponse(any(), any(), anyLong(), any());
+        then(guardianResponses).shouldHaveNoInteractions();
     }
 
     @Test
@@ -375,7 +381,7 @@ class IncidentServiceTest {
                 GuardianResponseType.MESSAGE_SENT))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
-        then(incidentRepository).should(never()).recordGuardianResponse(any(), any(), anyLong(), any());
+        then(guardianResponses).shouldHaveNoInteractions();
     }
 
     @Test
@@ -393,7 +399,7 @@ class IncidentServiceTest {
                 GuardianResponseType.MESSAGE_SENT))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
-        then(incidentRepository).should(never()).recordGuardianResponse(any(), any(), anyLong(), any());
+        then(guardianResponses).shouldHaveNoInteractions();
     }
 
     @Test
@@ -410,26 +416,37 @@ class IncidentServiceTest {
                 GuardianResponseType.MESSAGE_SENT))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
-        then(incidentRepository).should(never()).recordGuardianResponse(any(), any(), anyLong(), any());
+        then(guardianResponses).shouldHaveNoInteractions();
     }
 
     @Test
-    @DisplayName("보호자 반응이 이미 있으면 두 번째 요청은 409로 거부한다")
-    void 보호자_반응이_이미_있으면_두_번째_요청은_409로_거부한다() {
+    @DisplayName("같은 보호자와 같은 종류를 다시 기록하면 최초 시각으로 200을 반환한다")
+    void 같은_보호자와_같은_종류를_다시_기록하면_최초_시각을_반환한다() {
         // given
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "id", 3L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
+        given(incidentRepository.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
         Member guardian = org.mockito.Mockito.mock(Member.class);
         given(guardian.getType()).willReturn(MemberType.GUARDIAN);
         given(guardian.getStatus()).willReturn(Status.ACTIVE);
         given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(guardian));
         given(seniorProfileRepository.findFamilyIdByMemberId(SENIOR_ID)).willReturn(Optional.of(7L));
         given(familyMembershipRepository.existsByFamilyIdAndGuardianId(7L, GUARDIAN_ID)).willReturn(true);
+        given(guardianResponses.findByIncidentIdAndGuardianMemberIdAndResponseType(
+                3L, GUARDIAN_ID, GuardianResponseType.CALL_INITIATED))
+                .willReturn(Optional.of(IncidentGuardianResponse.of(3L, GUARDIAN_ID,
+                        GuardianResponseType.CALL_INITIATED, OPENED_AT_MS)));
 
-        // when & then
-        assertThatThrownBy(() -> service().recordGuardianResponse(GUARDIAN_ID, INCIDENT_REF,
-                GuardianResponseType.CALL_INITIATED))
-                .isInstanceOf(BusinessException.class)
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_GUARDIAN_RESPONSE_ALREADY_RECORDED);
+        // when
+        var response = service().recordGuardianResponse(GUARDIAN_ID, INCIDENT_REF,
+                GuardianResponseType.CALL_INITIATED);
+
+        // then
+        assertThat(response.guardianResponseAtMs()).isEqualTo(OPENED_AT_MS);
+        assertThat(response.secondAlertCancelled()).isFalse();
+        then(entityManager).should().clear();
+        then(guardianResponses).should(never()).save(any());
     }
 
     @Test
@@ -619,12 +636,12 @@ class IncidentServiceTest {
     }
 
     private IncidentService service() {
-        return new IncidentService(incidentRepository, fcmService, familyAccessService,
+        return new IncidentService(incidentRepository, guardianResponses, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(60, 5000L, false, 5),
                         new SensorProperties.Followup(false, false)), memberRepository,
                 incidentEscalation, outboxService, seniorProfileRepository,
-                familyMembershipRepository, followupCardService);
+                familyMembershipRepository, followupCardService, entityManager);
     }
 
     private void givenResolveUpdates(int updated) {

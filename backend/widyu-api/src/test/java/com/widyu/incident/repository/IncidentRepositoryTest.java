@@ -1,16 +1,19 @@
 package com.widyu.incident.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.incident.Incident;
 import com.widyu.incident.GuardianResponseType;
+import com.widyu.incident.IncidentGuardianResponse;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +21,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -34,6 +38,8 @@ class IncidentRepositoryTest {
     private static final long RESPOND_BY_MS = OPENED_AT_MS + 60_000L;
 
     @Autowired private IncidentRepository incidentRepository;
+    @Autowired private IncidentGuardianResponseRepository guardianResponses;
+    @Autowired private EntityManager entityManager;
     @MockBean private JPAQueryFactory jpaQueryFactory;
 
     @Test
@@ -186,24 +192,123 @@ class IncidentRepositoryTest {
     }
 
     @Test
-    @DisplayName("보호자 둘이 반응을 기록하면 첫 보호자의 행동만 남는다")
-    void 보호자_둘이_반응을_기록하면_첫_보호자의_행동만_남는다() {
+    @DisplayName("같은 보호자의 다른 종류와 다른 보호자의 멈춤은 각각 한 행을 남긴다")
+    void 다른_종류와_다른_보호자의_멈춤은_각각_한_행을_남긴다() {
         // given
-        incidentRepository.save(checkingIncident());
+        Incident incident = incidentRepository.save(checkingIncident());
 
         // when
-        int first = incidentRepository.recordGuardianResponse(INCIDENT_REF,
-                GuardianResponseType.MESSAGE_SENT, OPENED_AT_MS + 10_000L, OTHER_ID);
-        int second = incidentRepository.recordGuardianResponse(INCIDENT_REF,
-                GuardianResponseType.CALL_INITIATED, OPENED_AT_MS + 20_000L, SENIOR_ID);
+        guardianResponses.save(IncidentGuardianResponse.of(incident.getId(), OTHER_ID,
+                GuardianResponseType.MESSAGE_SENT, OPENED_AT_MS + 10_000L));
+        guardianResponses.save(IncidentGuardianResponse.of(incident.getId(), OTHER_ID,
+                GuardianResponseType.CALL_INITIATED, OPENED_AT_MS + 20_000L));
+        guardianResponses.save(IncidentGuardianResponse.of(incident.getId(), SENIOR_ID,
+                GuardianResponseType.ACKNOWLEDGED, OPENED_AT_MS + 30_000L));
 
         // then
-        Incident found = incidentRepository.findByIncidentRef(INCIDENT_REF).orElseThrow();
+        assertThat(guardianResponses.count()).isEqualTo(3);
+        assertThat(guardianResponses.existsByIncidentId(incident.getId())).isTrue();
+        assertThat(incidentRepository.findById(incident.getId()).orElseThrow().getGuardianResponseType()).isNull();
+    }
+
+    @Test
+    @DisplayName("같은 보호자의 같은 멈춤 종류를 두 번 넣으면 고유 제약이 막는다")
+    void 같은_보호자의_같은_멈춤_종류를_두_번_넣으면_고유_제약이_막는다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+        guardianResponses.saveAndFlush(IncidentGuardianResponse.of(incident.getId(), OTHER_ID,
+                GuardianResponseType.ACKNOWLEDGED, OPENED_AT_MS));
+
+        // when / then
+        assertThatThrownBy(() -> guardianResponses.saveAndFlush(IncidentGuardianResponse.of(
+                incident.getId(), OTHER_ID, GuardianResponseType.ACKNOWLEDGED,
+                OPENED_AT_MS + 1_000L)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("첫 알림 게이트를 얻으면 같은 UPDATE에 2차 마감을 기록한다")
+    void 첫_알림_게이트를_얻으면_같은_UPDATE에_2차_마감을_기록한다() {
+        // given
+        Incident incident = incidentRepository.save(checkingIncident());
+        long nowMs = RESPOND_BY_MS + 1L;
+
+        // when
+        int first = incidentRepository.claimInitialAlertIfDue(incident.getId(), nowMs);
+        int repeated = incidentRepository.claimInitialAlertIfDue(incident.getId(), nowMs);
+
+        // then
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
         assertThat(first).isEqualTo(1);
-        assertThat(second).isZero();
-        assertThat(found.getGuardianResponseType()).isEqualTo(GuardianResponseType.MESSAGE_SENT);
-        assertThat(found.getGuardianResponseAtMs()).isEqualTo(OPENED_AT_MS + 10_000L);
-        assertThat(found.getGuardianResponseBy()).isEqualTo(OTHER_ID);
+        assertThat(repeated).isZero();
+        assertThat(found.getInitialAlertSentAtMs()).isEqualTo(nowMs);
+        assertThat(found.getSecondAlertDueAtMs()).isEqualTo(nowMs + 180_000L);
+    }
+
+    @Test
+    @DisplayName("2차 게이트가 먼저 성공하면 멈춤 취소는 사건을 바꾸지 않는다")
+    void 이차_게이트가_먼저_성공하면_멈춤_취소는_사건을_바꾸지_않는다() {
+        // given
+        Incident incident = checkingIncident();
+        incident.markInitialAlertSent(OPENED_AT_MS + 1_000L);
+        incident = incidentRepository.save(incident);
+        long dueMs = OPENED_AT_MS + 181_000L;
+
+        // when
+        int sent = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
+        int repeated = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs);
+
+        // then
+        entityManager.clear();
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(sent).isEqualTo(1);
+        assertThat(repeated).isZero();
+        assertThat(cancelled).isZero();
+        assertThat(found.getSecondAlertSentAtMs()).isEqualTo(dueMs);
+        assertThat(found.getSecondAlertCancelledAtMs()).isNull();
+    }
+
+    @Test
+    @DisplayName("멈춤 취소가 먼저 성공하면 2차 게이트는 사건을 바꾸지 않는다")
+    void 멈춤_취소가_먼저_성공하면_이차_게이트는_사건을_바꾸지_않는다() {
+        // given
+        Incident incident = checkingIncident();
+        incident.markInitialAlertSent(OPENED_AT_MS + 1_000L);
+        incident = incidentRepository.save(incident);
+        long dueMs = OPENED_AT_MS + 181_000L;
+
+        // when
+        int cancelled = incidentRepository.cancelSecondAlertIfPending(incident.getId(), dueMs);
+        int sent = incidentRepository.claimSecondAlertIfDue(incident.getId(), dueMs);
+
+        // then
+        entityManager.clear();
+        Incident found = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(sent).isZero();
+        assertThat(found.getSecondAlertCancelledAtMs()).isEqualTo(dueMs);
+        assertThat(found.getSecondAlertSentAtMs()).isNull();
+    }
+
+    @Test
+    @DisplayName("재시작 뒤에도 DB에 남은 2차 마감 사건을 키셋으로 조회한다")
+    void 재시작_뒤에도_DB에_남은_이차_마감_사건을_조회한다() {
+        // given
+        Incident incident = checkingIncident();
+        incident.markInitialAlertSent(OPENED_AT_MS + 1_000L);
+        incident = incidentRepository.saveAndFlush(incident);
+        entityManager.clear();
+
+        // when
+        var due = incidentRepository.findSecondAlertDueIds(OPENED_AT_MS + 181_000L,
+                0L, PageRequest.of(0, 10));
+        var after = incidentRepository.findSecondAlertDueIds(OPENED_AT_MS + 181_000L,
+                incident.getId(), PageRequest.of(0, 10));
+
+        // then
+        assertThat(due).containsExactly(incident.getId());
+        assertThat(after).isEmpty();
     }
 
     @Test
