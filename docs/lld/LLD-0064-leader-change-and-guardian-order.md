@@ -73,7 +73,7 @@ revision은 개별 보호자 행이 아니라 **가족 한 곳의 정렬 상태*
 1. 기존 CommandService의 방장 권한 확인에 더해 `GuardianMyPageService.changeLeader`의 트랜잭션 안에서 가족 행을 잠그고, 잠금 **이후 DB 조회**로 호출자가 현재 방장인지 다시 확인한다. 잠금 전 로드한 membership의 `isLeader` 값만 다시 읽으면 1차 캐시 때문에 이전 권한으로 통과할 수 있다. 대상이 같은 가족의 다른 보호자인지 확인한다. 본인 대상은 실제 변경이 아니므로 400으로 거부한다.
 2. 같은 트랜잭션에서 기존 방장을 해제하고 대상 한 명을 방장으로 지정한다. `isRepresentative`와 보호자 순서는 그대로 둔다.
 3. `FamilyLeaderChangedEvent`(새 방장 회원 ID)를 발행한다. 별도 `@EventListener` 빈은 동기적으로 `NotificationCopy.of(FAMILY_LEADER_CHANGED, "R01", Map.of())`와 `FcmSendDto`를 만들어 `FcmOutboxService.enqueue(newLeaderId, dto)`를 **같은 트랜잭션**에서 한 번 호출한다. `@Async`를 사용하지 않는다. DB 저장이 실패하면 방장 변경도 롤백한다. 외부 FCM 전송은 기존 outbox dispatcher가 커밋 뒤 처리한다.
-4. type은 `FAMILY_LEADER_CHANGED`, 문구는 `이제 가족 방장이 되었어요.` / `가족 관리와 중요한 알림을 확인해주세요.`, 딥링크는 W2의 `widyu-care://family/manage`를 쓴다. `PUSH_AND_CENTER`, `GENERAL`, `ROUTINE_90D` 정책을 따른다. 센터 필터는 없다(전체·안 읽음에서 노출). 구 방장과 다른 보호자에게는 event/enqueue가 없다. W3의 센터 저장이 선행돼 토큰 0개나 푸시 OFF라도 새 방장 센터 행 1건이 남는다.
+4. type은 `FAMILY_LEADER_CHANGED`, 문구는 `이제 가족 방장이 되었어요.` / `가족 관리와 중요한 알림을 확인해주세요.`, 딥링크는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)의 `/family-manage`를 쓴다. `PUSH_AND_CENTER`, `GENERAL`, `ROUTINE_90D` 정책을 따른다. 센터 필터는 없다(전체·안 읽음에서 노출). 구 방장과 다른 보호자에게는 event/enqueue가 없다. W3의 센터 저장이 선행돼 토큰 0개나 푸시 OFF라도 새 방장 센터 행 1건이 남는다.
 
 ### 정렬(E23)
 

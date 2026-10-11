@@ -21,6 +21,7 @@ import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -67,6 +68,35 @@ class HeartMessageServiceTest {
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
         assertThat(captor.getValue().emergency()).isFalse();
+        assertThat(captor.getValue().dataForEnqueue("heart-senior")).isEqualTo(Map.of());
+    }
+
+    @Test
+    @DisplayName("보호자에게 하트 메시지를 보내면 알림센터 경로를 전달한다")
+    void 보호자에게_하트_메시지를_보내면_알림센터_경로를_전달한다() {
+        // given
+        Member sender = mock(Member.class);
+        Member receiver = mock(Member.class);
+        SeniorProfile profile = mock(SeniorProfile.class);
+        given(memberUtil.getCurrentMember()).willReturn(sender);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(receiver));
+        given(sender.getId()).willReturn(1L);
+        given(sender.getType()).willReturn(MemberType.SENIOR);
+        given(sender.getSeniorProfile()).willReturn(profile);
+        given(profile.getId()).willReturn(20L);
+        given(receiver.getId()).willReturn(2L);
+        given(receiver.getType()).willReturn(MemberType.GUARDIAN);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(2L, 20L)).willReturn(true);
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        heartMessageService.sendHeartMessage(new HeartMessageRequest(2L, "응원해요"));
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
+        assertThat(captor.getValue().notificationType()).isNull();
+        assertThat(captor.getValue().dataForEnqueue("heart-guardian"))
+                .containsEntry("deepLink", "/notification");
     }
 
     @Test

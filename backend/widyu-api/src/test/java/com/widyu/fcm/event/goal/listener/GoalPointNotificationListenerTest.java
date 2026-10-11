@@ -126,10 +126,14 @@ class GoalPointNotificationListenerTest {
         assertThat(message.getAllValues()).allMatch(item -> item.eventId().equals("G01:W:7"));
         assertThat(message.getAllValues()).allMatch(item -> item.content().equals("25P가 자동으로 적립됐어요."));
         assertThat(message.getAllValues().get(0).title()).isEqualTo("걷기 목표를 달성했어요!");
+        assertThat(message.getAllValues().get(0).dataForEnqueue("G01:W:7"))
+                .containsEntry("deepLink", "widyu://goals/7");
         assertThat(message.getAllValues().get(1).title()).isEqualTo("부모님 님이 걷기 목표를 달성했어요!");
         assertThat(message.getAllValues().get(1).relatedMemberId()).isEqualTo(1L);
         assertThat(message.getAllValues().get(1).deepLink())
-                .isEqualTo("widyu-care://seniors/1/goals/7");
+                .isEqualTo("/goal/medicine?seniorId=1");
+        assertThat(message.getAllValues().get(1).dataForEnqueue("G01:W:7"))
+                .containsEntry("deepLink", "/goal/medicine?seniorId=1");
     }
 
     private Member member(Long id, MemberType type, String name) {

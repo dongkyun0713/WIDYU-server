@@ -37,7 +37,7 @@
 | --- | --- |
 | `SafeZoneExitEvent(seniorMemberId)` | 안전구역 안에서 밖으로 이동한 위치 갱신의 DB 커밋 뒤에 처리한다. |
 | 시니어 본인확인 | `NotificationType.SAFETY_SELF_CHECK`, 문구 S02, `incidentRef`로 화면을 연다. 버튼은 `취소` 하나, 마감은 서버 사건 개시 시각 + 60초다. 센터 행은 만들지 않는다. |
-| 보호자 최초 알림 | `NotificationType.SAFE_ZONE_EXITED`, 문구 S05, `eventId=incidentRef`, `seniorId`와 임시 딥링크 `widyu-care://seniors/{seniorId}/location`을 사용한다. 딥링크 상수는 한 곳에 두고 FE 확인을 기다린다. 수신자별 센터 행과 outbox는 W11a-1의 공통 경로를 따른다. |
+| 보호자 최초 알림 | `NotificationType.SAFE_ZONE_EXITED`, 문구 S05, `eventId=incidentRef`, `seniorId`와 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)의 `/location?seniorId={seniorId}` 템플릿을 사용한다. 수신자별 센터 행과 outbox는 W11a-1의 공통 경로를 따른다. |
 | 시니어 정상 응답 뒤 안내 | S09는 W11b의 `OK_NOTICE` 경로가 맡는다. 본 LLD는 `SAFE_ZONE_EXIT` 종류로 그 경로에 들어갈 수 있게 한다. |
 
 ## 4. 데이터 모델
@@ -113,7 +113,7 @@
 | G02 동시 달성 묶음 | 단일 트리거가 목표 2개를 동시에 적립하는 경로가 없어 G01만 발생 | G01만 | — |
 | A 활성화 조건 | 카드·10p는 플래그 OFF로 머지, IRB 확인 뒤 ON | — | — |
 
-S05 딥링크는 `widyu-care://seniors/{seniorId}/location`을 임시 계약으로 사용한다. 문자열의 최종 확정은 FE 확인 대기이며, 구현에서는 `NotificationType.SAFE_ZONE_EXITED`의 딥링크 정의 한 곳을 사용한다.
+S05의 2026-10-02 임시 경로는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)에 따라 2026-10-03 FE 문서의 `/location?seniorId={seniorId}`로 교체·확정했다. 구현은 `NotificationType.SAFE_ZONE_EXITED`의 딥링크 정의 한 곳을 사용한다.
 
 2026-10-02 구현 시 위 가정표를 유지했다. S09·자동전화는 후속 작업이며, 본 범위에서 새 정책 결정을 추가하지 않았다.
 

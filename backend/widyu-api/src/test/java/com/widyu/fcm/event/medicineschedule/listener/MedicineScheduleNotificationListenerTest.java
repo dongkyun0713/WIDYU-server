@@ -114,7 +114,7 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(guardianCaptor.getValue().title())
                 .isEqualTo("김할머니 님의 약 복용 인증이 아직 확인되지 않았어요.");
         assertThat(guardianCaptor.getValue().dataForEnqueue(guardianCaptor.getValue().eventId()))
-                .containsEntry("deepLink", "widyu-care://seniors/1/medication");
+                .containsEntry("deepLink", "/goal/medicine?seniorId=1");
     }
 
     @Test

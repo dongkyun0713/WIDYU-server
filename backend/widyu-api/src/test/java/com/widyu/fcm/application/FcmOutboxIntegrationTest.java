@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.*;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.goal.medicineschedule.application.MedicationAlarmPayload;
 import com.widyu.fcm.dto.request.UpdateNotificationSettingRequest;
@@ -239,8 +240,66 @@ class FcmOutboxIntegrationTest {
         assertThat(transactions.claim(disabledRow.getId())).isNull();
         assertThat(notifications.findAll()).allSatisfy(row -> {
             assertThat(row.getSeniorId()).isEqualTo(seniorId);
-            assertThat(row.getDeepLink()).isEqualTo("widyu-care://seniors/" + seniorId + "/medication");
+            assertThat(row.getDeepLink()).isEqualTo("/goal/medicine?seniorId=" + seniorId);
         });
+    }
+
+    @Test
+    @DisplayName("보호자 작성자에게 댓글과 답글 알림을 넣으면 센터와 FCM data에 각 댓글 경로를 저장한다")
+    void 보호자_작성자에게_댓글과_답글_알림을_넣으면_각_댓글_경로를_저장한다() {
+        // given
+        Long guardianId = guardianWithToken();
+        FcmSendDto comment = FcmSendDto.builder().title("댓글 알림").content("댓글을 확인해보세요.")
+                .notificationType(NotificationType.ALBUM_COMMENTED).entityId("31")
+                .deepLink(GuardianDeepLinks.postComment("31", "7"))
+                .data(Map.of("commentId", "7")).build();
+        FcmSendDto reply = FcmSendDto.builder().title("답글 알림").content("답글을 확인해보세요.")
+                .notificationType(NotificationType.ALBUM_REPLIED).entityId("31")
+                .deepLink(GuardianDeepLinks.postComment("31", "8"))
+                .data(Map.of("commentId", "8")).build();
+
+        // when
+        service.enqueue(guardianId, comment);
+        service.enqueue(guardianId, reply);
+
+        // then
+        assertThat(notifications.findAll()).hasSize(2).allSatisfy(center -> {
+            assertThat(center.getRecipientMember().getId()).isEqualTo(guardianId);
+            if (center.getType() == NotificationType.ALBUM_COMMENTED) {
+                assertThat(center.getDeepLink()).isEqualTo("/post?postId=31&commentId=7");
+            } else {
+                assertThat(center.getType()).isEqualTo(NotificationType.ALBUM_REPLIED);
+                assertThat(center.getDeepLink()).isEqualTo("/post?postId=31&commentId=8");
+            }
+        });
+        assertThat(outbox.findAll()).hasSize(2).allSatisfy(row -> {
+            FcmDelivery delivery = transactions.claim(row.getId());
+            if (row.getNotificationType() == NotificationType.ALBUM_COMMENTED) {
+                assertThat(delivery.message().data()).containsEntry("deepLink", "/post?postId=31&commentId=7");
+            } else {
+                assertThat(delivery.message().data()).containsEntry("deepLink", "/post?postId=31&commentId=8");
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("보호자에게 비타입 하트 메시지를 넣으면 센터와 FCM data에 알림센터 경로를 저장한다")
+    void 보호자에게_비타입_하트_메시지를_넣으면_센터와_data에_알림센터_경로를_저장한다() {
+        // given
+        Long guardianId = guardianWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("하트 메시지").content("응원해요")
+                .fcmCategory(FcmCategory.HEART_MESSAGE)
+                .data(Map.of("deepLink", GuardianDeepLinks.notification())).build();
+
+        // when
+        service.enqueue(guardianId, message);
+
+        // then
+        FcmNotification center = notifications.findAll().getFirst();
+        FcmDelivery delivery = transactions.claim(outbox.findAll().getFirst().getId());
+        assertThat(center.getType()).isNull();
+        assertThat(center.getDeepLink()).isEqualTo("/notification");
+        assertThat(delivery.message().data()).containsEntry("deepLink", center.getDeepLink());
     }
 
     @Test
@@ -617,13 +676,14 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(member, FcmSendDto.of(NotificationType.ALBUM_UNLOCKED,
-                copy, "31", "widyu-care://albums/31", null, 17L, null)
+                copy, "31", null, null, 17L, null)
                 .withSeniorUnlockDetails("어머니", 0));
 
         // then
         FcmNotification center = notifications.findAll().getFirst();
         assertThat(center.getSeniorDisplayName()).isEqualTo("어머니");
         assertThat(center.getRemainingLockedCount()).isZero();
+        assertThat(center.getDeepLink()).isEqualTo("/post?postId=31");
         FcmDelivery delivery = transactions.claim(outbox.findAll().getFirst().getId());
         assertThat(delivery.message().data()).containsEntry("remainingLockedCount", "0")
                 .containsEntry("seniorDisplayName", "어머니");
@@ -657,7 +717,9 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.findNotificationsWithCursor(member, null, PageRequest.of(0, 10))).hasSize(3);
         assertThat(FcmNotificationResponse.from(legacy).scheme()).isEmpty();
         assertThat(FcmNotificationResponse.from(heart).scheme())
-                .isEqualTo("widyu-care://seniors/" + member + "/location");
+                .isEqualTo("/location?seniorId=" + member);
+        assertThat(FcmNotificationResponse.from(zone).scheme())
+                .isEqualTo("/location?seniorId=" + member);
     }
 
     @Test
@@ -867,6 +929,14 @@ class FcmOutboxIntegrationTest {
         return new TransactionTemplate(transactionManager).execute(status -> {
             Member member = members.save(Member.createMember(MemberType.SENIOR, "수신자", "01012345678"));
             tokens.save(MemberFcmToken.builder().member(member).token("mock-token").active(true).build());
+            return member.getId();
+        });
+    }
+
+    private Long guardianWithToken() {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            Member member = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01012345678"));
+            tokens.save(MemberFcmToken.builder().member(member).token("guardian-token").active(true).build());
             return member.getId();
         });
     }

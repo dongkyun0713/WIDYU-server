@@ -26,7 +26,6 @@ public class HealthScheduleNotificationListener {
 
     private static final String HEALTH_SCHEDULE_DEFAULT_IMAGE = "health_schedule.png";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("a h:mm", Locale.KOREAN);
-    static final String GUARDIAN_HEALTH_SCHEDULE_DETAIL = "widyu-care://health/schedules/";
 
     private final FcmService fcmService;
     private final HealthScheduleRepository healthScheduleRepository;
@@ -77,20 +76,17 @@ public class HealthScheduleNotificationListener {
             return;
         }
         Member recipient = schedule.getMember();
-        String variant = "H01-S";
-        String deepLink = null;
         if (recipient.getType() == MemberType.GUARDIAN) {
-            variant = "H01-C-SELF";
-            deepLink = GUARDIAN_HEALTH_SCHEDULE_DETAIL + schedule.getId();
+            return;
         }
         NotificationCopy osCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
-                variant + "-OS", Map.of());
+                "H01-S-OS", Map.of());
         NotificationCopy inAppCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
-                variant + "-INAPP", Map.of(
+                "H01-S-INAPP", Map.of(
                         "오전/오후 시각", schedule.getScheduledAt().format(TIME_FORMATTER),
                         "일정명", schedule.getScheduleName()));
         FcmSendDto dto = FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING, osCopy,
-                schedule.getId().toString(), deepLink, null, null, HEALTH_SCHEDULE_DEFAULT_IMAGE)
+                schedule.getId().toString(), null, null, null, HEALTH_SCHEDULE_DEFAULT_IMAGE)
                 .withCenterCopy(inAppCopy);
         fcmService.sendMessageToUser(recipient.getId(), dto);
     }

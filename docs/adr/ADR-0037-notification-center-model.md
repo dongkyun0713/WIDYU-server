@@ -48,7 +48,8 @@
 - `push_eligible`은 enqueue 시점 값이라 그 뒤 설정을 바꿔도 행은 그대로다. 실제 발송 여부는 outbox 상태가 답한다.
 
 ## 후속 / 미결정
-- 이벤트별 `priority`, Android 채널 id, iOS 표시 수준, 딥링크 문자열은 명세에 없다. LLD(W2)에 제안표로 싣고 착수 회의에서 FE와 고정한다.
+- 위듀케어 경로는 2026-10-03 FE 문서로 확정했다(앱 내부 경로 형식, [LLD-0076](../lld/LLD-0076-guardian-deeplink-paths.md)). 위듀 경로는 FE 전달 대기다.
+- 이벤트별 `priority`, Android 채널 id, iOS 표시 수준과 위듀 딥링크 문자열은 당시 명세에 없어 LLD(W2)에 제안표로 실었다. 위듀 경로와 표시 계약은 FE 확인 대기다.
 - 시니어(위듀)의 푸시 설정 항목은 회신 대기다. 가정: `GENERAL` 하나.
 - 복약 동기화 신호 형식은 회신 대기다. 가정: M08/M05/M09마다 `DATA_ONLY` `MEDICATION_SCHEDULE_SYNC`(revision)를 항상 함께 보내고, 구 앱 호환으로 data `type=MEDICATION_SCHEDULE_CHANGED`를 유지한다.
 - `group_key`·`target_unavailable_at`은 쓰는 쪽(동시 목표 달성 묶음, 대상 삭제 훅)이 생길 때 더한다.

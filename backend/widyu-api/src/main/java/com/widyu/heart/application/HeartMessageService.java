@@ -3,6 +3,7 @@ package com.widyu.heart.application;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
@@ -11,6 +12,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,10 @@ public class HeartMessageService {
         validateFamilyConnection(sender, receiver);
 
         String title = sender.getName() + "님이 메시지를 보냈어요.";
+        Map<String, String> data = Map.of();
+        if (receiver.getType() == MemberType.GUARDIAN) {
+            data = Map.of("deepLink", GuardianDeepLinks.notification());
+        }
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)
@@ -43,6 +49,7 @@ public class HeartMessageService {
                 .scheme("")
                 .image(sender.getProfileImage())
                 .relatedMemberId(sender.getId())
+                .data(data)
                 .build();
 
         fcmService.sendMessageToUser(receiver.getId(), fcmSendDto);

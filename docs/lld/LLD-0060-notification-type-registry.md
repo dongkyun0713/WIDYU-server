@@ -31,7 +31,7 @@
 
 ## 3. 인터페이스 / API
 
-HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP v1 `message` JSON이다. data 값은 모두 문자열이다. 예시의 채널·interruption-level·딥링크 문자열은 FE 합의 전 **제안값**이다.
+HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP v1 `message` JSON이다. data 값은 모두 문자열이다. 예시의 채널·interruption-level과 위듀 딥링크 문자열은 FE 합의 전 **제안값**이다. 위듀케어 딥링크는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)의 앱 내부 경로 계약을 따른다.
 
 보호자 안전 알림(`HEART_RATE_EMERGENCY`, S04):
 
@@ -43,7 +43,7 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
     "data": {
       "eventId": "8e7313ab-2c55-40f9-9b22-282d96846bdb",
       "type": "HEART_RATE_EMERGENCY", "priority": "critical",
-      "notificationId": "4072", "deepLink": "widyu-care://seniors/17/location",
+      "notificationId": "4072", "deepLink": "/location?seniorId=17",
       "foregroundPresentation": "BANNER", "seniorId": "17"
     },
     "android": {"ttl": "300s", "priority": "high", "notification": {"channel_id": "widyu_safety"}},
@@ -82,22 +82,22 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 
 ### `NotificationType` 전체 상수 표
 
-괄호 안 센터 필터는 푸시 전용 타입의 목적지 분류이며 실제 센터 행이 없음을 뜻한다. `GENERAL` 등 설정 그룹은 W5부터 판정에 쓴다. 딥링크 문자열 전체는 FE 합의 전 제안이다. 표의 전달 방식은 최종 정책이며 W2에서 기존 발행자의 센터 생성 흐름을 바꾸지 않는다.
+괄호 안 센터 필터는 푸시 전용 타입의 목적지 분류이며 실제 센터 행이 없음을 뜻한다. `GENERAL` 등 설정 그룹은 W5부터 판정에 쓴다. 위듀케어 전용 템플릿은 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)에 따라 2026-10-03 FE 문서의 앱 내부 경로로 확정했다. 역할별 보호자 링크는 `GuardianDeepLinks`가 명시하고, 위듀 경로는 FE 확정 대기다. 표의 전달 방식은 최종 정책이며 W2에서 기존 발행자의 센터 생성 흐름을 바꾸지 않는다.
 
 `legacyDataType`은 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`만 `MEDICATION_SCHEDULE_CHANGED`이며 나머지는 null이다. 모든 typed FCM의 `data.notificationType`은 논리 타입 이름이고 `data.type`은 `legacyDataType`이 있으면 그 값, 없으면 논리 타입 이름이다.
 
-| # | `NotificationType` | `FcmCategory` | 센터 필터 | `DeliveryMode` | priority 제안 | `RetentionClass` | settingGroup | foreground | 딥링크 템플릿 제안 | 문구 코드 |
+| # | `NotificationType` | `FcmCategory` | 센터 필터 | `DeliveryMode` | priority 제안 | `RetentionClass` | settingGroup | foreground | 딥링크 템플릿 | 문구 코드 |
 | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `ALBUM_UPLOAD_COMPLETE` | ALBUM | (ALBUM) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | NONE | `widyu://albums/{entityId}` | A01 |
 | 2 | `ALBUM_CREATED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}` | A02-S/C |
 | 3a | `ALBUM_COMMENTED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}/comments/{commentId}` | A03 |
 | 3b | `ALBUM_REPLIED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://albums/{entityId}/comments/{commentId}` | A04 |
 | 4 | `ALBUM_LIKED` | ALBUM | ALBUM | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://albums/{entityId}` | A05 |
-| 5 | `ALBUM_UNLOCKED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu-care://albums/{entityId}` | A06-L/Z |
-| 6 | `ALBUM_ALL_VIEWED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu-care://albums` | A07 |
+| 5 | `ALBUM_UNLOCKED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/post?postId={entityId}` | A06-L/Z |
+| 6 | `ALBUM_ALL_VIEWED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album` | A07 |
 | 8 | `MEDICATION_REMINDER_10` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M02 |
 | 9 | `MEDICATION_REMINDER_20` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M03 |
-| 10 | `MEDICATION_PROOF_MISSING` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | MEDICATION_CHECK | BANNER | `widyu-care://seniors/{seniorId}/medication` | M04 |
+| 10 | `MEDICATION_PROOF_MISSING` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | MEDICATION_CHECK | BANNER | `/goal/medicine?seniorId={seniorId}` | M04 |
 | 11 | `MEDICATION_SCHEDULE_CHANGED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M05 |
 | 12 | `HEALTH_SCHEDULE_UPCOMING` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H01-S/C-SELF/C-SENIOR-OS/INAPP |
 | 13 | `WALK_GOAL_UNMET` | WALK | (GOAL) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W01 |
@@ -108,11 +108,11 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 | 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X01-OS/INAPP |
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X02-OS/INAPP |
 | 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01/S02 |
-| 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | BANNER | `widyu-care://seniors/{seniorId}/location` | S01/S03/S04/S06 |
-| 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | critical | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `widyu-care://seniors/{seniorId}/location` | S02/S03/S05/S07 |
-| 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `widyu-care://seniors/{seniorId}/location` | S08 |
-| 20b | `SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | GENERAL | BANNER | `widyu-care://seniors/{seniorId}/location` | S09 |
-| 21 | `FAMILY_LEADER_CHANGED` | ETC | — (ALL·UNREAD만) | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu-care://family/manage` | R01 |
+| 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | BANNER | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
+| 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | critical | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | S02/S03/S05/S07 |
+| 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S08 |
+| 20b | `SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S09 |
+| 21 | `FAMILY_LEADER_CHANGED` | ETC | — (ALL·UNREAD만) | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/family-manage` | R01 |
 | 22 | `MEDICATION_SCHEDULE_CREATED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M08 |
 | 23 | `MEDICATION_SCHEDULE_DELETED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M09 |
 | 24 | `MEDICATION_SCHEDULE_SYNC` | MEDICINE_SCHEDULE | — | DATA_ONLY | passive | ROUTINE_90D | NONE | NONE | — | 없음 |
@@ -165,10 +165,10 @@ ALTER TABLE fcm_outbox
 
 ## 9. 미결정 사항 (Open Questions)
 
-2026-10-01 구현은 아래 제안값을 적용했다. FE 합의가 끝나면 채널·딥링크·wire type 계약을 갱신한다. 계획 §5의 작업 가정은 그대로 유지한다.
+2026-10-01 구현은 아래 제안값을 적용했다. 2026-10-03 FE 문서로 위듀케어 경로는 확정됐고, 채널·위듀 경로·wire type의 미결정 항목은 아래에 남는다. 계획 §5의 작업 가정은 그대로 유지한다.
 
 - [ ] **FE 합의 필요:** Android 채널 ID `widyu_safety`·`widyu_general`, iOS `time-sensitive`·`active`·`passive` interruption-level, priority 매핑은 계획 §5의 제안값이다. 구현 제안은 `critical/timeSensitive→time-sensitive`, `interaction→active`, `passive→passive`이며 Android 전달 priority는 앞의 두 등급에 high, 나머지에 normal이다. iOS `critical` 권한은 사용하지 않는다.
-- [ ] **FE 합의 필요:** 4절의 딥링크 문자열과 `{entityId}`·`{seniorId}` 경로 변수는 제안값이다. 역할별 화면 계약을 FE와 고정한다.
+- [ ] **FE 합의 필요:** 위듀(시니어) 경로는 여전히 제안값이며 FE의 앱 내부 경로 전달을 기다린다. 위듀케어 경로는 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)과 2026-10-03 FE 문서로 확정했다. G01-C의 목표별 목적 화면과 심박 위급 최초 알림의 `type` 값은 FE 확인 대기다.
 - [ ] **FE 합의 필요:** R01 `FAMILY_LEADER_CHANGED`의 센터 필터는 null로 두어 ALL·UNREAD에만 노출한다. FE와 노출 필터 계약을 고정한다.
 - [ ] **FE 합의 필요:** `SAFETY_SELF_CHECK`의 딥링크 `widyu://incident/{entityId}`에서 `entityId=incident_ref`로 사용한다. IncidentService의 현재 scheme과 같으며 FE router 계약을 고정한다.
 - [ ] **FE 합의 필요:** 원 제안명 `SAFETY_SENIOR_OK_NOTICE`를 보존등급·문구별 `SAFETY_SENIOR_OK_NOTICE_HEART`(S08)·`SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE`(S09) wire type으로 분리했다. 앱 수신 파서·라우터와 합의한다.

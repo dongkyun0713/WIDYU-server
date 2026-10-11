@@ -103,6 +103,23 @@ class FcmSchedulerOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("보호자 소유 건강일정이 임박하면 H01 센터 행과 outbox를 만들지 않는다")
+    void 보호자_소유_건강일정이_임박하면_H01_센터와_outbox를_만들지_않는다() {
+        // given
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                schedules.save(HealthSchedule.create(guardianWithToken(), "병원 방문", "주소", 37.0, 127.0,
+                        LocalDateTime.now().plusHours(1).plusMinutes(5))));
+
+        // when
+        healthScheduler.sendHealthScheduleReminder();
+
+        // then
+        assertThat(notifications.count()).isZero();
+        assertThat(outbox.count()).isZero();
+        then(fcm).should(org.mockito.Mockito.never()).sendMessageToUser(anyLong(), any(FcmSendDto.class));
+    }
+
+    @Test
     @DisplayName("걷기 스케줄러의 커밋이 실패하면 outbox와 송신을 남기지 않는다")
     void 걷기_스케줄러_롤백은_송신하지_않는다() {
         // given
@@ -209,6 +226,12 @@ class FcmSchedulerOutboxIntegrationTest {
     private Member memberWithToken() {
         Member member = members.save(Member.createMember(MemberType.SENIOR, "수신자", "01012345678"));
         tokens.save(MemberFcmToken.builder().member(member).token("loopback-only").active(true).build());
+        return member;
+    }
+
+    private Member guardianWithToken() {
+        Member member = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01012345678"));
+        tokens.save(MemberFcmToken.builder().member(member).token("guardian-loopback").active(true).build());
         return member;
     }
 }
