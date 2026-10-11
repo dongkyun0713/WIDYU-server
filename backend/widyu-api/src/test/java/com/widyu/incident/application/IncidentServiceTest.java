@@ -122,6 +122,7 @@ class IncidentServiceTest {
         // 제품 본인확인 마감은 서버 사건 생성부터 60초다.
         assertThat(opened.getRespondByMs() - opened.getOpenedAtMs()).isEqualTo(SELF_CHECK_MS);
         assertThat(opened.getState()).isEqualTo(IncidentState.CHECKING);
+        assertThat(opened.getPolicyRevision()).isEqualTo(20261005L);
 
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
@@ -205,9 +206,10 @@ class IncidentServiceTest {
         givenRepositoryReturnsSavedIncident();
 
         // when
-        service().openForAlert(alertDecision(), IncidentKind.FALL_SUSPECTED);
+        Incident opened = service().openForAlert(alertDecision(), IncidentKind.FALL_SUSPECTED);
 
         // then
+        assertThat(opened.getPolicyRevision()).isEqualTo(20261005L);
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
         assertThat(message.getValue().title()).isEqualTo("괜찮으세요?");

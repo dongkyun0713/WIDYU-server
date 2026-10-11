@@ -86,6 +86,15 @@ public class IncidentEscalation {
         if (incident.getDecisionId() != null) {
             data = Map.of("decisionId", incident.getDecisionId());
         }
+        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
+            data = Map.of("deliveryStage", "INITIAL_ALERT",
+                    "safetyEventId", incident.getIncidentRef());
+            if (incident.getDecisionId() != null) {
+                data = Map.of("deliveryStage", "INITIAL_ALERT",
+                        "safetyEventId", incident.getIncidentRef(),
+                        "decisionId", incident.getDecisionId());
+            }
+        }
         FcmSendDto notification = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
                 .notificationType(type)
@@ -98,6 +107,30 @@ public class IncidentEscalation {
                 .data(data)
                 .emergency(true)
                 .build();
+        if (incident.getKind() == IncidentKind.HR_ANOMALY) {
+            FamilyMembership leader = null;
+            int activeLeaders = 0;
+            for (FamilyMembership membership : memberships) {
+                if (!membership.isLeader() || membership.getGuardian().getStatus() != Status.ACTIVE) {
+                    continue;
+                }
+                activeLeaders++;
+                if (leader == null || membership.getId() < leader.getId()) {
+                    leader = membership;
+                }
+            }
+            if (leader == null) {
+                log.warn("보호자 최초 안전 알림 수신자 없음: incidentRef={}", incident.getIncidentRef());
+                return;
+            }
+            if (activeLeaders > 1) {
+                log.warn("보호자 최초 안전 알림 복수 방장: incidentRef={}, familyId={}",
+                        incident.getIncidentRef(), familyId);
+            }
+            outboxService.enqueue(leader.getGuardian().getId(), notification);
+            log.info("보호자 최초 안전 알림 enqueue: incidentRef={}, recipients=1", incident.getIncidentRef());
+            return;
+        }
         int recipients = 0;
         for (FamilyMembership membership : memberships) {
             if (membership.getGuardian().getStatus() != Status.ACTIVE) {
