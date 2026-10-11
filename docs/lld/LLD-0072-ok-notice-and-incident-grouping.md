@@ -1,5 +1,7 @@
 # LLD-0072: OK 정보성 알림·같은 사건 묶기·보호자 반응 기록
 
+> **안심구역 S09·OK 안내와 `SAFE_ZONE_EXIT` 사건 묶기 기대는 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)이 대체한다.** 심박 S08과 심박 사건 묶기·보호자 반응 기록은 유지한다.
+
 > Low-Level Design. 이 문서는 이슈 #708의 구현과 PR 검수 기준이다.
 
 | 항목 | 값 |
@@ -95,6 +97,8 @@ Content-Type: application/json
 감지 시각은 서버가 사건 경로에 들어온 시각이며 단말 시각·JPA `updated_at`을 쓰지 않는다. 두 진입점 모두 회원 행 잠금 → incident 조회·갱신 순서를 유지한다. 사건·본인확인·플래그 OFF 최초 알림은 선행 LLD의 동일 트랜잭션 정책을 따른다. 심박 `AFTER_COMMIT` 리스너의 새 트랜잭션과 안심구역 리스너의 새 트랜잭션을 합치거나 원 심박·위치 저장 트랜잭션으로 옮기지 않는다.
 
 ### 5.3 보호자의 첫 실제 연락 행동
+
+> 이 절의 사건당 첫 1건·중복 409·모달 확인 제외 규칙은 [LLD-0081](LLD-0081-second-alert-and-stop-records.md) §3·§4·§6으로 대체된다. 기존 사건 열 3개는 읽기 전용이며 새 기록은 사건×보호자×종류 테이블에 남긴다.
 
 1. Controller는 인증 보호자 ID와 `{ref}`·요청 type을 `IncidentService.recordGuardianResponse`에 넘긴다. 서비스는 사건을 조회해 시니어 ID를 얻고 요청자의 `GUARDIAN` 타입과 같은 가족 연결을 먼저 검증한다. 사건 없음·시니어 본인·타 가족은 계정 활성 여부와 관계없이 404로 응답한 뒤, 같은 가족 보호자의 계정 활성 상태를 검사해 비활성이면 403으로 응답한다. 가족 연결은 행 존재로 활성 여부를 판단한다.
 2. `IncidentRepository.recordGuardianResponse`는 `guardian_response_type IS NULL`을 조건으로 type·서버 시각·보호자 ID를 한 UPDATE에서 기록한다. 영향 행 1건이면 재조회한 값으로 DTO를 반환한다. 0건이면 409이며 첫 기록은 덮지 않는다. 보호자 둘의 동시 요청도 한 건만 성공한다.

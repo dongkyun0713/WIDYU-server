@@ -52,8 +52,8 @@ class PushSettingGroupTest {
                 .isEqualTo(PushSettingGroup.GENERAL);
         assertThat(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART.settingGroup())
                 .isEqualTo(PushSettingGroup.GENERAL);
-        assertThat(NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE.settingGroup())
-                .isEqualTo(PushSettingGroup.GENERAL);
+        assertThat(NotificationType.SAFE_ZONE_ENTERED.settingGroup())
+                .isEqualTo(PushSettingGroup.SAFE_ZONE);
         assertThat(NotificationType.GOAL_ACHIEVED.settingGroup()).isEqualTo(PushSettingGroup.GENERAL);
     }
 }

@@ -109,9 +109,11 @@
 
 위듀 FE가 시니어 앱의 알림별 이동 경로를 앱 내부 경로로 확정했다. 시니어가 받는 알림의 `deepLink`를 아래 값으로 바꾸고, 본인확인 요청의 `data.type`을 FE 화면 트리거 값으로 바꾼다. 보호자 경로(§3)는 그대로다.
 
+2026-10-11 PR #748에 최신 `develop`을 병합하면서 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)의 안심구역 일반 소식 계약을 함께 유지한다. §3의 S05·S09와 기존 S02 본인확인은 폐기된 이력이며, 현재 안심구역은 보호자에게 Z01·Z02만 보낸다. 심박 최초·2차 알림은 [LLD-0081](LLD-0081-second-alert-and-stop-records.md)의 수신자·게이트를 유지하고, 이 개정은 시니어 경로와 본인확인 화면 트리거에만 적용한다.
+
 | 알림 | 타입 | 시니어 deepLink | `data.type` |
 |---|---|---|---|
-| 본인확인 요청 S01/S02 | `SAFETY_SELF_CHECK` | 없음(빈 문자열, 화면 트리거 전용) | `EMERGENCY_CONFIRM_REQUEST` |
+| 심박 본인확인 요청 S01 | `SAFETY_SELF_CHECK` | 없음(빈 문자열, 화면 트리거 전용) | `EMERGENCY_CONFIRM_REQUEST` |
 | 낙상 본인확인(비타입) | — | 기존 `scheme` 유지 | `EMERGENCY_CONFIRM_REQUEST`(data에 직접) |
 | 업로드 완료 A01·새 게시물 A02-S·좋아요 A05 | `ALBUM_UPLOAD_COMPLETE`·`ALBUM_CREATED`·`ALBUM_LIKED` | `/album/post?postId={albumId}` | 타입 이름 |
 | 댓글·답글 A03/A04 | `ALBUM_COMMENTED`·`ALBUM_REPLIED` | `/album/post?postId={albumId}&commentId={commentId}` | 타입 이름 |
@@ -123,7 +125,7 @@
 | 포인트 획득·사용 P01/P02 | `POINT_EARNED`·`POINT_USED` | `/my/point` | 타입 이름 |
 | 하트·응원 메시지(비타입, 두 역할) | — | `/notification` | `HEART_MESSAGE_RECEIVED`·`CHEER_MESSAGE_RECEIVED`(data에 직접) |
 
-- 경로는 모두 `NotificationType` 템플릿 한 곳에 둔다. 포인트 리스너가 넘기던 명시 링크 `widyu://points`를 지워 템플릿이 적용되게 한다. 심박·안심구역 본인확인은 `scheme`을 넘기지 않아 `deepLink`가 빈 문자열이다. 사건은 `data.entityId=incident_ref`로 찾는다.
+- 경로는 모두 `NotificationType` 템플릿 한 곳에 둔다. 포인트 리스너가 넘기던 명시 링크 `widyu://points`를 지워 템플릿이 적용되게 한다. 심박 본인확인은 `scheme`을 넘기지 않아 `deepLink`가 빈 문자열이다. 사건은 `data.entityId=incident_ref`로 찾는다.
 - 비타입 하트·응원 메시지는 수신자 역할과 관계없이 같은 data(`deepLink`·`type`)를 싣는다. 값은 `HEART_MESSAGE_RECEIVED`·`CHEER_MESSAGE_RECEIVED` 상수의 템플릿과 이름이다. 두 메시지는 여전히 비타입 발송이라 전달 방식·센터 저장은 바뀌지 않는다.
 - 유지: 복약 동기화 신호 `MEDICATION_SCHEDULE_SYNC`는 계속 보낸다. FE는 M08/M05/M09와 병합해 쓰지만, 일반 푸시를 끈 시니어 기기에도 알람 변경을 알리려면 data 전용 신호가 필요하다(LLD-0068 §5, 사용자 결정 2026-10-11). 정각 복약 푸시는 #743의 설정 스위치를 따른다.
 - 이미 저장된 알림센터 행의 `deep_link`는 백필하지 않는다. 체인 미배포 상태라 운영 행이 없다.
@@ -131,7 +133,7 @@
 ### 인수조건
 
 - [x] AC11. 시니어가 받는 위 타입의 FCM `data.deepLink`와 센터 행 `deep_link`가 표의 경로이고, `NotificationType`과 main 코드에 `widyu://`는 낙상 비타입 `scheme` 상수 하나만 남는다.
-- [x] AC12. 심박·안심구역 본인확인 FCM의 `data.type`은 `EMERGENCY_CONFIRM_REQUEST`, `data.notificationType`은 `SAFETY_SELF_CHECK`, `data.deepLink`는 빈 문자열이다. 낙상 본인확인 data의 `type`도 `EMERGENCY_CONFIRM_REQUEST`다.
+- [x] AC12. 심박 본인확인 FCM의 `data.type`은 `EMERGENCY_CONFIRM_REQUEST`, `data.notificationType`은 `SAFETY_SELF_CHECK`, `data.deepLink`는 빈 문자열이다. 낙상 본인확인 data의 `type`도 `EMERGENCY_CONFIRM_REQUEST`다. 안심구역 본인확인은 LLD-0078에 따라 발송하지 않는다.
 - [x] AC13. 하트·응원 메시지는 수신자 역할과 관계없이 `data.deepLink=/notification`이고 `data.type`이 각 타입 이름이다.
 - [x] AC14. 보호자 수신 경로(§3)와 M08/M05/M09의 `data.type=MEDICATION_SCHEDULE_CHANGED`는 바뀌지 않는다.
 - [x] AC15. `bash scripts/harness/verify.sh`가 통과한다.

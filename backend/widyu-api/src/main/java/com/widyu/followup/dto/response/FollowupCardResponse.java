@@ -22,9 +22,6 @@ public record FollowupCardResponse(Long id, String incidentRef, String questionS
         if (card.getQuestionSetVersion().equals("FALL_V1")) {
             q1Question = "그때 실제로 넘어지셨나요?";
         }
-        if (card.getQuestionSetVersion().equals("SAFE_ZONE_V1")) {
-            q1Question = "그때 정해 둔 안심구역 밖에 계셨나요?";
-        }
         return new FollowupCardResponse(card.getId(), card.getIncidentRef(), card.getQuestionSetVersion(),
                 card.getEventAtMs(), card.getIssuedAtMs(), card.getExpiresAtMs(), card.getState().name(),
                 "아까 " + TIME_FORMAT.format(Instant.ofEpochMilli(card.getEventAtMs()))

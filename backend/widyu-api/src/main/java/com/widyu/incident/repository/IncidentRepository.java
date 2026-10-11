@@ -1,17 +1,18 @@
 package com.widyu.incident.repository;
 
 import com.widyu.incident.Incident;
-import com.widyu.incident.GuardianResponseType;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentOutcome;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseVia;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -23,23 +24,14 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
 
     Optional<Incident> findByIncidentRef(String incidentRef);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM Incident i WHERE i.id = :id")
+    Optional<Incident> findByIdForUpdate(@Param("id") Long id);
+
     Optional<Incident> findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
             Long memberId, IncidentKind kind, List<IncidentState> states);
 
-    Optional<Incident> findFirstByMemberIdAndKindAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
-            Long memberId, IncidentKind kind);
-
     Optional<Incident> findFirstByMemberIdAndKindOrderByOpenedAtMsDesc(Long memberId, IncidentKind kind);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE Incident i
-               SET i.situationEndedAtMs = :endedAtMs
-             WHERE i.memberId = :memberId
-               AND i.kind = com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT
-               AND i.situationEndedAtMs IS NULL
-            """)
-    int endOpenSafeZoneSituation(@Param("memberId") Long memberId, @Param("endedAtMs") long endedAtMs);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
@@ -57,19 +49,6 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             """)
     int attachDetection(@Param("id") Long id, @Param("decisionId") String decisionId,
             @Param("detectedAtMs") long detectedAtMs);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("""
-            UPDATE Incident i
-               SET i.guardianResponseType = :type,
-                   i.guardianResponseAtMs = :respondedAtMs,
-                   i.guardianResponseBy = :guardianId
-             WHERE i.incidentRef = :incidentRef
-               AND i.guardianResponseType IS NULL
-            """)
-    int recordGuardianResponse(@Param("incidentRef") String incidentRef,
-            @Param("type") GuardianResponseType type, @Param("respondedAtMs") long respondedAtMs,
-            @Param("guardianId") Long guardianId);
 
     List<Incident> findTop50ByMemberIdOrderByOpenedAtMsDesc(Long memberId);
 
@@ -149,8 +128,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     @Query("""
             SELECT i.id FROM Incident i
              WHERE i.id > :afterId
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND ((i.state IN (com.widyu.incident.IncidentState.OPEN,
                                  com.widyu.incident.IncidentState.CHECKING)
                      AND i.respondByMs < :nowMs)
@@ -166,8 +144,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             UPDATE Incident i
                SET i.state = com.widyu.incident.IncidentState.ESCALATED
              WHERE i.id = :id
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING)
                AND i.respondByMs < :nowMs
@@ -178,11 +155,11 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Incident i
-               SET i.initialAlertSentAtMs = :nowMs
+               SET i.initialAlertSentAtMs = :nowMs,
+                   i.secondAlertDueAtMs = :nowMs + 180000
              WHERE i.id = :id
                AND i.initialAlertSentAtMs IS NULL
-               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
-                              com.widyu.incident.IncidentKind.SAFE_ZONE_EXIT)
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING,
                                com.widyu.incident.IncidentState.ESCALATED)
@@ -190,6 +167,35 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                     OR i.state = com.widyu.incident.IncidentState.ESCALATED)
             """)
     int claimInitialAlertIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
+
+    @Query("""
+            SELECT i.id FROM Incident i
+             WHERE i.id > :afterId
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND i.secondAlertDueAtMs <= :nowMs
+               AND i.secondAlertSentAtMs IS NULL
+               AND i.secondAlertCancelledAtMs IS NULL
+             ORDER BY i.id
+            """)
+    List<Long> findSecondAlertDueIds(@Param("nowMs") long nowMs, @Param("afterId") long afterId, Pageable limit);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i SET i.secondAlertSentAtMs = :nowMs
+             WHERE i.id = :id AND i.secondAlertSentAtMs IS NULL
+               AND i.secondAlertCancelledAtMs IS NULL
+               AND i.secondAlertDueAtMs <= :nowMs
+               AND i.situationEndedAtMs IS NULL
+            """)
+    int claimSecondAlertIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i SET i.secondAlertCancelledAtMs = :nowMs
+             WHERE i.id = :id AND i.secondAlertSentAtMs IS NULL
+               AND i.secondAlertCancelledAtMs IS NULL
+            """)
+    int cancelSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs);
 
     /** 낙상 판정 경로는 이 PR에서 보호자 알림 순서를 바꾸지 않는다. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

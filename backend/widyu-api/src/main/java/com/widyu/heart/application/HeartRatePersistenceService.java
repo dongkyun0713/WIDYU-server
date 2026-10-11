@@ -6,6 +6,7 @@ import com.widyu.fcm.event.heart.dto.HeartRateEmergencyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.retry.RetryOnTransientLockFailure;
 import com.widyu.heart.HeartRateEmergency;
 import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateResult;
@@ -33,7 +34,8 @@ public class HeartRatePersistenceService {
     private final DecisionRecordRepository decisionRecordRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). */
+    /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). 락 충돌이면 새 트랜잭션으로 다시 시도한다(LLD-0076). */
+    @RetryOnTransientLockFailure
     @Transactional
     @Timed(value = "heart.persistence", extraTags = {"path", "single"})
     public HeartRateResult saveMeasurement(
@@ -72,7 +74,11 @@ public class HeartRatePersistenceService {
      * 판정 행을 먼저 따로 커밋하면 이어지는 심박 저장이 실패했을 때 심박 이벤트도 위급 알림도 없이
      * 판정만 남아, 「알림이 갔다고 적혔지만 아무것도 가지 않은」 자료가 생긴다. 판정 식별자는
      * 알림이 나갔다는 사실을 그 행에 채우려고 이벤트에 싣는다(LLD-0053 5.2). 판정이 없으면 null이다.
+     *
+     * <p>락 충돌이면 새 트랜잭션으로 다시 시도한다(LLD-0076). 위급 알림 outbox도 같은 트랜잭션이라
+     * 실패한 시도의 알림은 남지 않는다.
      */
+    @RetryOnTransientLockFailure
     @Transactional
     @Timed(value = "heart.persistence", extraTags = {"path", "batch"})
     public void saveBatchSample(
