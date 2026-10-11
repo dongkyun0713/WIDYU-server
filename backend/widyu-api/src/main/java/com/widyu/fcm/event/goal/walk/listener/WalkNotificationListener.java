@@ -2,11 +2,14 @@ package com.widyu.fcm.event.goal.walk.listener;
 
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
-import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.goal.walk.repository.WalkRepository;
+import com.widyu.member.MemberType;
 import com.widyu.walk.Walk;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -57,18 +60,15 @@ public class WalkNotificationListener {
      * 개별 미달성자에게 알림 발송
      */
     private void sendUnachievedNotification(Walk walk) {
-        String title = String.format("목표 %d보 중 %d보를 걸으셨어요. 조금만 더 힘내세요!",
-                walk.getGoalSteps(), walk.getActualSteps());
-        String content = "오늘의 걷기 목표를 확인해주세요.";
-
-        FcmSendDto fcmSendDto = FcmSendDto.builder()
-                .title(title)
-                .content(content)
-                .fcmCategory(FcmCategory.WALK)
-                .scheme("")
-                .image(WALK_DEFAULT_IMAGE)
-                .build();
-
-        fcmService.sendMessageToUser(walk.getMember().getId(), fcmSendDto);
+        if (walk.getMember().getType() != MemberType.SENIOR
+                || walk.getGoalSteps() == null || walk.getActualSteps() == null
+                || walk.getActualSteps() <= 0 || walk.getActualSteps() >= walk.getGoalSteps()) {
+            return;
+        }
+        NotificationCopy copy = NotificationCopy.of(NotificationType.WALK_GOAL_UNMET, "W01",
+                Map.of("실제 걸음 수", walk.getActualSteps().toString()));
+        FcmSendDto dto = FcmSendDto.of(NotificationType.WALK_GOAL_UNMET, copy,
+                null, null, null, null, WALK_DEFAULT_IMAGE);
+        fcmService.sendMessageToUser(walk.getMember().getId(), dto);
     }
 }

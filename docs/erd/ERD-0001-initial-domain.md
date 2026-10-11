@@ -481,6 +481,8 @@ erDiagram
         String entityId "nullable"
         Long seniorId "nullable"
         String actorDisplayName "nullable"
+        String seniorDisplayName "nullable; ALBUM_UNLOCKED"
+        Integer remainingLockedCount "nullable; ALBUM_UNLOCKED"
         LocalDateTime expiresAt "nullable; center retention"
         String retentionPolicyVersion "nullable"
         Boolean pushEligible "nullable; policy snapshot"
@@ -800,6 +802,7 @@ erDiagram
 |------|--------|-----------|-----|
 | 2026-10-01 | `fcm_notification`·`fcm_outbox` | 센터 수신자×이벤트 행의 메타데이터·UK, 토큰 FK NULL 허용, outbox `notification_id` 참조 (LLD-0062) | `scripts/mysql/alter_fcm_notification_center.sql` |
 | 2026-10-01 | `family_membership`·`family` | `sort_order INT NOT NULL`(가족별 `connected_at, id` 순서 백필)·`family_order_revision BIGINT NOT NULL DEFAULT 0` 추가 (LLD-0064) | `scripts/mysql/alter_family_membership_sort_order.sql` |
+| 2026-10-02 | `fcm_notification` | 잠금 해제 알림의 시니어 이름·남은 잠금 수 nullable 컬럼 (LLD-0066) | `scripts/mysql/alter_fcm_notification_album_unlock.sql` |
 | 2026-10-01 | `fcm_outbox` | `notification_type VARCHAR(48)`·`data_payload TEXT` 추가 (LLD-0060). type별 FCM 표현과 재시도 data 복원, 기존 행은 NULL 폴백 | `scripts/mysql/alter_fcm_outbox_notification_type.sql` |
 | 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
 | 2026-09-21 | `location_access_log` | 신규 테이블 (LLD-0056). 위치 열람 주체·대상·경로·통보 시각 | `scripts/mysql/create_location_access_log.sql` |

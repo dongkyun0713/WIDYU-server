@@ -166,7 +166,11 @@ class FcmSchedulerOutboxIntegrationTest {
             dispatcher.shutdown();
         }
         assertThat(outbox.findById(id).orElseThrow().getState()).isEqualTo(FcmOutbox.State.SENT);
-        assertThat(notifications.count()).isEqualTo(1);
+        if (category == FcmCategory.WALK) {
+            assertThat(notifications.count()).isZero();
+        } else {
+            assertThat(notifications.count()).isEqualTo(1);
+        }
     }
 
     private void assertRolledBackWithoutDispatch() {
@@ -187,8 +191,11 @@ class FcmSchedulerOutboxIntegrationTest {
     }
 
     private void createWalk() {
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                walks.save(Walk.createWithGoal(memberWithToken(), LocalDate.now(), 10000)));
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Walk walk = Walk.createWithGoal(memberWithToken(), LocalDate.now(), 10000);
+            walk.updateActualSteps(1);
+            walks.save(walk);
+        });
     }
 
     private void createSchedule() {

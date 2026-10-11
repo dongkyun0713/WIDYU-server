@@ -2,12 +2,17 @@ package com.widyu.fcm.event.goal.healthschedule.listener;
 
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
-import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.healthschedule.HealthSchedule;
+import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,7 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class HealthScheduleNotificationListener {
 
     private static final String HEALTH_SCHEDULE_DEFAULT_IMAGE = "health_schedule.png";
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("a h:mm", Locale.KOREAN);
+    static final String GUARDIAN_HEALTH_SCHEDULE_DETAIL = "widyu-care://health/schedules/";
 
     private final FcmService fcmService;
     private final HealthScheduleRepository healthScheduleRepository;
@@ -65,19 +71,27 @@ public class HealthScheduleNotificationListener {
      * 개별 일정에 대한 알림 발송
      */
     private void sendScheduleNotification(HealthSchedule schedule) {
-        String scheduledTime = schedule.getScheduledAt().format(TIME_FORMATTER);
-        String title = String.format("%s에 '%s' 일정이 있어요!",
-                scheduledTime, schedule.getScheduleName());
-        String content = "건강 일정을 잊지 말고 확인해주세요.";
-
-        FcmSendDto fcmSendDto = FcmSendDto.builder()
-                .title(title)
-                .content(content)
-                .fcmCategory(FcmCategory.HEALTH_SCHEDULE)
-                .scheme("")
-                .image(HEALTH_SCHEDULE_DEFAULT_IMAGE)
-                .build();
-
-        fcmService.sendMessageToUser(schedule.getMember().getId(), fcmSendDto);
+        if (schedule.getScheduledAt() == null || schedule.getScheduleName() == null
+                || schedule.getScheduleName().isBlank()) {
+            log.warn("건강 일정 알림 필수 정보 누락: scheduleId={}", schedule.getId());
+            return;
+        }
+        Member recipient = schedule.getMember();
+        String variant = "H01-S";
+        String deepLink = null;
+        if (recipient.getType() == MemberType.GUARDIAN) {
+            variant = "H01-C-SELF";
+            deepLink = GUARDIAN_HEALTH_SCHEDULE_DETAIL + schedule.getId();
+        }
+        NotificationCopy osCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+                variant + "-OS", Map.of());
+        NotificationCopy inAppCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+                variant + "-INAPP", Map.of(
+                        "오전/오후 시각", schedule.getScheduledAt().format(TIME_FORMATTER),
+                        "일정명", schedule.getScheduleName()));
+        FcmSendDto dto = FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING, osCopy,
+                schedule.getId().toString(), deepLink, null, null, HEALTH_SCHEDULE_DEFAULT_IMAGE)
+                .withCenterCopy(inAppCopy);
+        fcmService.sendMessageToUser(recipient.getId(), dto);
     }
 }

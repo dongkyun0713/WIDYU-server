@@ -63,7 +63,9 @@ public class AlbumCommentService {
         eventPublisher.publishEvent(new AlbumCommentedEvent(
                 albumId,
                 currentMember.getId(),
-                album.getMember().getId()
+                album.getMember().getId(),
+                savedComment.getId(),
+                request.parentCommentId()
         ));
 
         return AlbumCommentResponse.fromWithoutReplies(savedComment);

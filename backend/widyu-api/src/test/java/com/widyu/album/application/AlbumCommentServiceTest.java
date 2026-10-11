@@ -1,8 +1,10 @@
 package com.widyu.album.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -78,7 +81,10 @@ class AlbumCommentServiceTest {
         // then
         verify(albumCommentRepository).save(any(AlbumComment.class));
         verify(album).incrementCommentCount();
-        verify(eventPublisher).publishEvent(any(AlbumCommentedEvent.class));
+        ArgumentCaptor<AlbumCommentedEvent> eventCaptor = ArgumentCaptor.forClass(AlbumCommentedEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().commentId()).isEqualTo(100L);
+        assertThat(eventCaptor.getValue().parentCommentId()).isNull();
     }
 
     @Test
@@ -119,6 +125,10 @@ class AlbumCommentServiceTest {
         // then
         verify(albumCommentRepository).save(any(AlbumComment.class));
         verify(album).incrementCommentCount();
+        ArgumentCaptor<AlbumCommentedEvent> eventCaptor = ArgumentCaptor.forClass(AlbumCommentedEvent.class);
+        then(eventPublisher).should().publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().commentId()).isEqualTo(101L);
+        assertThat(eventCaptor.getValue().parentCommentId()).isEqualTo(50L);
     }
 
     @Test

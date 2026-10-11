@@ -1,35 +1,39 @@
 package com.widyu.fcm.event.album.listener;
 
-import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
-import com.widyu.fcm.event.album.dto.AlbumCommentedEvent;
-import com.widyu.fcm.event.album.dto.AlbumLikedEvent;
-import com.widyu.fcm.event.album.dto.AlbumUnlockedEvent;
-import com.widyu.global.error.BusinessException;
-import com.widyu.global.error.ErrorCode;
 import com.widyu.album.Album;
-import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.album.repository.AlbumRepository;
+import com.widyu.album.repository.AlbumUnlockRepository;
+import com.widyu.album.repository.AlbumViewRepository;
+import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
-import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.fcm.event.album.dto.AlbumCommentedEvent;
 import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
+import com.widyu.fcm.event.album.dto.AlbumLikedEvent;
+import com.widyu.fcm.event.album.dto.AlbumUnlockedEvent;
+import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
+import com.widyu.global.entity.Status;
+import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
-import com.widyu.global.entity.Status;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import org.springframework.transaction.annotation.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
@@ -37,6 +41,8 @@ import org.springframework.context.event.EventListener;
 public class AlbumNotificationListener {
 
     private static final String ALBUM_DEFAULT_IMAGE = "album.png";
+    static final String GUARDIAN_ALBUM_DETAIL = "widyu-care://albums/";
+    static final String GUARDIAN_ALBUM_LIST = "widyu-care://albums";
 
     private final FcmService fcmService;
     private final FamilyMembershipRepository familyMembershipRepository;
@@ -44,23 +50,48 @@ public class AlbumNotificationListener {
     private final MemberRepository memberRepository;
     private final AlbumViewRepository albumViewRepository;
     private final AlbumRepository albumRepository;
+    private final AlbumUnlockRepository albumUnlockRepository;
 
     @EventListener
     @Transactional
     public void handleAlbumCreated(AlbumCreatedEvent event) {
         Member author = memberRepository.findById(event.authorId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
+        String albumId = event.albumId().toString();
+        NotificationCopy uploadCopy = NotificationCopy.of(NotificationType.ALBUM_UPLOAD_COMPLETE, "A01", Map.of());
+        String uploadDeepLink = null;
+        if (author.getType() == MemberType.GUARDIAN) {
+            uploadDeepLink = guardianAlbumLink(albumId);
+        }
+        send(author.getId(), FcmSendDto.of(NotificationType.ALBUM_UPLOAD_COMPLETE, uploadCopy,
+                albumId, uploadDeepLink, null, null, ALBUM_DEFAULT_IMAGE));
 
-        sendNotificationToSpecificMember(
-                event.authorId(),
-                "앨범 업로드가 완료되었어요!",
-                "업로드한 앨범을 확인해보세요."
-        );
+        if (author.getType() == MemberType.SENIOR) {
+            Optional<Long> familyId = seniorProfileRepository.findFamilyIdByMemberId(author.getId());
+            if (familyId.isEmpty()) {
+                return;
+            }
+            for (FamilyMembership membership : familyMembershipRepository.findAllByFamilyIdWithGuardian(familyId.get())) {
+                Member guardian = membership.getGuardian();
+                NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_CREATED, "A02-C",
+                        Map.of("작성자 이름", author.getName()));
+                send(guardian.getId(), FcmSendDto.of(NotificationType.ALBUM_CREATED, copy, albumId,
+                        guardianAlbumLink(albumId), author.getId(), author.getId(), author.getProfileImage()));
+            }
+            return;
+        }
 
-        String title = author.getName() + "님이 새로운 소식을 전했어요!";
-        String content = "새로운 앨범을 확인해보세요.";
-
-        sendNotificationToFamilyMembers(event.authorId(), title, content, author.getProfileImage());
+        Optional<Long> familyId = familyMembershipRepository.findFamilyIdByGuardianId(author.getId());
+        if (familyId.isEmpty()) {
+            return;
+        }
+        List<SeniorProfile> seniors = seniorProfileRepository.findAllByFamilyIdWithMember(familyId.get());
+        for (SeniorProfile senior : seniors) {
+            NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_CREATED, "A02-S",
+                    Map.of("작성자 이름", author.getName()));
+            send(senior.getMember().getId(), FcmSendDto.of(NotificationType.ALBUM_CREATED, copy,
+                    albumId, null, author.getId(), null, author.getProfileImage()));
+        }
     }
 
     @EventListener
@@ -68,56 +99,21 @@ public class AlbumNotificationListener {
     public void handleAlbumViewed(AlbumViewedEvent event) {
         Member viewer = memberRepository.findById(event.memberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
-
         Album album = albumRepository.findByIdAndStatusWithCollections(event.albumId(), Status.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALBUM_NOT_FOUND));
-
-        if (hasViewedAllAlbums(event.memberId(), album)) {
-            Member albumWriter = album.getMember();
-            String title = viewer.getName() + "님이 " + albumWriter.getName() + "님의 모든 소식을 확인했어요!";
-            String content = "새로운 소식을 공유해보세요.";
-            enqueueNotification(albumWriter.getId(), new FcmSendDto(title, content, FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE)
-                    .withRelatedMember(viewer.getId()));
-        }
-    }
-
-    private void sendNotificationToFamilyMembers(Long memberId, String title, String content, String image) {
-        Optional<Long> seniorFamilyId = seniorProfileRepository.findFamilyIdByMemberId(memberId);
-        if (seniorFamilyId.isPresent()) {
-            Long familyId = seniorFamilyId.get();
-            List<FamilyMembership> memberships = familyMembershipRepository.findAllByFamilyIdWithGuardian(familyId);
-            for (FamilyMembership membership : memberships) {
-                FcmSendDto dto = new FcmSendDto(title, content, FcmCategory.ALBUM, "", image).withRelatedMember(memberId);
-                enqueueNotification(membership.getGuardian().getId(), dto);
-            }
-        } else {
-            familyMembershipRepository.findFamilyIdByGuardianId(memberId).ifPresent(familyId -> {
-                List<SeniorProfile> seniors = seniorProfileRepository
-                        .findAllByFamilyIdWithMember(familyId);
-                for (SeniorProfile senior : seniors) {
-                    FcmSendDto dto = new FcmSendDto(title, content, FcmCategory.ALBUM, "", image).withRelatedMember(memberId);
-                    enqueueNotification(senior.getMember().getId(), dto);
-                }
-            });
-        }
-    }
-
-    private void sendNotificationToSpecificMember(Long memberId, String title, String content) {
-        FcmSendDto dto = new FcmSendDto(title, content, FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE);
-        enqueueNotification(memberId, dto);
-    }
-
-    private void enqueueNotification(Long memberId, FcmSendDto dto) {
-        fcmService.sendMessageToUser(memberId, dto);
-    }
-
-    private boolean hasViewedAllAlbums(Long viewerId, Album album) {
         Member writer = album.getMember();
-        long totalCount = albumRepository.countByMemberId(writer.getId());
-        long viewedCount = albumViewRepository.countViewedAlbumsByGuardianAndParent(viewerId, writer.getId());
-
-        log.info("작성자 memberId: {}, 전체: {}, 본 개수: {}", writer.getId(), totalCount, viewedCount);
-        return viewedCount == totalCount && totalCount > 0;
+        if (writer.getType() != MemberType.GUARDIAN || viewer.getType() != MemberType.SENIOR) {
+            return;
+        }
+        long total = albumViewRepository.countTotalAlbumsByParent(writer.getId());
+        long viewed = albumViewRepository.countViewedAlbumsByGuardianAndParent(viewer.getId(), writer.getId());
+        if (total == 0 || viewed != total) {
+            return;
+        }
+        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_ALL_VIEWED, "A07",
+                Map.of("시니어 이름", viewer.getName()));
+        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_ALL_VIEWED, copy, null,
+                GUARDIAN_ALBUM_LIST, viewer.getId(), viewer.getId(), ALBUM_DEFAULT_IMAGE));
     }
 
     @Scheduled(cron = "0 0 10 * * *")
@@ -180,21 +176,32 @@ public class AlbumNotificationListener {
     public void handleAlbumCommented(AlbumCommentedEvent event) {
         Member commenter = memberRepository.findById(event.commenterMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
-        Member albumAuthor = memberRepository.findById(event.albumAuthorId())
+        Member writer = memberRepository.findById(event.albumAuthorId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
-
-        if (event.commenterMemberId().equals(event.albumAuthorId())) {
+        if (commenter.getId().equals(writer.getId())) {
             return;
         }
-
-        FcmSendDto dto = new FcmSendDto(
-                commenter.getName() + "님이 회원님의 게시물에 댓글을 남겼어요!",
-                "답글을 달아주세요.",
-                FcmCategory.ALBUM,
-                "",
-                commenter.getProfileImage()
-        );
-        enqueueNotification(albumAuthor.getId(), dto.withRelatedMember(event.commenterMemberId()));
+        NotificationType type = NotificationType.ALBUM_COMMENTED;
+        String code = "A03";
+        if (event.parentCommentId() != null) {
+            type = NotificationType.ALBUM_REPLIED;
+            code = "A04";
+        }
+        NotificationCopy copy = NotificationCopy.of(type, code, Map.of("작성자 이름", commenter.getName()));
+        String albumId = event.albumId().toString();
+        String commentId = event.commentId().toString();
+        String deepLink = null;
+        Long seniorId = null;
+        if (writer.getType() == MemberType.GUARDIAN) {
+            deepLink = guardianAlbumLink(albumId) + "/comments/" + commentId;
+            if (commenter.getType() == MemberType.SENIOR) {
+                seniorId = commenter.getId();
+            }
+        }
+        FcmSendDto dto = FcmSendDto.of(type, copy, albumId, deepLink,
+                commenter.getId(), seniorId, commenter.getProfileImage())
+                .withData(Map.of("commentId", commentId));
+        send(writer.getId(), dto);
     }
 
     @EventListener
@@ -202,39 +209,56 @@ public class AlbumNotificationListener {
     public void handleAlbumLiked(AlbumLikedEvent event) {
         Member liker = memberRepository.findById(event.likerMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
-        Member albumAuthor = memberRepository.findById(event.albumAuthorId())
+        Member writer = memberRepository.findById(event.albumAuthorId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
-
-        if (event.likerMemberId().equals(event.albumAuthorId())) {
+        if (liker.getId().equals(writer.getId())) {
             return;
         }
-
-        FcmSendDto dto = new FcmSendDto(
-                liker.getName() + "님이 회원님의 게시물을 좋아합니다!",
-                "게시물을 확인해보세요.",
-                FcmCategory.ALBUM,
-                "",
-                liker.getProfileImage()
-        );
-        enqueueNotification(albumAuthor.getId(), dto.withRelatedMember(event.likerMemberId()));
+        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_LIKED, "A05",
+                Map.of("누른 사람 이름", liker.getName()));
+        String albumId = event.albumId().toString();
+        String deepLink = null;
+        if (writer.getType() == MemberType.GUARDIAN) {
+            deepLink = guardianAlbumLink(albumId);
+        }
+        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_LIKED, copy, albumId,
+                deepLink, liker.getId(), null, liker.getProfileImage()));
     }
 
     @EventListener
     @Transactional
     public void handleAlbumUnlocked(AlbumUnlockedEvent event) {
-        Member parentMember = memberRepository.findById(event.parentMemberId())
+        Member senior = memberRepository.findById(event.parentMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_PARENT_MEMBER_NOT_FOUND));
-
         Album album = albumRepository.findByIdWithMember(event.albumId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALBUM_NOT_FOUND));
+        Member writer = album.getMember();
+        int remaining = Math.toIntExact(albumUnlockRepository.countRemainingLockedByWriterAndSenior(
+                writer.getId(), senior.getId(), album.getId()));
+        String code = "A06-L";
+        if (remaining == 0) {
+            code = "A06-Z";
+        }
+        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_UNLOCKED, code,
+                unlockCopyValues(senior.getName(), remaining));
+        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_UNLOCKED, copy,
+                album.getId().toString(), guardianAlbumLink(album.getId().toString()),
+                senior.getId(), senior.getId(), senior.getProfileImage())
+                .withSeniorUnlockDetails(senior.getName(), remaining));
+    }
 
-        FcmSendDto dto = new FcmSendDto(
-                parentMember.getName() + "님이 회원님의 게시물을 잠금해제했어요.",
-                "새로운 소식을 확인해보세요.",
-                FcmCategory.ALBUM,
-                "",
-                parentMember.getProfileImage()
-        );
-        enqueueNotification(album.getMember().getId(), dto.withRelatedMember(event.parentMemberId()));
+    private Map<String, String> unlockCopyValues(String seniorName, int remaining) {
+        if (seniorName == null || seniorName.isBlank()) {
+            return Map.of("남은 개수", Integer.toString(remaining));
+        }
+        return Map.of("시니어 이름", seniorName, "남은 개수", Integer.toString(remaining));
+    }
+
+    private String guardianAlbumLink(String albumId) {
+        return GUARDIAN_ALBUM_DETAIL + albumId;
+    }
+
+    private void send(Long recipientId, FcmSendDto dto) {
+        fcmService.sendMessageToUser(recipientId, dto);
     }
 }

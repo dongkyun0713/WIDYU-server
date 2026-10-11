@@ -26,7 +26,11 @@ public record FcmSendDto(
         Long seniorId,
         String actorDisplayName,
         String effectiveFromDate,
-        String groupKey
+        String groupKey,
+        String centerTitle,
+        String centerBody,
+        String seniorDisplayName,
+        Integer remainingLockedCount
 ) {
     public FcmSendDto {
         if (data == null) {
@@ -41,7 +45,7 @@ public record FcmSendDto(
     public FcmSendDto(String title, String content, FcmCategory category, String scheme, String image,
             boolean emergency, Long relatedMemberId, Map<String, String> data, String decisionId) {
         this(title, content, category, scheme, image, emergency, relatedMemberId, data, decisionId,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public static FcmSendDto from(FcmOutbox row, Map<String, String> restoredData) {
@@ -50,6 +54,14 @@ public record FcmSendDto(
                 .emergency(row.isEmergency()).relatedMemberId(row.getRelatedMemberId())
                 .data(restoredData).decisionId(row.getDecisionId())
                 .notificationType(row.getNotificationType()).build();
+    }
+
+    public static FcmSendDto of(NotificationType type, NotificationCopy copy, String entityId,
+            String deepLink, Long relatedMemberId, Long seniorId, String image) {
+        return FcmSendDto.builder().title(copy.title()).content(copy.body())
+                .fcmCategory(type.fcmCategory()).notificationType(type)
+                .entityId(entityId).deepLink(deepLink).relatedMemberId(relatedMemberId)
+                .seniorId(seniorId).image(image).build();
     }
 
     /** type이 없는 기존 호출자의 data는 그대로 둔다. */
@@ -70,7 +82,27 @@ public record FcmSendDto(
         putIfPresent(values, "actorDisplayName", actorDisplayName);
         putIfPresent(values, "effectiveFromDate", effectiveFromDate);
         putIfPresent(values, "groupKey", groupKey);
+        putIfPresent(values, "inAppTitle", centerTitle);
+        putIfPresent(values, "inAppBody", centerBody);
+        putIfPresent(values, "seniorDisplayName", seniorDisplayName);
+        if (remainingLockedCount != null) {
+            values.put("remainingLockedCount", remainingLockedCount.toString());
+        }
         return Map.copyOf(values);
+    }
+
+    public String centerTitleOrTitle() {
+        if (centerTitle != null) {
+            return centerTitle;
+        }
+        return title;
+    }
+
+    public String centerBodyOrContent() {
+        if (centerBody != null) {
+            return centerBody;
+        }
+        return content;
     }
 
     private String resolvedDeepLink() {
@@ -108,11 +140,25 @@ public record FcmSendDto(
 
     public FcmSendDto withRelatedMember(Long memberId) {
         return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, memberId, data, decisionId,
-                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey);
+                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey,
+                centerTitle, centerBody, seniorDisplayName, remainingLockedCount);
     }
 
     public FcmSendDto withData(Map<String, String> newData) {
         return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, relatedMemberId, newData, decisionId,
-                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey);
+                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey,
+                centerTitle, centerBody, seniorDisplayName, remainingLockedCount);
+    }
+
+    public FcmSendDto withCenterCopy(NotificationCopy copy) {
+        return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, relatedMemberId, data, decisionId,
+                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey,
+                copy.title(), copy.body(), seniorDisplayName, remainingLockedCount);
+    }
+
+    public FcmSendDto withSeniorUnlockDetails(String displayName, Integer count) {
+        return new FcmSendDto(title, content, fcmCategory, scheme, image, emergency, relatedMemberId, data, decisionId,
+                notificationType, eventId, deepLink, entityId, seniorId, actorDisplayName, effectiveFromDate, groupKey,
+                centerTitle, centerBody, displayName, count);
     }
 }

@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.*;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.NotificationCopy;
 import com.widyu.fcm.dto.response.FcmNotificationResponse;
 import com.widyu.fcm.repository.*;
 import com.widyu.global.config.JpaAuditingConfig;
@@ -351,6 +352,53 @@ class FcmOutboxIntegrationTest {
         assertThat(delivery.notificationId()).isNull();
         assertThat(delivery.message().data()).containsEntry("revision", "42");
         assertThat(transactions.preflight(delivery)).isTrue();
+    }
+
+    @Test
+    @DisplayName("건강 일정 임박 알림을 넣으면 OS 푸시와 센터 문구를 따로 보관한다")
+    void 건강_일정_임박_알림을_넣으면_OS와_센터_문구를_나눠_보관한다() {
+        // given
+        Long member = memberWithToken();
+        NotificationCopy os = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+                "H01-S-OS", Map.of());
+        NotificationCopy inApp = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+                "H01-S-INAPP", Map.of("오전/오후 시각", "오후 3:30", "일정명", "병원 진료"));
+
+        // when
+        service.enqueue(member, FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+                os, "10", null, null, null, null).withCenterCopy(inApp));
+
+        // then
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(center.getTitle()).isEqualTo("오후 3:30에 병원 진료 일정이 있어요.");
+        assertThat(center.getBody()).isEqualTo("잊지 않도록 일정을 확인해보세요.");
+        FcmDelivery delivery = transactions.claim(outbox.findAll().getFirst().getId());
+        assertThat(delivery.message().title()).isEqualTo("건강 일정이 곧 있어요.");
+        assertThat(delivery.message().content()).isEqualTo("앱에서 일정 시간과 내용을 확인해주세요.");
+        assertThat(delivery.message().data()).containsEntry("inAppTitle", center.getTitle())
+                .containsEntry("inAppBody", center.getBody());
+    }
+
+    @Test
+    @DisplayName("잠금 해제 알림을 넣으면 시니어 이름과 0개 남은 수를 센터와 푸시에 보관한다")
+    void 잠금_해제_알림을_넣으면_시니어_이름과_0개를_보관한다() {
+        // given
+        Long member = memberWithToken();
+        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_UNLOCKED,
+                "A06-Z", Map.of("시니어 이름", "어머니"));
+
+        // when
+        service.enqueue(member, FcmSendDto.of(NotificationType.ALBUM_UNLOCKED,
+                copy, "31", "widyu-care://albums/31", null, 17L, null)
+                .withSeniorUnlockDetails("어머니", 0));
+
+        // then
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(center.getSeniorDisplayName()).isEqualTo("어머니");
+        assertThat(center.getRemainingLockedCount()).isZero();
+        FcmDelivery delivery = transactions.claim(outbox.findAll().getFirst().getId());
+        assertThat(delivery.message().data()).containsEntry("remainingLockedCount", "0")
+                .containsEntry("seniorDisplayName", "어머니");
     }
 
     @Test

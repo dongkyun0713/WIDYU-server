@@ -60,6 +60,8 @@ PATCH /api/v1/notifications/{id}/read
       "entityId": "91",
       "seniorId": null,
       "actorDisplayName": null,
+      "seniorDisplayName": null,
+      "remainingLockedCount": null,
       "expiresAt": "2026-12-31T09:30:00",
       "retentionClass": "ROUTINE_90D",
       "retentionPolicyVersion": "v1",
@@ -75,6 +77,13 @@ PATCH /api/v1/notifications/{id}/read
   "traceId": null
 }
 ```
+
+| 응답 필드 | 타입 | 값 |
+| --- | --- | --- |
+| `seniorDisplayName` | nullable String | `ALBUM_UNLOCKED` 센터 행의 저장된 시니어 표시명. 값이 없는 행은 null. |
+| `remainingLockedCount` | nullable Integer | `ALBUM_UNLOCKED` 센터 행의 저장된 해금 직후 남은 잠금 수. 0을 그대로 반환하고 값이 없는 행은 null. |
+
+두 필드는 타입 있는 행과 레거시 `type IS NULL` 행 모두 DB 컬럼값을 그대로 사용한다. 레거시 행에 값이 있으면 반환하고 없으면 null이다.
 
 `unreadCounts`는 호출자에게 허용된 `UNREAD`와 카테고리 키를 모두 반환한다(보호자에게만 `LOCATION` 추가). `UNREAD`는 전체 안 읽은 수다. `ALL`은 숫자를 표시하지 않으므로 맵에서 제외한다. 0도 숫자로 반환하며 화면의 숨김·`99+` 표현은 FE가 맡는다. `snapshotRevision`은 이 응답의 기준 시각인 epoch milliseconds를 문자열로, `serverTime`은 같은 시각을 ISO-8601로 반환한다. 이 값은 다음 페이지까지 고정하는 스냅샷 토큰은 아니다.
 
