@@ -50,6 +50,7 @@ class FollowupCardPersistenceTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @MockBean private SensorProperties properties;
     @MockBean private JPAQueryFactory queryFactory;
+    @MockBean private FollowupRewardService rewardService;
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -92,7 +93,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("OK 종료 사건에 카드를 발급하면 12시간 만료시각과 문항 판본을 저장한다")
     void OK_종료_사건에_카드를_발급하면_만료시각과_판본을_저장한다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110001");
         Incident incident = incident(senior.getId(), "inc-followup-1", IncidentKind.HR_ANOMALY);
 
@@ -112,7 +113,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("한 방문에서 카드를 제출하면 같은 방문의 다음 카드를 노출하지 않는다")
     void 한_방문에서_제출하면_다음_카드를_노출하지_않는다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110002");
         service.issueIfEnabled(incident(senior.getId(), "inc-followup-2", IncidentKind.HR_ANOMALY));
         service.issueIfEnabled(incident(senior.getId(), "inc-followup-3", IncidentKind.SAFE_ZONE_EXIT));
@@ -142,7 +143,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("만료 전 단말 제출이 늦게 도착하면 원답을 저장하고 재제출을 막는다")
     void 만료_전_단말_제출이_늦게_도착하면_원답을_저장하고_재제출을_막는다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110004");
         FollowupCard card = cards.save(FollowupCard.issue("inc-followup-late", senior.getId(),
                 "HR_V1", 1L, System.currentTimeMillis() - 43_201_000L));
@@ -168,7 +169,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("명시적으로 건너뛰면 거절 상태와 단말 및 서버 시각을 남긴다")
     void 명시적으로_건너뛰면_거절_상태와_시각을_남긴다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110005");
         FollowupCard card = cards.save(FollowupCard.issue("inc-followup-decline", senior.getId(),
                 "HR_V1", 1L, System.currentTimeMillis()));
@@ -191,7 +192,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("만료 시각이 지나면 미제출 카드만 무응답으로 바꾼다")
     void 만료_시각이_지나면_미제출_카드만_무응답으로_바꾼다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member senior = senior("01098110006");
         long nowMs = System.currentTimeMillis();
         FollowupCard due = cards.save(FollowupCard.issue("inc-followup-due", senior.getId(),
@@ -221,7 +222,7 @@ class FollowupCardPersistenceTest {
     @DisplayName("만료 뒤 단말 제출은 거절하고 다른 시니어에게 카드를 숨긴다")
     void 만료_뒤_제출은_거절하고_다른_시니어에게_카드를_숨긴다() {
         // given
-        given(properties.followup()).willReturn(new SensorProperties.Followup(true));
+        given(properties.followup()).willReturn(new SensorProperties.Followup(true, false));
         Member owner = senior("01098110007");
         Member other = senior("01098110008");
         FollowupCard card = cards.save(FollowupCard.issue("inc-followup-expired", owner.getId(),

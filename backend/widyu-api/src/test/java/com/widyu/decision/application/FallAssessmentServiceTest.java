@@ -184,7 +184,7 @@ class FallAssessmentServiceTest {
                 32768, null, export, new SensorProperties.FallAi(enabled, "/api/fall", 2, "server", "v1"),
                 new SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
                 new SensorProperties.Incident(60, 5000L, false, 5),
-                new SensorProperties.Followup(false));
+                new SensorProperties.Followup(false, false));
     }
 
     private SensorBatch trigger() {

@@ -60,6 +60,7 @@ sensor:
 
   followup:
     enabled: ${SENSOR_FOLLOWUP_ENABLED:false}
+    reward-enabled: ${SENSOR_FOLLOWUP_REWARD_ENABLED:false}
 
   fall-ai:
     enabled: ${SENSOR_FALL_AI_ENABLED:false}

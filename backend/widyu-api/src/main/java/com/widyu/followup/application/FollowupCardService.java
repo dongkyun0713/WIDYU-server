@@ -33,6 +33,7 @@ public class FollowupCardService {
     private final FollowupAnswerRepository answerRepository;
     private final MemberRepository memberRepository;
     private final SensorProperties sensorProperties;
+    private final FollowupRewardService rewardService;
 
     @Transactional
     public void issueIfEnabled(Incident incident) {
@@ -144,6 +145,7 @@ public class FollowupCardService {
             requireNotSubmitted(refreshed);
             throw new BusinessException(ErrorCode.FOLLOWUP_EXPIRED);
         }
+        rewardService.rewardIfEnabled(card.getId(), card.getSeniorId());
     }
 
     private void requireNotSubmitted(FollowupCard card) {

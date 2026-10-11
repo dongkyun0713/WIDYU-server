@@ -640,7 +640,7 @@ class IncidentServiceTest {
         return new IncidentService(incidentRepository, fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
                         new SensorProperties.Incident(60, 5000L, false, 5),
-                        new SensorProperties.Followup(false)), memberRepository,
+                        new SensorProperties.Followup(false, false)), memberRepository,
                 incidentEscalation, redisTemplate, outboxService, seniorProfileRepository,
                 familyMembershipRepository, followupCardService);
     }
