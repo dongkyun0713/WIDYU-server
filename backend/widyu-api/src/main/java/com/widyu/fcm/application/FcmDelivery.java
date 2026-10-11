@@ -4,20 +4,40 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.fcm.FcmOutbox;
+import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.dto.FcmSendDto;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
-public record FcmDelivery(Long id, long fence, String token, FcmSendDto message, Instant expiresAt) {
+public record FcmDelivery(Long id, long fence, String token, FcmSendDto message, Instant expiresAt,
+        Long notificationId) {
     private static final ObjectMapper DATA_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, String>> DATA_TYPE = new TypeReference<>() {};
+
+    public FcmDelivery(Long id, long fence, String token, FcmSendDto message, Instant expiresAt) {
+        this(id, fence, token, message, expiresAt, id);
+    }
 
     public static FcmDelivery from(FcmOutbox row) {
         return new FcmDelivery(row.getId(), row.getFence(), row.getMemberFcmToken().getToken(),
                 FcmSendDto.from(row, data(row)),
-                row.getExpiresAt().atZone(ZoneId.systemDefault()).toInstant());
+                row.getExpiresAt().atZone(ZoneId.systemDefault()).toInstant(), notificationId(row));
+    }
+
+    private static Long notificationId(FcmOutbox row) {
+        if (row.getNotificationId() != null) {
+            return row.getNotificationId();
+        }
+        if (row.getNotificationType() == null) {
+            return row.getId();
+        }
+        DeliveryMode mode = row.getNotificationType().deliveryMode();
+        if (mode == DeliveryMode.PUSH_AND_CENTER || mode == DeliveryMode.CENTER_ONLY) {
+            return row.getId();
+        }
+        return null;
     }
 
     static String encodeData(Map<String, String> data) {

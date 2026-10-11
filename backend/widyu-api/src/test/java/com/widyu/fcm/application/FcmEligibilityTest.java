@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
+import com.widyu.fcm.NotificationType;
 import com.widyu.global.entity.Status;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
@@ -119,6 +120,21 @@ class FcmEligibilityTest {
 
         // then
         assertThat(allowed).isEqualTo(false);
+    }
+
+    @Test
+    @DisplayName("data 전용 동기화이면 설정을 건너뛰고 수신 자격을 유지한다")
+    void data_전용_동기화이면_설정을_건너뛰고_수신을_허용한다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_SCHEDULE_SYNC);
+        activeRecipient(outbox);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isTrue();
     }
 
     @Test

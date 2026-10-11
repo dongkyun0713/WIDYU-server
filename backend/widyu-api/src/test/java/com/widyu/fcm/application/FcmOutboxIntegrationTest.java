@@ -8,13 +8,19 @@ import static org.mockito.BDDMockito.*;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
 import com.widyu.fcm.dto.FcmSendDto;
+import com.widyu.fcm.dto.response.FcmNotificationResponse;
 import com.widyu.fcm.repository.*;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
+import com.widyu.member.Family;
+import com.widyu.member.SeniorProfile;
+import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
+import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +35,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -48,8 +55,11 @@ class FcmOutboxIntegrationTest {
     @Autowired FcmOutboxTransactions transactions;
     @Autowired FcmOutboxRepository outbox;
     @Autowired FcmNotificationRepository notifications;
+    @Autowired MemberNotificationSettingRepository settings;
     @Autowired MemberFcmTokenRepository tokens;
     @Autowired MemberRepository members;
+    @Autowired FamilyRepository families;
+    @Autowired SeniorProfileRepository seniorProfiles;
     @Autowired PlatformTransactionManager transactionManager;
     @MockBean FcmOutboxDispatcher immediate;
     @MockBean JPAQueryFactory queryFactory;
@@ -58,9 +68,12 @@ class FcmOutboxIntegrationTest {
     @AfterEach
     void cleanup() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            notifications.deleteAll();
             outbox.deleteAll();
+            notifications.deleteAll();
+            settings.deleteAll();
             tokens.deleteAll();
+            seniorProfiles.deleteAll();
+            families.deleteAll();
             members.deleteAll();
         });
     }
@@ -102,6 +115,7 @@ class FcmOutboxIntegrationTest {
         })).isInstanceOf(IllegalStateException.class);
         // then
         assertThat(outbox.count()).isZero();
+        assertThat(notifications.count()).isZero();
         then(immediate).shouldHaveNoInteractions();
     }
 
@@ -124,10 +138,14 @@ class FcmOutboxIntegrationTest {
         // then
         List<FcmOutbox> rows = outbox.findAll();
         assertThat(rows).hasSize(2);
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(rows).allMatch(row -> center.getId().equals(row.getNotificationId()));
         assertThat(rows).allMatch(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_CHANGED);
         Map<String, String> first = transactions.claim(rows.get(0).getId()).message().data();
         Map<String, String> second = transactions.claim(rows.get(1).getId()).message().data();
         assertThat(first).isEqualTo(second);
+        assertThat(center.getEventId()).isEqualTo(first.get("eventId"));
         assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
         assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
                 .containsEntry("revision", "42")
@@ -136,6 +154,234 @@ class FcmOutboxIntegrationTest {
                 .containsEntry("priority", "interaction")
                 .containsEntry("deepLink", "widyu://medication/schedules")
                 .containsEntry("foregroundPresentation", "BANNER");
+    }
+
+    @Test
+    @DisplayName("활성 토큰이 없으면 센터 행 하나만 저장한다")
+    void 활성_토큰이_없으면_센터_행_하나만_저장한다() {
+        // given
+        Long member = new TransactionTemplate(transactionManager).execute(status ->
+                members.save(Member.createMember(MemberType.SENIOR, "수신자", "01012345678")).getId());
+
+        // when
+        service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isZero();
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(center.getMemberFcmToken()).isNull();
+        assertThat(center.getExpiresAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("가족이 아닌 관련 회원의 알림을 넣으면 센터와 기기 작업을 남기지 않는다")
+    void 가족이_아닌_관련_회원의_알림을_넣으면_센터와_기기_작업을_남기지_않는다() {
+        // given
+        Long recipient = memberWithToken();
+        Long related = new TransactionTemplate(transactionManager).execute(status ->
+                members.save(Member.createMember(MemberType.GUARDIAN, "외부 회원", "01087654321")).getId());
+
+        // when
+        service.enqueue(recipient, FcmSendDto.builder().title("외부 알림").content("본문")
+                .fcmCategory(FcmCategory.ETC).relatedMemberId(related).build());
+
+        // then
+        assertThat(notifications.count()).isZero();
+        assertThat(outbox.count()).isZero();
+        then(immediate).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("같은 가족의 관련 회원 알림을 넣으면 센터 행을 하나 저장한다")
+    void 같은_가족의_관련_회원_알림을_넣으면_센터_행을_저장한다() {
+        // given
+        Long recipient = memberWithToken();
+        Long related = new TransactionTemplate(transactionManager).execute(status -> {
+            Family family = families.save(Family.createFamily("FAM001"));
+            Member recipientMember = members.findById(recipient).orElseThrow();
+            Member relatedMember = members.save(Member.createMember(
+                    MemberType.SENIOR, "관련 회원", "01087654321"));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(recipientMember, family, "서울", "INV0001",
+                    LocalDate.of(1950, 1, 1)));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(relatedMember, family, "서울", "INV0002",
+                    LocalDate.of(1950, 1, 1)));
+            return relatedMember.getId();
+        });
+
+        // when
+        service.enqueue(recipient, FcmSendDto.builder().title("가족 알림").content("본문")
+                .fcmCategory(FcmCategory.ETC).relatedMemberId(related).build());
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isEqualTo(1);
+        assertThat(outbox.findAll().getFirst().getFamilyId()).isEqualTo(families.findAll().getFirst().getId());
+    }
+
+    @Test
+    @DisplayName("같은 이벤트를 다시 넣으면 기존 센터 행과 읽음 상태를 유지한다")
+    void 같은_이벤트를_다시_넣으면_센터_행을_유지한다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto first = FcmSendDto.builder().title("첫 제목").content("첫 본문")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("fixed-event")
+                .entityId("31").build();
+        service.enqueue(member, first);
+        FcmNotification original = notifications.findAll().getFirst();
+        Long originalId = original.getId();
+        LocalDateTime expiresAt = original.getExpiresAt();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                notifications.findById(originalId).orElseThrow().markAsRead());
+
+        // when
+        service.enqueue(member, FcmSendDto.builder().title("다른 제목").content("다른 본문")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("fixed-event")
+                .entityId("31").build());
+
+        // then
+        FcmNotification stored = notifications.findAll().getFirst();
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(stored.getId()).isEqualTo(originalId);
+        assertThat(stored.getTitle()).isEqualTo("첫 제목");
+        assertThat(stored.getBody()).isEqualTo("첫 본문");
+        assertThat(stored.getExpiresAt()).isEqualTo(expiresAt);
+        assertThat(stored.isRead()).isTrue();
+        assertThat(stored.getReadAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("같은 수신자와 이벤트를 중복 삽입하면 고유 제약이 막고 재호출은 기존 행을 사용한다")
+    void 같은_수신자와_이벤트를_중복_삽입하면_기존_행을_사용한다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("앨범").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("one-event")
+                .entityId("31").build();
+        service.enqueue(member, message);
+        Long originalId = notifications.findAll().getFirst().getId();
+
+        // when / then
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                notifications.saveAndFlush(FcmNotification.builder()
+                        .recipientMember(members.findById(member).orElseThrow())
+                        .eventId("one-event").fcmCategory(FcmCategory.ALBUM)
+                        .title("중복").body("본문").build())))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        service.enqueue(member, message);
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(notifications.findAll().getFirst().getId()).isEqualTo(originalId);
+    }
+
+    @Test
+    @DisplayName("같은 이벤트를 다른 수신자에게 넣으면 각각 센터 행을 저장한다")
+    void 같은_이벤트를_다른_수신자에게_넣으면_각각_센터_행을_저장한다() {
+        // given
+        Long first = memberWithToken();
+        Long second = new TransactionTemplate(transactionManager).execute(status ->
+                members.save(Member.createMember(MemberType.GUARDIAN, "다른 수신자", "01087654321")).getId());
+        FcmSendDto message = FcmSendDto.builder().title("앨범").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("family-event")
+                .entityId("31").build();
+
+        // when
+        service.enqueue(first, message);
+        service.enqueue(second, message);
+
+        // then
+        assertThat(notifications.findByRecipientMemberIdAndEventId(first, "family-event")).isPresent();
+        assertThat(notifications.findByRecipientMemberIdAndEventId(second, "family-event")).isPresent();
+        assertThat(notifications.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("푸시 설정을 끄면 센터를 유지하고 기기 작업을 취소한다")
+    void 푸시_설정을_끄면_센터를_유지하고_작업을_취소한다() {
+        // given
+        Long member = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
+                        FcmCategory.ALBUM, false)));
+
+        // when
+        service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
+                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+        Long rowId = outbox.findAll().getFirst().getId();
+        FcmDelivery delivery = transactions.claim(rowId);
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isEqualTo(1);
+        assertThat(delivery).isNull();
+        assertThat(outbox.findById(rowId).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("전달 방식을 구분하면 센터와 기기 작업 수가 정책대로 저장된다")
+    void 전달_방식을_구분하면_센터와_기기_작업을_나눈다() {
+        // given
+        Long member = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
+                        FcmCategory.MEDICINE_SCHEDULE, false)));
+
+        // when
+        service.enqueue(member, FcmSendDto.builder().title("업로드").content("본문")
+                .notificationType(NotificationType.ALBUM_UPLOAD_COMPLETE).entityId("31").build());
+        service.enqueue(member, FcmSendDto.builder().title("좋아요").content("본문")
+                .notificationType(NotificationType.ALBUM_LIKED).entityId("31").build());
+        service.enqueue(member, FcmSendDto.builder().notificationType(NotificationType.MEDICATION_SCHEDULE_SYNC)
+                .data(Map.of("revision", "42")).build());
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(notifications.findAll().getFirst().getPushEligible()).isFalse();
+        assertThat(outbox.count()).isEqualTo(2);
+        FcmOutbox pushOnly = outbox.findAll().stream()
+                .filter(row -> row.getNotificationType() == NotificationType.ALBUM_UPLOAD_COMPLETE)
+                .findFirst().orElseThrow();
+        FcmOutbox dataOnly = outbox.findAll().stream()
+                .filter(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_SYNC)
+                .findFirst().orElseThrow();
+        assertThat(pushOnly.getNotificationId()).isNull();
+        assertThat(dataOnly.getNotificationId()).isNull();
+        assertThat(transactions.claim(pushOnly.getId()).notificationId()).isNull();
+        FcmDelivery delivery = transactions.claim(dataOnly.getId());
+        assertThat(delivery.notificationId()).isNull();
+        assertThat(delivery.message().data()).containsEntry("revision", "42");
+        assertThat(transactions.preflight(delivery)).isTrue();
+    }
+
+    @Test
+    @DisplayName("보존 등급이 다르면 만료 시각과 기존 목록 응답을 각각 유지한다")
+    void 보존_등급이_다르면_만료와_기존_응답을_유지한다() {
+        // given
+        Long member = memberWithToken();
+        service.enqueue(member, FcmSendDto.builder().title("심박 안내").content("본문")
+                .notificationType(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART)
+                .seniorId(member).eventId("incident:OK").build());
+        service.enqueue(member, FcmSendDto.builder().title("안심구역 안내").content("본문")
+                .notificationType(NotificationType.SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE)
+                .seniorId(member).eventId("zone:OK").build());
+        FcmNotification legacy = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.save(FcmNotification.builder().recipientMember(members.findById(member).orElseThrow())
+                        .memberFcmToken(tokens.findAll().getFirst()).title("기존 제목").body("기존 본문")
+                        .fcmCategory(FcmCategory.ALBUM).isRead(false).build()));
+
+        // when / then
+        FcmNotification heart = notifications.findByRecipientMemberIdAndEventId(member, "incident:OK").orElseThrow();
+        FcmNotification zone = notifications.findByRecipientMemberIdAndEventId(member, "zone:OK").orElseThrow();
+        assertThat(Duration.between(heart.getCreatedAt(), heart.getExpiresAt()))
+                .isBetween(Duration.ofDays(180).minusSeconds(5), Duration.ofDays(180).plusSeconds(5));
+        assertThat(Duration.between(zone.getCreatedAt(), zone.getExpiresAt()))
+                .isBetween(Duration.ofDays(90).minusSeconds(5), Duration.ofDays(90).plusSeconds(5));
+        assertThat(heart.getRetentionPolicyVersion()).isEqualTo("v1");
+        assertThat(zone.getRetentionPolicyVersion()).isEqualTo("v1");
+        assertThat(notifications.findNotificationsWithCursor(member, null, PageRequest.of(0, 10))).hasSize(3);
+        assertThat(FcmNotificationResponse.from(legacy).scheme()).isEmpty();
+        assertThat(FcmNotificationResponse.from(heart).scheme())
+                .isEqualTo("widyu-care://seniors/" + member + "/location");
     }
 
     @Test
@@ -237,7 +483,7 @@ class FcmOutboxIntegrationTest {
         FcmDelivery current = transactions.claim(id);
         transactions.finish(old, FcmTransport.Result.delivered());
         // then
-        assertThat(notifications.count()).isZero();
+        assertThat(notifications.count()).isEqualTo(1);
         assertThat(current.fence()).isGreaterThan(old.fence());
         transactions.finish(current, FcmTransport.Result.delivered());
         transactions.finish(current, FcmTransport.Result.delivered());
@@ -258,7 +504,7 @@ class FcmOutboxIntegrationTest {
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.PENDING);
         assertThat(row.getAvailableAt()).isAfterOrEqualTo(earliest);
         assertThat(transactions.claim(id)).isNull();
-        assertThat(notifications.count()).isZero();
+        assertThat(notifications.count()).isEqualTo(1);
     }
 
     @Test
@@ -362,7 +608,7 @@ class FcmOutboxIntegrationTest {
         // then
         assertThat(allowed).isFalse();
         assertThat(outbox.findById(id).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CANCELLED);
-        assertThat(notifications.count()).isZero();
+        assertThat(notifications.count()).isEqualTo(1);
     }
 
     @Test

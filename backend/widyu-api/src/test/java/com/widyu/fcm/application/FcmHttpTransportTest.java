@@ -78,7 +78,7 @@ class FcmHttpTransportTest {
                 .data(Map.of("eventId", "event-1", "deepLink", "widyu-care://seniors/17/location",
                         "seniorId", "17")).build();
         FcmDelivery delivery = new FcmDelivery(4072L, 1, "loopback-token", message,
-                Instant.now().plusSeconds(300));
+                Instant.now().plusSeconds(300), 8111L);
         try {
             // when
             assertThat(transport.send(delivery, () -> true).success()).isTrue();
@@ -88,7 +88,7 @@ class FcmHttpTransportTest {
             assertThat(body.at("/message/data/eventId").asText()).isEqualTo("event-1");
             assertThat(body.at("/message/data/type").asText()).isEqualTo("HEART_RATE_EMERGENCY");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
-            assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("4072");
+            assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
             assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("widyu-care://seniors/17/location");
             assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("BANNER");
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
@@ -148,15 +148,18 @@ class FcmHttpTransportTest {
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().notificationType(NotificationType.MEDICATION_SCHEDULE_SYNC)
                 .data(Map.of("eventId", "event-3", "revision", "43")).build();
+        FcmDelivery delivery = new FcmDelivery(4074L, 1, "loopback-token", message,
+                Instant.now().plusSeconds(300), null);
         try {
             // when
-            assertThat(transport.send("loopback-token", message).success()).isTrue();
+            assertThat(transport.send(delivery, () -> true).success()).isTrue();
 
             // then
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/notification").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_SYNC");
             assertThat(body.at("/message/data/revision").asText()).isEqualTo("43");
+            assertThat(body.at("/message/data/notificationId").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("NONE");
             assertThat(body.at("/message/android/notification").isMissingNode()).isTrue();
             assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("5");

@@ -17,6 +17,10 @@ public record FcmNotificationResponse(
         if (n.getFcmCategory() != null) {
             category = n.getFcmCategory().name();
         }
+        String scheme = "";
+        if (n.getDeepLink() != null) {
+            scheme = n.getDeepLink();
+        }
         return new FcmNotificationResponse(
                 n.getId(),
                 n.getImage(),
@@ -24,7 +28,7 @@ public record FcmNotificationResponse(
                 n.getTitle(),
                 n.getBody(),
                 n.getCreatedAt(),
-                "" // 기본 스킴 값
+                scheme
         );
     }
 }
