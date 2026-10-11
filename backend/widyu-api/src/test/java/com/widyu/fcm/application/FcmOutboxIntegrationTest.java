@@ -455,6 +455,77 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("방장에게 같은 사건의 1차와 2차를 넣으면 센터 한 행과 단계별 기기 작업을 남긴다")
+    void 방장에게_같은_사건의_일차와_이차를_넣으면_센터_한_행을_남긴다() {
+        // given
+        Long seniorId = memberWithToken();
+        Long guardianId = guardianWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Family family = families.save(Family.createFamily("HRT001"));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(
+                    members.findById(seniorId).orElseThrow(), family, "서울", "HRTINV1",
+                    LocalDate.of(1950, 1, 1)));
+            memberships.save(FamilyMembership.createLeaderMembership(family,
+                    members.findById(guardianId).orElseThrow()));
+        });
+        FcmSendDto first = FcmSendDto.builder().title("첫 알림").content("본문")
+                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-1")
+                .seniorId(seniorId).relatedMemberId(seniorId)
+                .data(Map.of("deliveryStage", "INITIAL_ALERT")).emergency(true).build();
+        FcmSendDto second = FcmSendDto.builder().title("두 번째 알림").content("본문")
+                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-1")
+                .seniorId(seniorId).relatedMemberId(seniorId)
+                .data(Map.of("deliveryStage", "SECOND_ALERT")).emergency(true).build();
+
+        // when
+        service.enqueue(guardianId, first);
+        service.enqueue(guardianId, second);
+
+        // then
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.count()).isEqualTo(2);
+        FcmNotification center = notifications.findAll().getFirst();
+        assertThat(center.getTitle()).isEqualTo("첫 알림");
+        assertThat(outbox.findAll()).allSatisfy(row ->
+                assertThat(row.getNotificationId()).isEqualTo(center.getId()));
+        assertThat(outbox.findAll().stream().map(FcmOutbox::getDataPayload).toList())
+                .anySatisfy(payload -> assertThat(payload).contains("SECOND_ALERT"));
+    }
+
+    @Test
+    @DisplayName("안전 푸시를 끈 보호자에게 2차를 넣으면 센터만 남고 기기 작업을 취소한다")
+    void 안전_푸시를_끈_보호자에게_이차를_넣으면_센터만_남긴다() {
+        // given
+        Long seniorId = memberWithToken();
+        Long guardianId = new TransactionTemplate(transactionManager).execute(status -> {
+            Family family = families.save(Family.createFamily("HRT002"));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(
+                    members.findById(seniorId).orElseThrow(), family, "서울", "HRTINV2",
+                    LocalDate.of(1950, 1, 1)));
+            Member guardian = members.save(Member.createMember(MemberType.GUARDIAN,
+                    "비방장", "01087650321"));
+            memberships.save(FamilyMembership.createMembership(family, guardian));
+            tokens.save(MemberFcmToken.builder().member(guardian).token("safety-off").active(true).build());
+            settings.save(MemberNotificationSetting.create(guardian, PushSettingGroup.SAFETY, false));
+            return guardian.getId();
+        });
+        FcmSendDto message = FcmSendDto.builder().title("2차 알림").content("본문")
+                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-off")
+                .seniorId(seniorId).relatedMemberId(seniorId)
+                .data(Map.of("deliveryStage", "SECOND_ALERT")).emergency(true).build();
+
+        // when
+        service.enqueue(guardianId, message);
+        Long outboxId = outbox.findAll().getFirst().getId();
+        FcmDelivery claimed = transactions.claim(outboxId);
+
+        // then
+        assertThat(claimed).isNull();
+        assertThat(notifications.findByRecipientMemberIdAndEventId(guardianId, "inc-stage-off")).isPresent();
+        assertThat(outbox.findById(outboxId).orElseThrow().getState()).isEqualTo(FcmOutbox.State.CANCELLED);
+    }
+
+    @Test
     @DisplayName("같은 수신자와 이벤트를 중복 삽입하면 고유 제약이 막고 재호출은 기존 행을 사용한다")
     void 같은_수신자와_이벤트를_중복_삽입하면_기존_행을_사용한다() {
         // given

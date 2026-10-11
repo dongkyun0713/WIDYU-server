@@ -36,18 +36,18 @@ public interface IncidentDocs {
             @Parameter(description = "사건 식별자(`inc-`로 시작)") String incidentId,
             IncidentRespondRequest request);
 
-    @Operation(summary = "보호자 실제 연락 행동 기록", description = """
-            같은 가족의 활성 보호자가 실제 메시지 전송 성공 또는 전화 걸기 시작을 기록합니다.
-            `type`은 `MESSAGE_SENT` 또는 `CALL_INITIATED`이며 최초 기록만 수락합니다.
-            화면 열람·팝업 확인·provider answered는 반응이 아닙니다.
-            잘못된 입력은 400(`REQ_4000`), 비활성 보호자는 403(`AUTH_4030`),
-            사건 없음·다른 가족·시니어 요청은 404(`INCIDENT_4040`), 중복 기록은 409(`INCIDENT_4092`)입니다.
+    @Operation(summary = "보호자 멈춤 기록", description = """
+            같은 가족의 활성 보호자가 `type=ACKNOWLEDGED|MESSAGE_SENT|CALL_INITIATED`를 기록합니다.
+            사건×보호자×종류당 한 건이며 같은 종류를 다시 보내면 원래 기록 시각으로 200을 반환합니다.
+            한 건이라도 기록되면 아직 예약하지 않은 2차 알림을 취소하고 응답에 취소 여부를 담습니다.
+            화면 열람·푸시 탭·읽음·메시지 작성 화면만 연 것은 멈춤이 아닙니다.
+            잘못된 입력은 400(`REQ_4000`), 사건 없음·다른 가족·시니어 요청은 먼저
+            404(`INCIDENT_4040`), 같은 가족의 비활성 보호자는 403(`AUTH_4030`)입니다.
             """)
-    @ApiResponse(responseCode = "200", description = "첫 보호자 반응 기록 완료")
+    @ApiResponse(responseCode = "200", description = "보호자 멈춤 기록 또는 같은 종류의 멱등 재호출")
     @ApiResponse(responseCode = "400", description = "허용되지 않은 반응 종류")
     @ApiResponse(responseCode = "403", description = "비활성 보호자")
     @ApiResponse(responseCode = "404", description = "사건 또는 접근 가능한 가족 없음")
-    @ApiResponse(responseCode = "409", description = "이미 기록된 보호자 반응")
     ApiResponseTemplate<GuardianResponseResult> recordGuardianResponse(
             @Parameter(description = "사건 식별자(`inc-`로 시작)") String incidentId,
             GuardianResponseRequest request);
