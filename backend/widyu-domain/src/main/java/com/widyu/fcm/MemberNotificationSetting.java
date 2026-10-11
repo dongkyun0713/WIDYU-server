@@ -13,6 +13,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -35,20 +37,24 @@ public class MemberNotificationSetting {
     private Member member;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private FcmCategory category;
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 32)
+    private PushSettingGroup category;
 
     @Column(nullable = false)
     private boolean enabled;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private MemberNotificationSetting(Member member, FcmCategory category, boolean enabled) {
+    private MemberNotificationSetting(Member member, PushSettingGroup category, boolean enabled) {
         this.member = member;
         this.category = category;
         this.enabled = enabled;
     }
 
-    public static MemberNotificationSetting create(Member member, FcmCategory category, boolean enabled) {
+    public static MemberNotificationSetting create(Member member, PushSettingGroup category, boolean enabled) {
+        if (category == null || category == PushSettingGroup.NONE) {
+            throw new IllegalArgumentException("저장 가능한 푸시 설정 그룹이 아닙니다.");
+        }
         return MemberNotificationSetting.builder()
                 .member(member)
                 .category(category)

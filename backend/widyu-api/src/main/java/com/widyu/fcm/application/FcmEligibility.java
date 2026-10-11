@@ -2,6 +2,7 @@ package com.widyu.fcm.application;
 
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.DeliveryMode;
+import com.widyu.fcm.PushSettingGroup;
 import com.widyu.global.entity.Status;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
@@ -38,9 +39,14 @@ public class FcmEligibility {
                 || !recipientId.equals(outbox.getMemberFcmToken().getMember().getId())) {
             return false;
         }
-        if (outbox.getNotificationType() == null
-                || outbox.getNotificationType().deliveryMode() != DeliveryMode.DATA_ONLY) {
-            if (!settings.isNotificationEnabled(recipientId, outbox.getFcmCategory())) {
+        PushSettingGroup group = null;
+        if (outbox.getNotificationType() == null) {
+            group = PushSettingGroup.fromLegacy(outbox.getFcmCategory());
+        } else if (outbox.getNotificationType().deliveryMode() != DeliveryMode.DATA_ONLY) {
+            group = outbox.getNotificationType().settingGroup();
+        }
+        if (group != null && group != PushSettingGroup.NONE) {
+            if (!settings.isNotificationEnabled(recipientId, group)) {
                 return false;
             }
         }

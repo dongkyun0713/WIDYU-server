@@ -10,6 +10,7 @@ import com.widyu.fcm.event.goal.walk.listener.WalkNotificationListener;
 import com.widyu.fcm.repository.*;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.global.util.SecurityUtil;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.healthschedule.HealthSchedule;
@@ -63,6 +64,7 @@ class FcmSchedulerOutboxIntegrationTest {
     @MockBean FcmTransport transport;
     @MockBean JPAQueryFactory queryFactory;
     @MockBean MemberUtil memberUtil;
+    @MockBean SecurityUtil securityUtil;
 
     @AfterEach
     void cleanup() {
