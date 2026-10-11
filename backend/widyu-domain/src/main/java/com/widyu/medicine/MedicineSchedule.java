@@ -66,10 +66,14 @@ public class MedicineSchedule extends BaseTimeEntity {
     }
 
     public static MedicineSchedule create(Member member, LocalTime alarmTime) {
+        return create(member, alarmTime, LocalDate.now());
+    }
+
+    public static MedicineSchedule create(Member member, LocalTime alarmTime, LocalDate effectiveFrom) {
         return MedicineSchedule.builder()
                 .member(member)
                 .alarmTime(alarmTime)
-                .effectiveFrom(LocalDate.now())
+                .effectiveFrom(effectiveFrom)
                 .build();
     }
 

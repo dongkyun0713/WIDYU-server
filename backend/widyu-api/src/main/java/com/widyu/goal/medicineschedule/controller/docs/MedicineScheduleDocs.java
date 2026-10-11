@@ -8,6 +8,7 @@ import com.widyu.goal.medicineschedule.dto.response.MedicationAlarmSyncResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDetailResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleChangeResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleIdResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineSearchResponse;
@@ -342,17 +343,18 @@ public interface MedicineScheduleDocs {
     );
 
     @Operation(
-            summary = "시니어 약 복용 생성 / 보호자가 시니어 약 복용 대신 생성",
+            summary = "시니어 복약 일정 생성",
             description = """
                     새로운 약 복용 스케줄을 생성합니다.
 
                     **기능:**
                     - 알람 시간, 카테고리, 약품 정보를 포함한 스케줄 생성
-                    - 약품이 DB에 없으면 자동으로 생성
+                    - 새 일정은 다음 날부터 적용되며 오늘 알람에는 나타나지 않습니다.
+                    - 응답의 scheduleRevision은 시니어의 복약 알람 revision입니다.
 
                     **권한:**
-                    - memberId가 null → 본인의 약 복용 스케줄 생성 (시니어)
-                    - memberId가 있음 → 보호자가 가족으로 연결된 시니어의 약 복용 스케줄 생성
+                    - 현재 가족 방장만 등록할 수 있습니다. 대상 시니어 memberId는 필수입니다.
+                    - 비방장 보호자와 시니어 본인은 403입니다.
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
@@ -396,7 +398,9 @@ public interface MedicineScheduleDocs {
                                               "code": "MEDICINE_2005",
                                               "message": "약 복용 스케줄 생성 성공",
                                               "data": {
-                                                "medicineScheduleId": 1
+                                                "medicineScheduleId": 1,
+                                                "scheduleRevision": 7,
+                                                "effectiveFromDate": "2026-10-02"
                                               }
                                             }
                                             """
@@ -409,7 +413,7 @@ public interface MedicineScheduleDocs {
     })
     ApiResponseTemplate<MedicineScheduleIdResponse> createSchedule(
             @Valid @RequestBody CreateMedicineScheduleRequest request,
-            @Parameter(description = "대상 시니어 ID (null이면 본인)", example = "1")
+            @Parameter(description = "대상 시니어 ID (방장 쓰기에서 필수)", example = "1")
             @RequestParam(required = false) Long memberId
     );
 
@@ -420,12 +424,14 @@ public interface MedicineScheduleDocs {
 
                     **기능:**
                     - 알람 시간, 카테고리, 약품 정보 수정
-                    - 수정은 오늘부터 적용되며, 과거 날짜의 일자별 조회에는 수정 전 상태가 그대로 보존됩니다.
-                    - 과거부터 유효하던 스케줄을 수정하면 기존 버전은 어제까지 마감되고 오늘부터 적용되는 새 버전(새 scheduleId)이 생성됩니다. 수정 후 목록을 재조회해 최신 scheduleId를 확인하세요.
+                    - 수정은 다음 날부터 적용되며 오늘 알람과 인증은 기존 버전에 남습니다.
+                    - 오늘 유효한 버전은 오늘까지 마감하고 새 버전을 만듭니다. 내일 시작 버전을 같은 날 다시 수정하면 해당 버전을 갱신합니다.
+                    - 응답의 medicineScheduleId는 다음 날 적용될 버전 ID입니다.
                     - 이미 종료된 과거 버전(닫힌 scheduleId)은 수정할 수 없습니다.
 
                     **권한:**
-                    - 본인 또는 보호자만 수정 가능
+                    - 현재 가족 방장만 수정할 수 있습니다. 대상 시니어 memberId는 필수입니다.
+                    - 비방장 보호자와 시니어 본인은 403입니다.
                     """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
@@ -457,16 +463,27 @@ public interface MedicineScheduleDocs {
             )
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "수정 성공"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "수정 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = MedicineScheduleIdResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {"code":"MEDICINE_2006","message":"약 복용 스케줄 수정 성공",
+                                     "data":{"medicineScheduleId":2,"scheduleRevision":8,"effectiveFromDate":"2026-10-02"}}
+                                    """)
+                    )
+            ),
             @ApiResponse(responseCode = "400", description = "존재하지 않는 스케줄"),
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "403", description = "권한 없음")
     })
-    ApiResponseTemplate<Void> updateSchedule(
+    ApiResponseTemplate<MedicineScheduleIdResponse> updateSchedule(
             @Parameter(description = "약 복용 스케줄 ID", required = true)
             @PathVariable Long scheduleId,
             @Valid @RequestBody UpdateMedicineScheduleRequest request,
-            @Parameter(description = "대상 시니어 ID (null이면 본인)", example = "1")
+            @Parameter(description = "대상 시니어 ID (방장 쓰기에서 필수)", example = "1")
             @RequestParam(required = false) Long memberId
     );
 
@@ -476,22 +493,35 @@ public interface MedicineScheduleDocs {
                     약 복용 스케줄을 삭제합니다.
 
                     **기능:**
-                    - 오늘부터 중단되고, 과거 날짜의 일자별 조회에는 삭제 전 상태가 그대로 보존됩니다 (적용 종료일을 어제로 마감)
+                    - 오늘 알람은 유지하고 다음 날부터 중단합니다 (적용 종료일을 오늘로 마감).
+                    - 응답에 scheduleRevision과 effectiveFromDate(다음 날)를 반환합니다.
 
                     **권한:**
-                    - 본인 또는 보호자만 삭제 가능
+                    - 현재 가족 방장만 삭제할 수 있습니다. 대상 시니어 memberId는 필수입니다.
+                    - 비방장 보호자와 시니어 본인은 403입니다.
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "삭제 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = MedicineScheduleChangeResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {"code":"MEDICINE_2007","message":"약 복용 스케줄 삭제 성공",
+                                     "data":{"scheduleRevision":9,"effectiveFromDate":"2026-10-02"}}
+                                    """)
+                    )
+            ),
             @ApiResponse(responseCode = "400", description = "존재하지 않는 스케줄"),
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "403", description = "권한 없음")
     })
-    ApiResponseTemplate<Void> deleteSchedule(
+    ApiResponseTemplate<MedicineScheduleChangeResponse> deleteSchedule(
             @Parameter(description = "약 복용 스케줄 ID", required = true)
             @PathVariable Long scheduleId,
-            @Parameter(description = "대상 시니어 ID (null이면 본인)", example = "1")
+            @Parameter(description = "대상 시니어 ID (방장 쓰기에서 필수)", example = "1")
             @RequestParam(required = false) Long memberId
     );
 

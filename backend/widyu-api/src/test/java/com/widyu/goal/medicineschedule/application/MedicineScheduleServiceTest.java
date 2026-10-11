@@ -18,6 +18,9 @@ import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse;
 import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleDailyResponse.ScheduleItem;
+import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleIdResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicineScheduleChangeResponse;
+import com.widyu.goal.medicineschedule.dto.response.MedicineHomeResponse;
 import com.widyu.goal.medicineschedule.dto.request.CreateMedicineScheduleRequest;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineRepository;
@@ -27,6 +30,7 @@ import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.Medicine;
 import com.widyu.medicine.MedicineSchedule;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -139,24 +143,32 @@ class MedicineScheduleServiceTest {
     }
 
     private MedicineSchedule scheduleEffectiveFrom(Long id, Member member, LocalTime alarmTime, LocalDate effectiveFrom) {
-        MedicineSchedule schedule = MedicineSchedule.create(member, alarmTime);
+        MedicineSchedule schedule = MedicineSchedule.create(member, alarmTime, effectiveFrom);
         ReflectionTestUtils.setField(schedule, "id", id);
-        ReflectionTestUtils.setField(schedule, "effectiveFrom", effectiveFrom);
         return schedule;
     }
 
+    private Member seniorWithId(Long id) {
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        ReflectionTestUtils.setField(member, "id", id);
+        return member;
+    }
+
+    private LocalDate today() {
+        return LocalDate.now();
+    }
+
     @Test
-    @DisplayName("과거부터 유효한 스케줄을 수정하면 기존 버전은 어제까지 마감되고 새 버전이 생성된다")
-    void 과거_유효_스케줄_수정하면_기존_마감_후_새_버전_생성() {
+    @DisplayName("오늘 유효한 스케줄을 수정하면 오늘 버전과 인증을 보존하고 내일 버전을 만든다")
+    void 오늘_유효한_스케줄을_수정하면_오늘_버전과_인증을_보존하고_내일_버전을_만든다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
-        Member targetMember = mock(Member.class);
+        Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
-        given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), LocalDate.now().minusDays(5));
+                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(5));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
                 .willReturn(Optional.of(existing));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
@@ -167,45 +179,58 @@ class MedicineScheduleServiceTest {
                     return newSchedule;
                 });
         MedicationProof proof = MedicationProof.create(existing, targetMember, List.of());
-        given(medicationProofRepository.findByMedicineScheduleAndVerifiedAtBetween(any(), any(), any()))
-                .willReturn(List.of(proof));
 
         // when
-        medicineScheduleService.updateSchedule(scheduleId, updateRequest("09:00"), memberId);
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("09:00"), memberId);
 
         // then
-        assertThat(existing.getEffectiveTo()).isEqualTo(LocalDate.now().minusDays(1));
-        then(medicineScheduleRepository).should().save(any(MedicineSchedule.class));
-        assertThat(proof.getMedicineSchedule().getId()).isEqualTo(101L);
-        then(targetMember).should().incrementMedicationAlarmRevision();
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.isEffectiveOn(today())).isTrue();
+        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(8, 0));
+        assertThat(proof.getMedicineSchedule()).isSameAs(existing);
+        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
+        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
+        assertThat(scheduleCaptor.getValue().getEffectiveFrom()).isEqualTo(today().plusDays(1));
+        assertThat(scheduleCaptor.getValue().getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(response.medicineScheduleId()).isEqualTo(101L);
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+        then(medicationProofRepository).should(never())
+                .findByMedicineScheduleAndVerifiedAtBetween(any(), any(), any());
         then(fcmService).should().sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
     }
 
     @Test
-    @DisplayName("오늘 생성된 스케줄을 수정하면 새 버전 없이 그대로 수정된다")
-    void 오늘_생성_스케줄_수정은_새_버전_없이_수정된다() {
+    @DisplayName("오늘 시작한 스케줄을 수정하면 오늘 버전을 마감하고 내일 버전을 만든다")
+    void 오늘_시작한_스케줄을_수정하면_오늘_버전을_마감하고_내일_버전을_만든다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
-        Member targetMember = mock(Member.class);
+        Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
-        given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), LocalDate.now());
+                scheduleId, targetMember, LocalTime.of(8, 0), today());
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
                 .willReturn(Optional.of(existing));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
+            MedicineSchedule schedule = invocation.getArgument(0);
+            ReflectionTestUtils.setField(schedule, "id", 101L);
+            return schedule;
+        });
 
         // when
-        medicineScheduleService.updateSchedule(scheduleId, updateRequest("09:00"), memberId);
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("09:00"), memberId);
 
         // then
-        assertThat(existing.getEffectiveTo()).isNull();
-        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
-        then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
-        then(targetMember).should().incrementMedicationAlarmRevision();
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(8, 0));
+        assertThat(response.medicineScheduleId()).isEqualTo(101L);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         ArgumentCaptor<FcmSendDto> messageCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
         assertThat(messageCaptor.getValue().data())
@@ -214,37 +239,38 @@ class MedicineScheduleServiceTest {
     }
 
     @Test
-    @DisplayName("스케줄을 삭제하면 오늘부터 중단되도록 어제까지 마감된다")
-    void 삭제하면_어제까지_마감되어_과거는_보존된다() {
+    @DisplayName("오늘 유효한 스케줄을 삭제하면 오늘 알람을 유지하고 내일부터 중단한다")
+    void 오늘_유효한_스케줄을_삭제하면_오늘_알람을_유지하고_내일부터_중단한다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
-        Member targetMember = mock(Member.class);
+        Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
-        given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), LocalDate.now().minusDays(3));
+                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(3));
         given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
 
         // when
-        medicineScheduleService.deleteSchedule(scheduleId, memberId);
+        MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
 
         // then
-        assertThat(existing.getEffectiveTo()).isEqualTo(LocalDate.now().minusDays(1));
-        then(targetMember).should().incrementMedicationAlarmRevision();
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.isEffectiveOn(today())).isTrue();
+        assertThat(existing.isEffectiveOn(today().plusDays(1))).isFalse();
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         then(fcmService).should().sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
     }
 
     @Test
-    @DisplayName("스케줄을 생성하면 revision을 증가시키고 설정 변경 FCM을 보낸다")
-    void 스케줄을_생성하면_revision을_증가시키고_설정_변경_FCM을_보낸다() {
+    @DisplayName("스케줄을 생성하면 내일부터 적용하고 현재 revision을 반환한다")
+    void 스케줄을_생성하면_내일부터_적용하고_현재_revision을_반환한다() {
         // given
         Long memberId = 1L;
-        Member targetMember = mock(Member.class);
+        Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
-        given(targetMember.getId()).willReturn(memberId);
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
         given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
             MedicineSchedule schedule = invocation.getArgument(0);
@@ -253,12 +279,90 @@ class MedicineScheduleServiceTest {
         });
 
         // when
-        medicineScheduleService.createSchedule(createRequest("08:00"), memberId);
+        MedicineScheduleIdResponse response = medicineScheduleService.createSchedule(
+                createRequest("08:00"), memberId);
 
         // then
-        then(targetMember).should().incrementMedicationAlarmRevision();
+        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
+        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
+        assertThat(scheduleCaptor.getValue().isEffectiveOn(today())).isFalse();
+        assertThat(scheduleCaptor.getValue().isEffectiveOn(today().plusDays(1))).isTrue();
+        assertThat(response.medicineScheduleId()).isEqualTo(1L);
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         then(fcmService).should().sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("내일 시작하는 스케줄을 다시 수정하면 같은 버전에만 반영한다")
+    void 내일_시작하는_스케줄을_다시_수정하면_같은_버전에만_반영한다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        MedicineSchedule pending = scheduleEffectiveFrom(
+                scheduleId, targetMember, LocalTime.of(8, 0), today().plusDays(1));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(pending));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("09:00"), memberId);
+
+        // then
+        assertThat(pending.getEffectiveFrom()).isEqualTo(today().plusDays(1));
+        assertThat(pending.getEffectiveTo()).isNull();
+        assertThat(pending.getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(response.medicineScheduleId()).isEqualTo(scheduleId);
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
+    }
+
+    @Test
+    @DisplayName("내일 시작하는 스케줄을 삭제하면 오늘과 내일 모두에 노출하지 않는다")
+    void 내일_시작하는_스케줄을_삭제하면_오늘과_내일_모두에_노출하지_않는다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        MedicineSchedule pending = scheduleEffectiveFrom(
+                scheduleId, targetMember, LocalTime.of(8, 0), today().plusDays(1));
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(pending));
+
+        // when
+        MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
+
+        // then
+        assertThat(pending.getEffectiveFrom()).isEqualTo(today().plusDays(1));
+        assertThat(pending.getEffectiveTo()).isEqualTo(today());
+        assertThat(pending.isEffectiveOn(today())).isFalse();
+        assertThat(pending.isEffectiveOn(today().plusDays(1))).isFalse();
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("복약 홈을 조회하면 오늘 유효한 버전만 반환한다")
+    void 복약_홈을_조회하면_오늘_유효한_버전만_반환한다() {
+        // given
+        Long memberId = 1L;
+        Member targetMember = seniorWithId(memberId);
+        MedicineSchedule todaySchedule = scheduleEffectiveFrom(
+                100L, targetMember, LocalTime.of(8, 0), today().minusDays(3));
+        todaySchedule.closeAsOf(today());
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(
+                targetMember, Status.ACTIVE, today())).willReturn(List.of(todaySchedule));
+
+        // when
+        MedicineHomeResponse response = medicineScheduleService.getHomeSchedules(memberId);
+
+        // then
+        assertThat(response.medicineSchedules()).extracting(MedicineHomeResponse.ScheduleItem::medicineScheduleId)
+                .containsExactly(100L);
     }
 
     @Test

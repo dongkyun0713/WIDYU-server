@@ -73,6 +73,78 @@ class MedicineScheduleRepositoryTest {
     }
 
     @Test
+    @DisplayName("알람 시각과 날짜를 조회하면 오늘은 기존 버전이고 내일은 새 버전을 반환한다")
+    void 알람_시각과_날짜를_조회하면_오늘은_기존_버전이고_내일은_새_버전을_반환한다() {
+        // given
+        Member member = persistSenior("01044445555");
+        LocalDate today = LocalDate.of(2026, 10, 1);
+        MedicineSchedule oldSchedule = persistSchedule(
+                member, LocalTime.of(8, 0), today.minusDays(3), today);
+        MedicineSchedule newSchedule = persistSchedule(
+                member, LocalTime.of(9, 0), today.plusDays(1), null);
+
+        // when
+        List<MedicineSchedule> todayOldAlarm = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(8, 0), Status.ACTIVE, today);
+        List<MedicineSchedule> todayNewAlarm = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(9, 0), Status.ACTIVE, today);
+        List<MedicineSchedule> tomorrowOldAlarm = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(8, 0), Status.ACTIVE, today.plusDays(1));
+        List<MedicineSchedule> tomorrowNewAlarm = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(9, 0), Status.ACTIVE, today.plusDays(1));
+
+        // then
+        assertThat(todayOldAlarm).extracting(MedicineSchedule::getId).containsExactly(oldSchedule.getId());
+        assertThat(todayNewAlarm).isEmpty();
+        assertThat(tomorrowOldAlarm).isEmpty();
+        assertThat(tomorrowNewAlarm).extracting(MedicineSchedule::getId).containsExactly(newSchedule.getId());
+    }
+
+    @Test
+    @DisplayName("내일 시작하는 신규 일정을 조회하면 오늘은 없고 내일은 반환한다")
+    void 내일_시작하는_신규_일정을_조회하면_오늘은_없고_내일은_반환한다() {
+        // given
+        Member member = persistSenior("01055556666");
+        LocalDate today = LocalDate.of(2026, 10, 1);
+        MedicineSchedule schedule = persistSchedule(
+                member, LocalTime.of(10, 0), today.plusDays(1), null);
+
+        // when
+        List<MedicineSchedule> todaySchedules = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(10, 0), Status.ACTIVE, today);
+        List<MedicineSchedule> tomorrowSchedules = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(10, 0), Status.ACTIVE, today.plusDays(1));
+
+        // then
+        assertThat(todaySchedules).isEmpty();
+        assertThat(tomorrowSchedules).extracting(MedicineSchedule::getId).containsExactly(schedule.getId());
+    }
+
+    @Test
+    @DisplayName("오늘까지로 마감한 일정을 조회하면 오늘만 반환한다")
+    void 오늘까지로_마감한_일정을_조회하면_오늘만_반환한다() {
+        // given
+        Member member = persistSenior("01066667777");
+        LocalDate today = LocalDate.of(2026, 10, 1);
+        MedicineSchedule schedule = persistSchedule(
+                member, LocalTime.of(11, 0), today.minusDays(3), today);
+        persistSchedule(member, LocalTime.of(12, 0), today.plusDays(1), today);
+
+        // when
+        List<MedicineSchedule> todaySchedules = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(11, 0), Status.ACTIVE, today);
+        List<MedicineSchedule> tomorrowSchedules = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(11, 0), Status.ACTIVE, today.plusDays(1));
+        List<MedicineSchedule> cancelledPending = medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
+                LocalTime.of(12, 0), Status.ACTIVE, today.plusDays(1));
+
+        // then
+        assertThat(todaySchedules).extracting(MedicineSchedule::getId).containsExactly(schedule.getId());
+        assertThat(tomorrowSchedules).isEmpty();
+        assertThat(cancelledPending).isEmpty();
+    }
+
+    @Test
     @DisplayName("월 범위와 겹치는 스케줄 버전만 조회한다")
     void 월_범위와_겹치는_스케줄_버전만_조회한다() {
         // given

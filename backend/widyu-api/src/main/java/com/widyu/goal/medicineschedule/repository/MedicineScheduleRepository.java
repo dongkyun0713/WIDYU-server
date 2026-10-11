@@ -35,17 +35,6 @@ public interface MedicineScheduleRepository extends JpaRepository<MedicineSchedu
             @Param("date") LocalDate date
     );
 
-    // 현재 유효한(effectiveTo IS NULL) 최신 스케줄만 조회 (홈 화면용)
-    @Query("SELECT DISTINCT ms FROM MedicineSchedule ms " +
-           "LEFT JOIN FETCH ms.categories c " +
-           "WHERE ms.member = :member AND ms.status = :status " +
-           "AND ms.effectiveTo IS NULL " +
-           "ORDER BY ms.alarmTime ASC")
-    List<MedicineSchedule> findCurrentByMemberWithDetails(
-            @Param("member") Member member,
-            @Param("status") Status status
-    );
-
     // [start, end] 기간과 겹치는 모든 스케줄 버전 조회 (월별 통계에서 날짜별 유효 수 계산용)
     @Query("SELECT ms FROM MedicineSchedule ms " +
            "WHERE ms.member = :member AND ms.status = :status " +
