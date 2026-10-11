@@ -292,7 +292,8 @@ class HeartRateBatchServiceTest {
                 new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
                 null,
                 new SensorProperties.Incident(60, 5000L, false, 5),
-                new SensorProperties.Followup(false, false));
+                new SensorProperties.Followup(false, false),
+                new SensorProperties.Medication(true));
 
         // when
         HeartRateBatchService.BatchOutcome outcome = service(withoutHeartAi).storeAndAssess(
@@ -460,7 +461,8 @@ class HeartRateBatchServiceTest {
                 new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
                 new SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
                 new SensorProperties.Incident(60, 5000L, false, 5),
-                new SensorProperties.Followup(false, false));
+                new SensorProperties.Followup(false, false),
+                new SensorProperties.Medication(true));
     }
 
     /** 저장 서비스는 받은 행을 그대로 돌려준다. 식별자는 서비스가 붙이므로 그대로 흘려보낸다. */

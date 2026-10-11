@@ -62,6 +62,10 @@ sensor:
     enabled: ${SENSOR_FOLLOWUP_ENABLED:false}
     reward-enabled: ${SENSOR_FOLLOWUP_REWARD_ENABLED:false}
 
+  # 위듀 앱 기기 알람의 실기기 확인·배포 뒤 운영에서 끈다(LLD-0080).
+  medication:
+    on-time-push: ${SENSOR_MEDICATION_ON_TIME_PUSH:true}
+
   fall-ai:
     enabled: ${SENSOR_FALL_AI_ENABLED:false}
     path: ${SENSOR_FALL_AI_PATH:/api/fall}
