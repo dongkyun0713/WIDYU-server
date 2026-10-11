@@ -25,6 +25,9 @@ public class Family extends BaseTimeEntity {
     @Column(name = "family_code", nullable = false, unique = true, length = 6)
     private String familyCode;
 
+    @Column(name = "family_order_revision", nullable = false)
+    private long familyOrderRevision;
+
     @Builder(access = AccessLevel.PRIVATE)
     private Family(String familyCode) {
         this.familyCode = familyCode;
@@ -34,5 +37,9 @@ public class Family extends BaseTimeEntity {
         return Family.builder()
                 .familyCode(familyCode)
                 .build();
+    }
+
+    public void incrementOrderRevision() {
+        familyOrderRevision++;
     }
 }

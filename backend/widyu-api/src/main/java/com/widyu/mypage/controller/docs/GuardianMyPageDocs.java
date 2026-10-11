@@ -4,6 +4,7 @@ import com.widyu.auth.dto.request.SeniorSignUpRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.mypage.dto.request.ProfileImageUploadRequest;
+import com.widyu.mypage.dto.request.GuardianOrderUpdateRequest;
 import com.widyu.mypage.dto.request.UpdateInviteCodeRequest;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
@@ -12,6 +13,7 @@ import com.widyu.mypage.dto.response.ConnectedSeniorResponse;
 import com.widyu.mypage.dto.response.FamilyCodeResponse;
 import com.widyu.mypage.dto.response.FamilyMemberListResponse;
 import com.widyu.mypage.dto.response.GuardianInfoResponse;
+import com.widyu.mypage.dto.response.GuardianOrderUpdateResponse;
 import com.widyu.mypage.dto.response.GuardianProfileDetailResponse;
 import com.widyu.mypage.dto.response.SeniorProfileForGuardianResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -141,7 +143,7 @@ public interface GuardianMyPageDocs {
             @Parameter(description = "시니어 회원 ID", required = true, example = "1") Long memberId,
             UpdateInviteCodeRequest request);
 
-    @Operation(summary = "가족 멤버 목록 조회", description = "현재 로그인한 보호자가 속한 가족의 멤버 목록과 방장 여부를 조회합니다.")
+    @Operation(summary = "가족 멤버 목록 조회", description = "시니어 다음에 보호자를 저장된 순서로 반환하고 방장 여부와 familyOrderRevision을 제공합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "404", description = "연결된 가족 없음")
@@ -155,6 +157,14 @@ public interface GuardianMyPageDocs {
     })
     ApiResponseTemplate<Void> changeLeader(
             @Parameter(description = "새 방장으로 지정할 보호자 회원 ID", required = true, example = "2") Long memberId);
+
+    @Operation(summary = "보호자 순서 변경", description = "현재 방장만 변경할 수 있습니다. 가족 보호자 전원의 ID를 위에서 아래 순서로 정확히 한 번씩 보내야 합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "순서 변경 및 familyOrderRevision 증가"),
+            @ApiResponse(responseCode = "400", description = "누락·중복·가족 밖 보호자 ID"),
+            @ApiResponse(responseCode = "403", description = "방장 권한 없음")
+    })
+    ApiResponseTemplate<GuardianOrderUpdateResponse> updateGuardianOrder(GuardianOrderUpdateRequest request);
 
     @Operation(summary = "가족 멤버 삭제", description = "방장만 호출 가능. 특정 보호자를 가족에서 삭제합니다.")
     @ApiResponses({

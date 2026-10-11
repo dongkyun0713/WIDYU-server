@@ -36,4 +36,19 @@ class FamilyMembershipTest {
         assertThat(membership.isLeader()).isFalse();
         assertThat(membership.isRepresentative()).isFalse();
     }
+
+    @Test
+    @DisplayName("보호자 순서를 변경하면 새 sortOrder를 보관한다")
+    void 보호자_순서를_변경하면_sortOrder를_보관한다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01011112222");
+        FamilyMembership membership = FamilyMembership.createMembership(family, guardian, 3);
+
+        // when
+        membership.updateSortOrder(1);
+
+        // then
+        assertThat(membership.getSortOrder()).isEqualTo(1);
+    }
 }

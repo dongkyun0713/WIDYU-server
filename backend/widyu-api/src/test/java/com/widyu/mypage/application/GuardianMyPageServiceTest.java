@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -30,10 +31,12 @@ import com.widyu.member.MemberType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.SocialAccount;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.FamilyRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.PointHistoryRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.mypage.dto.request.UpdateInviteCodeRequest;
+import com.widyu.mypage.dto.request.GuardianOrderUpdateRequest;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
 import com.widyu.mypage.dto.request.UpdateSeniorAddressRequest;
@@ -45,16 +48,22 @@ import com.widyu.mypage.dto.response.FamilyMemberListResponse;
 import com.widyu.mypage.dto.response.GuardianInfoResponse;
 import com.widyu.mypage.dto.response.GuardianProfileDetailResponse;
 import com.widyu.mypage.dto.response.SeniorProfileForGuardianResponse;
+import com.widyu.mypage.event.FamilyLeaderChangedEvent;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Arrays;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class GuardianMyPageServiceTest {
@@ -65,6 +74,9 @@ class GuardianMyPageServiceTest {
     @Mock private AuthLimitStore authLimitStore;
     @Mock private PhoneChangeVerifiedRepository phoneChangeVerifiedRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
+    @Mock private FamilyRepository familyRepository;
+    @Mock private EntityManager entityManager;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private PointHistoryRepository pointHistoryRepository;
@@ -627,12 +639,13 @@ class GuardianMyPageServiceTest {
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(guardiansMembership));
         given(guardiansMembership.getFamily()).willReturn(family);
         given(family.getId()).willReturn(10L);
+        given(family.getFamilyOrderRevision()).willReturn(4L);
         given(seniorProfileRepository.findAllByFamilyIdWithMember(10L)).willReturn(List.of(seniorProfile));
         given(seniorProfile.getMember()).willReturn(seniorMember);
         given(seniorMember.getId()).willReturn(99L);
         given(seniorMember.getName()).willReturn("부모님");
         given(seniorMember.getProfileImage()).willReturn("senior.png");
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L))
+        given(familyMembershipRepository.findAllByFamilyIdWithGuardianOrdered(10L))
                 .willReturn(List.of(leaderMembership, memberMembership));
 
         given(leaderMembership.getGuardian()).willReturn(leaderGuardian);
@@ -652,11 +665,13 @@ class GuardianMyPageServiceTest {
 
         // then
         assertThat(response.isCurrentUserLeader()).isTrue();
+        assertThat(response.familyOrderRevision()).isEqualTo(4);
         assertThat(response.members()).hasSize(3);
         assertThat(response.members().get(0).isSenior()).isTrue();
         assertThat(response.members().get(0).name()).isEqualTo("부모님");
         assertThat(response.members().get(1).isCurrent()).isTrue();
         assertThat(response.members().get(2).isCurrent()).isFalse();
+        verify(familyMembershipRepository).findAllByFamilyIdWithGuardianOrdered(10L);
     }
 
     @Test
@@ -683,7 +698,7 @@ class GuardianMyPageServiceTest {
         given(seniorMember.getId()).willReturn(99L);
         given(seniorMember.getName()).willReturn("부모님");
         given(seniorMember.getProfileImage()).willReturn("senior.png");
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L))
+        given(familyMembershipRepository.findAllByFamilyIdWithGuardianOrdered(10L))
                 .willReturn(List.of(leaderMembership, memberMembership));
 
         given(leaderMembership.getGuardian()).willReturn(leaderGuardian);
@@ -733,33 +748,39 @@ class GuardianMyPageServiceTest {
     @DisplayName("방장이 다른 보호자를 방장으로 변경하면 기존 방장은 해제되고 새 방장이 설정된다")
     void 방장_변경() {
         // given
-        Member guardian = mock(Member.class);
-        FamilyMembership myMembership = mock(FamilyMembership.class);
-        Family family = mock(Family.class);
-        FamilyMembership currentMembership = mock(FamilyMembership.class);
-        FamilyMembership newMembership = mock(FamilyMembership.class);
-        Member currentGuardian = mock(Member.class);
-        Member newGuardianMember = mock(Member.class);
-
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "구 방장", "01011112222");
+        Member newGuardian = Member.createMember(MemberType.GUARDIAN, "새 방장", "01033334444");
+        ReflectionTestUtils.setField(guardian, "id", 1L);
+        ReflectionTestUtils.setField(newGuardian, "id", 2L);
+        FamilyMembership currentMembership = FamilyMembership.createLeaderMembership(family, guardian);
+        FamilyMembership newMembership = FamilyMembership.createMembership(family, newGuardian, 1);
         given(memberUtil.getCurrentMember()).willReturn(guardian);
-        given(guardian.getId()).willReturn(1L);
-        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(myMembership));
-        given(myMembership.isLeader()).willReturn(true);
-        given(myMembership.getFamily()).willReturn(family);
-        given(family.getId()).willReturn(10L);
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L))
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(currentMembership));
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L))
                 .willReturn(List.of(currentMembership, newMembership));
-        given(currentMembership.getGuardian()).willReturn(currentGuardian);
-        given(currentGuardian.getId()).willReturn(1L);
-        given(newMembership.getGuardian()).willReturn(newGuardianMember);
-        given(newGuardianMember.getId()).willReturn(2L);
 
         // when
         guardianMyPageService.changeLeader(2L);
 
         // then
-        verify(newMembership).setLeader(true);
-        verify(currentMembership).setLeader(false);
+        assertThat(currentMembership.isLeader()).isFalse();
+        assertThat(newMembership.isLeader()).isTrue();
+        assertThat(currentMembership.isRepresentative()).isTrue();
+        assertThat(newMembership.isRepresentative()).isFalse();
+        InOrder lockOrder = inOrder(familyMembershipRepository, entityManager, familyRepository);
+        lockOrder.verify(familyMembershipRepository).findFamilyIdByGuardianId(1L);
+        lockOrder.verify(entityManager).clear();
+        lockOrder.verify(familyRepository).findByIdForUpdate(10L);
+        lockOrder.verify(familyMembershipRepository).findByFamilyIdAndGuardianIdForUpdate(10L, 1L);
+        lockOrder.verify(familyMembershipRepository).findAllByFamilyIdForUpdate(10L);
+        verify(familyMembershipRepository).findAllByFamilyIdForUpdate(10L);
+        verify(familyMembershipRepository, never()).findAllByFamilyIdWithGuardian(10L);
+        verify(eventPublisher).publishEvent(FamilyLeaderChangedEvent.of(2L));
     }
 
     @Test
@@ -774,11 +795,12 @@ class GuardianMyPageServiceTest {
 
         given(memberUtil.getCurrentMember()).willReturn(guardian);
         given(guardian.getId()).willReturn(1L);
-        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(myMembership));
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(myMembership));
         given(myMembership.isLeader()).willReturn(true);
-        given(myMembership.getFamily()).willReturn(family);
-        given(family.getId()).willReturn(10L);
-        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(10L))
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L))
                 .willReturn(List.of(membership));
         given(membership.getGuardian()).willReturn(connectedGuardian);
         given(connectedGuardian.getId()).willReturn(2L);
@@ -786,6 +808,7 @@ class GuardianMyPageServiceTest {
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.changeLeader(999L))
                 .isInstanceOf(BusinessException.class);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -794,15 +817,188 @@ class GuardianMyPageServiceTest {
         // given
         Member guardian = mock(Member.class);
         FamilyMembership myMembership = mock(FamilyMembership.class);
+        Family family = mock(Family.class);
 
         given(memberUtil.getCurrentMember()).willReturn(guardian);
         given(guardian.getId()).willReturn(1L);
-        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(myMembership));
-        given(myMembership.isLeader()).willReturn(false);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(myMembership));
 
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.changeLeader(2L))
                 .isInstanceOf(BusinessException.class);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("방장이 자신을 새 방장으로 지정하면 예외가 발생한다")
+    void 방장이_자신을_지정하면_예외가_발생한다() {
+        // given
+        Member guardian = mock(Member.class);
+        FamilyMembership membership = mock(FamilyMembership.class);
+        Family family = mock(Family.class);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(guardian.getId()).willReturn(1L);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(membership));
+        given(membership.isLeader()).willReturn(true);
+
+        // when / then
+        assertThatThrownBy(() -> guardianMyPageService.changeLeader(1L))
+                .isInstanceOf(BusinessException.class);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("방장이 보호자 전원을 정렬하면 목록 순서가 바뀌고 revision이 증가한다")
+    void 방장이_보호자_전원을_정렬하면_순서와_revision이_증가한다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member first = Member.createMember(MemberType.GUARDIAN, "방장", "01011112222");
+        Member second = Member.createMember(MemberType.GUARDIAN, "보호자", "01033334444");
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        FamilyMembership leader = FamilyMembership.createLeaderMembership(family, first);
+        FamilyMembership other = FamilyMembership.createMembership(family, second, 1);
+        given(memberUtil.getCurrentMember()).willReturn(first);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(leader));
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L)).willReturn(List.of(leader, other));
+
+        // when
+        var response = guardianMyPageService.updateGuardianOrder(new GuardianOrderUpdateRequest(List.of(2L, 1L)));
+
+        // then
+        assertThat(other.getSortOrder()).isZero();
+        assertThat(leader.getSortOrder()).isEqualTo(1);
+        assertThat(response.familyOrderRevision()).isEqualTo(1);
+        assertThat(family.getFamilyOrderRevision()).isEqualTo(1);
+        InOrder lockOrder = inOrder(familyMembershipRepository, entityManager, familyRepository);
+        lockOrder.verify(familyMembershipRepository).findFamilyIdByGuardianId(1L);
+        lockOrder.verify(entityManager).clear();
+        lockOrder.verify(familyRepository).findByIdForUpdate(10L);
+        lockOrder.verify(familyMembershipRepository).findByFamilyIdAndGuardianIdForUpdate(10L, 1L);
+        lockOrder.verify(familyMembershipRepository).findAllByFamilyIdForUpdate(10L);
+        verify(familyMembershipRepository).findAllByFamilyIdForUpdate(10L);
+        verify(familyMembershipRepository, never()).findAllByFamilyIdWithGuardian(10L);
+    }
+
+    @Test
+    @DisplayName("보호자 ID가 중복되면 순서와 revision이 바뀌지 않고 예외가 발생한다")
+    void 보호자_ID가_중복되면_순서와_revision이_바뀌지_않는다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member first = Member.createMember(MemberType.GUARDIAN, "방장", "01011112222");
+        Member second = Member.createMember(MemberType.GUARDIAN, "보호자", "01033334444");
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        FamilyMembership leader = FamilyMembership.createLeaderMembership(family, first);
+        FamilyMembership other = FamilyMembership.createMembership(family, second, 1);
+        given(memberUtil.getCurrentMember()).willReturn(first);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(leader));
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L)).willReturn(List.of(leader, other));
+
+        // when / then
+        assertThatThrownBy(() -> guardianMyPageService.updateGuardianOrder(
+                new GuardianOrderUpdateRequest(List.of(1L, 1L))))
+                .isInstanceOf(BusinessException.class);
+        assertThat(leader.getSortOrder()).isZero();
+        assertThat(other.getSortOrder()).isEqualTo(1);
+        assertThat(family.getFamilyOrderRevision()).isZero();
+    }
+
+    @Test
+    @DisplayName("비방장이 보호자 순서를 바꾸면 접근 거부 예외가 발생한다")
+    void 비방장이_보호자_순서를_바꾸면_예외가_발생한다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01033334444");
+        ReflectionTestUtils.setField(guardian, "id", 2L);
+        FamilyMembership membership = FamilyMembership.createMembership(family, guardian);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(2L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 2L))
+                .willReturn(Optional.of(membership));
+
+        // when / then
+        assertThatThrownBy(() -> guardianMyPageService.updateGuardianOrder(
+                new GuardianOrderUpdateRequest(List.of(2L))))
+                .isInstanceOf(BusinessException.class);
+        assertThat(family.getFamilyOrderRevision()).isZero();
+    }
+
+    @Test
+    @DisplayName("보호자 목록에 누락되거나 가족 밖 ID가 있으면 순서와 revision이 바뀌지 않는다")
+    void 보호자_목록이_정확하지_않으면_순서와_revision이_바뀌지_않는다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member first = Member.createMember(MemberType.GUARDIAN, "방장", "01011112222");
+        Member second = Member.createMember(MemberType.GUARDIAN, "보호자", "01033334444");
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        FamilyMembership leader = FamilyMembership.createLeaderMembership(family, first);
+        FamilyMembership other = FamilyMembership.createMembership(family, second, 1);
+        given(memberUtil.getCurrentMember()).willReturn(first);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(leader));
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L)).willReturn(List.of(leader, other));
+
+        // when / then
+        List<GuardianOrderUpdateRequest> invalidRequests = Arrays.asList(
+                new GuardianOrderUpdateRequest(null),
+                new GuardianOrderUpdateRequest(List.of()),
+                new GuardianOrderUpdateRequest(List.of(1L)),
+                new GuardianOrderUpdateRequest(List.of(1L, 99L)),
+                new GuardianOrderUpdateRequest(Arrays.asList(1L, null)));
+        for (GuardianOrderUpdateRequest request : invalidRequests) {
+            assertThatThrownBy(() -> guardianMyPageService.updateGuardianOrder(request))
+                    .isInstanceOf(BusinessException.class);
+            assertThat(leader.getSortOrder()).isZero();
+            assertThat(other.getSortOrder()).isEqualTo(1);
+            assertThat(family.getFamilyOrderRevision()).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("같은 보호자 순서를 다시 저장하면 revision이 다시 증가한다")
+    void 같은_보호자_순서를_다시_저장하면_revision이_증가한다() {
+        // given
+        Family family = Family.createFamily("ABC123");
+        ReflectionTestUtils.setField(family, "id", 10L);
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "방장", "01011112222");
+        ReflectionTestUtils.setField(guardian, "id", 1L);
+        FamilyMembership membership = FamilyMembership.createLeaderMembership(family, guardian);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(familyMembershipRepository.findFamilyIdByGuardianId(1L)).willReturn(Optional.of(10L));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(family));
+        given(familyMembershipRepository.findByFamilyIdAndGuardianIdForUpdate(10L, 1L))
+                .willReturn(Optional.of(membership));
+        given(familyMembershipRepository.findAllByFamilyIdForUpdate(10L)).willReturn(List.of(membership));
+
+        // when
+        var first = guardianMyPageService.updateGuardianOrder(new GuardianOrderUpdateRequest(List.of(1L)));
+        var second = guardianMyPageService.updateGuardianOrder(new GuardianOrderUpdateRequest(List.of(1L)));
+
+        // then
+        assertThat(first.familyOrderRevision()).isEqualTo(1);
+        assertThat(second.familyOrderRevision()).isEqualTo(2);
+        assertThat(family.getFamilyOrderRevision()).isEqualTo(2);
     }
 
     // ======================== 가족 멤버 삭제 ========================
@@ -850,6 +1046,7 @@ class GuardianMyPageServiceTest {
 
         // then
         verify(familyMembershipRepository).delete(targetMembership);
+        verify(familyRepository).incrementOrderRevision(10L);
     }
 
     @Test

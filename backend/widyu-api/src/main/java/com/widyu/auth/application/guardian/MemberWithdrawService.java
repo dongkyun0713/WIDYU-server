@@ -102,6 +102,8 @@ public class MemberWithdrawService {
             familyRepository.deleteById(familyId);
             return;
         }
+        Long familyId = membership.getFamily().getId();
         familyMembershipRepository.deleteByGuardianId(guardianId);
+        familyRepository.incrementOrderRevision(familyId);
     }
 }

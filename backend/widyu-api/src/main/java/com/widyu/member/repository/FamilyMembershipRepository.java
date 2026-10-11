@@ -1,9 +1,11 @@
 package com.widyu.member.repository;
 
 import com.widyu.member.FamilyMembership;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,6 +20,11 @@ public interface FamilyMembershipRepository extends JpaRepository<FamilyMembersh
 
     Optional<FamilyMembership> findByFamilyIdAndGuardianId(Long familyId, Long guardianId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT fm FROM FamilyMembership fm WHERE fm.family.id = :familyId AND fm.guardian.id = :guardianId")
+    Optional<FamilyMembership> findByFamilyIdAndGuardianIdForUpdate(
+            @Param("familyId") Long familyId, @Param("guardianId") Long guardianId);
+
     boolean existsByFamilyIdAndGuardianId(Long familyId, Long guardianId);
 
     boolean existsByFamilyIdAndGuardianIdAndIsLeaderTrue(Long familyId, Long guardianId);
@@ -28,6 +35,17 @@ public interface FamilyMembershipRepository extends JpaRepository<FamilyMembersh
 
     @Query("SELECT fm FROM FamilyMembership fm JOIN FETCH fm.guardian WHERE fm.family.id = :familyId")
     List<FamilyMembership> findAllByFamilyIdWithGuardian(@Param("familyId") Long familyId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT fm FROM FamilyMembership fm WHERE fm.family.id = :familyId ORDER BY fm.id ASC")
+    List<FamilyMembership> findAllByFamilyIdForUpdate(@Param("familyId") Long familyId);
+
+    @Query("SELECT fm FROM FamilyMembership fm JOIN FETCH fm.guardian WHERE fm.family.id = :familyId " +
+           "ORDER BY fm.sortOrder ASC, fm.connectedAt ASC, fm.id ASC")
+    List<FamilyMembership> findAllByFamilyIdWithGuardianOrdered(@Param("familyId") Long familyId);
+
+    @Query("SELECT COALESCE(MAX(fm.sortOrder), -1) FROM FamilyMembership fm WHERE fm.family.id = :familyId")
+    int findMaxSortOrderByFamilyId(@Param("familyId") Long familyId);
 
     @Query("SELECT COUNT(fm) > 0 FROM FamilyMembership fm " +
            "JOIN SeniorProfile sp ON sp.family.id = fm.family.id " +
