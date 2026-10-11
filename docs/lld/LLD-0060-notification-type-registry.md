@@ -41,10 +41,12 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
     "token": "<device-token>",
     "notification": {"title": "홍길동 님의 심박 상태를 확인해주세요.", "body": "평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요."},
     "data": {
-      "eventId": "8e7313ab-2c55-40f9-9b22-282d96846bdb",
+      "eventId": "inc-0123456789abcdef0123456789abcdef",
+      "safetyEventId": "inc-0123456789abcdef0123456789abcdef",
+      "deliveryStage": "INITIAL_ALERT",
       "type": "HEART_RATE_EMERGENCY", "priority": "critical",
       "notificationId": "4072", "deepLink": "/location?seniorId=17",
-      "foregroundPresentation": "BANNER", "seniorId": "17"
+      "foregroundPresentation": "MODAL", "seniorId": "17"
     },
     "android": {"ttl": "300s", "priority": "high", "notification": {"channel_id": "widyu_safety"}},
     "apns": {"headers": {"apns-expiration": "1790806700", "apns-priority": "10", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "time-sensitive"}}}
@@ -74,6 +76,8 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
 
 FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLink`, `foregroundPresentation`이다. `revision`, `effectiveFromDate`, `actorDisplayName`은 해당 이벤트에만 추가하며, 목적지에 따라 `entityId`·`seniorId`도 실을 수 있다. `deepLink`가 없으면 빈 문자열을 보내고 FE router가 폴백한다. **W2의 `notificationId`는 아직 outbox 행 ID**다. W3가 센터 저장 타입은 센터 행 ID로 교체하고 센터 미저장 타입은 키를 생략한다. W2에서 한 enqueue 호출의 여러 기기는 같은 `eventId`를 공유하며, 호출자가 명시한 eventId가 있으면 우선한다. `DATA_ONLY`는 top-level `notification` 없이 보내고 APNs는 `apns-priority=5`, `apns-push-type=background`, `aps.content-available=1`을 쓴다.
 
+W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=INITIAL_ALERT`를 추가한다. `HEART_RATE_EMERGENCY`의 앱 사용 중 표시는 `MODAL`이며, M02·M03·H01은 `interaction`, M04만 `timeSensitive`라는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)의 구현 가정을 적용한다.
+
 ## 4. 데이터 모델
 
 `FcmOutbox`(`widyu-domain/com.widyu.fcm`)에 `notification_type VARCHAR(48) NULL`과 `data_payload TEXT NULL`을 더한다. enum 필드는 `@Enumerated(EnumType.STRING)`과 `@JdbcTypeCode(SqlTypes.VARCHAR)`를 함께 써 native ENUM 생성을 피한다. `data_payload`는 enqueue 시점의 data 맵 전체를 저장한 JSON 객체 문자열이다. 키·값은 문자열이며 빈 맵은 `{}`다. 기존 `data_type`·`data_revision` 컬럼은 레거시 복원을 위해 유지한다. 센터 테이블은 W3에서 바꾼다.
@@ -95,11 +99,11 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 | 4 | `ALBUM_LIKED` | ALBUM | ALBUM | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `widyu://albums/{entityId}` | A05 |
 | 5 | `ALBUM_UNLOCKED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/post?postId={entityId}` | A06-L/Z |
 | 6 | `ALBUM_ALL_VIEWED` | ALBUM | ALBUM | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/album` | A07 |
-| 8 | `MEDICATION_REMINDER_10` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M02 |
-| 9 | `MEDICATION_REMINDER_20` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M03 |
+| 8 | `MEDICATION_REMINDER_10` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M02 |
+| 9 | `MEDICATION_REMINDER_20` | MEDICINE_SCHEDULE | (GOAL) | PUSH_ONLY | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/proof/{entityId}` | M03 |
 | 10 | `MEDICATION_PROOF_MISSING` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | MEDICATION_CHECK | BANNER | `/goal/medicine?seniorId={seniorId}` | M04 |
 | 11 | `MEDICATION_SCHEDULE_CHANGED` | MEDICINE_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://medication/schedules` | M05 |
-| 12 | `HEALTH_SCHEDULE_UPCOMING` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | timeSensitive | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H01-S/C-SELF/C-SENIOR-OS/INAPP |
+| 12 | `HEALTH_SCHEDULE_UPCOMING` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://health/schedules/{entityId}` | H01-S/C-SELF/C-SENIOR-OS/INAPP |
 | 13 | `WALK_GOAL_UNMET` | WALK | (GOAL) | PUSH_ONLY | passive | ROUTINE_90D | GENERAL | BANNER | `widyu://walk/goal` | W01 |
 | 14a | `GOAL_ACHIEVED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals/{entityId}` | G01-S/C |
 | 14b | `GOALS_ACHIEVED_GROUPED` | TARGET | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://goals` | G02-S/C |
@@ -108,7 +112,7 @@ FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLin
 | 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X01-OS/INAPP |
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `widyu://messages/{entityId}` | X02-OS/INAPP |
 | 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | `widyu://incident/{entityId}` (`entityId=incident_ref`) | S01/S02 |
-| 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | BANNER | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
+| 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
 | 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | critical | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | S02/S03/S05/S07 |
 | 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S08 |
 | 20b | `SAFETY_SENIOR_OK_NOTICE_SAFE_ZONE` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S09 |

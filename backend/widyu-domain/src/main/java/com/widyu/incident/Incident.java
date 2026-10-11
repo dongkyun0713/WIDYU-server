@@ -52,6 +52,8 @@ import org.hibernate.type.SqlTypes;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Incident extends BaseTimeEntity {
 
+    private static final long SAFETY_POLICY_REVISION_2026_10_05 = 20261005L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "incident_id")
@@ -169,6 +171,7 @@ public class Incident extends BaseTimeEntity {
         this.level = level;
         this.openedAtMs = openedAtMs;
         this.respondByMs = respondByMs;
+        this.policyRevision = SAFETY_POLICY_REVISION_2026_10_05;
         this.state = IncidentState.OPEN;
     }
 

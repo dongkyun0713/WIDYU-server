@@ -8,8 +8,10 @@ import static org.mockito.BDDMockito.willAnswer;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.MemberFcmToken;
+import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmDeliveryProperties;
+import com.widyu.fcm.application.FcmDelivery;
 import com.widyu.fcm.application.FcmEligibility;
 import com.widyu.fcm.application.FcmOutboxDispatcher;
 import com.widyu.fcm.application.FcmOutboxService;
@@ -46,6 +48,7 @@ import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,6 +81,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
     @Autowired private FamilyMembershipRepository memberships;
     @Autowired private SeniorProfileRepository seniorProfiles;
     @Autowired private FcmOutboxService outboxService;
+    @Autowired private IncidentEscalation escalation;
     @Autowired private IncidentService incidentService;
     @MockBean private FollowupCardService followupCardService;
     @MockBean private FcmService fcmService;
@@ -91,6 +95,87 @@ class HeartRateEmergencyAfterCommitOutboxTest {
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("심박 저장 커밋 뒤 60초 무응답을 처리하면 현재 방장에게만 최초 알림을 남긴다")
+    void 심박_저장_커밋_뒤_무응답을_처리하면_현재_방장에게만_최초_알림을_남긴다() {
+        // given
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        Long[] ids = transactions.execute(status -> {
+            Family family = families.save(Family.createFamily("FAM735"));
+            Member senior = members.save(Member.createMember(MemberType.SENIOR, "시니어", "01000000735"));
+            Member leader = members.save(Member.createMember(MemberType.GUARDIAN, "방장", "01000000736"));
+            Member nonLeader = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01000000737"));
+            seniorProfiles.save(SeniorProfile.createSeniorProfile(senior, family, "서울", "INV0735",
+                    LocalDate.of(1950, 1, 1)));
+            memberships.save(FamilyMembership.createLeaderMembership(family, leader));
+            memberships.save(FamilyMembership.createMembership(family, nonLeader));
+            tokens.save(MemberFcmToken.builder().member(senior).token("senior-735").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(leader).token("leader-735").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(nonLeader).token("guardian-735").active(true).build());
+            return new Long[] {senior.getId(), leader.getId(), nonLeader.getId(), family.getId()};
+        });
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
+        given(eligibility.familyId(ids[0])).willReturn(ids[3]);
+        given(eligibility.sameActiveFamily(ids[2], ids[0], ids[3])).willReturn(true);
+        willAnswer(invocation -> {
+            outboxService.enqueue(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).given(fcmService).sendMessageToUser(anyLong(), any());
+
+        // when
+        transactions.executeWithoutResult(status -> {
+            Member senior = members.findById(ids[0]).orElseThrow();
+            heartEvents.save(HeartRateEvent.of(senior, 180, LocalDateTime.of(2026, 10, 2, 3, 5),
+                    HeartRateStatus.EMERGENCY, null, null));
+            publisher.publishEvent(new HeartRateEmergencyEvent(ids[0], null));
+        });
+        Incident opened = incidents.findAll().stream().filter(row -> row.getMemberId().equals(ids[0]))
+                .findFirst().orElseThrow();
+        assertThat(opened.getInitialAlertSentAtMs()).isNull();
+        assertThat(opened.getPolicyRevision()).isEqualTo(20261005L);
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], opened.getIncidentRef())).isEmpty();
+        transactions.executeWithoutResult(status -> {
+            for (FamilyMembership membership : memberships.findAllByFamilyIdWithGuardian(ids[3])) {
+                if (membership.getGuardian().getId().equals(ids[1])) {
+                    membership.setLeader(false);
+                } else {
+                    membership.setLeader(true);
+                }
+            }
+        });
+        assertThat(escalation.escalateIfDue(opened.getId(), opened.getRespondByMs() + 1)).isTrue();
+
+        // then
+        Incident alerted = incidents.findById(opened.getId()).orElseThrow();
+        assertThat(alerted.getState()).isEqualTo(IncidentState.ESCALATED);
+        assertThat(alerted.getInitialAlertSentAtMs()).isEqualTo(opened.getRespondByMs() + 1);
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[2], opened.getIncidentRef()))
+                .hasValueSatisfying(center -> assertThat(center.getType())
+                        .isEqualTo(NotificationType.HEART_RATE_EMERGENCY));
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], opened.getIncidentRef())).isEmpty();
+        List<FcmOutbox> alerts = outbox.findAll().stream()
+                .filter(row -> row.getNotificationType() == NotificationType.HEART_RATE_EMERGENCY)
+                .filter(row -> row.getRelatedMemberId().equals(ids[0]))
+                .toList();
+        assertThat(alerts).hasSize(1);
+        assertThat(alerts.getFirst().getRecipientMember().getId()).isEqualTo(ids[2]);
+        FcmDelivery restored = transactions.execute(status ->
+                FcmDelivery.from(outbox.findById(alerts.getFirst().getId()).orElseThrow()));
+        assertThat(restored.message().data())
+                .containsEntry("deliveryStage", "INITIAL_ALERT")
+                .containsEntry("safetyEventId", opened.getIncidentRef())
+                .containsEntry("eventId", opened.getIncidentRef())
+                .containsEntry("foregroundPresentation", "MODAL");
+        FcmDelivery restoredAgain = transactions.execute(status ->
+                FcmDelivery.from(outbox.findById(alerts.getFirst().getId()).orElseThrow()));
+        assertThat(restoredAgain.message().data()).isEqualTo(restored.message().data());
+        assertThat(escalation.escalateIfDue(opened.getId(), opened.getRespondByMs() + 2)).isFalse();
+        assertThat(outbox.findAll().stream().filter(row -> row.getNotificationType()
+                == NotificationType.HEART_RATE_EMERGENCY && row.getRelatedMemberId().equals(ids[0]))).hasSize(1);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     @DisplayName("커밋 뒤 같은 심박 감지가 이어지고 OK로 답하면 사건 하나와 S08 센터 한 건이 남는다")
     void 커밋_뒤_같은_심박_감지가_이어지고_OK로_답하면_사건_하나와_S08이_남는다() {
         // given
@@ -101,7 +186,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             Member guardian = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01000000709"));
             seniorProfiles.save(SeniorProfile.createSeniorProfile(senior, family, "서울", "INV0708",
                     LocalDate.of(1950, 1, 1)));
-            memberships.save(FamilyMembership.createMembership(family, guardian));
+            memberships.save(FamilyMembership.createLeaderMembership(family, guardian));
             tokens.save(MemberFcmToken.builder().member(senior).token("senior-708").active(true).build());
             tokens.save(MemberFcmToken.builder().member(guardian).token("guardian-708").active(true).build());
             return new Long[] {senior.getId(), guardian.getId(), family.getId()};
@@ -126,6 +211,11 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         });
         long firstOutboxCount = outbox.count();
         transactions.executeWithoutResult(status -> {
+            Incident first = incidents.findAll().stream()
+                    .filter(row -> row.getMemberId().equals(ids[0])).findFirst().orElseThrow();
+            ReflectionTestUtils.setField(first, "policyRevision", 20261004L);
+        });
+        transactions.executeWithoutResult(status -> {
             Member senior = members.findById(ids[0]).orElseThrow();
             heartEvents.save(HeartRateEvent.of(senior, 181, LocalDateTime.of(2026, 10, 2, 3, 2),
                     HeartRateStatus.EMERGENCY, null, null));
@@ -133,6 +223,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         });
         Incident incident = incidents.findAll().stream().filter(row -> row.getMemberId().equals(ids[0]))
                 .findFirst().orElseThrow();
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())).isEmpty();
         transactions.executeWithoutResult(status -> incidentService.respond(ids[0], incident.getIncidentRef(),
                 new IncidentRespondRequest(IncidentResponseValue.OK, ResponseVia.PHONE)));
 
@@ -140,7 +231,9 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         Incident answered = incidents.findById(incident.getId()).orElseThrow();
         assertThat(incidents.count()).isEqualTo(previousIncidents + 1);
         assertThat(answered.getDetectionCount()).isEqualTo(2);
+        assertThat(answered.getPolicyRevision()).isEqualTo(20261004L);
         assertThat(answered.getState()).isEqualTo(IncidentState.OK_CLOSED);
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())).isEmpty();
         assertThat(answered.getOkNoticeSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(firstOutboxCount + 1);
         assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef() + ":OK")
@@ -196,11 +289,14 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             Family family = families.save(Family.createFamily("FAM706"));
             Member senior = members.save(Member.createMember(MemberType.SENIOR, "시니어", "01000000011"));
             Member guardian = members.save(Member.createMember(MemberType.GUARDIAN, "보호자", "01000000012"));
+            Member nonLeader = members.save(Member.createMember(MemberType.GUARDIAN, "비방장", "01000000014"));
             seniorProfiles.save(SeniorProfile.createSeniorProfile(senior, family, "서울", "INV0706",
                     LocalDate.of(1950, 1, 1)));
-            memberships.save(FamilyMembership.createMembership(family, guardian));
+            memberships.save(FamilyMembership.createLeaderMembership(family, guardian));
+            memberships.save(FamilyMembership.createMembership(family, nonLeader));
             tokens.save(MemberFcmToken.builder().member(senior).token("senior-token").active(true).build());
             tokens.save(MemberFcmToken.builder().member(guardian).token("guardian-token").active(true).build());
+            tokens.save(MemberFcmToken.builder().member(nonLeader).token("nonleader-token").active(true).build());
             long oldOpenedAtMs = System.currentTimeMillis() - Duration.ofMinutes(6).toMillis();
             Incident old = Incident.builder().incidentRef("inc-old-706").memberId(senior.getId())
                     .kind(IncidentKind.HR_ANOMALY).openedAtMs(oldOpenedAtMs)
@@ -208,7 +304,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             ReflectionTestUtils.setField(old, "state", IncidentState.ESCALATED);
             old.markInitialAlertSent(oldOpenedAtMs);
             incidents.save(old);
-            return new Long[] {senior.getId(), guardian.getId(), family.getId(), old.getId()};
+            return new Long[] {senior.getId(), guardian.getId(), family.getId(), old.getId(), nonLeader.getId()};
         });
         given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
@@ -249,6 +345,9 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(center.getType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
         assertThat(center.getSeniorId()).isEqualTo(ids[0]);
         assertThat(center.getEventId()).isEqualTo(incident.getIncidentRef());
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[4], incident.getIncidentRef())).isEmpty();
+        assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(ids[4]))
+                .toList()).isEmpty();
     }
 
     @Test

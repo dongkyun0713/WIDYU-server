@@ -396,7 +396,7 @@ erDiagram
         String guardianResponseType "MESSAGE_SENT / CALL_INITIATED"
         Long guardianResponseAtMs
         Long guardianResponseBy
-        Long policyRevision
+        Long policyRevision "신규 사건 정책판 20261005; 기존 NULL 허용"
         String responseVia "WATCH / PHONE"
         String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
         String outcome "TRUE_EMERGENCY / FALSE_ALARM / UNKNOWN. 실증 학습 라벨"
