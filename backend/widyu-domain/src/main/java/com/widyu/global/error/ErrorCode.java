@@ -195,13 +195,22 @@ public enum ErrorCode {
 
     // 잘못된 요청
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "REQ_4000", "잘못된 요청입니다."),
+    // 입력 오류를 원인별로 나눈다(LLD-0085). 400 응답은 errors에 필드별 사유를 함께 담는다.
+    INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "REQ_4001", "입력값을 확인해 주세요."),
+    INVALID_REQUEST_FORMAT(HttpStatus.BAD_REQUEST, "REQ_4002", "요청 형식이 올바르지 않습니다."),
+    MISSING_REQUIRED_VALUE(HttpStatus.BAD_REQUEST, "REQ_4003", "필수 요청 값이 없습니다."),
+    INPUT_TOO_LONG(HttpStatus.BAD_REQUEST, "REQ_4004", "입력값이 허용 길이를 넘었습니다."),
+    DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "REQ_4090", "이미 처리된 요청이거나 중복된 데이터입니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "REQ_4050", "지원하지 않는 HTTP 메서드입니다."),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "REQ_4130", "요청 크기가 허용 범위를 초과했습니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "REQ_4150", "지원하지 않는 미디어 타입입니다."),
 
     // 서버 오류
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SRV_5000", "서버 내부 오류가 발생했습니다."),
+    DATA_INTEGRITY_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SRV_5001", "데이터를 저장하지 못했습니다."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "SRV_5030", "현재 서비스를 사용할 수 없습니다."),
+    TEMPORARILY_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "SRV_5031", "요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+    DEPENDENCY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "SRV_5032", "일시적으로 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "SRV_4040", "찾을 수 없습니다");
     ;
 

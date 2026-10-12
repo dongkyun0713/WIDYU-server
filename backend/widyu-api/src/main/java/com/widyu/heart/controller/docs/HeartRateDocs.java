@@ -274,9 +274,12 @@ public interface HeartRateDocs {
                                     name = "메시지 초과",
                                     value = """
                                             {
-                                              "code": "REQ_4000",
-                                              "message": "메시지는 50자 이내로 입력해주세요.",
-                                              "data": null
+                                              "code": "REQ_4001",
+                                              "message": "메시지는 50자 이내로 입력해주세요 (message)",
+                                              "data": null,
+                                              "errors": [
+                                                {"field": "message", "reason": "메시지는 50자 이내로 입력해주세요."}
+                                              ]
                                             }
                                             """
                             ),
@@ -284,9 +287,12 @@ public interface HeartRateDocs {
                                     name = "필수값 누락",
                                     value = """
                                             {
-                                              "code": "REQ_4000",
-                                              "message": "받는 사람 ID는 필수입니다.",
-                                              "data": null
+                                              "code": "REQ_4001",
+                                              "message": "받는 사람 ID는 필수입니다 (receiverId)",
+                                              "data": null,
+                                              "errors": [
+                                                {"field": "receiverId", "reason": "받는 사람 ID는 필수입니다."}
+                                              ]
                                             }
                                             """
                             )
