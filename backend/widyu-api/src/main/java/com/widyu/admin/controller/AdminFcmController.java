@@ -8,6 +8,7 @@ import com.widyu.admin.dto.request.AdminPointGrantRequest;
 import com.widyu.admin.dto.response.AdminLogEntryResponse;
 import com.widyu.admin.dto.response.AdminMemberResponse;
 import com.widyu.global.response.ApiResponseTemplate;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
@@ -45,7 +46,7 @@ public class AdminFcmController {
     }
 
     @PostMapping("/fcm/test")
-    public ApiResponseTemplate<String> sendTestNotification(@RequestBody AdminFcmTestRequest request) {
+    public ApiResponseTemplate<String> sendTestNotification(@Valid @RequestBody AdminFcmTestRequest request) {
         String result = adminFcmService.sendTestNotification(request);
         return ApiResponseTemplate.ok()
                 .code("200")
@@ -70,7 +71,7 @@ public class AdminFcmController {
     }
 
     @PostMapping("/dev/points")
-    public ApiResponseTemplate<Long> grantPoints(@RequestBody AdminPointGrantRequest request) {
+    public ApiResponseTemplate<Long> grantPoints(@Valid @RequestBody AdminPointGrantRequest request) {
         long newBalance = adminPointGrantService.grant(request.memberId(), request.amount());
         return ApiResponseTemplate.ok()
                 .code("200")

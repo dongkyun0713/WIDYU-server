@@ -5,6 +5,7 @@ import com.widyu.album.application.AlbumCalendarService;
 import com.widyu.album.dto.FamilyAlbumPageResponse;
 import com.widyu.global.response.ApiResponseTemplate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,13 +34,12 @@ public class AlbumCalendarController implements AlbumCalendarDocs {
 
     @GetMapping("/family")
     public ApiResponseTemplate<FamilyAlbumPageResponse> getFamilyAlbumsByDate(
-            @RequestParam String date,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long cursor
     ) {
-        LocalDate localDate = LocalDate.parse(date);
         return ApiResponseTemplate.ok()
                 .code("200")
                 .message("OK")
-                .body(albumCalendarService.getFamilyAlbumsByDateWithCursor(localDate, cursor));
+                .body(albumCalendarService.getFamilyAlbumsByDateWithCursor(date, cursor));
     }
 }

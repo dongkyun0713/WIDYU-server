@@ -60,7 +60,7 @@ public class HealthScheduleController implements HealthScheduleDocs {
     @PatchMapping("/{healthScheduleId}")
     public ApiResponseTemplate<HealthScheduleResponse> updateHealthSchedule(
             @PathVariable Long healthScheduleId,
-            @RequestBody HealthScheduleUpdateRequest request
+            @Valid @RequestBody HealthScheduleUpdateRequest request
     ) {
         HealthScheduleResponse response = healthScheduleFacade.updateHealthSchedule(healthScheduleId, request);
 
@@ -146,7 +146,7 @@ public class HealthScheduleController implements HealthScheduleDocs {
 
     @PostMapping("/complete")
     public ApiResponseTemplate<Void> completeSchedule(
-            @RequestBody HealthScheduleCompleteRequest request
+            @Valid @RequestBody HealthScheduleCompleteRequest request
     ) {
         healthScheduleFacade.completeSchedule(request.healthScheduleId());
 

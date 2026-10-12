@@ -2,6 +2,7 @@ package com.widyu.album.dto.request;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 
@@ -16,6 +17,14 @@ public record AlbumFeedRequest(
 
     public boolean hasDate() {
         return date != null && !date.trim().isEmpty();
+    }
+
+    public LocalDate parsedDate() {
+        try {
+            return LocalDate.parse(date);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "날짜 형식은 yyyy-MM-dd 이어야 합니다.");
+        }
     }
 
     public static AlbumFeedRequest from(String cursor, String date) {

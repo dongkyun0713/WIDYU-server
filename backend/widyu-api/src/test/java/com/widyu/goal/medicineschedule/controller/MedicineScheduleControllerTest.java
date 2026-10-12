@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -154,6 +155,16 @@ class MedicineScheduleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.scheduleRevision").value(9))
                 .andExpect(jsonPath("$.data.effectiveFromDate").value("2026-10-02"));
+    }
+
+    @Test
+    @DisplayName("월별 통계 조회 월이 13이면 400을 반환한다")
+    void 월별_통계_조회_월이_13이면_400을_반환한다() throws Exception {
+        // when / then
+        mockMvc().perform(get(BASE_PATH + "/monthly").param("year", "2026").param("month", "13"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("month는 1 이상 12 이하여야 합니다."));
+        then(medicineScheduleService).shouldHaveNoInteractions();
     }
 
     @Test
