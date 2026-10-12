@@ -82,6 +82,10 @@ Grafana와 relay는 아래 형식에 의존한다. 로그 패턴(`application.ym
 | DEV 푸시 발송 실패 | `[FCM_FAILED]` | `type`, `emergency`, `reason` | 📵 푸시 알림 발송 실패 · 종류 | X |
 | DEV 기타 ERROR | 위에 해당하지 않는 ERROR | `logger` | ⚠️ 에러 로그 · 로거 | O |
 
+**5xx 응답은 예외 종류와 상관없이 API 실패다.** 응답이 5xx인 `BusinessException`(결제·파일 업로드·외부 연동 실패)도 `[EXCEPTION]`으로 남는다.
+
+소셜 로그인·S3·SMS 코드는 `BusinessException`을 던지기 직전에 따로 ERROR를 남긴다. 그래서 같은 실패가 API 실패와 기타 ERROR로 두 번 잡힐 수 있다. relay는 기타 ERROR의 대표 로그에서 같은 traceId로 이미 `[EXCEPTION]`이 있는 줄을 빼고, 남는 줄이 없으면 기타 알림을 보내지 않는다. 요청 밖(비동기·리스너, traceId=none)의 ERROR는 그 로그가 유일한 기록이므로 그대로 알린다.
+
 **레이블에는 요청마다 달라지는 값을 두지 않는다.** Grafana는 레이블 조합 하나를 알림 하나로 본다. traceId나 회원 ID를 레이블로 두면 요청마다 알림이 새로 생긴다. 이런 값은 relay가 Loki에서 다시 읽는다.
 
 LogQL `regexp`는 패턴이 맞지 않는 줄을 거르지 않고 레이블만 비운다. 그래서 모든 규칙은 먼저 줄 필터로 형식을 맞추고, regexp 뒤에 `| <레이블> != ""`로 빈 레이블 줄을 버린다. provisioning 파일은 `$`를 환경변수로 치환하므로 템플릿 변수는 `$$`로 쓴다.

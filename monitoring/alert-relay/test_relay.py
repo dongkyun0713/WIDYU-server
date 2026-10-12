@@ -21,6 +21,8 @@ if "anthropic" not in sys.modules:
 
 import relay  # noqa: E402
 
+REAL_FETCH_SOURCE = relay.fetch_source
+
 SHA_A = "a" * 40
 SHA_B = "b" * 40
 FRAME_FILE = "backend/widyu-api/src/main/java/com/widyu/fcm/application/FcmOutboxTransactions.java"
@@ -252,6 +254,49 @@ class AnalysisReuseTest(StoreCase):
         self.store.backup(target)
         restored = sqlite3.connect(target).execute("SELECT COUNT(*) FROM ai_analyses").fetchone()[0]
         self.assertEqual(restored, 1)
+
+
+class DetailQueryTest(unittest.TestCase):
+    def test_queries_include_every_identity_label(self):
+        api = relay.detail_query("api", dict(API_LABELS))
+        self.assertIn(" Api=푸시 결과 반영 Method=POST Path=/api/v1/fcm/{notificationId}/finish ", api)
+        scheduler = relay.detail_query("scheduler", {"task": "PaymentRecoveryScheduler.recover",
+                                                     "logger": "c.w.g.c.SchedulerErrorHandler",
+                                                     "exceptionType": "IllegalStateException"})
+        self.assertIn("] c.w.g.c.SchedulerErrorHandler - [SCHEDULER] Task=PaymentRecoveryScheduler.recover "
+                      "ExceptionType=IllegalStateException ", scheduler)
+        push = relay.detail_query("push", {"type": "SAFE_ZONE_EXITED", "emergency": "true", "reason": "REJECTED"})
+        self.assertIn("Type=SAFE_ZONE_EXITED Emergency=true ", push)
+
+    def test_request_errors_already_alerted_as_api_failure_are_dropped(self):
+        lines = [(3, "x ERROR traceId=req-1 [http-nio-8080-exec-1] c.w.a.KakaoLoginStrategy - 카카오 사용자 조회 실패"),
+                 (2, "x ERROR traceId=req-2 [http-nio-8080-exec-2] c.w.a.KakaoLoginStrategy - 카카오 사용자 조회 실패"),
+                 (1, "x ERROR traceId=none [task-1] c.w.a.KakaoLoginStrategy - 카카오 계정 탈퇴 중 오류")]
+        api_failures = [(5, "x ERROR traceId=req-1 [http-nio-8080-exec-1] c.w.g.e.GlobalExceptionHandler - [EXCEPTION] ...")]
+        with mock.patch.object(relay, "loki", return_value=api_failures):
+            kept = relay.without_api_failures(lines, 0, 10)
+        self.assertEqual([ts for ts, _ in kept], [2, 1])
+
+    def test_error_alert_is_skipped_when_every_line_was_an_api_failure(self):
+        store = relay.Store(":memory:")
+        self.addCleanup(store.close)
+        details = {"count": 0, "items": [], "covered": 2}
+        with mock.patch.object(relay, "fetch_details", return_value=details), \
+                mock.patch.object(relay, "send_discord") as send:
+            store.enqueue("f1", {"labels": {"kind": "error", "logger": "c.w.a.KakaoLoginStrategy"}, "annotations": {}}, 1.0)
+            relay.process(store, store.next_job(2.0), 2.0)
+        send.assert_not_called()
+        self.assertEqual(store.db.execute("SELECT state FROM jobs").fetchone()[0], "done")
+
+
+class SourceFetchTest(StoreCase):
+    def test_network_error_while_fetching_source_does_not_fail_the_analysis(self):
+        with mock.patch.object(relay, "fetch_source", REAL_FETCH_SOURCE), \
+                mock.patch.object(relay.urllib.request, "urlopen", side_effect=relay.urllib.error.URLError("timeout")):
+            self.assertIsNone(relay.fetch_source(SHA_A, "com.widyu.fcm.application.FcmOutboxTransactions"))
+            analysis = relay.analyze(self.store, "api", API_LABELS, item(), 2000.0)
+        self.assertTrue(analysis.startswith("⚠️ 소스 조회 실패"))
+        self.assertEqual(self.claude.call_count, 1)
 
 
 class ChangeDetectionTest(unittest.TestCase):

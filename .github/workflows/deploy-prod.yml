@@ -97,7 +97,7 @@ jobs:
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           ENV_TAG: PROD
           RESULT: ${{ job.status }}
-          FAILED_STEP: ${{ steps.validate.outcome == 'failure' && '테스트·빌드 단계' || steps.image.outcome == 'failure' && '이미지 빌드 단계' || steps.deploy.outcome == 'failure' && '서버 배포 단계' || '' }}
+          FAILED_STEP: ${{ steps.validate.outcome == 'failure' && '테스트·빌드 단계' || steps.image.outcome == 'failure' && '이미지 빌드 단계' || steps.deploy.outcome == 'failure' && '서버 배포 단계' || '배포 준비 단계' }}
           COMMIT_SHA: ${{ github.sha }}
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

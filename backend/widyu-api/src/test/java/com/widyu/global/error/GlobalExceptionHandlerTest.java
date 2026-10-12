@@ -227,6 +227,56 @@ class GlobalExceptionHandlerTest {
         }
     }
 
+    @Test
+    @DisplayName("5xx로 분류된 업무 예외는 API 실패 알림이 읽는 서버 오류 로그로 남긴다")
+    void _5xx로_분류된_업무_예외는_API_실패_알림이_읽는_서버_오류_로그로_남긴다() throws Exception {
+        // given
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            mockMvc.perform(get("/test/business/naver")).andExpect(status().isBadGateway());
+
+            // then
+            assertThat(appender.list).singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+                assertThat(event.getFormattedMessage())
+                        .startsWith("[EXCEPTION] ")
+                        .contains(" ExceptionType=com.widyu.global.error.BusinessException ");
+            });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("4xx 업무 예외는 알림 대상이 아닌 WARN 업무 로그로 남긴다")
+    void _4xx_업무_예외는_알림_대상이_아닌_WARN_업무_로그로_남긴다() throws Exception {
+        // given
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            mockMvc.perform(get("/test/business/invalid-file-type")).andExpect(status().isBadRequest());
+
+            // then
+            assertThat(appender.list).singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage()).startsWith("[BUSINESS-EXCEPTION] ");
+            });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @RestController
     static class TestController {
 

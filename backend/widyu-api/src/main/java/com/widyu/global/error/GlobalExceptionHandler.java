@@ -57,15 +57,19 @@ public class GlobalExceptionHandler {
             final BusinessException ex,
             final HttpServletRequest request
     ) {
-        doBusinessLog(ex, request);
-
         final ErrorCode errorCode = ex.getErrorCode();
+        final HttpStatus status = getHttpStatusOrDefault(errorCode);
+        // 응답이 5xx면 예외 종류와 상관없이 서버 오류 로그로 남겨 API 실패 알림에 잡히게 한다(LLD-0084).
+        if (status.is5xxServerError()) {
+            doSystemLog(ex, request);
+        } else {
+            doBusinessLog(ex, request);
+        }
+
         String detail = nullSafe(ex.getMessage(), errorCode.getMessage());
         if (isAuthRequest(request)) {
             detail = errorCode.getMessage();
         }
-
-        final HttpStatus status = getHttpStatusOrDefault(errorCode);
 
         return toResponse(status, errorCode.getCode(), detail, runtimeDebugInfo(ex, request, status));
     }

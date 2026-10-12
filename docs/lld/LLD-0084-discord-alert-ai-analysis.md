@@ -37,6 +37,7 @@
 - **배포 커밋 로그**: 실행 중인 커밋을 `[BUILD] Version=<sha>`로 시작할 때와 매일 04:00에 남긴다.
 - **WebSocket 실패 로그**: `@MessageMapping` 처리 중 난 서버 오류를 `[WS_EXCEPTION] Api= Destination= Actor= ExceptionType= Message= StackTrace=` 한 줄로 남긴다. 업무 규칙 4xx·입력 검증·형식 오류는 WARN으로 남긴다. 서버 오류의 내부 메시지는 클라이언트에 돌려주지 않는다(REST 500과 같은 기준).
 - **4xx 잡음 제거**: 입력 검증 실패 로그를 ERROR에서 WARN으로 내린다.
+- **5xx 업무 예외**: 응답이 5xx인 `BusinessException`(결제 실패, 파일 업로드 실패, 외부 OAuth·SMS 통신 실패 등)은 WARN 업무 로그 대신 `[EXCEPTION]` ERROR로 남긴다. "5xx 응답 = API 실패 알림"이 예외 종류와 상관없이 성립하게 하기 위해서다.
 - **Grafana 규칙**: 규칙 5개(API·WebSocket·스케줄러·푸시·기타 ERROR)로 나누고 식별 레이블만 남긴다. 해소 알림을 끄고 webhook으로 relay에 보낸다.
 - **alert-relay**: Python 컨테이너로, SQLite 작업 큐, 대표 로그 재조회, 마스킹, Discord 전송·수정, 배포 커밋 소스 기반 Claude 분석, 분석 이력과 재사용, 하루 호출 상한, 무효화·백업 명령을 맡는다.
 - **배포 알림**: dev·prod 배포 결과와 dev 인증서 갱신 실패를 Discord로 알린다.
@@ -140,6 +141,8 @@ DB·엔티티 변경 없음. relay의 SQLite(`/data/relay.sqlite3`, 볼륨 `aler
 - [x] FCM 최종 실패(전송 실패·선점 시 만료)만 `[FCM_FAILED]`를 남기고, 재시도 예정 실패는 남기지 않는다. 토큰·본문은 없다. (`FcmOutboxTransactionsTest`)
 - [x] `[BUILD] Version=`을 남긴다. (`BuildVersionLogTest`)
 - [x] 입력 검증 실패는 WARN이다.
+- [x] 5xx 업무 예외는 `[EXCEPTION]` ERROR로, 4xx 업무 예외는 WARN 업무 로그로 남는다. (`GlobalExceptionHandlerTest`)
+- [x] 요청 안의 ERROR 가운데 그 요청이 API 실패 알림으로 이미 간 줄(같은 traceId의 `[EXCEPTION]`)은 기타 ERROR에서 빠지고, 남는 줄이 없으면 기타 알림을 보내지 않는다. 요청 밖(traceId=none)의 ERROR는 그대로 알린다. (`test_relay.py`)
 - [x] WebSocket 메시지 처리 서버 오류는 기능·목적지·요청자를 담은 `[WS_EXCEPTION]` 한 줄 ERROR로 남고, 내부 메시지는 응답에 담지 않는다. 업무 규칙 4xx는 WARN이고, 5xx 업무 예외는 ERROR다. 실제 STOMP 처리 경로에서도 Spring이 핸들러와 헤더를 넘겨 같은 로그가 남는다. (`WebSocketExceptionHandlerTest`)
 - [x] 같은 API 오류 100건이 알림 인스턴스 하나·Discord 메시지 하나가 되고, "최근 15분 100건 · 앞 3건 표시"를 보여 준다. (로컬 E2E)
 - [x] 예전 형식 `[EXCEPTION]` 줄과 WARN은 알림이 되지 않는다(레이블이 빈 알림 없음). (로컬 E2E)

@@ -12,7 +12,7 @@ Grafana 규칙은 아래 다섯 가지로 나뉘고, `alert-relay`가 Discord �
 
 | 알림 | 조건 |
 | --- | --- |
-| 🚨 API 실패 | 처리하지 못한 예외로 5xx가 난 요청. 첫 줄은 Swagger summary(기능 이름) |
+| 🚨 API 실패 | 5xx로 끝난 요청(처리하지 못한 예외, 5xx로 분류된 업무 예외). 첫 줄은 Swagger summary(기능 이름) |
 | 🔌 WebSocket 실패 | 심박·위치·센서 등 STOMP 메시지 처리 중 난 서버 오류. 목적지와 보낸 회원을 보여 준다 |
 | ⏰ 스케줄러 실패 | `scheduling-N` 스레드의 ERROR |
 | 📵 푸시 알림 발송 실패 | FCM 재시도를 다 쓴 최종 실패 |

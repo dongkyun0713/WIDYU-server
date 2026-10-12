@@ -246,7 +246,8 @@ def detail_query(kind, labels):
     if kind == "api":
         exception_type = re.escape(labels.get("exceptionType", "")).replace("\\", "\\\\")
         return (f'{LOKI_SELECTOR} |= "[EXCEPTION]" '
-                f'|= " Method={logql_text(labels.get("method", ""))} Path={logql_text(labels.get("path", ""))} " '
+                f'|= " Api={logql_text(labels.get("api", ""))} Method={logql_text(labels.get("method", ""))} '
+                f'Path={logql_text(labels.get("path", ""))} " '
                 f'|~ "ExceptionType=([^ ]*\\\\.)?{exception_type} "')
     if kind == "ws":
         exception_type = re.escape(labels.get("exceptionType", "")).replace("\\", "\\\\")
@@ -254,11 +255,13 @@ def detail_query(kind, labels):
                 f'Destination={logql_text(labels.get("destination", ""))} " '
                 f'|~ "ExceptionType=([^ ]*\\\\.)?{exception_type} "')
     if kind == "scheduler" and labels.get("task"):
-        return f'{LOKI_SELECTOR} |= "[SCHEDULER] Task={logql_text(labels["task"])} "'
+        return (f'{LOKI_SELECTOR} |= "] {logql_text(labels.get("logger", ""))} - [SCHEDULER] '
+                f'Task={logql_text(labels["task"])} ExceptionType={logql_text(labels.get("exceptionType", ""))} "')
     if kind == "scheduler":
         return f'{LOKI_SELECTOR} |= " ERROR traceId=none [scheduling-" |= "] {logql_text(labels.get("logger", ""))} - "'
     if kind == "push":
-        return (f'{LOKI_SELECTOR} |= "[FCM_FAILED] Type={logql_text(labels.get("type", ""))} " '
+        return (f'{LOKI_SELECTOR} |= "[FCM_FAILED] Type={logql_text(labels.get("type", ""))} '
+                f'Emergency={logql_text(labels.get("emergency", ""))} " '
                 f'|= "Reason={logql_text(labels.get("reason", ""))}"')
     return (f'{LOKI_SELECTOR} |= " ERROR traceId=" |= "] {logql_text(labels.get("logger", ""))} - " '
             f'!~ "\\\\[EXCEPTION\\\\]|\\\\[WS_EXCEPTION\\\\]|\\\\[FCM_FAILED\\\\]|\\\\[scheduling-"')
@@ -304,6 +307,11 @@ def fetch_details(kind, labels, now):
     end_ns = int(now * 1e9)
     start_ns = end_ns - DETAIL_WINDOW_MINUTES * 60 * 10**9
     found = loki(detail_query(kind, labels), start_ns, end_ns, DETAIL_LIMIT)
+    covered = 0
+    if kind == "error":
+        before = len(found)
+        found = without_api_failures(found, start_ns, end_ns)
+        covered = before - len(found)
     items = []
     for ts, line in found[:MAX_ITEMS_PER_MESSAGE]:
         item = parse_line(kind, line)
@@ -311,7 +319,25 @@ def fetch_details(kind, labels, now):
         items.append(item)
     if items and kind in AI_KINDS and not items[0]["raw_stack"]:
         items[0]["raw_stack"] = continuation(items[0]["ts"])
-    return {"count": len(found), "items": items}
+    return {"count": len(found), "items": items, "covered": covered}
+
+
+TRACE_ID = re.compile(r"traceId=(\S+)")
+
+
+def without_api_failures(lines, start_ns, end_ns):
+    """요청 안에서 난 ERROR 중 그 요청이 5xx로 끝나 API 실패 알림으로 이미 간 줄은 뺀다.
+    소셜 로그인·S3처럼 던지기 직전에 ERROR를 남기는 코드가 같은 실패를 두 번 알리지 않게 한다.
+    요청 밖(traceId=none)의 ERROR는 그대로 둔다."""
+    api_failures = loki(f'{LOKI_SELECTOR} |= "[EXCEPTION]"', start_ns, end_ns, 1000)
+    trace_ids = {match.group(1) for _, line in api_failures for match in [TRACE_ID.search(line)] if match}
+    kept = []
+    for ts, line in lines:
+        match = TRACE_ID.search(line)
+        if match and match.group(1) != "none" and match.group(1) in trace_ids:
+            continue
+        kept.append((ts, line))
+    return kept
 
 
 def deployed_sha(ts_ns):
@@ -477,12 +503,15 @@ def source_paths(class_name):
 
 
 def fetch_source(sha, class_name):
+    """소스 조회는 선택 사항이다. 없거나(404) 네트워크 오류면 None을 돌려 '소스 조회 실패'로 분석을 이어 간다."""
     for path in source_paths(class_name):
         try:
             with urllib.request.urlopen(f"{SOURCE_RAW_BASE}/{sha}/{path}", timeout=10) as response:
                 return path, response.read().decode().splitlines()
         except urllib.error.HTTPError:
             continue
+        except (OSError, ValueError):
+            return None
     return None
 
 
@@ -529,7 +558,7 @@ def changed_files(base_sha, head_sha):
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             files = json.loads(response.read()).get("files", [])
-    except (urllib.error.URLError, ValueError):
+    except (OSError, ValueError):
         return None
     if len(files) >= COMPARE_FILE_LIMIT:
         return None
@@ -593,7 +622,7 @@ def analyze(store, kind, labels, item, now):
     frames = app_frames(stack)
     try:
         sha = deployed_sha(item.get("ts") or int(now * 1e9))
-    except (urllib.error.URLError, KeyError, ValueError):
+    except (OSError, KeyError, ValueError):
         sha = None
     key = analysis_key(kind, labels, item, frames)
     try:
@@ -644,6 +673,10 @@ def process(store, job, now):
     if job["state"] == "pending":
         # 재시도로 처리가 늦어져도 알림을 받은 시각 기준 15분 로그를 본다.
         details = fetch_details(kind, labels, job["created_at"])
+        if details["count"] == 0 and details.get("covered"):
+            store.update(job["id"], state="done")
+            print(f"skipped job={job['id']} kind={kind}: API 실패 알림과 같은 요청", flush=True)
+            return
         embed = build_embed(kind, labels, details, base_link)
         message_id = send_discord(embed)
         item = (details["items"] or [{}])[0]
