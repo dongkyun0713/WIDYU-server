@@ -45,7 +45,7 @@ AI_REUSE_DAYS = float(os.environ.get("ALERT_AI_REUSE_DAYS", "7"))
 ENV_TAG = os.environ.get("ALERT_ENV_TAG", "DEV")
 
 # 분석 규칙(시스템 프롬프트·입력 형식)을 바꾸면 올린다. 분석 키에 들어가 이전 분석을 재사용하지 않게 된다.
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 DETAIL_WINDOW_MINUTES = 15
 DETAIL_LIMIT = 200
 MAX_ITEMS_PER_MESSAGE = 3
@@ -99,14 +99,39 @@ PUSH_REASONS = {
 }
 
 SYSTEM_PROMPT = """너는 Spring Boot 백엔드(WIDYU)의 개발 서버 에러를 분석한다.
-주어진 예외, 스택 프레임, 소스 조각만 근거로 원인을 추정한다. 근거가 부족하면 부족하다고 쓴다.
+주어진 예외, 스택 프레임, 소스 조각만 근거로 원인을 추정한다. 근거가 부족하면 confidence를 low로 두고 부족하다고 쓴다.
 소스가 없다고 표시되면 코드 줄 내용을 추측하지 말고 스택의 위치만 근거로 쓴다.
 입력의 <값>, <id> 같은 표시는 개인정보를 가린 자리다.
-한국어로, 아래 네 줄 형식만 출력한다. 전체 700자 이내, 마크다운 제목·코드 블록 없이.
-원인 추정: <한두 문장>
-근거: <파일명:줄 — 그 줄이 하는 일>
-확인할 것: <다음에 볼 로그·설정·데이터>
-수정 방향: <한 문장>"""
+모든 값은 한국어로, 짧게 쓴다. 마크다운·코드 블록은 쓰지 않는다.
+- cause: 원인 추정 한두 문장
+- confidence: 근거가 얼마나 직접적인지(high/medium/low)
+- evidence: 근거 위치 1~3개. location은 "파일명:줄", description은 그 줄이 하는 일 한 문장
+- checks: 다음에 확인할 로그·설정·데이터 1~3개
+- fix: 수정 방향 한 문장"""
+
+# 응답 형식을 API 단에서 강제한다(structured outputs). 길이 제한은 스키마가 지원하지 않아 relay가 자른다.
+ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "cause": {"type": "string"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "evidence": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"location": {"type": "string"}, "description": {"type": "string"}},
+                "required": ["location", "description"],
+                "additionalProperties": False,
+            },
+        },
+        "checks": {"type": "array", "items": {"type": "string"}},
+        "fix": {"type": "string"},
+    },
+    "required": ["cause", "confidence", "evidence", "checks", "fix"],
+    "additionalProperties": False,
+}
+CONFIDENCE_NAMES = {"high": "높음", "medium": "보통", "low": "낮음"}
+MAX_LIST_ITEMS = 3
 
 
 # ---------- 마스킹 ----------
@@ -597,6 +622,7 @@ def build_prompt(kind, labels, item, sources, source_note):
 
 
 def ask_claude(prompt):
+    """Claude를 1회 호출해 스키마에 맞는 분석 dict를 돌려준다. 거절·잘림·스키마 위반이면 None."""
     import anthropic  # 서버에서만 필요하다. 단위 테스트는 SDK 없이 돈다.
 
     # 짧은 진단이라 effort를 낮춰 지연·비용을 줄인다. thinking은 Opus 5 기본(adaptive)을 쓴다.
@@ -607,11 +633,54 @@ def ask_claude(prompt):
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
         betas=["server-side-fallback-2026-07-01"],
-        extra_body={"fallbacks": "default", "output_config": {"effort": "medium"}},
+        extra_body={
+            "fallbacks": "default",
+            "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": ANALYSIS_SCHEMA}},
+        },
     )
-    if response.stop_reason == "refusal":
+    # 거절이나 max_tokens 잘림이면 스키마를 지키지 않았을 수 있다.
+    if response.stop_reason != "end_turn":
         return None
-    return "".join(block.text for block in response.content if block.type == "text").strip() or None
+    text = "".join(block.text for block in response.content if block.type == "text")
+    try:
+        return valid_analysis(json.loads(text))
+    except ValueError:
+        return None
+
+
+def valid_analysis(data):
+    """스키마를 한 번 더 확인한다. 어긋나면 None(분석 실패로 처리하고 저장하지 않음)."""
+    if not isinstance(data, dict) or set(data) != set(ANALYSIS_SCHEMA["required"]):
+        return None
+    if not all(isinstance(data[key], str) and data[key].strip() for key in ("cause", "fix")):
+        return None
+    if data["confidence"] not in CONFIDENCE_NAMES or not isinstance(data["checks"], list):
+        return None
+    if not isinstance(data["evidence"], list):
+        return None
+    for entry in data["evidence"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("location"), str) \
+                or not isinstance(entry.get("description"), str):
+            return None
+    if not all(isinstance(check, str) for check in data["checks"]):
+        return None
+    return data
+
+
+def render_analysis(data):
+    """검증한 분석 JSON을 Discord 마크다운으로 그린다. 값마다 길이를 잘라 임베드 한도를 지킨다."""
+    lines = [f"**원인 추정** · 신뢰도 {CONFIDENCE_NAMES[data['confidence']]}", truncate(data["cause"].strip(), 300)]
+    if data["evidence"]:
+        lines.append("**근거**")
+        for entry in data["evidence"][:MAX_LIST_ITEMS]:
+            location = truncate(entry["location"].strip().replace("`", ""), 80)
+            lines.append(f"• `{location}` — {truncate(entry['description'].strip(), 160)}")
+    if data["checks"]:
+        lines.append("**확인할 것**")
+        lines.extend(f"• {truncate(check.strip(), 160)}" for check in data["checks"][:MAX_LIST_ITEMS])
+    lines.append("**수정 방향**")
+    lines.append(truncate(data["fix"].strip(), 200))
+    return "\n".join(lines)
 
 
 def analyze(store, kind, labels, item, now):
@@ -642,7 +711,7 @@ def analyze(store, kind, labels, item, now):
     if not store.take_quota(datetime.date.today().isoformat(), AI_DAILY_LIMIT):
         return f"오늘 분석 한도({AI_DAILY_LIMIT}회)를 넘어 생략했습니다."
     try:
-        analysis = ask_claude(build_prompt(kind, labels, item, sources, note))
+        result = ask_claude(build_prompt(kind, labels, item, sources, note))
     except anthropic.RateLimitError:
         return "분석 실패: Claude API 호출 한도 초과"
     except anthropic.APIStatusError as error:
@@ -652,8 +721,9 @@ def analyze(store, kind, labels, item, now):
     except anthropic.APIError as error:
         # 작업 재시도로 넘기면 재시도마다 하루 호출 수를 다시 쓰므로 여기서 끝낸다.
         return f"분석 실패: Claude API 응답 오류({type(error).__name__})"
-    if analysis is None:
-        return "분석 실패: 빈 답변 또는 모델 정책상 거절"
+    if result is None:
+        return "분석 실패: 형식에 맞지 않는 답변이거나 모델 정책상 거절"
+    analysis = render_analysis(result)
     if not sources:
         analysis = f"⚠️ 소스 조회 실패({note}) — 스택 위치만으로 추정했습니다.\n{analysis}"
     try:

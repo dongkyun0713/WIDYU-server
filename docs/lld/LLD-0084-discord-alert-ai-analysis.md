@@ -105,7 +105,10 @@ DB·엔티티 변경 없음. relay의 SQLite(`/data/relay.sqlite3`, 볼륨 `aler
         - `build.gradle` 계열 파일
 
       커밋을 모르거나, compare가 실패하거나, 파일 목록이 300개에서 잘리면 재사용하지 않는다.
-   4. 재사용하지 않으면 하루 상한 안에서 Claude를 1회 호출한다(effort medium, 300초 제한). 정상 분석만 이력에 저장하고, 실패·거절·빈 답변은 저장하지 않는다.
+   4. 재사용하지 않으면 하루 상한 안에서 Claude를 1회 호출한다(effort medium, 300초 제한). 응답은 structured outputs(`output_config.format`의 JSON 스키마)로 강제한다.
+      - 필드: `cause`, `confidence`(high/medium/low), `evidence`[{`location`, `description`}], `checks`[], `fix`
+      - relay가 스키마를 한 번 더 확인한 뒤 Discord 형식으로 그린다: 원인 추정·신뢰도 / 근거 / 확인할 것 / 수정 방향, 목록은 최대 3개, 값마다 길이를 자른다.
+      - 거절·`max_tokens` 잘림·스키마 위반은 분석 실패로 처리하고 이력에 저장하지 않는다.
    4. 결과를 같은 메시지에 PATCH로 덧붙인다.
 6. **배포 알림**: GitHub Actions가 배포 결과를 `scripts/ci/notify-discord-deploy.sh`로 보낸다. 새 push로 취소된 배포는 보내지 않는다.
 
@@ -156,6 +159,7 @@ DB·엔티티 변경 없음. relay의 SQLite(`/data/relay.sqlite3`, 볼륨 `aler
   - 실패·빈 답변은 저장하지 않는다.
   - 이력 저장소가 고장 나도 기본 알림은 간다.
   - 백업 파일에 이력이 들어 있다.
+- [x] AI 답변 형식은 JSON 스키마로 강제되고, 거절·잘림·스키마 위반 답변은 분석 실패로 처리돼 저장되지 않는다. 그려진 분석은 네 구획과 목록 3개 제한을 지킨다. (`test_relay.py`)
 - [x] AI 입력에 회원 ID·traceId·전화번호·이메일·실제 URI가 없고, 마스킹 뒤에도 HTTP 상태·SQL 코드·제약조건 이름은 남는다. (`test_relay.py`)
 - [x] 배포 알림은 성공·실패(실패 단계)를 보내고, 취소된 배포는 건너뛰며, webhook이 없어도 실패하지 않는다. (`scripts/ci/test_notify_discord_deploy.py`)
 - [ ] dev 배포 후 실제 Discord 채널에서 기본 알림과 AI 분석이 같은 메시지로 보인다. (배포 후 확인)

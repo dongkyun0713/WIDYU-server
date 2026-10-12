@@ -151,6 +151,19 @@ stateDiagram-v2
 
 요청자, 대상, traceId, 실제 URI는 AI 입력에 넣지 않는다. 배포 커밋을 찾지 못하거나 파일이 없으면 develop 소스로 대신하지 않는다. 대신 "소스 조회 실패"로 표시하고 스택 위치만으로 추정하게 한다.
 
+**출력.** 답변 형식은 structured outputs(JSON 스키마)로 API 단에서 강제한다. relay는 스키마를 한 번 더 확인한 뒤 직접 그리므로 Discord에는 항상 같은 모양으로 나간다. 거절, 잘린 답변, 스키마 위반은 "분석 실패"로 처리하고 이력에 저장하지 않는다. 아래는 모양을 보여 주는 가상의 예시다.
+
+```text
+**원인 추정** · 신뢰도 보통
+세션 TTL이 지난 뒤 완료 API가 호출되어 Redis 조회가 비었습니다.
+**근거**
+• `AlbumUploadSessionFacadeImpl.java:142` — 세션이 없으면 IllegalStateException을 던집니다.
+**확인할 것**
+• 클라이언트 재시도 간격
+**수정 방향**
+만료 세션은 4xx로 응답합니다.
+```
+
 **재사용.** 분석은 `ai_analyses`에 이력으로 계속 쌓이고, 지우지 않는다. 분석 키는 다음 값으로 만든다. 배포 커밋은 키에 넣지 않는다.
 
 - 환경과 알림 종류
@@ -204,7 +217,7 @@ flowchart TD
 | 묶음 대기 / 변경 간격 / 반복 | 30초 / 5분 / 4시간 | `policies.yml` |
 | 상세 로그 조회 | 알림 수신 시각 기준 15분, 최대 200건, 표시 3건 | `relay.py` |
 | 배포 커밋 조회 범위 | 7일(Loki 보관 기간과 같음) | `relay.py` |
-| Claude | `claude-opus-5`, effort medium, `max_tokens` 16000, 300초 | `ALERT_AI_MODEL`, `relay.py` |
+| Claude | `claude-opus-5`, effort medium, `max_tokens` 16000, 300초, JSON 스키마 강제 | `ALERT_AI_MODEL`, `relay.py` |
 | 하루 호출 상한 / 재사용 기간 | 50회 / 7일 | `ALERT_AI_DAILY_LIMIT`, `ALERT_AI_REUSE_DAYS` |
 | 작업 재시도 | 30초×2^n(최대 30분), 6회 | `relay.py` |
 

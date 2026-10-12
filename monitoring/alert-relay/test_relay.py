@@ -42,6 +42,12 @@ SAMPLE_API_LINE = (
 )
 
 
+def analysis(cause="세션이 만료됐습니다."):
+    return {"cause": cause, "confidence": "medium",
+            "evidence": [{"location": "FcmOutboxTransactions.java:87", "description": "재시도 상태를 바꿉니다."}],
+            "checks": ["세션 TTL 설정"], "fix": "만료 세션은 4xx로 응답합니다."}
+
+
 def item(message="처리 실패 status=503", ts=1_760_230_800_000_000_000):
     return {"exceptionType": "IllegalStateException", "message": message, "ts": ts,
             "raw_stack": "com.widyu.fcm.application.FcmOutboxTransactions.finish(FcmOutboxTransactions.java:87)"}
@@ -52,7 +58,7 @@ class StoreCase(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.directory.name, "relay.sqlite3")
         self.store = relay.Store(self.path)
-        self.claude = mock.Mock(return_value="원인 추정: 테스트")
+        self.claude = mock.Mock(return_value=analysis())
         patches = [
             mock.patch.object(relay, "ask_claude", self.claude),
             mock.patch.object(relay, "deployed_sha", return_value=SHA_A),
@@ -174,9 +180,9 @@ class QueueTest(StoreCase):
                 mock.patch.object(self.store, "record_analysis", broken):
             self.store.enqueue("f1", {"labels": API_LABELS, "annotations": {}}, 1000.0)
             relay.process(self.store, self.store.next_job(2000.0), 2000.0)
-            analysis = relay.analyze(self.store, "api", API_LABELS, item(), 2000.0)
+            analysis = relay.analyze(self.store, "api", API_LABELS, item(), 2000.0)  # noqa: F841
         send.assert_called_once()
-        self.assertEqual(analysis, "원인 추정: 테스트")
+        self.assertTrue(analysis.startswith("**원인 추정** · 신뢰도 보통\n세션이 만료됐습니다."))
 
 
 class AnalysisReuseTest(StoreCase):
@@ -240,19 +246,22 @@ class AnalysisReuseTest(StoreCase):
 
     def test_failed_empty_or_refused_answers_are_not_saved(self):
         failures = [relay.sys.modules["anthropic"].APIConnectionError("timeout"), None]
-        self.claude.side_effect = failures + ["원인 추정: 정상"]
+        self.claude.side_effect = failures + [analysis("정상 분석")]
         self.assertIn("분석 실패", self.analyze())
         self.assertIn("분석 실패", self.analyze(now=2001.0))
-        self.assertEqual(self.analyze(now=2002.0), "원인 추정: 정상")
+        self.assertIn("정상 분석", self.analyze(now=2002.0))
         self.assertEqual(self.claude.call_count, 3)
         rows = self.store.db.execute("SELECT analysis, sha, prompt_version FROM ai_analyses").fetchall()
-        self.assertEqual([tuple(row) for row in rows], [("원인 추정: 정상", SHA_A, relay.PROMPT_VERSION)])
+        self.assertEqual([(row[1], row[2]) for row in rows], [(SHA_A, relay.PROMPT_VERSION)])
+        self.assertIn("정상 분석", rows[0][0])
 
     def test_backup_copies_history(self):
         self.analyze()
         target = os.path.join(self.directory.name, "backup.sqlite3")
         self.store.backup(target)
-        restored = sqlite3.connect(target).execute("SELECT COUNT(*) FROM ai_analyses").fetchone()[0]
+        connection = sqlite3.connect(target)
+        self.addCleanup(connection.close)
+        restored = connection.execute("SELECT COUNT(*) FROM ai_analyses").fetchone()[0]
         self.assertEqual(restored, 1)
 
 
@@ -297,6 +306,50 @@ class SourceFetchTest(StoreCase):
             analysis = relay.analyze(self.store, "api", API_LABELS, item(), 2000.0)
         self.assertTrue(analysis.startswith("⚠️ 소스 조회 실패"))
         self.assertEqual(self.claude.call_count, 1)
+
+
+class StructuredOutputTest(unittest.TestCase):
+    def response(self, text, stop_reason="end_turn"):
+        block = types.SimpleNamespace(type="text", text=text)
+        return types.SimpleNamespace(stop_reason=stop_reason, content=[block])
+
+    def call(self, response):
+        client = mock.Mock()
+        client.beta.messages.create.return_value = response
+        with mock.patch.object(relay.sys.modules["anthropic"], "Anthropic", return_value=client, create=True):
+            result = relay.ask_claude("prompt")
+        return result, client.beta.messages.create.call_args.kwargs
+
+    def test_request_forces_json_schema_and_valid_answer_is_parsed(self):
+        result, kwargs = self.call(self.response(json.dumps(analysis(), ensure_ascii=False)))
+        self.assertEqual(result, analysis())
+        output_config = kwargs["extra_body"]["output_config"]
+        self.assertEqual(output_config["format"], {"type": "json_schema", "schema": relay.ANALYSIS_SCHEMA})
+        self.assertEqual(kwargs["extra_body"]["fallbacks"], "default")
+
+    def test_refused_truncated_or_off_schema_answers_are_rejected(self):
+        broken = dict(analysis(), confidence="certain")
+        missing = {key: value for key, value in analysis().items() if key != "fix"}
+        cases = [self.response("{}", stop_reason="refusal"),
+                 self.response(json.dumps(analysis())[:20], stop_reason="max_tokens"),
+                 self.response("원인 추정: 자유 형식"),
+                 self.response(json.dumps(broken)),
+                 self.response(json.dumps(missing))]
+        for response in cases:
+            with self.subTest(response=response):
+                self.assertIsNone(self.call(response)[0])
+
+    def test_rendered_analysis_has_fixed_sections_and_limits(self):
+        data = analysis(cause="원" * 1000)
+        data["evidence"] = [{"location": f"A.java:{i}", "description": "설명"} for i in range(5)]
+        rendered = relay.render_analysis(data)
+        lines = rendered.splitlines()
+        self.assertEqual(lines[0], "**원인 추정** · 신뢰도 보통")
+        self.assertLessEqual(len(lines[1]), 300)
+        self.assertIn("**근거**", lines)
+        self.assertIn("• `A.java:0` — 설명", lines)
+        self.assertNotIn("• `A.java:3` — 설명", lines)
+        self.assertEqual(lines[-2:], ["**수정 방향**", "만료 세션은 4xx로 응답합니다."])
 
 
 class ChangeDetectionTest(unittest.TestCase):
