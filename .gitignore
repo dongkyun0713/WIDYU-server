@@ -63,6 +63,7 @@ docs/architecture/*
 !docs/architecture/notification.md
 !docs/architecture/payment.md
 !docs/architecture/infrastructure.md
+!docs/architecture/alerting.md
 
 # local artifacts
 dump.rdb
