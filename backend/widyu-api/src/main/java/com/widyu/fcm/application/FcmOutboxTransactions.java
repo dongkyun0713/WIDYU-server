@@ -26,7 +26,12 @@ public class FcmOutboxTransactions {
     public FcmDelivery claim(Long id) {
         FcmOutbox row = outbox.lockById(id).orElse(null);
         LocalDateTime now = LocalDateTime.now();
-        if (row == null || !row.claim(now, properties.lease(), properties.maxRetries())) {
+        if (row == null) {
+            return null;
+        }
+        FcmOutbox.State before = row.getState();
+        if (!row.claim(now, properties.lease(), properties.maxRetries())) {
+            logIfFinallyFailed(row, before, finalStateReason(row));
             return null;
         }
         if (!eligibility.eligible(row)) {
@@ -37,6 +42,7 @@ public class FcmOutboxTransactions {
             return FcmDelivery.from(row);
         } catch (IllegalArgumentException exception) {
             row.failed(false, Duration.ZERO, now, properties.maxRetries());
+            logIfFinallyFailed(row, FcmOutbox.State.CLAIMED, "INVALID_PAYLOAD");
             String typeName = null;
             if (row.getNotificationType() != null) {
                 typeName = row.getNotificationType().name();
@@ -55,6 +61,7 @@ public class FcmOutboxTransactions {
         }
         if (!row.getExpiresAt().isAfter(now)) {
             row.expire();
+            logIfFinallyFailed(row, FcmOutbox.State.CLAIMED, "EXPIRED");
             return false;
         }
         if (!eligibility.eligible(row)
@@ -85,6 +92,52 @@ public class FcmOutboxTransactions {
             delay = result.retryAfter();
         }
         row.failed(result.retryable(), delay, now, properties.maxRetries());
+        logIfFinallyFailed(row, FcmOutbox.State.CLAIMED, failureReason(row, result));
+    }
+
+    /**
+     * 재시도가 끝나 더는 보내지 않게 된 순간만 에러 알림으로 남긴다(LLD-0084). 재시도 예정 실패까지 남기면 알림이 폭주한다.
+     * 전송 실패(finish)뿐 아니라 선점·전송 직전에 만료·소진으로 끝나는 경우도 남겨, 긴급 알림이 조용히 사라지지 않게 한다.
+     * 알림은 외부로 나가므로 회원 ID만 남기고 토큰·제목·본문은 넣지 않는다.
+     */
+    private void logIfFinallyFailed(FcmOutbox row, FcmOutbox.State before, String reason) {
+        FcmOutbox.State state = row.getState();
+        if (state == before || (state != FcmOutbox.State.EXHAUSTED && state != FcmOutbox.State.EXPIRED)) {
+            return;
+        }
+        log.error("[FCM_FAILED] Type={} Emergency={} Related={} Recipient={} Attempts={} Reason={}",
+                typeName(row), row.isEmergency(), row.getRelatedMemberId(), row.getRecipientMember().getId(),
+                row.getAttempts(), reason);
+    }
+
+    private static String finalStateReason(FcmOutbox row) {
+        if (row.getState() == FcmOutbox.State.EXPIRED) {
+            return "EXPIRED";
+        }
+        return "RETRY_EXHAUSTED";
+    }
+
+    private static String typeName(FcmOutbox row) {
+        if (row.getNotificationType() != null) {
+            return row.getNotificationType().name();
+        }
+        if (row.getDataType() != null) {
+            return row.getDataType();
+        }
+        return row.getFcmCategory().name();
+    }
+
+    private static String failureReason(FcmOutbox row, FcmTransport.Result result) {
+        if (row.getState() == FcmOutbox.State.EXPIRED) {
+            return "EXPIRED";
+        }
+        if (result.permanentToken()) {
+            return "INVALID_TOKEN";
+        }
+        if (!result.retryable()) {
+            return "REJECTED";
+        }
+        return "RETRY_EXHAUSTED";
     }
 
     /**

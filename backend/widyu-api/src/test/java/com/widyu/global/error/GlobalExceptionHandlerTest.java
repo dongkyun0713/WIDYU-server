@@ -10,11 +10,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.response.ApiResponseTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -196,8 +201,39 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getDebug().requestUri()).isEqualTo("/api/test");
     }
 
+    @Test
+    @DisplayName("처리하지 못한 예외는 기능 이름과 경로 패턴과 대상을 시스템 로그에 남긴다")
+    void 처리하지_못한_예외는_기능_이름과_경로_패턴과_대상을_시스템_로그에_남긴다() throws Exception {
+        // given
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            mockMvc.perform(post("/test/system/7")).andExpect(status().isInternalServerError());
+
+            // then
+            assertThat(appender.list).hasSize(1);
+            assertThat(appender.list.get(0).getLevel()).isEqualTo(Level.ERROR);
+            assertThat(appender.list.get(0).getFormattedMessage())
+                    .contains("[EXCEPTION] ")
+                    .contains(" Api=TestController.systemFailure Method=POST Path=/test/system/{albumId} "
+                            + "Actor=anonymous Target=albumId=7 ExceptionType=java.lang.IllegalStateException ");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @RestController
     static class TestController {
+
+        @PostMapping("/test/system/{albumId}")
+        void systemFailure(@PathVariable final Long albumId) {
+            throw new IllegalStateException("처리 실패");
+        }
 
         @PostMapping(value = "/test/body", consumes = "application/json")
         void body(@RequestBody final SampleRequest request) {

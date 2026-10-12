@@ -6,6 +6,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
@@ -26,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -90,6 +94,85 @@ class FcmOutboxTransactionsTest {
         // then
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.PENDING);
         then(decisions).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("재시도할 수 없는 전송 실패면 받는 사람과 관련 회원을 담아 최종 실패 로그를 남긴다")
+    void 재시도할_수_없는_전송_실패면_받는_사람과_관련_회원을_담아_최종_실패_로그를_남긴다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row.getRecipientMember(), "id", 12L);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        Logger logger = (Logger) LoggerFactory.getLogger(FcmOutboxTransactions.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            transactions().finish(delivery(), FcmTransport.Result.rejected(false));
+
+            // then
+            assertThat(row.getState()).isEqualTo(FcmOutbox.State.EXHAUSTED);
+            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
+                    "[FCM_FAILED] Type=HEART_MESSAGE Emergency=true Related=1023 Recipient=12 Attempts=1 Reason=REJECTED");
+            assertThat(appender.list.get(0).getFormattedMessage()).doesNotContain(TOKEN, "제목", "본문");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("재시도를 기다리다 만료된 알림을 선점하면 만료 사유로 최종 실패 로그를 남긴다")
+    void 재시도를_기다리다_만료된_알림을_선점하면_만료_사유로_최종_실패_로그를_남긴다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
+        ReflectionTestUtils.setField(row, "expiresAt", LocalDateTime.now().minusSeconds(1));
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        Logger logger = (Logger) LoggerFactory.getLogger(FcmOutboxTransactions.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            FcmDelivery delivery = transactions().claim(ROW_ID);
+
+            // then
+            assertThat(delivery).isNull();
+            assertThat(row.getState()).isEqualTo(FcmOutbox.State.EXPIRED);
+            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).singleElement()
+                    .asString().startsWith("[FCM_FAILED] Type=HEART_MESSAGE Emergency=true").endsWith("Reason=EXPIRED");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("다시 보낼 전송 실패면 최종 실패 로그를 남기지 않는다")
+    void 다시_보낼_전송_실패면_최종_실패_로그를_남기지_않는다() {
+        // given
+        FcmOutbox row = row(null);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        Logger logger = (Logger) LoggerFactory.getLogger(FcmOutboxTransactions.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            transactions().finish(delivery(), FcmTransport.Result.retry(Duration.ofSeconds(30)));
+
+            // then
+            assertThat(row.getState()).isEqualTo(FcmOutbox.State.PENDING);
+            assertThat(appender.list).isEmpty();
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

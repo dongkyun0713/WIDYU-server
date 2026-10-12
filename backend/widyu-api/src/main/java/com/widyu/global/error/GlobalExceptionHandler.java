@@ -1,15 +1,15 @@
 package com.widyu.global.error;
 
+import com.widyu.global.log.ApiRequestContext;
 import com.widyu.global.log.BusinessExceptionLogEntry;
 import com.widyu.auth.exception.AuthRateLimitException;
 import com.widyu.global.log.ExceptionLogEntry;
+import com.widyu.global.log.StackTraceLog;
 import com.widyu.global.response.ApiErrorDebugInfo;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Marker;
@@ -87,7 +87,7 @@ public class GlobalExceptionHandler {
 
         final String message = String.format("%s (%s)", trimTrailingPeriod(defaultMsg), field);
 
-        log.error("Validation error for field {}: {}", field, defaultMsg);
+        log.warn("Validation error for field {}: {}", field, defaultMsg);
 
         return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
     }
@@ -103,7 +103,7 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .orElse("요청 값이 유효하지 않습니다");
 
-        log.error("Validation error: {}", message);
+        log.warn("Validation error: {}", message);
 
         return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
     }
@@ -307,6 +307,11 @@ public class GlobalExceptionHandler {
         }
         final ExceptionLogEntry entry = ExceptionLogEntry.builder()
                 .timestamp(OffsetDateTime.now().toString())
+                .api(ApiRequestContext.apiName(request))
+                .httpMethod(request.getMethod())
+                .path(ApiRequestContext.pathPattern(request))
+                .actor(ApiRequestContext.actor())
+                .target(ApiRequestContext.target(request))
                 .exceptionType(exception.getClass().getName())
                 .message(message)
                 .requestUri(request.getRequestURI())
@@ -324,9 +329,7 @@ public class GlobalExceptionHandler {
     }
 
     private String toStackTraceLog(final Exception exception) {
-        return Arrays.stream(exception.getStackTrace())
-                .map(StackTraceElement::toString)
-                .collect(Collectors.joining("\n"));
+        return StackTraceLog.oneLine(exception);
     }
 
     private boolean isAuthRequest(HttpServletRequest request) {
