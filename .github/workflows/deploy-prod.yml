@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  # 배포 알림의 소요 시간 계산(실행 시작 시각 조회)에만 쓴다.
+  actions: read
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
@@ -39,6 +41,7 @@ jobs:
       - name: Install isolated Redis test executable without starting a host service
         run: bash scripts/ci/prepare-redis.sh
       - name: Validate and build release
+        id: validate
         run: |
           bash scripts/docker/validate-release.sh
           python3 -m unittest discover -s scripts/docker -p 'test_*.py'
@@ -54,12 +57,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: image
         with:
           context: .
           push: true
           platforms: linux/arm64
           tags: ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
       - name: Upload and deploy release
+        id: deploy
         env:
           PROD_SSH_KEY: ${{ secrets.PROD_EC2_SSH_PRIVATE_KEY }}
           PROD_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
@@ -83,3 +88,18 @@ jobs:
           ssh "${ssh_args[@]}" "ec2-user@$PROD_HOST" \
             "cd '$release' && tar -xzf release.tgz && PROD_ENV_FILE=/home/ec2-user/.env DOCKER_IMAGE_NAME='$DOCKER_IMAGE_NAME' IMAGE_TAG='$GITHUB_SHA' PROD_DOMAIN='$PROD_DOMAIN' bash scripts/docker/prod-up.sh"
           echo "Release directory: $release" >> "$GITHUB_STEP_SUMMARY"
+
+      # 알림 실패가 배포 결과를 바꾸지 않게 한다(LLD-0084).
+      - name: Send Discord notification
+        if: always()
+        continue-on-error: true
+        env:
+          DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
+          ENV_TAG: PROD
+          RESULT: ${{ job.status }}
+          FAILED_STEP: ${{ steps.validate.outcome == 'failure' && '테스트·빌드 단계' || steps.image.outcome == 'failure' && '이미지 빌드 단계' || steps.deploy.outcome == 'failure' && '서버 배포 단계' || '' }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/notify-discord-deploy.sh
