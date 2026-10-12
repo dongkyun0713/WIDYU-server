@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | Review (2026-10-11, 구현·검증 완료; 코디네이터 검수 대기) |
 | Issue | #740 (base W18 `feature/739`) |
-| 관련 ADR | ADR-0039 결정 6·7 (Proposed, 별도 PR #734; 현재 브랜치에 없음), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
+| 관련 ADR | [ADR-0039](../adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md) 결정 6·7 (Accepted 2026-10-12, PR #750), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
 | 선행 | [LLD-0070](LLD-0070-self-check-first-heart.md), [LLD-0072](LLD-0072-ok-notice-and-incident-grouping.md), [LLD-0077](LLD-0077-initial-alert-leader-only.md), [LLD-0081](LLD-0081-second-alert-and-stop-records.md) |
 | 작성자 | Codex / feature-740 |
 | 작성일 | 2026-10-11 |
@@ -152,4 +152,4 @@ W18의 원래 `cancelSecondAlertIfPending`은 sent/cancelled NULL만 검사해, 
 
 - 저장소 밖 정본 `apiDocs/notification/04_추가본_2026-10-05/추가본_AI용.md` §1-A1·A5, §5 B7. B11은 이 추가본 §1-A5에서 질문으로 남고, 상세 선택지는 아래 분석 §4에 있다.
 - 저장소 밖 분석 `apiDocs/notification/BE-GAP-2026-10-05.md` §3 #7·#8·§4 B11; 계획 `apiDocs/notification/BE-IMPLEMENTATION-PLAN-2026-10-01.md` §11 W20.
-- ADR-0039는 현재 브랜치에 없으며 `feature-734/docs/adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md`를 읽기 전용으로 참조했다(Proposed, 별도 PR #734). [LLD-0070](LLD-0070-self-check-first-heart.md), [LLD-0072](LLD-0072-ok-notice-and-incident-grouping.md), [LLD-0081](LLD-0081-second-alert-and-stop-records.md), [ERD-0001](../erd/ERD-0001-initial-domain.md).
+- [ADR-0039](../adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md)(Accepted 2026-10-12, PR #750). 작성 당시에는 `feature-734` 작업 폴더의 초안을 읽기 전용으로 참조했다. [LLD-0070](LLD-0070-self-check-first-heart.md), [LLD-0072](LLD-0072-ok-notice-and-incident-grouping.md), [LLD-0081](LLD-0081-second-alert-and-stop-records.md), [ERD-0001](../erd/ERD-0001-initial-domain.md).
