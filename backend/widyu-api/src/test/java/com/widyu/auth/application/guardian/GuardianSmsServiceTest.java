@@ -6,6 +6,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.widyu.auth.application.SmsService;
 import com.widyu.auth.application.VerificationCodeService;
 import com.widyu.auth.dto.request.FindPasswordRequest;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GuardianSmsService 단위 테스트")
@@ -78,6 +83,35 @@ class GuardianSmsServiceTest {
         assertThatThrownBy(() -> guardianSmsService.sendVerificationSmsForPasswordReset(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("비밀번호 찾기 대상 회원이 없으면 입력값 없이 WARN 로그만 남긴다")
+    void 비밀번호_찾기_대상_회원이_없으면_입력값_없이_WARN_로그만_남긴다() {
+        // given
+        FindPasswordRequest request = new FindPasswordRequest("없는사람", "none@test.com", "01099999999");
+        given(memberRepository.findByPhoneNumberAndNameAndLocalAccount_Email(
+                "01099999999", "없는사람", "none@test.com"))
+                .willReturn(Optional.empty());
+        Logger logger = (Logger) LoggerFactory.getLogger(GuardianSmsService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            assertThatThrownBy(() -> guardianSmsService.sendVerificationSmsForPasswordReset(request))
+                    .isInstanceOf(BusinessException.class);
+
+            // then
+            ILoggingEvent failure = appender.list.get(appender.list.size() - 1);
+            assertThat(failure.getLevel()).isEqualTo(Level.WARN);
+            assertThat(failure.getFormattedMessage()).isEqualTo("비밀번호 찾기 대상 회원 미일치");
+            assertThat(appender.list).noneMatch(event -> event.getLevel() == Level.ERROR);
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test
