@@ -44,7 +44,7 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
     @Override
     public void validateLoginRequest(SocialLoginRequest request) {
         if (request.authorizationCode() == null || request.authorizationCode().isBlank()) {
-            log.error("애플 인증 코드가 누락되었습니다");
+            log.warn("애플 인증 코드가 누락되었습니다");
             throw new BusinessException(ErrorCode.APPLE_AUTHORIZATION_CODE_IS_BLANK);
         }
     }
@@ -109,7 +109,7 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
 
     private void validateEmail(UserInfo userInfo) {
         if (!userInfo.hasEmail()) {
-            log.error("애플 이메일 정보가 누락되었습니다");
+            log.warn("애플 이메일 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_EMAIL_NOT_PROVIDED);
         }
     }

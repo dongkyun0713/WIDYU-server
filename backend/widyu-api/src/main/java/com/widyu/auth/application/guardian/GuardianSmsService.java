@@ -50,8 +50,8 @@ public class GuardianSmsService {
                 request.name(),
                 request.email()
         ).orElseThrow(() -> {
-            log.error("비밀번호 찾기 대상 회원을 찾을 수 없음: phoneNumber={}, email={}",
-                    PiiMaskingUtil.maskPhoneNumber(request.phoneNumber()), PiiMaskingUtil.maskEmail(request.email()));
+            // 사용자 입력 오류(404)라 ERROR가 아니다. 계정 존재 여부를 추측할 단서가 쌓이지 않도록 입력값은 남기지 않는다.
+            log.warn("비밀번호 찾기 대상 회원 미일치");
             return new BusinessException(ErrorCode.MEMBER_NOT_FOUND);
         });
         

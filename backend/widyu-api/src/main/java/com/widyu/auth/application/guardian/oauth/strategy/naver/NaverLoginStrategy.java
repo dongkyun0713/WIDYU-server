@@ -34,7 +34,7 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
     @Override
     public void validateLoginRequest(SocialLoginRequest request) {
         if (request.accessToken() == null || request.accessToken().isBlank()) {
-            log.error("네이버 액세스 토큰이 누락되었습니다");
+            log.warn("네이버 액세스 토큰이 누락되었습니다");
             throw new BusinessException(ErrorCode.OAUTH_ACCESS_TOKEN_IS_BLANK);
         }
     }
@@ -87,14 +87,14 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
 
     private void validateEmail(UserInfo userInfo) {
         if (!userInfo.hasEmail()) {
-            log.error("네이버 이메일 정보가 누락되었습니다");
+            log.warn("네이버 이메일 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_EMAIL_NOT_PROVIDED);
         }
     }
 
     private void validateName(UserInfo userInfo) {
         if (!userInfo.hasName()) {
-            log.error("네이버 이름 정보가 누락되었습니다");
+            log.warn("네이버 이름 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
         }
     }

@@ -38,7 +38,7 @@ public class KakaoLoginStrategy implements SocialLoginStrategy {
     @Override
     public void validateLoginRequest(SocialLoginRequest request) {
         if (request.accessToken() == null || request.accessToken().isBlank()) {
-            log.error("카카오 액세스 토큰이 누락되었습니다");
+            log.warn("카카오 액세스 토큰이 누락되었습니다");
             throw new BusinessException(ErrorCode.OAUTH_ACCESS_TOKEN_IS_BLANK);
         }
     }
@@ -90,14 +90,14 @@ public class KakaoLoginStrategy implements SocialLoginStrategy {
 
     private void validateEmail(UserInfo userInfo) {
         if (!userInfo.hasEmail()) {
-            log.error("카카오 이메일 정보가 누락되었습니다");
+            log.warn("카카오 이메일 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_EMAIL_NOT_PROVIDED);
         }
     }
 
     private void validateName(UserInfo userInfo) {
         if (!userInfo.hasName()) {
-            log.error("카카오 이름 정보가 누락되었습니다");
+            log.warn("카카오 이름 정보가 누락되었습니다");
             throw new BusinessException(ErrorCode.SOCIAL_NAME_NOT_PROVIDED);
         }
     }
