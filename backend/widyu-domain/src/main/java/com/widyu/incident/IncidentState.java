@@ -6,5 +6,6 @@ public enum IncidentState {
     CHECKING,
     OK_CLOSED,
     ESCALATED,
-    RESOLVED
+    RESOLVED,
+    CANCELLED_BY_SENIOR
 }

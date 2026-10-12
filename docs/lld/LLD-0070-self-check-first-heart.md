@@ -134,6 +134,8 @@ UPDATE incident
 
 ## 8. 영향 범위 / 마이그레이션
 
+[LLD-0083](LLD-0083-watch-self-help-request.md)은 `SELF_HELP_REQUEST`를 즉시 due인 ① 게이트 대상으로 추가하되 60초 무응답 전이는 심박 전용으로 유지한다.
+
 `opened_at_ms` 기준 5분 재사용은 임시 창이며 LLD-0072의 마지막 감지 시각 기준 `attachOrOpen`이 대체한다.
 
 `scripts/mysql/alter_incident_self_check_first.sql`은 `decision_id`를 NULL 허용으로 바꾸고 위 열·`idx_incident_alert_pending(initial_alert_sent_at_ms, respond_by_ms)`를 추가한다. 같은 인덱스를 엔티티 `@Table(indexes=…)`에도 둔다. 기존 UK와 행은 유지한다. 새 enum 저장 열은 VARCHAR이고 `FcmCategory` 값은 추가하지 않는다. 운영 DDL 적용 후 기동한다. 구현 PR에서 [ERD-0001](../erd/ERD-0001-initial-domain.md)의 Incident 열·인덱스·마이그레이션 이력도 갱신한다.

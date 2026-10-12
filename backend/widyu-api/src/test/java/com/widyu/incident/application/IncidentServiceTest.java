@@ -775,7 +775,8 @@ class IncidentServiceTest {
     @DisplayName("응답 대기 목록을 조회하면 아직 답하지 않은 사건만 최근순으로 나온다")
     void 응답_대기_목록을_조회하면_아직_답하지_않은_사건만_나온다() {
         // given
-        given(incidentRepository.findTop50ByMemberIdAndResponseIsNullOrderByOpenedAtMsDesc(SENIOR_ID))
+        given(incidentRepository.findTop50ByMemberIdAndResponseIsNullAndKindNotOrderByOpenedAtMsDesc(
+                SENIOR_ID, IncidentKind.SELF_HELP_REQUEST))
                 .willReturn(List.of(openIncident()));
 
         // when
@@ -809,7 +810,7 @@ class IncidentServiceTest {
                         new SensorProperties.Incident(60, 5000L, false, 5),
                         new SensorProperties.Followup(false, false),
                         new SensorProperties.Medication(true)), memberRepository,
-                incidentEscalation, outboxService, seniorProfileRepository,
+                incidentEscalation, outboxService, null, seniorProfileRepository,
                 familyMembershipRepository, followupCardService, entityManager);
     }
 

@@ -16,6 +16,43 @@ class IncidentStatusResponseTest {
     private static final long WINDOW_MS = 300_000L;
 
     @Test
+    @DisplayName("워치 도움 요청을 취소하면 종료 사유와 취소 시각을 반환한다")
+    void 워치_도움_요청을_취소하면_종료_사유와_시각을_반환한다() {
+        // given
+        Incident incident = Incident.builder().incidentRef("inc-help").memberId(1L)
+                .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(OPENED_AT_MS)
+                .respondByMs(OPENED_AT_MS).build();
+        ReflectionTestUtils.setField(incident, "state", IncidentState.CANCELLED_BY_SENIOR);
+        incident.endSituation(OPENED_AT_MS + 10_000L);
+
+        // when
+        IncidentStatusResponse response = IncidentStatusResponse.from(incident,
+                OPENED_AT_MS + 20_000L, WINDOW_MS, List.of());
+
+        // then
+        assertThat(response.status()).isEqualTo(IncidentStatusResponse.Status.ENDED);
+        assertThat(response.endedReason()).isEqualTo(IncidentStatusResponse.EndedReason.CANCELLED);
+        assertThat(response.endedAtMs()).isEqualTo(OPENED_AT_MS + 10_000L);
+    }
+
+    @Test
+    @DisplayName("열린 워치 도움 요청은 5분이 지나도 열린 상태를 반환한다")
+    void 열린_워치_도움_요청은_오분_뒤에도_열린_상태를_반환한다() {
+        // given
+        Incident incident = Incident.builder().incidentRef("inc-help").memberId(1L)
+                .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(OPENED_AT_MS)
+                .respondByMs(OPENED_AT_MS).build();
+
+        // when
+        IncidentStatusResponse response = IncidentStatusResponse.from(incident,
+                OPENED_AT_MS + WINDOW_MS + 1L, WINDOW_MS, List.of());
+
+        // then
+        assertThat(response.status()).isEqualTo(IncidentStatusResponse.Status.OPEN);
+        assertThat(response.endedReason()).isNull();
+    }
+
+    @Test
     @DisplayName("마지막 감지 뒤 5분 미만에 상태를 조회하면 열린 상황을 반환한다")
     void 마지막_감지_뒤_오분_미만에_조회하면_열린_상황을_반환한다() {
         // given

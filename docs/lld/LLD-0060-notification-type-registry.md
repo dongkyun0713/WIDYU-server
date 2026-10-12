@@ -115,6 +115,8 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/notification` | X02-OS/INAPP |
 | 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | 없음(화면 트리거 전용, `data.type=EMERGENCY_CONFIRM_REQUEST`) | S01 |
 | 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
+| 18a | `SELF_HELP_REQUESTED` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | K01 |
+| 18b | `SELF_HELP_REQUEST_CANCELLED` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | K02 |
 | 19 | `SAFE_ZONE_EXITED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | Z01 |
 | 19a | `SAFE_ZONE_ENTERED` | SAFE_ZONE | LOCATION | PUSH_AND_CENTER | interaction | SAFE_ZONE_90D | SAFE_ZONE | BANNER | `/location?seniorId={seniorId}` | Z02 |
 | 20a | `SAFETY_SENIOR_OK_NOTICE_HEART` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | S08 |
@@ -126,6 +128,8 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 26 | `HEALTH_SCHEDULE_UPDATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H03 |
 | 27 | `HEALTH_SCHEDULE_DELETED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H04 |
 | 28 | `WALK_GOAL_CHANGED` | WALK | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | W02 |
+
+LLD-0083의 K01/K02는 워치 직접 도움 요청과 취소 안내다. K01은 ①·②에서 같은 `eventId=incident_ref`를 쓰고, K02는 `event_id VARCHAR(40)`에 맞춘 `incident_ref:CX`를 쓴다.
 
 매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08은 심박 OK 안내다. 안심구역은 사건이 아니며 S02·S05·S07·S09 대신 제목만 있는 Z01·Z02를 쓴다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
 

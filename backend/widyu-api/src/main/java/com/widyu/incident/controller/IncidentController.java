@@ -6,11 +6,14 @@ import com.widyu.global.util.SecurityUtil;
 import com.widyu.incident.application.IncidentService;
 import com.widyu.incident.controller.docs.IncidentDocs;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
+import com.widyu.incident.dto.request.HelpRequestCreateRequest;
 import com.widyu.incident.dto.request.GuardianResponseRequest;
 import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
+import com.widyu.incident.dto.response.HelpRequestResult;
+import com.widyu.incident.dto.response.HelpRequestCancelResult;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +32,22 @@ public class IncidentController implements IncidentDocs {
 
     private final IncidentService incidentService;
     private final SecurityUtil securityUtil;
+
+    @Override
+    @PostMapping("/help-requests")
+    public ApiResponseTemplate<HelpRequestResult> openHelpRequest(
+            @RequestBody(required = false) HelpRequestCreateRequest request) {
+        HelpRequestResult result = incidentService.openHelpRequest(securityUtil.getCurrentMemberId(), request);
+        return ApiResponseTemplate.ok().code("INCIDENT_2007").message("도움 요청 접수 완료").body(result);
+    }
+
+    @Override
+    @PostMapping("/{incidentRef}/cancel")
+    public ApiResponseTemplate<HelpRequestCancelResult> cancelHelpRequest(@PathVariable String incidentRef) {
+        HelpRequestCancelResult result = incidentService.cancelHelpRequest(
+                securityUtil.getCurrentMemberId(), incidentRef);
+        return ApiResponseTemplate.ok().code("INCIDENT_2008").message("도움 요청 취소 완료").body(result);
+    }
 
     @Override
     @PostMapping("/{incidentId}/response")

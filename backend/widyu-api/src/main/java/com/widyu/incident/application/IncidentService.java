@@ -7,6 +7,7 @@ import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
+import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.followup.application.FollowupCardService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -16,6 +17,7 @@ import com.widyu.incident.Incident;
 import com.widyu.incident.IncidentKind;
 import com.widyu.incident.IncidentResponseValue;
 import com.widyu.incident.IncidentResponseAttempt;
+import com.widyu.incident.ResponseVia;
 import com.widyu.incident.IncidentState;
 import com.widyu.incident.ResponseAttemptOutcome;
 import com.widyu.incident.GuardianResponseType;
@@ -25,6 +27,9 @@ import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
+import com.widyu.incident.dto.request.HelpRequestCreateRequest;
+import com.widyu.incident.dto.response.HelpRequestResult;
+import com.widyu.incident.dto.response.HelpRequestCancelResult;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.incident.repository.IncidentGuardianResponseRepository;
 import com.widyu.incident.repository.IncidentResponseAttemptRepository;
@@ -44,6 +49,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 /**
  * 위급 판정 뒤의 본인확인·사후 판정을 사건 하나로 남긴다(LLD-0054 5절).
@@ -70,10 +76,106 @@ public class IncidentService {
     private final MemberRepository memberRepository;
     private final IncidentEscalation incidentEscalation;
     private final FcmOutboxService outboxService;
+    private final FcmNotificationRepository fcmNotifications;
     private final SeniorProfileRepository seniorProfileRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
     private final FollowupCardService followupCardService;
     private final EntityManager entityManager;
+
+    /** 워치 요청과 심박 감지를 회원 행 잠금으로 직렬화한다. */
+    @Transactional
+    public HelpRequestResult openHelpRequest(Long memberId, HelpRequestCreateRequest request) {
+        Member senior = requireActiveSenior(memberId);
+        if (request != null && request.via() != ResponseVia.WATCH) {
+            throw new BusinessException(ErrorCode.INCIDENT_REQUEST_INVALID);
+        }
+        Long deviceRequestedAtMs = null;
+        if (request != null) {
+            deviceRequestedAtMs = request.deviceRequestedAtMs();
+        }
+        long nowMs = System.currentTimeMillis();
+        List<IncidentState> activeStates = List.of(IncidentState.CHECKING, IncidentState.ESCALATED);
+        Optional<Incident> heart = incidentRepository
+                .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+                        memberId, IncidentKind.HR_ANOMALY, activeStates);
+        if (heart.isPresent()) {
+            Incident current = heart.get();
+            if (nowMs - current.lastDetectedAtOrOpenedAt() < situationWindowMs()) {
+                long incidentId = current.getId();
+                int updated = incidentRepository.respond(current.getIncidentRef(), memberId,
+                        IncidentResponseValue.HELP, ResponseVia.WATCH, nowMs, deviceRequestedAtMs,
+                        IncidentState.ESCALATED);
+                ResponseAttemptOutcome outcome = ResponseAttemptOutcome.DUPLICATE;
+                if (updated == 1) {
+                    outcome = ResponseAttemptOutcome.ACCEPTED;
+                    if (nowMs >= current.getRespondByMs()) {
+                        outcome = ResponseAttemptOutcome.LATE;
+                    }
+                }
+                responseAttempts.save(IncidentResponseAttempt.of(incidentId, IncidentResponseValue.HELP,
+                        ResponseVia.WATCH, deviceRequestedAtMs, nowMs, outcome));
+                Incident attached = incidentRepository.findById(incidentId).orElseThrow();
+                return HelpRequestResult.of(attached, true);
+            }
+            current.endSituation(current.lastDetectedAtOrOpenedAt() + situationWindowMs());
+        }
+        List<IncidentState> helpStates = List.of(IncidentState.OPEN, IncidentState.CHECKING,
+                IncidentState.ESCALATED);
+        Optional<Incident> existing = incidentRepository
+                .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+                        memberId, IncidentKind.SELF_HELP_REQUEST, helpStates);
+        if (existing.isPresent()) {
+            return HelpRequestResult.of(existing.get(), true);
+        }
+        Incident created = incidentRepository.save(Incident.builder()
+                .incidentRef("inc-" + UUID.randomUUID().toString().replace("-", ""))
+                .memberId(senior.getId())
+                .kind(IncidentKind.SELF_HELP_REQUEST)
+                .openedAtMs(nowMs)
+                .respondByMs(nowMs)
+                .build());
+        return HelpRequestResult.of(created, false);
+    }
+
+    /** 사건과 안내 예약을 같은 트랜잭션에서 확정한다. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public HelpRequestCancelResult cancelHelpRequest(Long memberId, String incidentRef) {
+        Member senior = requireActiveSenior(memberId);
+        Incident owned = findOwned(memberId, incidentRef);
+        entityManager.clear();
+        Incident locked = incidentRepository.findByIdForUpdate(owned.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
+        long nowMs = System.currentTimeMillis();
+        int updated = incidentRepository.cancelHelpRequest(incidentRef, memberId, nowMs);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.INCIDENT_HELP_REQUEST_NOT_OPEN);
+        }
+        incidentRepository.closeSecondAlertIfPending(locked.getId(), nowMs);
+        List<Long> recipients = fcmNotifications.findRecipientMemberIdsByEventId(incidentRef);
+        if (!recipients.isEmpty()) {
+            NotificationType type = NotificationType.SELF_HELP_REQUEST_CANCELLED;
+            NotificationCopy copy = NotificationCopy.of(type, "K02", Map.of("시니어 이름", senior.getName()));
+            FcmSendDto message = FcmSendDto.builder()
+                    .title(copy.title()).content(copy.body()).notificationType(type)
+                    .eventId(incidentRef + ":CX").entityId(incidentRef)
+                    .seniorId(memberId).relatedMemberId(memberId)
+                    .image(senior.getProfileImage()).emergency(false).build();
+            for (Long recipientId : recipients) {
+                outboxService.enqueue(recipientId, message);
+            }
+        }
+        Incident cancelled = incidentRepository.findByIncidentRef(incidentRef).orElseThrow();
+        return HelpRequestCancelResult.from(cancelled);
+    }
+
+    private Member requireActiveSenior(Long memberId) {
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getType() != MemberType.SENIOR || member.getStatus() != Status.ACTIVE) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return member;
+    }
 
     /** 배치 판정을 같은 심박 상황의 사건에 붙인다. 낙상은 기존 경로를 유지한다. */
     @Transactional
@@ -274,7 +376,8 @@ public class IncidentService {
         }
         Incident resolved = incidentRepository.findByIncidentRef(incidentRef)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
-        if (resolved.getKind() == IncidentKind.HR_ANOMALY) {
+        if (resolved.getKind() == IncidentKind.HR_ANOMALY
+                || resolved.getKind() == IncidentKind.SELF_HELP_REQUEST) {
             resolved.endSituation(resolved.getResolvedAtMs());
         }
         log.info("인시던트 사후 판정: guardianId={}, incidentRef={}", guardianId, incidentRef);
@@ -381,7 +484,9 @@ public class IncidentService {
     /** 시니어 본인이 아직 답하지 않은 사건. 앱이 확인 화면을 띄울 목록이다. */
     @Transactional(readOnly = true)
     public List<IncidentResponse> findPending(Long memberId) {
-        return toResponses(incidentRepository.findTop50ByMemberIdAndResponseIsNullOrderByOpenedAtMsDesc(memberId));
+        return toResponses(incidentRepository
+                .findTop50ByMemberIdAndResponseIsNullAndKindNotOrderByOpenedAtMsDesc(
+                        memberId, IncidentKind.SELF_HELP_REQUEST));
     }
 
     private Incident findOwned(Long memberId, String incidentRef) {

@@ -10,6 +10,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,33 @@ class FcmNotificationConditionalReadIntegrationTest {
             notifications.deleteAll();
             members.deleteAll();
         });
+    }
+
+    @Test
+    @DisplayName("사건 이벤트의 센터 수신자를 조회하면 실제 수신자만 중복 없이 반환한다")
+    void 사건_이벤트의_센터_수신자를_조회하면_실제_수신자만_반환한다() {
+        // given
+        List<Long> ids = new TransactionTemplate(transactionManager).execute(status -> {
+            Member first = members.save(Member.createMember(MemberType.GUARDIAN, "첫째", "01012345670"));
+            Member second = members.save(Member.createMember(MemberType.GUARDIAN, "둘째", "01012345671"));
+            notifications.save(FcmNotification.builder().recipientMember(first)
+                    .eventId("inc-help").fcmCategory(FcmCategory.HEART_MESSAGE)
+                    .title("요청").isRead(false).build());
+            notifications.save(FcmNotification.builder().recipientMember(second)
+                    .eventId("inc-help").fcmCategory(FcmCategory.HEART_MESSAGE)
+                    .title("요청").isRead(false).build());
+            notifications.save(FcmNotification.builder().recipientMember(first)
+                    .eventId("inc-other").fcmCategory(FcmCategory.HEART_MESSAGE)
+                    .title("다른 사건").isRead(false).build());
+            return List.of(first.getId(), second.getId());
+        });
+
+        // when
+        List<Long> recipients = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.findRecipientMemberIdsByEventId("inc-help"));
+
+        // then
+        assertThat(recipients).containsExactlyInAnyOrderElementsOf(ids);
     }
 
     @Test

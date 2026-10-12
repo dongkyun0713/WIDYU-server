@@ -56,6 +56,8 @@ public record NotificationCopy(String title, String body) {
             copy("Z01", "{시니어 이름} 님이 안심구역을 벗어났어요.", null),
             copy("Z02", "{시니어 이름} 님이 안심구역으로 돌아왔어요.", null),
             copy("S10", "괜찮다고 보호자에게 전해드렸어요.", null),
+            copy("K01", "{시니어 이름} 님이 워치로 직접 도움을 요청했어요.", null),
+            copy("K02", "{시니어 이름} 님이 도움 요청을 취소했어요.", null),
             copy("R01", "이제 가족 방장이 되었어요.", "가족 관리와 중요한 알림을 확인해주세요."));
 
     public static NotificationCopy of(NotificationType type, String code, Map<String, String> values) {

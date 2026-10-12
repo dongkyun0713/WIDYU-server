@@ -148,7 +148,7 @@ public class Incident extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
-    @Column(name = "state", nullable = false, length = 16)
+    @Column(name = "state", nullable = false, length = 24)
     private IncidentState state;
 
     @Enumerated(EnumType.STRING)

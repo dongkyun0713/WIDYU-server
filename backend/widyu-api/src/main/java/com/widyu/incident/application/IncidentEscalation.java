@@ -78,11 +78,16 @@ public class IncidentEscalation {
             return false;
         }
         long windowMs = sensorProperties.incident().situationWindowMin() * 60_000L;
-        if (incident.getKind() != IncidentKind.HR_ANOMALY
+        boolean supportedKind = incident.getKind() == IncidentKind.HR_ANOMALY
+                || incident.getKind() == IncidentKind.SELF_HELP_REQUEST;
+        boolean expiredHeart = incident.getKind() == IncidentKind.HR_ANOMALY
+                && incident.lastDetectedAtOrOpenedAt() + windowMs <= nowMs;
+        if (!supportedKind
                 || incident.getSituationEndedAtMs() != null
-                || (incident.getState() != IncidentState.CHECKING
+                || (incident.getState() != IncidentState.OPEN
+                    && incident.getState() != IncidentState.CHECKING
                     && incident.getState() != IncidentState.ESCALATED)
-                || incident.lastDetectedAtOrOpenedAt() + windowMs <= nowMs
+                || expiredHeart
                 || guardianResponses.existsByIncidentId(id)) {
             incidentRepository.closeSecondAlertIfPending(id, nowMs);
             return false;
@@ -116,9 +121,10 @@ public class IncidentEscalation {
         return true;
     }
 
-    /** OFF 즉시 경로와 ON 스케줄러가 공유하는 심박 보호자 S04 생성 경로다. */
+    /** 심박 S04와 워치 도움 요청 K01이 방장 선택을 공유한다. */
     void enqueueInitialAlert(Incident incident) {
-        if (incident.getKind() != IncidentKind.HR_ANOMALY) {
+        if (incident.getKind() != IncidentKind.HR_ANOMALY
+                && incident.getKind() != IncidentKind.SELF_HELP_REQUEST) {
             throw new IllegalArgumentException("최초 보호자 알림을 지원하지 않는 사건 종류입니다.");
         }
         Member senior = memberRepository.findById(incident.getMemberId())
@@ -155,7 +161,12 @@ public class IncidentEscalation {
 
     private FcmSendDto notificationFor(Incident incident, Member senior, String stage) {
         NotificationType type = NotificationType.HEART_RATE_EMERGENCY;
-        NotificationCopy copy = NotificationCopy.of(type, "S04", Map.of("시니어 이름", senior.getName()));
+        String copyCode = "S04";
+        if (incident.getKind() == IncidentKind.SELF_HELP_REQUEST) {
+            type = NotificationType.SELF_HELP_REQUESTED;
+            copyCode = "K01";
+        }
+        NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
         Map<String, String> data = Map.of("deliveryStage", stage,
                 "safetyEventId", incident.getIncidentRef());
         if ("SECOND_ALERT".equals(stage)) {

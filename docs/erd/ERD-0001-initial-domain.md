@@ -380,7 +380,7 @@ erDiagram
         Long memberId
         String runId
         String decisionId UK "NULL 허용: 단건 심박은 판정 없음"
-        String kind "HR_ANOMALY / FALL_SUSPECTED / SAFE_ZONE_EXIT(과거 행 호환)"
+        String kind "HR_ANOMALY / SELF_HELP_REQUEST / FALL_SUSPECTED / SAFE_ZONE_EXIT(과거 행 호환)"
         String level "판정 severity 복사"
         Long openedAtMs
         Long respondByMs "openedAtMs + 60초 (설정값)"
@@ -401,7 +401,7 @@ erDiagram
         Long guardianResponseBy "구 첫 기록 읽기 전용"
         Long policyRevision "신규 사건 정책판 20261005; 기존 NULL 허용"
         String responseVia "WATCH / PHONE"
-        String state "OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED"
+        String state "VARCHAR(24): OPEN / CHECKING / OK_CLOSED / ESCALATED / RESOLVED / CANCELLED_BY_SENIOR"
         String outcome "TRUE_EMERGENCY / FALSE_ALARM / UNKNOWN. 실증 학습 라벨"
         Long resolvedBy "보호자 member_id"
         Long resolvedAtMs
@@ -903,6 +903,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-11 | `incident` | 워치 도움 요청 취소 상태를 위한 `state VARCHAR(24)` 확장 (LLD-0083) | `scripts/mysql/alter_incident_state_length.sql` |
 | 2026-10-11 | `incident_response_attempt` | 본인확인 수락·지각·중복 시도 이력 (LLD-0082) | `scripts/mysql/create_incident_response_attempt.sql` |
 | 2026-10-02 | `followup_card`·`followup_answer` | OK 종료 후 카드와 시니어 원답·두 제출 시각 (LLD-0073) | `scripts/mysql/create_followup_card.sql` |
 | 2026-10-02 | `incident_label`·`label_annotation` | 두 라벨 축과 판독 revision (LLD-0074) | `scripts/mysql/create_incident_label.sql` |

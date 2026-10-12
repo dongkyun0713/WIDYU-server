@@ -2,11 +2,14 @@ package com.widyu.incident.controller.docs;
 
 import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.incident.dto.request.IncidentRespondRequest;
+import com.widyu.incident.dto.request.HelpRequestCreateRequest;
 import com.widyu.incident.dto.request.GuardianResponseRequest;
 import com.widyu.incident.dto.response.GuardianResponseResult;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
+import com.widyu.incident.dto.response.HelpRequestResult;
+import com.widyu.incident.dto.response.HelpRequestCancelResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,6 +18,27 @@ import java.util.List;
 
 @Tag(name = "Incident", description = "위급 알림 뒤의 본인확인·사후 판정 API")
 public interface IncidentDocs {
+
+    @Operation(summary = "워치 도움 요청", description = """
+            시니어가 워치에서 직접 도움을 요청합니다. 본문은 생략하거나 via=WATCH와
+            deviceRequestedAtMs를 보낼 수 있습니다. 열린 심박 사건에는 HELP로 부착하고
+            이미 답한 사건이면 첫 응답을 보존하며 시도 이력을 남깁니다. 열린 도움 요청은
+            같은 사건을 200으로 반환하고 ①을 다시 보내지 않습니다.
+            """)
+    @ApiResponse(responseCode = "200", description = "사건 접수 또는 멱등 부착, INCIDENT_2007")
+    @ApiResponse(responseCode = "400", description = "잘못된 via 또는 본문")
+    @ApiResponse(responseCode = "403", description = "시니어 계정 아님")
+    ApiResponseTemplate<HelpRequestResult> openHelpRequest(HelpRequestCreateRequest request);
+
+    @Operation(summary = "워치 도움 요청 취소", description = """
+            자기 자신의 열린 SELF_HELP_REQUEST만 취소합니다. 미발송 ②를 막고 ①·②의
+            실제 센터 수신자에게 취소 안내를 한 번 예약합니다. 심박 OK는 기존 응답 API를 사용합니다.
+            """)
+    @ApiResponse(responseCode = "200", description = "취소 완료, INCIDENT_2008")
+    @ApiResponse(responseCode = "403", description = "시니어 계정 아님")
+    @ApiResponse(responseCode = "404", description = "사건 없음 또는 다른 시니어 소유")
+    @ApiResponse(responseCode = "409", description = "열린 도움 요청 아님, INCIDENT_4093")
+    ApiResponseTemplate<HelpRequestCancelResult> cancelHelpRequest(String incidentRef);
 
     @Operation(
             summary = "본인확인 응답",
@@ -61,7 +85,8 @@ public interface IncidentDocs {
 
     @Operation(summary = "보호자 상황 상태 조회", description = """
             알림의 사건이 이어지는지 조회합니다. `status=OPEN|ENDED`는 저장된 종료 시각,
-            OK_CLOSED/RESOLVED 상태 또는 마지막 감지 뒤 5분 경과로 계산하며 DB를 갱신하지 않습니다.
+            OK_CLOSED/RESOLVED/CANCELLED_BY_SENIOR 상태 또는 심박·낙상의 마지막 감지 뒤
+            5분 경과로 계산하며 DB를 갱신하지 않습니다. 열린 워치 도움 요청은 5분만으로 종료되지 않습니다.
             `endedAtMs`와 `endedReason`은 OPEN일 때 null입니다. `state`는 DB 원래 값이고
             `myResponse`에는 요청 보호자 자신의 멈춤 종류만 담깁니다. 다른 보호자의 멈춤은
             종료 조건이 아닙니다. 사건 없음·타 가족·시니어 요청은 404(`INCIDENT_4040`),
@@ -94,7 +119,8 @@ public interface IncidentDocs {
             description = """
                     보호자가 같은 가족 시니어의 사건을 최근순 50건까지 봅니다.
 
-                    `state`로 `OPEN` · `CHECKING` · `OK_CLOSED` · `ESCALATED` · `RESOLVED`를
+                    `state`로 `OPEN` · `CHECKING` · `OK_CLOSED` · `ESCALATED` · `RESOLVED` ·
+                    `CANCELLED_BY_SENIOR`를
                     걸러낼 수 있습니다. 값 집합 밖이면 400(`INCIDENT_4000`)입니다.
                     """
     )

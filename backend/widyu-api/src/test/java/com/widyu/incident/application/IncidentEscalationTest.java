@@ -49,6 +49,67 @@ class IncidentEscalationTest {
     @InjectMocks private IncidentEscalation escalation;
 
     @Test
+    @DisplayName("워치 도움 요청이 마감되면 방장에게 K01 최초 알림을 예약한다")
+    void 워치_도움_요청이_마감되면_방장에게_K01을_예약한다() {
+        // given
+        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L)
+                .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(1L).respondByMs(1L).build();
+        given(incidents.claimInitialAlertIfDue(3L, 2L)).willReturn(1);
+        given(incidents.findById(3L)).willReturn(Optional.of(incident));
+        givenHeartRecipients();
+
+        // when
+        boolean queued = escalation.escalateIfDue(3L, 2L);
+
+        // then
+        assertThat(queued).isTrue();
+        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), message.capture());
+        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.SELF_HELP_REQUESTED);
+        assertThat(message.getValue().title()).isEqualTo("시니어 님이 워치로 직접 도움을 요청했어요.");
+        assertThat(message.getValue().content()).isNull();
+        assertThat(message.getValue().dataForEnqueue("inc-1"))
+                .containsEntry("deliveryStage", "INITIAL_ALERT")
+                .containsEntry("safetyEventId", "inc-1");
+    }
+
+    @Test
+    @DisplayName("오래 열린 워치 도움 요청은 5분이 지나도 2차 알림을 예약한다")
+    void 오래_열린_워치_도움_요청은_오분_뒤에도_이차_알림을_예약한다() {
+        // given
+        long nowMs = System.currentTimeMillis();
+        Incident incident = Incident.builder().incidentRef("inc-1").memberId(1L)
+                .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(nowMs - 600_000L)
+                .respondByMs(nowMs - 600_000L).build();
+        incident.markInitialAlertSent(nowMs - 181_000L);
+        org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
+        Member senior = Mockito.mock(Member.class);
+        Member guardian = Mockito.mock(Member.class);
+        FamilyMembership membership = Mockito.mock(FamilyMembership.class);
+        given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
+        given(incidents.claimSecondAlertIfDue(eq(3L), anyLong())).willReturn(1);
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(members.findById(1L)).willReturn(Optional.of(senior));
+        given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
+        given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(membership));
+        given(senior.getName()).willReturn("시니어");
+        given(membership.getGuardian()).willReturn(guardian);
+        given(guardian.getStatus()).willReturn(Status.ACTIVE);
+        given(guardian.getId()).willReturn(2L);
+
+        // when
+        boolean queued = escalation.sendSecondAlertIfDue(3L);
+
+        // then
+        assertThat(queued).isTrue();
+        ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(outbox).should().enqueue(eq(2L), message.capture());
+        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.SELF_HELP_REQUESTED);
+        assertThat(message.getValue().dataForEnqueue("inc-1"))
+                .containsEntry("deliveryStage", "SECOND_ALERT");
+    }
+
+    @Test
     @DisplayName("멈춤 없이 2차 마감이 지나면 활성 보호자 전원에게 2차 알림을 예약한다")
     void 멈춤_없이_이차_마감이_지나면_활성_보호자_전원에게_예약한다() {
         // given

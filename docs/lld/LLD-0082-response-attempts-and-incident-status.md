@@ -132,6 +132,8 @@ ENDED 판정은 `situation_ended_at_ms != null` **또는** `state=OK_CLOSED|RESO
 
 ## 8. 영향 범위 / 마이그레이션
 
+[LLD-0083](LLD-0083-watch-self-help-request.md)은 워치 HELP가 열린 심박 사건에 부착될 때 첫 응답을 보존하고 기존 응답이 있으면 `DUPLICATE` 이력·200을 남긴다. 도움 요청 취소는 상태 조회에서 `ENDED`/`endedReason=CANCELLED`이며, 열린 도움 요청은 심박 5분 창으로 자동 종료하지 않는다.
+
 앱 전환 전에 새 테이블 DDL을 적용한다. 기존 `incident` ALTER와 native ENUM ALTER는 없다. 과거 사건 응답은 정확한 시도별 시각·기기를 재구성할 수 없어 백필하지 않으며, 배포 뒤 요청부터 이력이 생긴다. `incident_guardian_response`의 W18 이관 결과는 유지한다.
 
 W18의 원래 `cancelSecondAlertIfPending`은 sent/cancelled NULL만 검사해, 5분이 지났지만 `situation_ended_at_ms`가 NULL인 사건에서도 1건을 갱신할 수 있었다. W20은 종료 상태·기록 종료·마지막 감지 5분 창 조건을 추가해 이 경우 0건으로 만든다. W18 스케줄러가 종료 후보의 게이트를 닫는 일은 `closeSecondAlertIfPending`으로 분리해 재조회가 반복되지 않게 한다. W18의 `secondAlertCancelled`에는 배포 억제 시각도 있으므로 `incidentEnded`와 뜻을 섞지 않는다.

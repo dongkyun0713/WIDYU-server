@@ -95,6 +95,8 @@ HTTP 요청·응답과 `POST /api/v1/incidents/{incidentId}/response`의 `HELP` 
 
 ## 8. 영향 범위 / 마이그레이션
 
+[LLD-0083](LLD-0083-watch-self-help-request.md)은 워치 도움 요청 K01에도 같은 활성 방장 1명 선정과 `deliveryStage`·`safetyEventId` 계약을 적용한다. 심박 S04 문구·타입은 유지한다.
+
 LLD-0070 §5.3·§7의 전원 발송 기대와 LLD-0060의 타입 표 중 바뀌는 부분을 이 문서의 W17 기준으로 대체한다. `FcmOutboxService`의 센터 1행, 안전 설정 판정, outbox 재시도·TTL·알림센터 읽음 계약은 유지한다. `NotificationType`의 위 표시/우선순위 외 다른 열은 바꾸지 않는다.
 
 스키마 변경은 없다. `policy_revision BIGINT NULL`은 운영 DDL과 ERD에 이미 있다. 과거 NULL 사건을 새 정책으로 오인하지 않도록 백필하지 않는다. 배포 뒤 새 사건만 revision이 채워지는지 확인한다. 앱은 `MODAL`과 새 data 키를 인식해야 하며 서버 변경만으로 실제 모달 표시를 보장하지 않는다.

@@ -9,13 +9,13 @@ import org.junit.jupiter.api.Test;
 
 class NotificationTypeTest {
     @Test
-    @DisplayName("승인된 서버 알림을 등록하면 32개 타입과 네 전달 방식을 반환한다")
+    @DisplayName("승인된 서버 알림을 등록하면 34개 타입과 네 전달 방식을 반환한다")
     void 승인된_서버_알림을_등록하면_타입과_전달_방식을_반환한다() {
         // given / when
         NotificationType[] types = NotificationType.values();
 
         // then
-        assertThat(types).hasSize(32);
+        assertThat(types).hasSize(34);
         assertThat(Arrays.stream(types).map(NotificationType::deliveryMode).distinct())
                 .containsExactlyInAnyOrder(DeliveryMode.values());
         assertThat(Arrays.stream(types).map(NotificationType::name))
@@ -39,6 +39,13 @@ class NotificationTypeTest {
         assertThat(emergency.centerFilter()).isEqualTo("LOCATION");
         assertThat(emergency.priority()).isEqualTo(NotificationPriority.CRITICAL);
         assertThat(emergency.settingGroup()).isEqualTo(PushSettingGroup.SAFETY);
+        assertThat(NotificationType.SELF_HELP_REQUESTED.priority()).isEqualTo(NotificationPriority.CRITICAL);
+        assertThat(NotificationType.SELF_HELP_REQUESTED.foregroundPresentation()).isEqualTo("MODAL");
+        assertThat(NotificationType.SELF_HELP_REQUESTED.settingGroup()).isEqualTo(PushSettingGroup.SAFETY);
+        assertThat(NotificationType.SELF_HELP_REQUEST_CANCELLED.priority())
+                .isEqualTo(NotificationPriority.INTERACTION);
+        assertThat(NotificationType.SELF_HELP_REQUEST_CANCELLED.settingGroup())
+                .isEqualTo(PushSettingGroup.GENERAL);
         assertThat(heartOk.retentionClass()).isEqualTo(RetentionClass.HEART_EMERGENCY_180D);
         assertThat(zoneExit.retentionClass()).isEqualTo(RetentionClass.SAFE_ZONE_90D);
         assertThat(zoneEnter.retentionClass()).isEqualTo(RetentionClass.SAFE_ZONE_90D);
