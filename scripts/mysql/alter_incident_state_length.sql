@@ -1,0 +1,2 @@
+-- LLD-0083: CANCELLED_BY_SENIOR(19자)를 담도록 사건 상태 열을 확장한다.
+ALTER TABLE incident MODIFY COLUMN state VARCHAR(24) NOT NULL;

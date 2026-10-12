@@ -20,7 +20,7 @@ public record IncidentStatusResponse(
 ) {
     public enum Status { OPEN, ENDED }
 
-    public enum EndedReason { SENIOR_OK, RESOLVED, WINDOW_ELAPSED }
+    public enum EndedReason { SENIOR_OK, RESOLVED, CANCELLED, WINDOW_ELAPSED }
 
     public static IncidentStatusResponse from(Incident incident, long nowMs, long windowMs,
             List<GuardianResponseType> myResponses) {
@@ -39,7 +39,9 @@ public record IncidentStatusResponse(
             } else {
                 endedAtMs = lastDetectedAtMs + windowMs;
             }
-            if (incident.getState() == IncidentState.OK_CLOSED) {
+            if (incident.getState() == IncidentState.CANCELLED_BY_SENIOR) {
+                endedReason = EndedReason.CANCELLED;
+            } else if (incident.getState() == IncidentState.OK_CLOSED) {
                 endedReason = EndedReason.SENIOR_OK;
             } else if (incident.getState() == IncidentState.RESOLVED) {
                 endedReason = EndedReason.RESOLVED;
@@ -56,8 +58,12 @@ public record IncidentStatusResponse(
         if (incident.getSituationEndedAtMs() != null) {
             return true;
         }
-        if (incident.getState() == IncidentState.OK_CLOSED || incident.getState() == IncidentState.RESOLVED) {
+        if (incident.getState() == IncidentState.OK_CLOSED || incident.getState() == IncidentState.RESOLVED
+                || incident.getState() == IncidentState.CANCELLED_BY_SENIOR) {
             return true;
+        }
+        if (incident.getKind() == IncidentKind.SELF_HELP_REQUEST) {
+            return false;
         }
         return nowMs >= incident.lastDetectedAtOrOpenedAt() + windowMs;
     }

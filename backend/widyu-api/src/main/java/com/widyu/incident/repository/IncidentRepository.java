@@ -56,6 +56,9 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
 
     List<Incident> findTop50ByMemberIdAndResponseIsNullOrderByOpenedAtMsDesc(Long memberId);
 
+    List<Incident> findTop50ByMemberIdAndResponseIsNullAndKindNotOrderByOpenedAtMsDesc(
+            Long memberId, IncidentKind kind);
+
     List<Incident> findByRunIdOrderByOpenedAtMsAsc(String runId);
 
     /**
@@ -87,7 +90,9 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
              WHERE i.incidentRef = :incidentRef
                AND i.memberId = :memberId
                AND i.response IS NULL
-               AND i.state <> com.widyu.incident.IncidentState.RESOLVED
+               AND i.state NOT IN (com.widyu.incident.IncidentState.RESOLVED,
+                                   com.widyu.incident.IncidentState.CANCELLED_BY_SENIOR)
+               AND i.kind <> com.widyu.incident.IncidentKind.SELF_HELP_REQUEST
             """)
     int respond(
             @Param("incidentRef") String incidentRef,
@@ -116,7 +121,8 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                    i.resolvedAtMs = :resolvedAtMs,
                    i.emergencyCalledAtMs = :emergencyCalledAtMs
              WHERE i.incidentRef = :incidentRef
-               AND i.state <> com.widyu.incident.IncidentState.RESOLVED
+               AND i.state NOT IN (com.widyu.incident.IncidentState.RESOLVED,
+                                   com.widyu.incident.IncidentState.CANCELLED_BY_SENIOR)
             """)
     int resolve(
             @Param("incidentRef") String incidentRef,
@@ -128,12 +134,17 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     @Query("""
             SELECT i.id FROM Incident i
              WHERE i.id > :afterId
-               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
-               AND ((i.state IN (com.widyu.incident.IncidentState.OPEN,
+               AND ((i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+                    AND ((i.state IN (com.widyu.incident.IncidentState.OPEN,
                                  com.widyu.incident.IncidentState.CHECKING)
                      AND i.respondByMs < :nowMs)
                     OR (i.state = com.widyu.incident.IncidentState.ESCALATED
-                        AND i.initialAlertSentAtMs IS NULL))
+                        AND i.initialAlertSentAtMs IS NULL)))
+                    OR (i.kind = com.widyu.incident.IncidentKind.SELF_HELP_REQUEST
+                        AND i.state = com.widyu.incident.IncidentState.OPEN
+                        AND i.situationEndedAtMs IS NULL
+                        AND i.initialAlertSentAtMs IS NULL
+                        AND i.respondByMs < :nowMs))
              ORDER BY i.id
             """)
     List<Long> findDueIds(@Param("nowMs") long nowMs, @Param("afterId") long afterId, Pageable limit);
@@ -159,19 +170,23 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                    i.secondAlertDueAtMs = :nowMs + 180000
              WHERE i.id = :id
                AND i.initialAlertSentAtMs IS NULL
-               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND (i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+                    OR i.kind = com.widyu.incident.IncidentKind.SELF_HELP_REQUEST)
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING,
                                com.widyu.incident.IncidentState.ESCALATED)
+               AND i.situationEndedAtMs IS NULL
                AND (i.respondByMs < :nowMs
-                    OR i.state = com.widyu.incident.IncidentState.ESCALATED)
+                    OR (i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+                        AND i.state = com.widyu.incident.IncidentState.ESCALATED))
             """)
     int claimInitialAlertIfDue(@Param("id") Long id, @Param("nowMs") long nowMs);
 
     @Query("""
             SELECT i.id FROM Incident i
              WHERE i.id > :afterId
-               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
+                              com.widyu.incident.IncidentKind.SELF_HELP_REQUEST)
                AND i.secondAlertDueAtMs <= :nowMs
                AND i.secondAlertSentAtMs IS NULL
                AND i.secondAlertCancelledAtMs IS NULL
@@ -182,7 +197,13 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     @Modifying(flushAutomatically = true)
     @Query("""
             UPDATE Incident i SET i.secondAlertSentAtMs = :nowMs
-             WHERE i.id = :id AND i.secondAlertSentAtMs IS NULL
+             WHERE i.id = :id
+               AND i.kind IN (com.widyu.incident.IncidentKind.HR_ANOMALY,
+                              com.widyu.incident.IncidentKind.SELF_HELP_REQUEST)
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
+                               com.widyu.incident.IncidentState.CHECKING,
+                               com.widyu.incident.IncidentState.ESCALATED)
+               AND i.secondAlertSentAtMs IS NULL
                AND i.secondAlertCancelledAtMs IS NULL
                AND i.secondAlertDueAtMs <= :nowMs
                AND i.situationEndedAtMs IS NULL
@@ -199,7 +220,8 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                AND i.state IN (com.widyu.incident.IncidentState.OPEN,
                                com.widyu.incident.IncidentState.CHECKING,
                                com.widyu.incident.IncidentState.ESCALATED)
-               AND COALESCE(i.lastDetectedAtMs, i.openedAtMs) + :windowMs > :nowMs
+               AND (i.kind = com.widyu.incident.IncidentKind.SELF_HELP_REQUEST
+                    OR COALESCE(i.lastDetectedAtMs, i.openedAtMs) + :windowMs > :nowMs)
             """)
     int cancelSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs,
             @Param("windowMs") long windowMs);
@@ -212,6 +234,21 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
                AND i.secondAlertCancelledAtMs IS NULL
             """)
     int closeSecondAlertIfPending(@Param("id") Long id, @Param("nowMs") long nowMs);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.state = com.widyu.incident.IncidentState.CANCELLED_BY_SENIOR,
+                   i.situationEndedAtMs = :nowMs
+             WHERE i.incidentRef = :incidentRef AND i.memberId = :memberId
+               AND i.kind = com.widyu.incident.IncidentKind.SELF_HELP_REQUEST
+               AND i.state IN (com.widyu.incident.IncidentState.OPEN,
+                               com.widyu.incident.IncidentState.CHECKING,
+                               com.widyu.incident.IncidentState.ESCALATED)
+               AND i.situationEndedAtMs IS NULL
+            """)
+    int cancelHelpRequest(@Param("incidentRef") String incidentRef, @Param("memberId") Long memberId,
+            @Param("nowMs") long nowMs);
 
     /** 낙상 판정 경로는 이 PR에서 보호자 알림 순서를 바꾸지 않는다. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

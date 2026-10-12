@@ -43,6 +43,63 @@ class IncidentRepositoryTest {
     @MockBean private JPAQueryFactory jpaQueryFactory;
 
     @Test
+    @DisplayName("워치 도움 요청을 열면 본인확인 전이 없이 최초 알림 게이트를 한 번 연다")
+    void 워치_도움_요청을_열면_최초_알림_게이트를_한번_연다() {
+        // given
+        Incident help = incidentRepository.save(Incident.builder().incidentRef("inc-help-due")
+                .memberId(SENIOR_ID).kind(IncidentKind.SELF_HELP_REQUEST)
+                .openedAtMs(OPENED_AT_MS).respondByMs(OPENED_AT_MS).build());
+
+        // when
+        var due = incidentRepository.findDueIds(OPENED_AT_MS + 1L, 0L, PageRequest.of(0, 10));
+        int first = incidentRepository.claimInitialAlertIfDue(help.getId(), OPENED_AT_MS + 1L);
+        int second = incidentRepository.claimInitialAlertIfDue(help.getId(), OPENED_AT_MS + 2L);
+        int timedOut = incidentRepository.escalateTimedOutIfDue(help.getId(), OPENED_AT_MS + 2L);
+
+        // then
+        Incident stored = incidentRepository.findById(help.getId()).orElseThrow();
+        assertThat(due).containsExactly(help.getId());
+        assertThat(first).isEqualTo(1);
+        assertThat(second).isZero();
+        assertThat(timedOut).isZero();
+        assertThat(stored.getState()).isEqualTo(IncidentState.OPEN);
+        assertThat(stored.getSecondAlertDueAtMs()).isEqualTo(OPENED_AT_MS + 180_001L);
+    }
+
+    @Test
+    @DisplayName("워치 도움 요청을 취소하면 재취소와 2차 게이트가 사건을 바꾸지 않는다")
+    void 워치_도움_요청을_취소하면_재취소와_이차_게이트가_사건을_바꾸지_않는다() {
+        // given
+        Incident help = Incident.builder().incidentRef("inc-help-cancel").memberId(SENIOR_ID)
+                .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(OPENED_AT_MS)
+                .respondByMs(OPENED_AT_MS).build();
+        help.markInitialAlertSent(OPENED_AT_MS + 1L);
+        help = incidentRepository.saveAndFlush(help);
+
+        // when
+        int cancelled = incidentRepository.cancelHelpRequest("inc-help-cancel", SENIOR_ID,
+                OPENED_AT_MS + 2L);
+        int again = incidentRepository.cancelHelpRequest("inc-help-cancel", SENIOR_ID,
+                OPENED_AT_MS + 3L);
+        int closed = incidentRepository.closeSecondAlertIfPending(help.getId(), OPENED_AT_MS + 2L);
+        int sent = incidentRepository.claimSecondAlertIfDue(help.getId(), OPENED_AT_MS + 181_001L);
+        int responded = incidentRepository.respond("inc-help-cancel", SENIOR_ID,
+                IncidentResponseValue.HELP, ResponseVia.WATCH, OPENED_AT_MS + 3L, null,
+                IncidentState.ESCALATED);
+
+        // then
+        Incident stored = incidentRepository.findById(help.getId()).orElseThrow();
+        assertThat(cancelled).isEqualTo(1);
+        assertThat(again).isZero();
+        assertThat(closed).isEqualTo(1);
+        assertThat(sent).isZero();
+        assertThat(responded).isZero();
+        assertThat(stored.getState()).isEqualTo(IncidentState.CANCELLED_BY_SENIOR);
+        assertThat(stored.getSituationEndedAtMs()).isEqualTo(OPENED_AT_MS + 2L);
+        assertThat(stored.getSecondAlertCancelledAtMs()).isEqualTo(OPENED_AT_MS + 2L);
+    }
+
+    @Test
     @DisplayName("마감 안에 OK로 답하면 사건이 정상 종료로 닫힌다")
     void 마감_안에_OK로_답하면_사건이_정상_종료로_닫힌다() {
         // given

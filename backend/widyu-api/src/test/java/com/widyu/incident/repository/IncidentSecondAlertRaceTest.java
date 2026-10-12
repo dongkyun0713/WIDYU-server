@@ -45,6 +45,60 @@ class IncidentSecondAlertRaceTest {
     }
 
     @Test
+    @DisplayName("워치 도움 요청의 취소와 2차 게이트가 경합하면 미발송 취소 또는 발송만 남는다")
+    void 워치_도움_요청의_취소와_이차_게이트가_경합하면_한쪽만_남는다() throws Exception {
+        // given
+        long openedAtMs = 1_760_000_000_000L;
+        long nowMs = openedAtMs + 181_000L;
+        Long id = new TransactionTemplate(transactions).execute(status -> {
+            Incident incident = Incident.builder().incidentRef("inc-help-race").memberId(1L)
+                    .kind(IncidentKind.SELF_HELP_REQUEST).openedAtMs(openedAtMs)
+                    .respondByMs(openedAtMs).build();
+            incident.markInitialAlertSent(openedAtMs + 1_000L);
+            return incidents.saveAndFlush(incident).getId();
+        });
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> sent = workers.submit(() -> {
+                ready.countDown();
+                start.await();
+                return new TransactionTemplate(transactions).execute(status -> {
+                    incidents.findByIdForUpdate(id).orElseThrow();
+                    return incidents.claimSecondAlertIfDue(id, nowMs);
+                });
+            });
+            Future<Integer> cancelled = workers.submit(() -> {
+                ready.countDown();
+                start.await();
+                return new TransactionTemplate(transactions).execute(status -> {
+                    incidents.findByIdForUpdate(id).orElseThrow();
+                    int updated = incidents.cancelHelpRequest("inc-help-race", 1L, nowMs);
+                    if (updated == 1) {
+                        return incidents.closeSecondAlertIfPending(id, nowMs);
+                    }
+                    return 0;
+                });
+            });
+
+            // when
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int sentRows = sent.get(10, TimeUnit.SECONDS);
+            int cancelledRows = cancelled.get(10, TimeUnit.SECONDS);
+
+            // then
+            Incident stored = incidents.findById(id).orElseThrow();
+            assertThat(sentRows + cancelledRows).isEqualTo(1);
+            assertThat(stored.getSecondAlertSentAtMs() != null)
+                    .isNotEqualTo(stored.getSecondAlertCancelledAtMs() != null);
+        } finally {
+            workers.shutdownNow();
+        }
+    }
+
+    @Test
     @DisplayName("2차 게이트와 멈춤이 경합하면 발송 또는 취소만 기록한다")
     void 이차_게이트와_멈춤이_경합하면_발송_또는_취소만_기록한다() throws Exception {
         // given

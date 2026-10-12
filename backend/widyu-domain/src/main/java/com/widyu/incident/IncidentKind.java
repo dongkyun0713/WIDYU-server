@@ -4,5 +4,6 @@ package com.widyu.incident;
 public enum IncidentKind {
     HR_ANOMALY,
     FALL_SUSPECTED,
-    SAFE_ZONE_EXIT
+    SAFE_ZONE_EXIT,
+    SELF_HELP_REQUEST
 }

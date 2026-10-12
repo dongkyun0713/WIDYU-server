@@ -168,6 +168,7 @@ public enum ErrorCode {
     INCIDENT_ALREADY_ANSWERED(HttpStatus.CONFLICT, "INCIDENT_4090", "이미 응답한 인시던트입니다."),
     INCIDENT_ALREADY_RESOLVED(HttpStatus.CONFLICT, "INCIDENT_4091", "이미 사후 판정이 끝난 인시던트입니다."),
     INCIDENT_GUARDIAN_RESPONSE_ALREADY_RECORDED(HttpStatus.CONFLICT, "INCIDENT_4092", "이미 보호자 반응이 기록된 인시던트입니다."),
+    INCIDENT_HELP_REQUEST_NOT_OPEN(HttpStatus.CONFLICT, "INCIDENT_4093", "열린 도움 요청 사건이 아닙니다."),
 
     // 종료 뒤 후속 질문
     FOLLOWUP_REQUEST_INVALID(HttpStatus.BAD_REQUEST, "FOLLOWUP_4000", "후속 질문 요청 값이 올바르지 않습니다."),

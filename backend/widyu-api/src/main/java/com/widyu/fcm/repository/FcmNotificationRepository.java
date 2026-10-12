@@ -16,6 +16,10 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
 
     Optional<FcmNotification> findByRecipientMemberIdAndEventId(Long recipientMemberId, String eventId);
 
+    @Query("SELECT DISTINCT n.recipientMember.id FROM FcmNotification n "
+            + "WHERE n.eventId = :eventId AND n.recipientMember IS NOT NULL")
+    List<Long> findRecipientMemberIdsByEventId(@Param("eventId") String eventId);
+
     Optional<FcmNotification> findByIdAndRecipientMemberId(Long id, Long recipientMemberId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
