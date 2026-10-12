@@ -31,6 +31,7 @@ flowchart TB
 | 알림 | [Notification](notification.md) | 업무 커밋과 FCM 호출을 어떻게 분리하고 복구하는가? |
 | 결제 | [Payment](payment.md) | PG와 DB가 일시적으로 다를 때 어떻게 대조하는가? |
 | 배포 | [Infrastructure](infrastructure.md) | 어디에 배포하며 장애·교체 시 무엇이 중단되는가? |
+| 오류 알림 | [Alerting](alerting.md) | 어떤 실패를 언제 알리고, 상세·AI 분석을 어떻게 붙이는가? |
 
 ## 문서 역할과 갱신 규칙
 

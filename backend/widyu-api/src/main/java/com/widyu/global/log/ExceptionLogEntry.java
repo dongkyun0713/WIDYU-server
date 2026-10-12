@@ -8,6 +8,11 @@ import lombok.Getter;
 public class ExceptionLogEntry {
 
     private String timestamp;
+    private String api;
+    private String httpMethod;
+    private String path;
+    private String actor;
+    private String target;
     private String exceptionType;
     private String message;
     private String requestUri;
@@ -15,8 +20,14 @@ public class ExceptionLogEntry {
 
     public String toLogString() {
         return String.format(
-                "[EXCEPTION] Time=%s ExceptionType=%s Message=%s RequestURI=%s StackTrace=%s",
+                "[EXCEPTION] Time=%s Api=%s Method=%s Path=%s Actor=%s Target=%s "
+                        + "ExceptionType=%s Message=%s RequestURI=%s StackTrace=%s",
                 timestamp,
+                api,
+                httpMethod,
+                path,
+                actor,
+                target,
                 exceptionType,
                 escapeLineBreaks(message),
                 requestUri,
