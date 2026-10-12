@@ -1,11 +1,38 @@
 services:
+  widyu-api:
+    environment:
+      # 알림 분석기가 오류 시점의 소스를 가져오도록 배포 커밋을 로그에 남긴다 (LLD-0084)
+      APP_COMMIT_SHA: ${IMAGE_TAG:-unknown}
+
   grafana:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_SECURITY_COOKIE_SECURE: "true"
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?DISCORD_WEBHOOK_URL is required}
       GRAFANA_EXTERNAL_URL: ${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}
       GF_SERVER_ROOT_URL: ${GRAFANA_EXTERNAL_URL:?GRAFANA_EXTERNAL_URL is required}/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - ./monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
+
+  # Grafana 알림을 Discord로 보내고 Claude 분석을 덧붙이는 중계 서버 (LLD-0084). 포트는 공개하지 않는다.
+  alert-relay:
+    build: ./monitoring/alert-relay
+    image: widyu-alert-relay:local
+    container_name: widyu-alert-relay
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?DISCORD_WEBHOOK_URL is required}
+      # 비어 있으면 AI 분석 없이 알림만 보낸다.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ALERT_AI_DAILY_LIMIT: ${ALERT_AI_DAILY_LIMIT:-50}
+      # 같은 원인의 저장 분석을 자동 재사용하는 기간(일). 분석 이력 자체는 지우지 않는다.
+      ALERT_AI_REUSE_DAYS: ${ALERT_AI_REUSE_DAYS:-7}
+    volumes:
+      - alert_relay_data:/data
+    networks:
+      - widyu-network
+    depends_on:
+      - loki
+
+volumes:
+  alert_relay_data:
