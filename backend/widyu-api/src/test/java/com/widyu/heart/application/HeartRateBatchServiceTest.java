@@ -291,7 +291,7 @@ class HeartRateBatchServiceTest {
                 32_768, null, null,
                 new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
                 null,
-                new SensorProperties.Incident(60, 5000L, false, 5),
+                new SensorProperties.Incident(60, 5000L, false, 5, 90),
                 new SensorProperties.Followup(false, false),
                 new SensorProperties.Medication(true));
 
@@ -460,7 +460,7 @@ class HeartRateBatchServiceTest {
                 32_768, null, null,
                 new SensorProperties.FallAi(false, "/api/fall", 2, "widyu-server", "abstain-v1"),
                 new SensorProperties.HeartAi("widyu-ai-hr", "ver7"),
-                new SensorProperties.Incident(60, 5000L, false, 5),
+                new SensorProperties.Incident(60, 5000L, false, 5, 90),
                 new SensorProperties.Followup(false, false),
                 new SensorProperties.Medication(true));
     }

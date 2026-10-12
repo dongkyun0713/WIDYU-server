@@ -104,6 +104,35 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
             @Param("answeredState") IncidentState answeredState);
 
     /**
+     * 확인 화면 수신 완료를 기록하고 마감을 수신 시각 기준으로 옮긴다(LLD-0085).
+     *
+     * <p>읽고 고쳐 저장하면 그 사이 스케줄러가 올린 {@code ESCALATED}나 먼저 온 응답을 놓치고 끝난
+     * 사건의 마감을 늘릴 수 있다. 마감 전·미응답·{@code CHECKING}·첫 수신을 같은 문장에서 확인한다.
+     *
+     * @return 1이면 기록·마감 변경, 0이면 아무것도 바꾸지 않았다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE Incident i
+               SET i.promptDisplayedAtMs = :displayedAtMs,
+                   i.promptDisplayedVia = :via,
+                   i.respondByMs = :newRespondByMs
+             WHERE i.incidentRef = :incidentRef
+               AND i.memberId = :memberId
+               AND i.kind = com.widyu.incident.IncidentKind.HR_ANOMALY
+               AND i.promptDisplayedAtMs IS NULL
+               AND i.response IS NULL
+               AND i.state = com.widyu.incident.IncidentState.CHECKING
+               AND i.respondByMs > :displayedAtMs
+            """)
+    int markPromptDisplayed(
+            @Param("incidentRef") String incidentRef,
+            @Param("memberId") Long memberId,
+            @Param("via") ResponseVia via,
+            @Param("displayedAtMs") long displayedAtMs,
+            @Param("newRespondByMs") long newRespondByMs);
+
+    /**
      * 보호자의 사후 판정을 한 문장으로 저장한다(LLD-0054 5.4).
      *
      * <p>읽고 고쳐 저장하면 보호자 둘이 같은 순간에 판정할 때 둘 다 종결 전 상태를 읽고 나중

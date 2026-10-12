@@ -71,12 +71,13 @@ public record SensorProperties(
             String deciderVersion
     ) {}
 
-    /** 본인확인 마감·순서 전환·상황 창(LLD-0070). */
+    /** 본인확인 마감·순서 전환·상황 창(LLD-0070), 확인 화면 수신 대기(LLD-0085). */
     public record Incident(
             int selfCheckSec,
             long timeoutPollMs,
             boolean selfCheckFirst,
-            int situationWindowMin
+            int situationWindowMin,
+            int promptWaitSec
     ) {}
 
     /** 종료 뒤 카드와 첫 제출 보상. 각각 활성화 전 기본값 false(LLD-0073·0075). */

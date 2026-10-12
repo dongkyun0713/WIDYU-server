@@ -36,7 +36,7 @@ class HeartRateEmergencyNotificationServiceTest {
         // given
         Incident incident = incident(null);
         given(incidentService.openForAlert(1L, IncidentKind.HR_ANOMALY)).willReturn(incident);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
 
         // when
         service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));
@@ -53,7 +53,7 @@ class HeartRateEmergencyNotificationServiceTest {
         Incident incident = incident("dec-1");
         given(decisionRecordRepository.findByDecisionId("dec-1")).willReturn(Optional.of(decision));
         given(incidentService.openForAlert(decision, IncidentKind.HR_ANOMALY)).willReturn(incident);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
 
         // when
         service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, "dec-1"));
@@ -71,7 +71,7 @@ class HeartRateEmergencyNotificationServiceTest {
         Incident incident = incident("dec-1");
         given(decisionRecordRepository.findByDecisionId("dec-1")).willReturn(Optional.of(decision));
         given(incidentService.openForAlert(decision, IncidentKind.HR_ANOMALY)).willReturn(incident);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5, 90));
 
         // when
         service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, "dec-1"));
@@ -88,7 +88,7 @@ class HeartRateEmergencyNotificationServiceTest {
         Incident incident = incident(null);
         incident.markInitialAlertSent(1_000L);
         given(incidentService.openForAlert(1L, IncidentKind.HR_ANOMALY)).willReturn(incident);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
 
         // when
         service.handleHeartRateEmergency(new HeartRateEmergencyEvent(1L, null));

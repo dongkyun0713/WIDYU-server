@@ -37,6 +37,8 @@ import com.widyu.incident.dto.request.IncidentRespondRequest;
 import com.widyu.incident.dto.request.IncidentResolveRequest;
 import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
+import com.widyu.incident.dto.request.PromptDisplayedRequest;
+import com.widyu.incident.dto.response.PromptDisplayedResult;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.incident.repository.IncidentGuardianResponseRepository;
 import com.widyu.incident.repository.IncidentResponseAttemptRepository;
@@ -72,6 +74,7 @@ class IncidentServiceTest {
     private static final String RUN_ID = "run-0f3a";
     private static final long OPENED_AT_MS = 1_760_000_000_000L;
     private static final long SELF_CHECK_MS = 60_000L;
+    private static final long PROMPT_WAIT_MS = 90_000L;
 
     @Mock private IncidentRepository incidentRepository;
     @Mock private IncidentGuardianResponseRepository guardianResponses;
@@ -108,8 +111,8 @@ class IncidentServiceTest {
     }
 
     @Test
-    @DisplayName("위급 판정으로 사건을 열면 60초 마감과 본인확인 푸시가 함께 만들어진다")
-    void 위급_판정으로_사건을_열면_60초_마감과_본인확인_푸시가_함께_만들어진다() {
+    @DisplayName("위급 판정으로 사건을 열면 화면 수신 대기 90초 마감과 본인확인 푸시가 함께 만들어진다")
+    void 위급_판정으로_사건을_열면_90초_마감과_본인확인_푸시가_함께_만들어진다() {
         // given
         given(memberRepository.findByIdForUpdate(SENIOR_ID)).willReturn(Optional.of(org.mockito.Mockito.mock(Member.class)));
         given(incidentRepository.findByDecisionId(DECISION_ID)).willReturn(Optional.empty());
@@ -125,8 +128,8 @@ class IncidentServiceTest {
         assertThat(opened.getKind()).isEqualTo(IncidentKind.HR_ANOMALY);
         assertThat(opened.getLevel()).isEqualTo("EMERGENCY");
         assertThat(opened.getIncidentRef()).startsWith("inc-");
-        // 제품 본인확인 마감은 서버 사건 생성부터 60초다.
-        assertThat(opened.getRespondByMs() - opened.getOpenedAtMs()).isEqualTo(SELF_CHECK_MS);
+        // 확인 화면 수신 완료 전 마감은 사건 생성부터 90초다(LLD-0085).
+        assertThat(opened.getRespondByMs() - opened.getOpenedAtMs()).isEqualTo(PROMPT_WAIT_MS);
         assertThat(opened.getState()).isEqualTo(IncidentState.CHECKING);
         assertThat(opened.getPolicyRevision()).isEqualTo(20261005L);
 
@@ -219,10 +222,47 @@ class IncidentServiceTest {
 
         // then
         assertThat(opened.getPolicyRevision()).isEqualTo(20261005L);
+        // 낙상은 화면 수신 대기 없이 기존 60초 마감을 유지한다(LLD-0085 범위 밖).
+        assertThat(opened.getRespondByMs() - opened.getOpenedAtMs()).isEqualTo(SELF_CHECK_MS);
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
         assertThat(message.getValue().title()).isEqualTo("괜찮으세요?");
         assertThat(message.getValue().notificationType()).isNull();
+    }
+
+    @Test
+    @DisplayName("다른 시니어가 확인 화면 수신을 보내면 사건을 찾을 수 없다고 한다")
+    void 다른_시니어가_확인_화면_수신을_보내면_사건을_찾을_수_없다고_한다() {
+        // given
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+
+        // when & then
+        assertThatThrownBy(() -> service().markPromptDisplayed(9999L, INCIDENT_REF,
+                new PromptDisplayedRequest(ResponseVia.PHONE)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INCIDENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("본인이 확인 화면 수신을 보내면 수신 시각 + 60초 마감으로 저장을 요청하고 연장 여부를 돌려준다")
+    void 본인이_확인_화면_수신을_보내면_수신_시각_기준_마감으로_저장을_요청한다() {
+        // given
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        given(incidentRepository.markPromptDisplayed(eq(INCIDENT_REF), eq(SENIOR_ID), eq(ResponseVia.WATCH),
+                anyLong(), anyLong())).willReturn(1);
+        ArgumentCaptor<Long> displayedAt = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> newRespondBy = ArgumentCaptor.forClass(Long.class);
+
+        // when
+        PromptDisplayedResult result = service().markPromptDisplayed(SENIOR_ID, INCIDENT_REF,
+                new PromptDisplayedRequest(ResponseVia.WATCH));
+
+        // then
+        then(incidentRepository).should().markPromptDisplayed(eq(INCIDENT_REF), eq(SENIOR_ID),
+                eq(ResponseVia.WATCH), displayedAt.capture(), newRespondBy.capture());
+        assertThat(newRespondBy.getValue() - displayedAt.getValue()).isEqualTo(SELF_CHECK_MS);
+        assertThat(result.deadlineExtended()).isTrue();
+        assertThat(result.incidentId()).isEqualTo(INCIDENT_REF);
     }
 
     @Test
@@ -807,7 +847,7 @@ class IncidentServiceTest {
                 new IncidentRespondTransaction(),
                 fcmService, familyAccessService,
                 new SensorProperties(32_768, null, null, null, null,
-                        new SensorProperties.Incident(60, 5000L, false, 5),
+                        new SensorProperties.Incident(60, 5000L, false, 5, 90),
                         new SensorProperties.Followup(false, false),
                         new SensorProperties.Medication(true)), memberRepository,
                 incidentEscalation, outboxService, null, seniorProfileRepository,

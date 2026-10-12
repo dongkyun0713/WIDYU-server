@@ -119,7 +119,7 @@ class IncidentHelpRequestServiceTest {
         // given
         givenActiveSenior();
         Incident heart = heartIncident();
-        given(properties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(properties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(incidents.findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
                 eq(1L), eq(IncidentKind.HR_ANOMALY), any())).willReturn(Optional.of(heart));
         given(incidents.respond(eq("inc-heart"), eq(1L), eq(IncidentResponseValue.HELP),
@@ -147,7 +147,7 @@ class IncidentHelpRequestServiceTest {
         givenActiveSenior();
         Incident heart = heartIncident();
         ReflectionTestUtils.setField(heart, "response", IncidentResponseValue.OK);
-        given(properties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(properties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(incidents.findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
                 eq(1L), eq(IncidentKind.HR_ANOMALY), any())).willReturn(Optional.of(heart));
         given(incidents.findById(3L)).willReturn(Optional.of(heart));
