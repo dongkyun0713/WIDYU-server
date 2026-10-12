@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | Review (2026-10-11, 구현·검증 완료) |
 | Issue | #741 (base develop, W20 #749 머지 뒤) |
-| 관련 ADR | ADR-0039 결정 8 (Proposed, PR #750), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
+| 관련 ADR | [ADR-0039](../adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md) 결정 8 (Accepted 2026-10-12, PR #750), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
 | 선행 | [LLD-0060](LLD-0060-notification-type-registry.md), [LLD-0070](LLD-0070-self-check-first-heart.md), [LLD-0072](LLD-0072-ok-notice-and-incident-grouping.md), [LLD-0077](LLD-0077-initial-alert-leader-only.md), [LLD-0081](LLD-0081-second-alert-and-stop-records.md), [LLD-0082](LLD-0082-response-attempts-and-incident-status.md) |
 | 작성자 | Codex / feature-741 |
 | 작성일 | 2026-10-11 |
@@ -151,7 +151,7 @@ W20 `IncidentStatusResponse`는 `CANCELLED_BY_SENIOR`를 `ENDED`, `endedReason=C
 - [ ] 보존 등급은 현재 `HEART_EMERGENCY_180D`를 추천한다. 정책 승인 시 LLD-0060 표와 함께 확정한다.
 - [ ] W20 상태 조회의 `CANCELLED_BY_SENIOR` → `ENDED`/`endedReason=CANCELLED`, 이후 FE 모달 S12·읽음 처리를 확정한다.
 - [ ] `eventId` 접미사 `:OK`/`:CX`는 `VARCHAR(40)` 제약에 따른 선택이다. `:CANCEL` 대신 `:CX`를 앱·분석 소비자와 공유한다.
-- [ ] `SELF_HELP_REQUEST`/`CANCELLED_BY_SENIOR` 이름과 API 경로는 추가본 제안명이다. ADR-0039 결정 8은 현재 Proposed다.
+- [ ] `SELF_HELP_REQUEST`/`CANCELLED_BY_SENIOR` 이름과 API 경로는 추가본 제안명이다. ADR-0039는 2026-10-12 Accepted됐지만 이름·경로는 FE·앱 팀 합의 대상으로 남는다.
 
 ## 10. 참고
 
