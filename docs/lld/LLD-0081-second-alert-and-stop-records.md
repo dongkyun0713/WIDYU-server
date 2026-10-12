@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | Review (2026-10-11, 구현·검증 완료; 코디네이터 검수 대기) |
 | Issue | #739 (base W19 `feature/736`) |
-| 관련 ADR | [ADR-0039](../adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md) 결정 2·3 (Proposed, 별도 PR #734), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
+| 관련 ADR | [ADR-0039](../adr/ADR-0039-two-stage-guardian-alert-and-safe-zone-notice.md) 결정 2·3 (Accepted 2026-10-12, PR #750), [ADR-0038](../adr/ADR-0038-self-check-first-safety-flow.md) |
 | 선행 | [LLD-0070](LLD-0070-self-check-first-heart.md), [LLD-0072](LLD-0072-ok-notice-and-incident-grouping.md), [LLD-0077](LLD-0077-initial-alert-leader-only.md), [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md) |
 | 작성자 | Codex / feature-739 |
 | 작성일 | 2026-10-11 |
@@ -146,7 +146,7 @@ DDL을 앱 전환 전에 실행한다. 구 기록은 `guardian_response_type/at_
 
 ## 9. 미결정 사항 (Open Questions)
 
-정본 §4의 B2·B3·B4는 확정 답변이 아니다. 아래 **W18 구현 가정**은 ADR-0039(Proposed) 결정 2·3과 일치하며, 코디네이터 게이트에서 대조한다. 회신이 다르면 구현 전 이 문서를 고친다.
+정본 §4의 B2·B3·B4는 확정 답변이 아니다. 아래 **W18 구현 가정**은 ADR-0039(Accepted) 결정 2·3과 일치하며, 코디네이터 게이트에서 대조한다. 회신이 다르면 구현 전 이 문서를 고친다.
 
 | 항목 | W18 가정 / 후속 확인 |
 | --- | --- |
