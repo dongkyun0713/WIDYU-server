@@ -39,7 +39,7 @@ flowchart TB
 | 환경 | Compose 적용 순서 | 주요 차이 |
 | --- | --- | --- |
 | 로컬 | `docker-compose.yml` → `docker-compose.dev.yml` | MySQL 컨테이너·개발 profile |
-| 개발 서버 | 공통 → dev → `docker-compose.dev-server.yml` | Grafana 외부 HTTPS·Discord 알림 provisioning |
+| 개발 서버 | 공통 → dev → `docker-compose.dev-server.yml` | Grafana 외부 HTTPS·알림 규칙 provisioning·alert-relay([Alerting](alerting.md)) |
 | 운영 | 공통 → `docker-compose.prod.yml` | RDS·schema validate·운영 자원 제한 |
 
 dev-server는 Grafana 서버 설정을 추가한다. 로컬 `dev-up.sh`는 이를 사용하지 않아 로컬 ERROR 로그가 개발 서버 Discord 알림으로 전송되지 않는다.
