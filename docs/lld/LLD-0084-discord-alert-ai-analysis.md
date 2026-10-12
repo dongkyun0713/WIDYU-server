@@ -35,8 +35,9 @@
 - **전용 스케줄러**: `@Scheduled`를 `SchedulingConfigurer`로 지정한 전용 스케줄러(`scheduling-N`, CPU 수만큼 병렬)에서 돌린다. 지정하지 않으면 `@EnableWebSocketMessageBroker`의 `messageBrokerTaskScheduler`(`MessageBroker-N`)가 쓰여 에러 핸들러가 붙지 않는다.
 - **FCM 최종 실패 로그**: 최종 실패(EXHAUSTED/EXPIRED)로 바뀌는 순간을 `[FCM_FAILED]` 한 줄로 남긴다. 대상 경로는 전송 실패(finish), 선점 시 만료·재시도 소진(claim), 전송 직전 만료(preflight), 저장 데이터 손상이다.
 - **배포 커밋 로그**: 실행 중인 커밋을 `[BUILD] Version=<sha>`로 시작할 때와 매일 04:00에 남긴다.
+- **WebSocket 실패 로그**: `@MessageMapping` 처리 중 난 서버 오류를 `[WS_EXCEPTION] Api= Destination= Actor= ExceptionType= Message= StackTrace=` 한 줄로 남긴다. 업무 규칙 4xx·입력 검증·형식 오류는 WARN으로 남긴다. 서버 오류의 내부 메시지는 클라이언트에 돌려주지 않는다(REST 500과 같은 기준).
 - **4xx 잡음 제거**: 입력 검증 실패 로그를 ERROR에서 WARN으로 내린다.
-- **Grafana 규칙**: 규칙 4개(API·스케줄러·푸시·기타 ERROR)로 나누고 식별 레이블만 남긴다. 해소 알림을 끄고 webhook으로 relay에 보낸다.
+- **Grafana 규칙**: 규칙 5개(API·WebSocket·스케줄러·푸시·기타 ERROR)로 나누고 식별 레이블만 남긴다. 해소 알림을 끄고 webhook으로 relay에 보낸다.
 - **alert-relay**: Python 컨테이너로, SQLite 작업 큐, 대표 로그 재조회, 마스킹, Discord 전송·수정, 배포 커밋 소스 기반 Claude 분석, 분석 이력과 재사용, 하루 호출 상한, 무효화·백업 명령을 맡는다.
 - **배포 알림**: dev·prod 배포 결과와 dev 인증서 갱신 실패를 Discord로 알린다.
 
@@ -59,6 +60,7 @@ GET  http://alert-relay:8080/health
 ```text
 [EXCEPTION] Time=.. Api=<summary|Controller.method|알 수 없는 API> Method=POST Path=/api/v1/albums/{albumId}|- Actor=USER#12|anonymous Target=albumId=7|- ExceptionType=<FQCN> Message=.. RequestURI=.. StackTrace=<\n으로 이은 프레임, Caused by 포함>
 [SCHEDULER] Task=PaymentRecoveryScheduler.recover ExceptionType=<simple> Message=.. StackTrace=..
+[WS_EXCEPTION] Api=<Controller.method> Destination=/app/heart-rate/send-single Actor=USER#34 ExceptionType=<FQCN> Message=.. StackTrace=..
 [FCM_FAILED] Type=<NotificationType|dataType|FcmCategory> Emergency=true Related=<id|null> Recipient=<id> Attempts=n Reason=INVALID_TOKEN|REJECTED|RETRY_EXHAUSTED|EXPIRED|INVALID_PAYLOAD
 [BUILD] Version=<git sha>
 ```
@@ -78,6 +80,7 @@ DB·엔티티 변경 없음. relay의 SQLite(`/data/relay.sqlite3`, 볼륨 `aler
 1. **로그 수집**: 앱이 로그를 남기면 promtail이 Loki로 보낸다.
 2. **규칙 평가**: Grafana가 1분마다 규칙을 평가한다. 알림 레이블은 다음 식별 정보만 둔다.
    - API: `api`, `method`, `path`, `exceptionType`
+   - WebSocket: `api`, `destination`, `exceptionType`
    - 스케줄러: `task`, `logger`, `exceptionType`
    - 푸시: `type`, `emergency`, `reason`
    - 기타 ERROR: `logger`
@@ -137,6 +140,7 @@ DB·엔티티 변경 없음. relay의 SQLite(`/data/relay.sqlite3`, 볼륨 `aler
 - [x] FCM 최종 실패(전송 실패·선점 시 만료)만 `[FCM_FAILED]`를 남기고, 재시도 예정 실패는 남기지 않는다. 토큰·본문은 없다. (`FcmOutboxTransactionsTest`)
 - [x] `[BUILD] Version=`을 남긴다. (`BuildVersionLogTest`)
 - [x] 입력 검증 실패는 WARN이다.
+- [x] WebSocket 메시지 처리 서버 오류는 기능·목적지·요청자를 담은 `[WS_EXCEPTION]` 한 줄 ERROR로 남고, 내부 메시지는 응답에 담지 않는다. 업무 규칙 4xx는 WARN이고, 5xx 업무 예외는 ERROR다. 실제 STOMP 처리 경로에서도 Spring이 핸들러와 헤더를 넘겨 같은 로그가 남는다. (`WebSocketExceptionHandlerTest`)
 - [x] 같은 API 오류 100건이 알림 인스턴스 하나·Discord 메시지 하나가 되고, "최근 15분 100건 · 앞 3건 표시"를 보여 준다. (로컬 E2E)
 - [x] 예전 형식 `[EXCEPTION]` 줄과 WARN은 알림이 되지 않는다(레이블이 빈 알림 없음). (로컬 E2E)
 - [x] 중복 webhook은 한 번만 처리하고, Discord 장애 중 relay가 재시작돼도 복구 후 한 번 전송한다. (로컬 E2E)

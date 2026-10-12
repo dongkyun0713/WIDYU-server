@@ -53,7 +53,7 @@ MAX_ATTEMPTS = 6
 TITLE_LIMIT = 256
 DESCRIPTION_LIMIT = 4096
 RED, ORANGE = 0xE5484D, 0xF5A524
-AI_KINDS = {"api", "scheduler", "error"}
+AI_KINDS = {"api", "ws", "scheduler", "error"}
 MODULE_SOURCE_ROOTS = ("backend/widyu-api/src/main/java/", "backend/widyu-domain/src/main/java/")
 # 코드가 아니어도 원인에 영향을 주는 파일. 저장 분석 이후 이 중 하나라도 바뀌면 재분석한다.
 CONFIG_PATH_PREFIXES = ("backend/widyu-api/src/main/resources/", "backend/widyu-domain/src/main/resources/")
@@ -69,6 +69,9 @@ API_LINE = re.compile(
     r"traceId=(?P<traceId>\S+) .*\[EXCEPTION\] Time=\S+ Api=.+? Method=\S+ Path=\S+ Actor=(?P<actor>\S+) "
     r"Target=(?P<target>\S+) ExceptionType=(?P<exceptionType>\S+) Message=(?P<message>.*?) RequestURI=\S* "
     r"StackTrace=(?P<stack>.*)$")
+WS_LINE = re.compile(
+    r"traceId=(?P<traceId>\S+) .*\[WS_EXCEPTION\] Api=\S+ Destination=\S+ Actor=(?P<actor>\S+) "
+    r"ExceptionType=(?P<exceptionType>\S+) Message=(?P<message>.*?) StackTrace=(?P<stack>.*)$")
 SCHEDULER_LINE = re.compile(
     r"\[SCHEDULER\] Task=\S+ ExceptionType=(?P<exceptionType>\S+) Message=(?P<message>.*?)(?: StackTrace=(?P<stack>.*))?$")
 PUSH_LINE = re.compile(r"\[FCM_FAILED\] .*Related=(?P<related>\S+) Recipient=(?P<recipient>\S+) Attempts=(?P<attempts>\S+)")
@@ -245,6 +248,11 @@ def detail_query(kind, labels):
         return (f'{LOKI_SELECTOR} |= "[EXCEPTION]" '
                 f'|= " Method={logql_text(labels.get("method", ""))} Path={logql_text(labels.get("path", ""))} " '
                 f'|~ "ExceptionType=([^ ]*\\\\.)?{exception_type} "')
+    if kind == "ws":
+        exception_type = re.escape(labels.get("exceptionType", "")).replace("\\", "\\\\")
+        return (f'{LOKI_SELECTOR} |= "[WS_EXCEPTION] Api={logql_text(labels.get("api", ""))} '
+                f'Destination={logql_text(labels.get("destination", ""))} " '
+                f'|~ "ExceptionType=([^ ]*\\\\.)?{exception_type} "')
     if kind == "scheduler" and labels.get("task"):
         return f'{LOKI_SELECTOR} |= "[SCHEDULER] Task={logql_text(labels["task"])} "'
     if kind == "scheduler":
@@ -253,7 +261,7 @@ def detail_query(kind, labels):
         return (f'{LOKI_SELECTOR} |= "[FCM_FAILED] Type={logql_text(labels.get("type", ""))} " '
                 f'|= "Reason={logql_text(labels.get("reason", ""))}"')
     return (f'{LOKI_SELECTOR} |= " ERROR traceId=" |= "] {logql_text(labels.get("logger", ""))} - " '
-            f'!~ "\\\\[EXCEPTION\\\\]|\\\\[FCM_FAILED\\\\]|\\\\[scheduling-"')
+            f'!~ "\\\\[EXCEPTION\\\\]|\\\\[WS_EXCEPTION\\\\]|\\\\[FCM_FAILED\\\\]|\\\\[scheduling-"')
 
 
 def parse_line(kind, line):
@@ -262,6 +270,8 @@ def parse_line(kind, line):
     match = None
     if kind == "api":
         match = API_LINE.search(line)
+    elif kind == "ws":
+        match = WS_LINE.search(line)
     elif kind == "push":
         match = PUSH_LINE.search(line)
     elif "[SCHEDULER]" in line:
@@ -350,6 +360,8 @@ def dashboard_link(base, item):
 def title_of(kind, labels):
     if kind == "api":
         return f"🚨 [{ENV_TAG}] {labels.get('api', '알 수 없는 API')} 실패"
+    if kind == "ws":
+        return f"🔌 [{ENV_TAG}] WebSocket 실패 · {labels.get('destination', '')}"
     if kind == "scheduler":
         return f"⏰ [{ENV_TAG}] 스케줄러 실패 · {labels.get('task') or labels.get('logger', '')}"
     if kind == "push":
@@ -368,7 +380,7 @@ def item_lines(kind, labels, item, base_link):
             who = f"👤 회원 #{item['related']} → 회원 #{item.get('recipient', '?')}"
         return [who, f"💥 {reason} · {item.get('attempts', '?')}회 시도", f"🔗 [로그 보기]({link})"]
     lines = []
-    if kind == "api":
+    if kind in ("api", "ws"):
         who = f"👤 {actor_text(item.get('actor'))}"
         if item.get("target") and item["target"] != "-":
             who += f" → {item['target']}"
@@ -389,6 +401,8 @@ def build_embed(kind, labels, details, base_link):
     head = []
     if kind == "api":
         head.append(f"**{labels.get('method', '')} {labels.get('path', '')}**")
+    if kind == "ws":
+        head.append(f"**SEND {labels.get('destination', '')}** · `{labels.get('api', '')}`")
     blocks = ["\n".join(item_lines(kind, labels, item, base_link)) for item in details["items"]]
     if not blocks:
         blocks = [f"상세 로그를 찾지 못했습니다. 🔗 [로그 보기]({base_link})"]
@@ -400,7 +414,7 @@ def build_embed(kind, labels, details, base_link):
         summary += f" · 앞 {len(details['items'])}건 표시"
     description = "\n".join(head + ["\n\n".join(blocks), "", f"-# {summary}"])
     color = ORANGE
-    if kind in ("api", "scheduler") or labels.get("emergency") == "true":
+    if kind in ("api", "ws", "scheduler") or labels.get("emergency") == "true":
         color = RED
     return {
         "title": truncate(title_of(kind, labels), TITLE_LIMIT),
@@ -541,7 +555,7 @@ def reusable_analysis(store, key, sha, stack, now):
 def build_prompt(kind, labels, item, sources, source_note):
     """AI 입력. 요청자·대상·traceId는 넣지 않고, 메시지·스택은 이미 마스킹한 값을 쓴다."""
     head = [f"알림 종류: {kind}"]
-    for key in ("api", "method", "path", "task", "logger"):
+    for key in ("api", "method", "path", "destination", "task", "logger"):
         if labels.get(key):
             head.append(f"{key}: {labels[key]}")
     head.append(f"exceptionType: {item.get('exceptionType') or labels.get('exceptionType', '')}")

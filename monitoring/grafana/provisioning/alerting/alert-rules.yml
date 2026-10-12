@@ -62,6 +62,59 @@ groups:
                     params: []
                     type: last
                   type: query
+      - uid: widyu-development-websocket-failure
+        title: DEV WebSocket 실패
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "WebSocket 메시지 처리가 서버 오류로 실패했습니다."
+          grafana_url: "{{ externalURL }}d/widyu-development-errors"
+        labels:
+          environment: dev
+          service: widyu-api-dev
+          kind: ws
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (api, destination, exceptionType) (count_over_time({service="widyu-api-dev", environment="dev"} |= " ERROR traceId=" |= "[WS_EXCEPTION]" | regexp "\\[WS_EXCEPTION\\] Api=(?P<api>[^ ]+) Destination=(?P<destination>[^ ]+) Actor=[^ ]+ ExceptionType=(?:[^ ]*\\.)?(?P<exceptionType>[^ .]+) " | api != "" [1m]))'
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
       - uid: widyu-development-scheduler-failure
         title: DEV 스케줄러 실패
         condition: C
@@ -188,7 +241,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum by (logger) (count_over_time({service="widyu-api-dev", environment="dev"} |= " ERROR traceId=" !~ "\\[EXCEPTION\\]|\\[FCM_FAILED\\]|\\[scheduling-" | regexp "ERROR traceId=[^ ]+ \\[[^\\]]*\\] (?P<logger>[^ ]+) - " | logger != "" [1m]))'
+              expr: 'sum by (logger) (count_over_time({service="widyu-api-dev", environment="dev"} |= " ERROR traceId=" !~ "\\[EXCEPTION\\]|\\[WS_EXCEPTION\\]|\\[FCM_FAILED\\]|\\[scheduling-" | regexp "ERROR traceId=[^ ]+ \\[[^\\]]*\\] (?P<logger>[^ ]+) - " | logger != "" [1m]))'
               refId: A
           - refId: B
             relativeTimeRange:

@@ -35,7 +35,7 @@ public final class StackTraceLog {
         return escapeLineBreaks(String.join("\n", lines));
     }
 
-    static String escapeLineBreaks(final String value) {
+    public static String escapeLineBreaks(final String value) {
         if (value == null) {
             return null;
         }

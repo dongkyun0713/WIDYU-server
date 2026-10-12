@@ -95,6 +95,24 @@ class MessageTest(unittest.TestCase):
         self.assertIn("최근 15분 5건 · 앞 3건 표시", embed["description"])
         self.assertEqual(relay.discord_payload(embed)["allowed_mentions"], {"parse": []})
 
+    def test_websocket_line_becomes_destination_centered_alert(self):
+        line = ("2026-10-12 10:00:00.000 ERROR traceId=none [clientInboundChannel-3] c.w.g.w.WebSocketExceptionHandler - "
+                "[WS_EXCEPTION] Api=HeartRateWebSocketController.sendHeartRate Destination=/app/heart-rate/send-single "
+                "Actor=USER#34 ExceptionType=org.springframework.dao.QueryTimeoutException Message=timeout memberId=34 "
+                "StackTrace=com.widyu.heart.application.HeartRateService.processHeartRate(HeartRateService.java:51)")
+        labels = {"kind": "ws", "api": "HeartRateWebSocketController.sendHeartRate",
+                  "destination": "/app/heart-rate/send-single", "exceptionType": "QueryTimeoutException"}
+        parsed = relay.parse_line("ws", line)
+        self.assertEqual((parsed["actor"], parsed["message"]), ("USER#34", "timeout memberId=<id>"))
+        embed = relay.build_embed("ws", labels, {"count": 1, "items": [parsed]}, "")
+        self.assertEqual(embed["title"], "🔌 [DEV] WebSocket 실패 · /app/heart-rate/send-single")
+        self.assertIn("👤 회원 #34", embed["description"])
+        self.assertEqual(embed["color"], relay.RED)
+        prompt = relay.build_prompt("ws", labels, parsed, [], "배포 커밋 확인 실패")
+        self.assertIn("destination: /app/heart-rate/send-single", prompt)
+        self.assertNotIn("USER#34", prompt)
+        self.assertIn("ws", relay.AI_KINDS)
+
     def test_push_embed_shows_related_member_to_recipient(self):
         line = ("... ERROR traceId=none [w] c.w.f.a.FcmOutboxTransactions - [FCM_FAILED] Type=SAFE_ZONE_EXITED "
                 "Emergency=true Related=34 Recipient=12 Attempts=4 Reason=INVALID_TOKEN")

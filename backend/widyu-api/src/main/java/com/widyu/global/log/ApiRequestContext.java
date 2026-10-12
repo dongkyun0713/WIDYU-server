@@ -51,8 +51,13 @@ public final class ApiRequestContext {
 
     /** 요청자. 예: USER#12, 비로그인은 anonymous. */
     public static String actor() {
-        final Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof PrincipalDetails principal)) {
+        return actorOf(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    /** WebSocket처럼 SecurityContext 대신 메시지 헤더에 인증 정보가 있는 경로에서 쓴다. */
+    public static String actorOf(final Object user) {
+        if (!(user instanceof Authentication authentication)
+                || !(authentication.getPrincipal() instanceof PrincipalDetails principal)) {
             return ANONYMOUS;
         }
         final String role = authentication.getAuthorities().stream()
