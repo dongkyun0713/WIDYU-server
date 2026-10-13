@@ -87,7 +87,7 @@ class HealthScheduleControllerTest {
         // when & then
         mockMvc().perform(get(BASE_PATH + "/calendar/seniors").param("year", "2026").param("month", "13"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("month는 1 이상 12 이하여야 합니다."));
+                .andExpect(jsonPath("$.message").value("month는 1 이상 12 이하여야 합니다 (month)"));
         verifyNoInteractions(healthScheduleFacade);
     }
 }

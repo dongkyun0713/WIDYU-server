@@ -41,7 +41,7 @@ class LocationAccessLogControllerTest {
         // when & then
         mockMvc().perform(get("/api/v1/location/access-logs/mine").param("size", "101"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("size는 1 이상 100 이하여야 합니다."));
+                .andExpect(jsonPath("$.message").value("size는 1 이상 100 이하여야 합니다 (size)"));
         verifyNoInteractions(locationAccessLogService);
     }
 }
