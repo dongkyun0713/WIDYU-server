@@ -24,7 +24,8 @@ public class WebSocketEventListener {
 
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
-        log.info("WebSocket 연결 종료 - sessionId: {}", event.getSessionId());
+        // 끊김 원인(1002·1009·1011 등)을 운영 로그로 가르기 위해 종료 코드·사유를 남긴다.
+        log.info("WebSocket 연결 종료 - sessionId: {}, closeStatus: {}", event.getSessionId(), event.getCloseStatus());
         webSocketSessionRegistry.remove(event.getSessionId());
     }
 
