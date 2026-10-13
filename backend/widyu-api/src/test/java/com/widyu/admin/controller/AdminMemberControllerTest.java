@@ -42,7 +42,7 @@ class AdminMemberControllerTest {
         // when & then
         mockMvc().perform(get(LIST_PATH).param("page", "-1"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("page는 0 이상이어야 합니다."));
+                .andExpect(jsonPath("$.message").value("page는 0 이상이어야 합니다 (page)"));
         verifyNoInteractions(adminFcmService);
     }
 
@@ -52,7 +52,7 @@ class AdminMemberControllerTest {
         // when & then
         mockMvc().perform(get(LIST_PATH).param("size", "0"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("size는 1 이상 100 이하여야 합니다."));
+                .andExpect(jsonPath("$.message").value("size는 1 이상 100 이하여야 합니다 (size)"));
         verifyNoInteractions(adminFcmService);
     }
 }

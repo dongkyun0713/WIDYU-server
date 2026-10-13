@@ -39,7 +39,7 @@ class AdminAccessLogControllerTest {
         // when & then
         mockMvc().perform(get("/api/v1/admin/access-logs").param("page", "-1"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("page는 0 이상이어야 합니다."));
+                .andExpect(jsonPath("$.message").value("page는 0 이상이어야 합니다 (page)"));
         verifyNoInteractions(adminAccessLogService);
     }
 }

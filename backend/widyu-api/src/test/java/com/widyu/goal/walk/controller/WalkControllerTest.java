@@ -39,7 +39,7 @@ class WalkControllerTest {
         // when & then
         mockMvc().perform(get("/api/v1/goals/walks/monthly").param("year", "999999999").param("month", "1"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("year는 2000 이상 2100 이하여야 합니다."));
+                .andExpect(jsonPath("$.message").value("year는 2000 이상 2100 이하여야 합니다 (year)"));
         verifyNoInteractions(walkService);
     }
 }
