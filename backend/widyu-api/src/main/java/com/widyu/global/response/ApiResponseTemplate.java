@@ -1,6 +1,7 @@
 package com.widyu.global.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -16,6 +17,8 @@ public class ApiResponseTemplate<T> {
     private final String traceId;
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private final ApiErrorDebugInfo debug;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final List<FieldErrorDetail> errors;
 
     public static BodyBuilder ok() {
         return new DefaultBodyBuilder();
@@ -32,6 +35,8 @@ public class ApiResponseTemplate<T> {
 
         BodyBuilder debug(final ApiErrorDebugInfo debug);
 
+        BodyBuilder errors(final List<FieldErrorDetail> errors);
+
         <T> ApiResponseTemplate<T> body(final T data);
 
         <T> ApiResponseTemplate<T> build();
@@ -41,6 +46,7 @@ public class ApiResponseTemplate<T> {
         private String code;
         private String message;
         private ApiErrorDebugInfo debug;
+        private List<FieldErrorDetail> errors;
 
         @Override
         public BodyBuilder code(final String code) {
@@ -61,13 +67,19 @@ public class ApiResponseTemplate<T> {
         }
 
         @Override
+        public BodyBuilder errors(final List<FieldErrorDetail> errors) {
+            this.errors = errors;
+            return this;
+        }
+
+        @Override
         public <T> ApiResponseTemplate<T> body(final T data) {
-            return new ApiResponseTemplate<>(this.code, this.message, data, MDC.get("traceId"), this.debug);
+            return new ApiResponseTemplate<>(this.code, this.message, data, MDC.get("traceId"), this.debug, this.errors);
         }
 
         @Override
         public <T> ApiResponseTemplate<T> build() {
-            return new ApiResponseTemplate<>(this.code, this.message, null, MDC.get("traceId"), this.debug);
+            return new ApiResponseTemplate<>(this.code, this.message, null, MDC.get("traceId"), this.debug, this.errors);
         }
     }
 }

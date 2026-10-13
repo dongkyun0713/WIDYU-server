@@ -8,8 +8,21 @@ import com.widyu.global.log.StackTraceLog;
 import com.widyu.global.response.ApiErrorDebugInfo;
 import com.widyu.global.response.ApiResponseTemplate;
 import jakarta.servlet.http.HttpServletRequest;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.widyu.global.response.FieldErrorDetail;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.validation.method.ParameterValidationResult;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import java.time.OffsetDateTime;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Marker;
@@ -19,7 +32,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -39,6 +51,9 @@ public class GlobalExceptionHandler {
 
     private static final String BUSINESS_LOG_MARKER = "BUSINESS-EXCEPTION-LOG";
     private static final String SYSTEM_LOG_MARKER = "EXCEPTION-LOG";
+    private static final String INVALID_FORMAT_REASON = "요청 값의 형식이 올바르지 않습니다";
+    private static final String TYPE_MISMATCH_REASON = "요청 값의 타입이 올바르지 않습니다";
+    private static final String TOO_LONG_REASON = "허용 길이를 넘었습니다";
 
     @Value("${observability.error-response.include-debug-details:false}")
     private boolean includeDebugDetails;
@@ -78,77 +93,126 @@ public class GlobalExceptionHandler {
     protected ResponseEntity<ApiResponseTemplate<Void>> handleMethodArgumentNotValidException(
             final MethodArgumentNotValidException e
     ) {
-        final FieldError fieldError = e.getBindingResult().getFieldError();
+        final List<FieldErrorDetail> errors = e.getBindingResult().getFieldErrors().stream()
+                .map(error -> FieldErrorDetail.of(error.getField(), reasonOf(error.getDefaultMessage())))
+                .toList();
+        log.warn("Validation error for fields {}", errors.stream().map(FieldErrorDetail::field).toList());
 
-        String field = "unknown";
-        String defaultMsg = "요청 값이 유효하지 않습니다";
-        if (fieldError != null) {
-            field = fieldError.getField();
-            if (fieldError.getDefaultMessage() != null) {
-                defaultMsg = fieldError.getDefaultMessage();
-            }
-        }
-
-        final String message = String.format("%s (%s)", trimTrailingPeriod(defaultMsg), field);
-
-        log.warn("Validation error for field {}: {}", field, defaultMsg);
-
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
+        return inputError(ErrorCode.INVALID_INPUT_VALUE, errors);
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
     protected ResponseEntity<ApiResponseTemplate<Void>> handleHandlerMethodValidationException(
             final HandlerMethodValidationException e
     ) {
-        String message = e.getAllValidationResults().stream()
-                .flatMap(result -> result.getResolvableErrors().stream())
-                .map(error -> error.getDefaultMessage())
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse("요청 값이 유효하지 않습니다");
+        final List<FieldErrorDetail> errors = new ArrayList<>();
+        for (ParameterValidationResult result : e.getAllValidationResults()) {
+            if (result instanceof ParameterErrors parameterErrors) {
+                parameterErrors.getFieldErrors().forEach(error ->
+                        errors.add(FieldErrorDetail.of(error.getField(), reasonOf(error.getDefaultMessage()))));
+                continue;
+            }
+            final String parameter = nullSafe(result.getMethodParameter().getParameterName(), "unknown");
+            result.getResolvableErrors().forEach(error ->
+                    errors.add(FieldErrorDetail.of(parameter, reasonOf(error.getDefaultMessage()))));
+        }
+        log.warn("Validation error for parameters {}", errors.stream().map(FieldErrorDetail::field).toList());
 
-        log.warn("Validation error: {}", message);
-
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
+        return inputError(ErrorCode.INVALID_INPUT_VALUE, errors);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     protected ResponseEntity<ApiResponseTemplate<Void>> handleHttpMessageNotReadableException(
             final HttpMessageNotReadableException e
     ) {
-        log.warn("Malformed request body");
+        final String field = jsonPathOf(e);
+        log.warn("Malformed request body: field={}", field);
+        if (field == null) {
+            return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST_FORMAT.getCode(),
+                    "요청 본문을 읽을 수 없습니다. 형식을 확인해주세요.");
+        }
 
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), "요청 본문을 읽을 수 없습니다. 형식을 확인해주세요.");
+        return inputError(ErrorCode.INVALID_REQUEST_FORMAT, List.of(FieldErrorDetail.of(field, INVALID_FORMAT_REASON)));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     protected ResponseEntity<ApiResponseTemplate<Void>> handleMethodArgumentTypeMismatchException(
             final MethodArgumentTypeMismatchException e
     ) {
-        final String message = String.format("요청 값의 타입이 올바르지 않습니다 (%s)", e.getName());
         log.warn("Type mismatch for parameter {}", e.getName());
 
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
+        return inputError(ErrorCode.INVALID_REQUEST_FORMAT, List.of(FieldErrorDetail.of(e.getName(), TYPE_MISMATCH_REASON)));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     protected ResponseEntity<ApiResponseTemplate<Void>> handleMissingServletRequestParameterException(
             final MissingServletRequestParameterException e
     ) {
-        final String message = String.format("필수 요청 파라미터가 누락되었습니다 (%s)", e.getParameterName());
         log.warn("Missing request parameter: {}", e.getParameterName());
 
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
+        return inputError(ErrorCode.MISSING_REQUIRED_VALUE, List.of(FieldErrorDetail.of(e.getParameterName(), "필수 요청 파라미터가 누락되었습니다")));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
     protected ResponseEntity<ApiResponseTemplate<Void>> handleMissingServletRequestPartException(
             final MissingServletRequestPartException e
     ) {
-        final String message = String.format("필수 요청 파트가 누락되었습니다 (%s)", e.getRequestPartName());
         log.warn("Missing request part: {}", e.getRequestPartName());
 
-        return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST.getCode(), message);
+        return inputError(ErrorCode.MISSING_REQUIRED_VALUE, List.of(FieldErrorDetail.of(e.getRequestPartName(), "필수 요청 파트가 누락되었습니다")));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    protected ResponseEntity<ApiResponseTemplate<Void>> handleMissingRequestHeaderException(
+            final MissingRequestHeaderException e
+    ) {
+        log.warn("Missing request header: {}", e.getHeaderName());
+
+        return inputError(ErrorCode.MISSING_REQUIRED_VALUE, List.of(FieldErrorDetail.of(e.getHeaderName(), "필수 요청 헤더가 누락되었습니다")));
+    }
+
+    /**
+     * DB 무결성 위반을 원인별로 응답한다(LLD-0085).
+     * 길이 초과는 클라이언트 입력이라 400이지만 요청 검증이 빠졌다는 신호라 서버 오류 로그로 남겨 알림을 유지한다.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponseTemplate<Void>> handleDataIntegrityViolationException(
+            final DataIntegrityViolationException e,
+            final HttpServletRequest request
+    ) {
+        final DataIntegrityViolationKind kind = DataIntegrityViolationKind.classify(e);
+        if (kind.type() == DataIntegrityViolationKind.Type.TOO_LONG) {
+            doSystemLog(e, request);
+            if (kind.field() == null) {
+                return toResponse(HttpStatus.BAD_REQUEST, ErrorCode.INPUT_TOO_LONG.getCode(), ErrorCode.INPUT_TOO_LONG.getMessage());
+            }
+            return inputError(ErrorCode.INPUT_TOO_LONG, List.of(FieldErrorDetail.of(kind.field(), TOO_LONG_REASON)));
+        }
+        if (kind.type() == DataIntegrityViolationKind.Type.DUPLICATE) {
+            doBusinessLog(e, request);
+            return toResponse(ErrorCode.DUPLICATE_RESOURCE.getHttpStatus(), ErrorCode.DUPLICATE_RESOURCE.getCode(),
+                    ErrorCode.DUPLICATE_RESOURCE.getMessage());
+        }
+        return serverError(ErrorCode.DATA_INTEGRITY_ERROR, e, request);
+    }
+
+    /** 락 대기·쿼리 시간 초과처럼 잠시 뒤 다시 하면 될 수 있는 실패. */
+    @ExceptionHandler({PessimisticLockingFailureException.class, QueryTimeoutException.class,
+            AsyncRequestTimeoutException.class})
+    public ResponseEntity<ApiResponseTemplate<Void>> handleTemporarilyBusy(
+            final Exception e,
+            final HttpServletRequest request
+    ) {
+        return serverError(ErrorCode.TEMPORARILY_BUSY, e, request);
+    }
+
+    /** DB·Redis 연결 실패처럼 의존 시스템을 쓸 수 없는 실패. */
+    @ExceptionHandler({DataAccessResourceFailureException.class, CannotCreateTransactionException.class})
+    public ResponseEntity<ApiResponseTemplate<Void>> handleDependencyUnavailable(
+            final Exception e,
+            final HttpServletRequest request
+    ) {
+        return serverError(ErrorCode.DEPENDENCY_UNAVAILABLE, e, request);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -250,6 +314,57 @@ public class GlobalExceptionHandler {
                 .build(); // data = null
 
         return ResponseEntity.status(status).body(body);
+    }
+
+    private ResponseEntity<ApiResponseTemplate<Void>> serverError(
+            final ErrorCode errorCode,
+            final Exception exception,
+            final HttpServletRequest request
+    ) {
+        doSystemLog(exception, request);
+        return toResponse(errorCode.getHttpStatus(), errorCode.getCode(), errorCode.getMessage(),
+                runtimeDebugInfo(exception, request, errorCode.getHttpStatus()));
+    }
+
+    /** 400 응답. message는 기존 클라이언트와 맞추려고 첫 번째 사유를 "사유 (필드)"로 담고, errors에 전체 목록을 담는다. */
+    private ResponseEntity<ApiResponseTemplate<Void>> inputError(
+            final ErrorCode errorCode,
+            final List<FieldErrorDetail> errors
+    ) {
+        String message = errorCode.getMessage();
+        if (!errors.isEmpty()) {
+            final FieldErrorDetail first = errors.get(0);
+            message = String.format("%s (%s)", trimTrailingPeriod(first.reason()), first.field());
+        }
+        final ApiResponseTemplate<Void> body = ApiResponseTemplate.<Void>error()
+                .code(errorCode.getCode())
+                .message(message)
+                .errors(errors)
+                .build();
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(body);
+    }
+
+    private static String reasonOf(final String defaultMessage) {
+        return nullSafe(defaultMessage, "요청 값이 유효하지 않습니다");
+    }
+
+    /** JSON 역직렬화 실패 위치를 "a.b[0].c" 형태로 꺼낸다. 문법 오류처럼 위치가 없으면 null. */
+    private static String jsonPathOf(final HttpMessageNotReadableException exception) {
+        if (!(exception.getCause() instanceof MismatchedInputException mismatch) || mismatch.getPath().isEmpty()) {
+            return null;
+        }
+        final StringBuilder path = new StringBuilder();
+        for (JsonMappingException.Reference reference : mismatch.getPath()) {
+            if (reference.getFieldName() != null) {
+                if (!path.isEmpty()) {
+                    path.append('.');
+                }
+                path.append(reference.getFieldName());
+                continue;
+            }
+            path.append('[').append(reference.getIndex()).append(']');
+        }
+        return path.toString();
     }
 
     private ApiErrorDebugInfo runtimeDebugInfo(

@@ -98,8 +98,10 @@ class PaymentControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()))
-                .andExpect(jsonPath("$.message").value("결제 키는 필수입니다 (paymentKey)"));
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_INPUT_VALUE.getCode()))
+                .andExpect(jsonPath("$.message").value("결제 키는 필수입니다 (paymentKey)"))
+                .andExpect(jsonPath("$.errors[0].field").value("paymentKey"))
+                .andExpect(jsonPath("$.errors[0].reason").value("결제 키는 필수입니다."));
 
         verifyNoInteractions(paymentService);
     }

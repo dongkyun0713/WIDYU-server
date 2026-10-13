@@ -23,7 +23,7 @@
 
 ## 3. 인터페이스 / API
 
-모든 HTTP 응답은 `X-Trace-Id` 헤더와 `traceId` JSON 필드를 포함한다. 요청 헤더의 traceId는 영문·숫자·점·밑줄·하이픈만 허용하며 최대 64자다. 유효하지 않거나 없으면 서버가 UUID를 생성한다. `dev`와 `local` 프로필의 5xx 응답은 `debug.exceptionType`, `debug.requestUri`를 추가한다. 예외 메시지와 스택 트레이스는 응답에 포함하지 않는다.
+모든 HTTP 응답은 `X-Trace-Id` 헤더와 `traceId` JSON 필드를 포함한다. 요청 헤더의 traceId는 영문·숫자·점·밑줄·하이픈만 허용하며 최대 64자다. 유효하지 않거나 없으면 서버가 UUID를 생성한다. `dev`와 `local` 프로필의 5xx 응답은 `debug.exceptionType`, `debug.requestUri`, `debug.message`(가장 안쪽 원인의 메시지, 300자)를 추가한다. 스택 트레이스는 응답에 포함하지 않는다. prod에는 `debug`가 없다. 원인별 코드와 400 응답의 `errors`는 [LLD-0085](LLD-0085-error-response-contract.md)를 따른다.
 
 ## 4. 데이터 모델
 
