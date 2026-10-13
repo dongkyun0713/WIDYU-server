@@ -47,6 +47,18 @@ class AlbumFeedRequestTest {
     }
 
     @Test
+    @DisplayName("날짜 형식이 잘못되면 BusinessException이 발생한다")
+    void 날짜_형식이_잘못되면_BusinessException이_발생한다() {
+        // given
+        AlbumFeedRequest request = AlbumFeedRequest.from(null, "2024-13-40");
+
+        // when & then
+        assertThatThrownBy(request::parsedDate)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("날짜 형식은 yyyy-MM-dd 이어야 합니다.");
+    }
+
+    @Test
     @DisplayName("커서 형식이 잘못되면 BAD_REQUEST 예외를 던진다")
     void 커서_형식이_잘못되면_BAD_REQUEST_예외를_던진다() {
         // given

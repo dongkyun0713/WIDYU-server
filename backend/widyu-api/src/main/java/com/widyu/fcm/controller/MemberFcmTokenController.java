@@ -5,6 +5,7 @@ import com.widyu.fcm.dto.request.FcmTokenLoginRequest;
 import com.widyu.fcm.dto.request.FcmTokenLogoutRequest;
 import com.widyu.fcm.application.MemberFcmTokenService;
 import com.widyu.global.response.ApiResponseTemplate;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,7 +24,7 @@ public class MemberFcmTokenController implements MemberFcmTokenDocs {
 
     @PostMapping("/login")
     public ApiResponseTemplate<Void> saveFcmToken(
-            @RequestBody FcmTokenLoginRequest fcmTokenLoginRequest
+            @Valid @RequestBody FcmTokenLoginRequest fcmTokenLoginRequest
     ) {
         memberFcmTokenService.saveOrActivateFcmToken(
                 fcmTokenLoginRequest.token(),
@@ -38,7 +39,7 @@ public class MemberFcmTokenController implements MemberFcmTokenDocs {
 
     @PostMapping("/logout")
     public ApiResponseTemplate<Void> deactivateFcmToken(
-            @RequestBody FcmTokenLogoutRequest fcmTokenLogoutRequest
+            @Valid @RequestBody FcmTokenLogoutRequest fcmTokenLogoutRequest
     ) {
         memberFcmTokenService.deactivateFcmToken(fcmTokenLogoutRequest.token());
 

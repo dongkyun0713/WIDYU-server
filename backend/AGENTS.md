@@ -88,6 +88,7 @@
 ## 백엔드 코딩 주의사항
 
 - **Swagger**: `controller/docs/`에 별도 `Docs` 인터페이스로 문서화 — 컨트롤러 본문은 깔끔하게 유지.
+- **요청 검증 위치**: `Docs` 인터페이스를 구현하는 컨트롤러는 `@RequestParam`·`@PathVariable`의 제약(`@Min`·`@Max` 등)과 `@Valid`를 **Docs 인터페이스 메서드에** 선언하고, 구현과 맞춘다. 구현 쪽에만 붙이면 Hibernate Validator가 `HV000151`(오버라이드 메서드의 파라미터 제약 변경)을 던져 정상 요청까지 500이 된다. 저장 필드에는 엔티티 컬럼 길이에 맞춘 `@Size`를 붙인다(LLD-0085).
 - **`@Async` 비동기**:
   - `@Async` 메서드는 **별도 빈**에 배치 (self-invocation 프록시 우회 방지)
   - `MultipartFile`은 요청 종료 후 삭제되므로 `File`로 변환해 async 스레드에 전달
