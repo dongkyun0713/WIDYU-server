@@ -599,6 +599,122 @@ class IncidentRepositoryTest {
         assertThat(found.getInitialAlertSentAtMs()).isNull();
     }
 
+    @Test
+    @DisplayName("마감 전 첫 확인 화면 수신을 기록하면 기기와 시각을 남기고 마감을 수신 시각 + 60초로 옮긴다")
+    void 마감_전_첫_확인_화면_수신을_기록하면_마감을_수신_시각_기준으로_옮긴다() {
+        // given
+        Incident checking = incidentRepository.saveAndFlush(checkingIncident());
+        long displayedAtMs = OPENED_AT_MS + 30_000L;
+
+        // when
+        int updated = incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.WATCH,
+                displayedAtMs, displayedAtMs + 60_000L);
+
+        // then
+        Incident stored = incidentRepository.findById(checking.getId()).orElseThrow();
+        assertThat(updated).isEqualTo(1);
+        assertThat(stored.getPromptDisplayedAtMs()).isEqualTo(displayedAtMs);
+        assertThat(stored.getPromptDisplayedVia()).isEqualTo(ResponseVia.WATCH);
+        assertThat(stored.getRespondByMs()).isEqualTo(displayedAtMs + 60_000L);
+    }
+
+    @Test
+    @DisplayName("두 번째 확인 화면 수신을 기록하면 첫 기기·시각과 마감을 바꾸지 않는다")
+    void 두_번째_확인_화면_수신을_기록하면_첫_기록과_마감을_바꾸지_않는다() {
+        // given
+        Incident checking = incidentRepository.saveAndFlush(checkingIncident());
+        long firstAtMs = OPENED_AT_MS + 10_000L;
+        incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.PHONE,
+                firstAtMs, firstAtMs + 60_000L);
+
+        // when
+        int second = incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.WATCH,
+                OPENED_AT_MS + 20_000L, OPENED_AT_MS + 80_000L);
+
+        // then
+        Incident stored = incidentRepository.findById(checking.getId()).orElseThrow();
+        assertThat(second).isZero();
+        assertThat(stored.getPromptDisplayedVia()).isEqualTo(ResponseVia.PHONE);
+        assertThat(stored.getPromptDisplayedAtMs()).isEqualTo(firstAtMs);
+        assertThat(stored.getRespondByMs()).isEqualTo(firstAtMs + 60_000L);
+    }
+
+    @Test
+    @DisplayName("마감이 지난 뒤 확인 화면 수신을 기록하면 아무것도 바꾸지 않는다")
+    void 마감이_지난_뒤_확인_화면_수신을_기록하면_아무것도_바꾸지_않는다() {
+        // given
+        Incident checking = incidentRepository.saveAndFlush(checkingIncident());
+
+        // when
+        int updated = incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.PHONE,
+                RESPOND_BY_MS, RESPOND_BY_MS + 60_000L);
+
+        // then
+        Incident stored = incidentRepository.findById(checking.getId()).orElseThrow();
+        assertThat(updated).isZero();
+        assertThat(stored.getPromptDisplayedAtMs()).isNull();
+        assertThat(stored.getRespondByMs()).isEqualTo(RESPOND_BY_MS);
+    }
+
+    @Test
+    @DisplayName("이미 응답한 사건에 확인 화면 수신을 기록하면 마감을 바꾸지 않는다")
+    void 이미_응답한_사건에_확인_화면_수신을_기록하면_마감을_바꾸지_않는다() {
+        // given
+        Incident checking = incidentRepository.saveAndFlush(checkingIncident());
+        incidentRepository.respond(INCIDENT_REF, SENIOR_ID, IncidentResponseValue.OK, ResponseVia.PHONE,
+                OPENED_AT_MS + 5_000L, null, IncidentState.OK_CLOSED);
+
+        // when
+        int updated = incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.PHONE,
+                OPENED_AT_MS + 6_000L, OPENED_AT_MS + 66_000L);
+
+        // then
+        Incident stored = incidentRepository.findById(checking.getId()).orElseThrow();
+        assertThat(updated).isZero();
+        assertThat(stored.getRespondByMs()).isEqualTo(RESPOND_BY_MS);
+    }
+
+    @Test
+    @DisplayName("다른 시니어나 낙상 사건에 확인 화면 수신을 기록하면 아무것도 바꾸지 않는다")
+    void 다른_시니어나_낙상_사건에_확인_화면_수신을_기록하면_아무것도_바꾸지_않는다() {
+        // given
+        incidentRepository.saveAndFlush(checkingIncident());
+        Incident fall = Incident.builder().incidentRef("inc-fall").memberId(SENIOR_ID)
+                .kind(IncidentKind.FALL_SUSPECTED).openedAtMs(OPENED_AT_MS).respondByMs(RESPOND_BY_MS).build();
+        fall.markChecking();
+        incidentRepository.saveAndFlush(fall);
+
+        // when
+        int otherSenior = incidentRepository.markPromptDisplayed(INCIDENT_REF, OTHER_ID, ResponseVia.PHONE,
+                OPENED_AT_MS + 1_000L, OPENED_AT_MS + 61_000L);
+        int fallUpdated = incidentRepository.markPromptDisplayed("inc-fall", SENIOR_ID, ResponseVia.PHONE,
+                OPENED_AT_MS + 1_000L, OPENED_AT_MS + 61_000L);
+
+        // then
+        assertThat(otherSenior).isZero();
+        assertThat(fallUpdated).isZero();
+        assertThat(incidentRepository.findByIncidentRef("inc-fall").orElseThrow().getRespondByMs())
+                .isEqualTo(RESPOND_BY_MS);
+    }
+
+    @Test
+    @DisplayName("확인 화면 수신으로 마감을 옮기면 무응답 후보는 옮긴 마감이 지나야 잡힌다")
+    void 확인_화면_수신으로_마감을_옮기면_무응답_후보는_옮긴_마감이_지나야_잡힌다() {
+        // given
+        Incident checking = incidentRepository.saveAndFlush(checkingIncident());
+        long displayedAtMs = OPENED_AT_MS + 30_000L;
+        incidentRepository.markPromptDisplayed(INCIDENT_REF, SENIOR_ID, ResponseVia.PHONE,
+                displayedAtMs, displayedAtMs + 60_000L);
+
+        // when
+        var atOldDeadline = incidentRepository.findDueIds(RESPOND_BY_MS + 1L, 0L, PageRequest.of(0, 10));
+        var afterNewDeadline = incidentRepository.findDueIds(displayedAtMs + 60_001L, 0L, PageRequest.of(0, 10));
+
+        // then
+        assertThat(atOldDeadline).doesNotContain(checking.getId());
+        assertThat(afterNewDeadline).contains(checking.getId());
+    }
+
     private Incident checkingIncident() {
         Incident incident = incident(INCIDENT_REF, SENIOR_ID, "dec-01");
         incident.markChecking();

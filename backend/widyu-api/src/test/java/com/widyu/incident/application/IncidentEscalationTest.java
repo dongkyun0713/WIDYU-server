@@ -88,7 +88,7 @@ class IncidentEscalationTest {
         FamilyMembership membership = Mockito.mock(FamilyMembership.class);
         given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
         given(incidents.claimSecondAlertIfDue(eq(3L), anyLong())).willReturn(1);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(members.findById(1L)).willReturn(Optional.of(senior));
         given(seniorProfiles.findFamilyIdByMemberId(1L)).willReturn(Optional.of(10L));
         given(memberships.findAllByFamilyIdWithGuardian(10L)).willReturn(List.of(membership));
@@ -119,7 +119,7 @@ class IncidentEscalationTest {
         Member other = Mockito.mock(Member.class);
         FamilyMembership leaderLink = Mockito.mock(FamilyMembership.class);
         FamilyMembership otherLink = Mockito.mock(FamilyMembership.class);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
         given(incidents.claimSecondAlertIfDue(eq(3L), anyLong())).willReturn(1);
         given(members.findById(1L)).willReturn(Optional.of(senior));
@@ -162,7 +162,7 @@ class IncidentEscalationTest {
         // given
         Incident incident = dueActiveIncident(null);
         given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(guardianResponses.existsByIncidentId(3L)).willReturn(true);
 
         // when
@@ -188,7 +188,7 @@ class IncidentEscalationTest {
                 incident, "lastDetectedAtMs", nowMs - 360_000L);
         org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
         given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
 
         // when
         long before = System.currentTimeMillis();
@@ -212,7 +212,7 @@ class IncidentEscalationTest {
         org.springframework.test.util.ReflectionTestUtils.setField(incident, "id", 3L);
         org.springframework.test.util.ReflectionTestUtils.setField(incident, "state", state);
         given(incidents.findByIdForUpdate(3L)).willReturn(Optional.of(incident));
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
 
         // when
         boolean sent = escalation.sendSecondAlertIfDue(3L);

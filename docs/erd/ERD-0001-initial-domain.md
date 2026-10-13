@@ -383,7 +383,9 @@ erDiagram
         String kind "HR_ANOMALY / SELF_HELP_REQUEST / FALL_SUSPECTED / SAFE_ZONE_EXIT(과거 행 호환)"
         String level "판정 severity 복사"
         Long openedAtMs
-        Long respondByMs "openedAtMs + 60초 (설정값)"
+        Long respondByMs "심박: openedAtMs + 90초, 화면 수신 뒤 수신 + 60초 / 낙상: + 60초"
+        Long promptDisplayedAtMs "확인 화면 수신 완료 서버 시각 (LLD-0085)"
+        String promptDisplayedVia "PHONE / WATCH"
         String response "OK / HELP"
         Long respondedAtMs
         Long deviceRespondedAtMs "단말 클릭 시각"
@@ -903,6 +905,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-13 | `incident` | 확인 화면 수신 시각·기기 `prompt_displayed_at_ms`·`prompt_displayed_via` 추가 (LLD-0085) | `scripts/mysql/alter_incident_prompt_displayed.sql` |
 | 2026-10-11 | `incident` | 워치 도움 요청 취소 상태를 위한 `state VARCHAR(24)` 확장 (LLD-0083) | `scripts/mysql/alter_incident_state_length.sql` |
 | 2026-10-11 | `incident_response_attempt` | 본인확인 수락·지각·중복 시도 이력 (LLD-0082) | `scripts/mysql/create_incident_response_attempt.sql` |
 | 2026-10-02 | `followup_card`·`followup_answer` | OK 종료 후 카드와 시니어 원답·두 제출 시각 (LLD-0073) | `scripts/mysql/create_followup_card.sql` |

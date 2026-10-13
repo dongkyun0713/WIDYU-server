@@ -146,6 +146,15 @@ public class Incident extends BaseTimeEntity {
     @Column(name = "response_via", length = 16)
     private ResponseVia responseVia;
 
+    /** 시니어 기기가 확인 화면을 띄웠다고 알린 서버 수신 시각(LLD-0085). 없으면 화면 미수신. */
+    @Column(name = "prompt_displayed_at_ms")
+    private Long promptDisplayedAtMs;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "prompt_displayed_via", length = 16)
+    private ResponseVia promptDisplayedVia;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "state", nullable = false, length = 24)

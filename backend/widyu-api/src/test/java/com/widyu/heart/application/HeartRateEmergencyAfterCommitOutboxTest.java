@@ -116,7 +116,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             tokens.save(MemberFcmToken.builder().member(nonLeader).token("guardian-735").active(true).build());
             return new Long[] {senior.getId(), leader.getId(), nonLeader.getId(), family.getId()};
         });
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5, 90));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
         given(eligibility.familyId(ids[0])).willReturn(ids[3]);
         given(eligibility.sameActiveFamily(ids[2], ids[0], ids[3])).willReturn(true);
@@ -194,7 +194,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             tokens.save(MemberFcmToken.builder().member(guardian).token("guardian-708").active(true).build());
             return new Long[] {senior.getId(), guardian.getId(), family.getId()};
         });
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5, 90));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
         given(deliveryProperties.ttl(false)).willReturn(Duration.ofHours(1));
         given(eligibility.familyId(ids[0])).willReturn(ids[2]);
@@ -254,7 +254,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             tokens.save(MemberFcmToken.builder().member(senior).token("test-token").active(true).build());
             return senior.getId();
         });
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, true, 5, 90));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
         willAnswer(invocation -> {
             outboxService.enqueue(invocation.getArgument(0), invocation.getArgument(1));
@@ -309,7 +309,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             incidents.save(old);
             return new Long[] {senior.getId(), guardian.getId(), family.getId(), old.getId(), nonLeader.getId()};
         });
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
         given(eligibility.familyId(ids[0])).willReturn(ids[2]);
         given(eligibility.sameActiveFamily(ids[1], ids[0], ids[2])).willReturn(true);
@@ -364,7 +364,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
             tokens.save(MemberFcmToken.builder().member(senior).token("unlinked-token").active(true).build());
             return senior.getId();
         });
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000, false, 5, 90));
         given(deliveryProperties.ttl(true)).willReturn(Duration.ofMinutes(5));
         willAnswer(invocation -> {
             outboxService.enqueue(invocation.getArgument(0), invocation.getArgument(1));

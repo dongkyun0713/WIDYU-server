@@ -30,6 +30,8 @@ import com.widyu.incident.dto.response.IncidentStatusResponse;
 import com.widyu.incident.dto.request.HelpRequestCreateRequest;
 import com.widyu.incident.dto.response.HelpRequestResult;
 import com.widyu.incident.dto.response.HelpRequestCancelResult;
+import com.widyu.incident.dto.request.PromptDisplayedRequest;
+import com.widyu.incident.dto.response.PromptDisplayedResult;
 import com.widyu.incident.repository.IncidentRepository;
 import com.widyu.incident.repository.IncidentGuardianResponseRepository;
 import com.widyu.incident.repository.IncidentResponseAttemptRepository;
@@ -270,7 +272,8 @@ public class IncidentService {
                 .memberId(memberId)
                 .kind(kind)
                 .openedAtMs(openedAtMs)
-                .respondByMs(openedAtMs + sensorProperties.incident().selfCheckSec() * MILLIS_PER_SECOND);
+                // 확인 화면 수신 완료가 오면 그 시각 + selfCheckSec로 옮긴다(LLD-0085).
+                .respondByMs(openedAtMs + sensorProperties.incident().promptWaitSec() * MILLIS_PER_SECOND);
         if (decision != null) {
             builder.decisionId(decision.getDecisionId()).runId(decision.getRunId()).level(decision.getSeverity());
         }
@@ -281,6 +284,23 @@ public class IncidentService {
             incidentEscalation.sendImmediately(incident, System.currentTimeMillis());
         }
         return incident;
+    }
+
+    /**
+     * 확인 화면 수신 완료(LLD-0085). 마감 전 첫 수신이면 마감을 수신 시각 + selfCheckSec로 옮긴다.
+     * 두 번째 수신·마감 뒤·응답 뒤·심박 외 사건은 바꾸지 않고 현재 값을 돌려준다.
+     */
+    @Transactional
+    public PromptDisplayedResult markPromptDisplayed(Long memberId, String incidentRef,
+                                                     PromptDisplayedRequest request) {
+        findOwned(memberId, incidentRef);
+        long displayedAtMs = System.currentTimeMillis();
+        long newRespondByMs = displayedAtMs + sensorProperties.incident().selfCheckSec() * MILLIS_PER_SECOND;
+        int updated = incidentRepository.markPromptDisplayed(incidentRef, memberId, request.via(),
+                displayedAtMs, newRespondByMs);
+        Incident current = findOwned(memberId, incidentRef);
+        log.info("확인 화면 수신: memberId={}, incidentRef={}, extended={}", memberId, incidentRef, updated == 1);
+        return PromptDisplayedResult.of(current, updated == 1);
     }
 
     /**
