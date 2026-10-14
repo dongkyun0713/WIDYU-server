@@ -10,7 +10,10 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "Album-Calendar", description = "앨범 캘린더 조회 API")
@@ -48,6 +51,8 @@ public interface AlbumCalendarDocs {
                     required = true,
                     example = "2025"
             )
+            @Min(value = 2000, message = "year는 2000 이상 2100 이하여야 합니다.")
+            @Max(value = 2100, message = "year는 2000 이상 2100 이하여야 합니다.")
             int year,
 
             @Parameter(
@@ -57,6 +62,8 @@ public interface AlbumCalendarDocs {
                     required = true,
                     example = "9"
             )
+            @Min(value = 1, message = "month는 1 이상 12 이하여야 합니다.")
+            @Max(value = 12, message = "month는 1 이상 12 이하여야 합니다.")
             int month
     );
 
@@ -120,7 +127,7 @@ public interface AlbumCalendarDocs {
                     required = true,
                     example = "2025-09-13"
             )
-            String date,
+            LocalDate date,
 
             @Parameter(
                     name = "cursor",

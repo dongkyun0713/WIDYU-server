@@ -16,6 +16,15 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.response.ApiResponseTemplate;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.sql.SQLException;
+import java.util.List;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -69,7 +78,8 @@ class GlobalExceptionHandlerTest {
                         .contentType(APPLICATION_JSON)
                         .content("{ this is broken"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_REQUEST_FORMAT.getCode()))
+                .andExpect(jsonPath("$.errors").doesNotExist());
     }
 
     @Test
@@ -77,8 +87,9 @@ class GlobalExceptionHandlerTest {
     void 경로_변수_타입_불일치() throws Exception {
         mockMvc.perform(get("/test/type/not-a-number"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()))
-                .andExpect(jsonPath("$.message").value("요청 값의 타입이 올바르지 않습니다 (id)"));
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_REQUEST_FORMAT.getCode()))
+                .andExpect(jsonPath("$.message").value("요청 값의 타입이 올바르지 않습니다 (id)"))
+                .andExpect(jsonPath("$.errors[0].field").value("id"));
     }
 
     @Test
@@ -86,8 +97,9 @@ class GlobalExceptionHandlerTest {
     void 필수_파라미터_누락() throws Exception {
         mockMvc.perform(get("/test/param"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()))
-                .andExpect(jsonPath("$.message").value("필수 요청 파라미터가 누락되었습니다 (name)"));
+                .andExpect(jsonPath("$.code").value(ErrorCode.MISSING_REQUIRED_VALUE.getCode()))
+                .andExpect(jsonPath("$.message").value("필수 요청 파라미터가 누락되었습니다 (name)"))
+                .andExpect(jsonPath("$.errors[0].field").value("name"));
     }
 
     @Test
@@ -95,7 +107,7 @@ class GlobalExceptionHandlerTest {
     void 필수_파트_누락() throws Exception {
         mockMvc.perform(multipart("/test/part"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()))
+                .andExpect(jsonPath("$.code").value(ErrorCode.MISSING_REQUIRED_VALUE.getCode()))
                 .andExpect(jsonPath("$.message").value("필수 요청 파트가 누락되었습니다 (file)"));
     }
 
@@ -277,8 +289,157 @@ class GlobalExceptionHandlerTest {
         }
     }
 
+    @Test
+    @DisplayName("요청 본문 검증이 여러 필드에서 실패하면 필드별 사유를 모두 담아 REQ_4001로 응답한다")
+    void 요청_본문_검증이_여러_필드에서_실패하면_필드별_사유를_모두_담아_응답한다() throws Exception {
+        mockMvc.perform(post("/test/valid")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"name\": \"\", \"code\": \"ABCDE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_INPUT_VALUE.getCode()))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[?(@.field == 'name')].reason").value("이름은 필수입니다."))
+                .andExpect(jsonPath("$.errors[?(@.field == 'code')].reason").value("코드는 3자 이하입니다."));
+    }
+
+    @Test
+    @DisplayName("JSON 값의 형식이 틀리면 틀린 위치를 필드 경로로 담아 REQ_4002로 응답한다")
+    void JSON_값의_형식이_틀리면_틀린_위치를_필드_경로로_담아_응답한다() throws Exception {
+        mockMvc.perform(post("/test/typed")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"items\": [{\"count\": \"many\"}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.INVALID_REQUEST_FORMAT.getCode()))
+                .andExpect(jsonPath("$.errors[0].field").value("items[0].count"));
+    }
+
+    @Test
+    @DisplayName("필수 헤더가 없으면 500이 아니라 REQ_4003으로 응답한다")
+    void 필수_헤더가_없으면_REQ_4003으로_응답한다() throws Exception {
+        mockMvc.perform(get("/test/header"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.MISSING_REQUIRED_VALUE.getCode()))
+                .andExpect(jsonPath("$.errors[0].field").value("X-Device-Id"));
+    }
+
+    @Test
+    @DisplayName("DB 길이 초과는 400과 해당 필드로 응답하고 검증 누락 신호로 서버 오류 로그를 남긴다")
+    void DB_길이_초과는_400과_해당_필드로_응답하고_서버_오류_로그를_남긴다() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            mockMvc.perform(get("/test/db/too-long"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value(ErrorCode.INPUT_TOO_LONG.getCode()))
+                    .andExpect(jsonPath("$.errors[0].field").value("scheduleName"))
+                    .andExpect(jsonPath("$.message").value("허용 길이를 넘었습니다 (scheduleName)"));
+
+            assertThat(appender.list).singleElement().satisfies(event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+                assertThat(event.getFormattedMessage()).startsWith("[EXCEPTION] ");
+            });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("DB 중복 키는 409 REQ_4090으로 응답한다")
+    void DB_중복_키는_409로_응답한다() throws Exception {
+        mockMvc.perform(get("/test/db/duplicate"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(ErrorCode.DUPLICATE_RESOURCE.getCode()));
+    }
+
+    @Test
+    @DisplayName("그 밖의 DB 무결성 위반은 일반 500과 구분되는 SRV_5001로 응답하고 dev에서는 원인 메시지를 보여 준다")
+    void 그_밖의_DB_무결성_위반은_SRV_5001로_응답하고_dev에서는_원인_메시지를_보여_준다() throws Exception {
+        mockMvcWithDebugDetails().perform(get("/test/db/not-null"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(ErrorCode.DATA_INTEGRITY_ERROR.getCode()))
+                .andExpect(jsonPath("$.debug.exceptionType").value("DataIntegrityViolationException"))
+                .andExpect(jsonPath("$.debug.message").value("Column 'member_fcm_token_id' cannot be null"));
+    }
+
+    @Test
+    @DisplayName("prod처럼 디버그 정보를 끄면 5xx 응답에 원인 메시지가 없다")
+    void 디버그_정보를_끄면_5xx_응답에_원인_메시지가_없다() throws Exception {
+        mockMvc.perform(get("/test/db/not-null"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.debug").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("락 대기 실패는 잠시 후 재시도할 수 있는 503 SRV_5031로 응답한다")
+    void 락_대기_실패는_503_SRV_5031로_응답한다() throws Exception {
+        mockMvc.perform(get("/test/lock"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(ErrorCode.TEMPORARILY_BUSY.getCode()));
+    }
+
+    @Test
+    @DisplayName("Redis 연결 실패는 의존 시스템 장애인 503 SRV_5032로 응답한다")
+    void Redis_연결_실패는_503_SRV_5032로_응답한다() throws Exception {
+        mockMvc.perform(get("/test/redis"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(ErrorCode.DEPENDENCY_UNAVAILABLE.getCode()));
+    }
+
+    private MockMvc mockMvcWithDebugDetails() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        ReflectionTestUtils.setField(handler, "includeDebugDetails", true);
+        return MockMvcBuilders.standaloneSetup(new TestController())
+                .setControllerAdvice(handler)
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
+                .build();
+    }
+
     @RestController
     static class TestController {
+
+        @PostMapping(value = "/test/valid", consumes = "application/json")
+        void valid(@Valid @RequestBody final ValidatedRequest request) {
+        }
+
+        @PostMapping(value = "/test/typed", consumes = "application/json")
+        void typed(@RequestBody final TypedRequest request) {
+        }
+
+        @GetMapping("/test/header")
+        void header(@RequestHeader("X-Device-Id") final String deviceId) {
+        }
+
+        @GetMapping("/test/db/too-long")
+        void tooLong() {
+            throw new DataIntegrityViolationException("could not execute statement",
+                    new SQLException("Data too long for column 'schedule_name' at row 1", "22001", 1406));
+        }
+
+        @GetMapping("/test/db/duplicate")
+        void duplicate() {
+            throw new DataIntegrityViolationException("could not execute statement",
+                    new SQLException("Duplicate entry 'a' for key 'uk_member'", "23000", 1062));
+        }
+
+        @GetMapping("/test/db/not-null")
+        void notNull() {
+            throw new DataIntegrityViolationException("could not execute statement",
+                    new SQLException("Column 'member_fcm_token_id' cannot be null", "23000", 1048));
+        }
+
+        @GetMapping("/test/lock")
+        void lock() {
+            throw new CannotAcquireLockException("Lock wait timeout exceeded");
+        }
+
+        @GetMapping("/test/redis")
+        void redis() {
+            throw new RedisConnectionFailureException("Unable to connect to Redis");
+        }
 
         @PostMapping("/test/system/{albumId}")
         void systemFailure(@PathVariable final Long albumId) {
@@ -328,5 +489,16 @@ class GlobalExceptionHandlerTest {
     }
 
     record SampleRequest(String value) {
+    }
+
+    record ValidatedRequest(
+            @NotBlank(message = "이름은 필수입니다.") String name,
+            @Size(max = 3, message = "코드는 3자 이하입니다.") String code
+    ) {
+    }
+
+    record TypedRequest(List<Item> items) {
+        record Item(Integer count) {
+        }
     }
 }

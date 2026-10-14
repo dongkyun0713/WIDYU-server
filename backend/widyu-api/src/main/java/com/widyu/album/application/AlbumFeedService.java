@@ -57,7 +57,7 @@ public class AlbumFeedService {
             lastAlbumId = request.lastAlbumId();
         }
         if (request.hasDate()) {
-            date = LocalDate.parse(request.date());
+            date = request.parsedDate();
         }
 
         // 1) 앨범 ID 커서 페이지 조회 (size+1 로 hasNext 판단)

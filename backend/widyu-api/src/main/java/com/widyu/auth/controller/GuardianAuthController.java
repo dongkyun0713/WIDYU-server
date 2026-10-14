@@ -83,7 +83,7 @@ public class GuardianAuthController implements GuardianAuthDocs {
 
     @PostMapping("/email")
     public ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
-            @RequestBody SmsVerificationRequest request
+            @RequestBody @Valid SmsVerificationRequest request
     ) {
         MemberInfoResponse response = guardianAuthService.findMemberByPhoneNumberAndName(request);
 

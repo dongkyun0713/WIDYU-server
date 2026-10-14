@@ -57,6 +57,8 @@ sensor:
     timeout-poll-ms: ${SENSOR_INCIDENT_TIMEOUT_POLL_MS:5000}
     self-check-first: ${SENSOR_INCIDENT_SELF_CHECK_FIRST:false}
     situation-window-min: ${SENSOR_INCIDENT_SITUATION_WINDOW_MIN:5}
+    # 확인 화면 수신 완료가 이 시간 안에 없으면 무응답으로 본다(LLD-0085).
+    prompt-wait-sec: ${SENSOR_INCIDENT_PROMPT_WAIT_SEC:90}
 
   followup:
     enabled: ${SENSOR_FOLLOWUP_ENABLED:false}

@@ -8,6 +8,7 @@ import com.widyu.followup.dto.response.CurrentFollowupResponse;
 import com.widyu.followup.dto.response.FollowupSubmissionResponse;
 import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.global.util.SecurityUtil;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,7 +35,7 @@ public class FollowupController implements FollowupDocs {
     @Override
     @PostMapping("/{id}/answers")
     public ApiResponseTemplate<FollowupSubmissionResponse> answer(
-            @PathVariable Long id, @RequestBody FollowupAnswerRequest request) {
+            @PathVariable Long id, @Valid @RequestBody FollowupAnswerRequest request) {
         return ApiResponseTemplate.ok().code("FOLLOWUP_2002").message("후속 답변 저장 완료")
                 .body(cardService.answer(securityUtil.getCurrentMemberId(), id, request));
     }
@@ -42,7 +43,7 @@ public class FollowupController implements FollowupDocs {
     @Override
     @PostMapping("/{id}/decline")
     public ApiResponseTemplate<FollowupSubmissionResponse> decline(
-            @PathVariable Long id, @RequestBody FollowupDeclineRequest request) {
+            @PathVariable Long id, @Valid @RequestBody FollowupDeclineRequest request) {
         Long deviceSubmittedAtMs = null;
         if (request != null) {
             deviceSubmittedAtMs = request.deviceSubmittedAtMs();

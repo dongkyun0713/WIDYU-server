@@ -4,6 +4,8 @@ import com.widyu.admin.application.AdminAlbumService;
 import com.widyu.admin.dto.response.AdminAlbumResponse;
 import com.widyu.admin.dto.response.AdminPageResponse;
 import com.widyu.global.response.ApiResponseTemplate;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,8 +21,10 @@ public class AdminAlbumController {
 
     @GetMapping("/albums")
     public ApiResponseTemplate<AdminPageResponse<AdminAlbumResponse>> getAlbums(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "page는 0 이상이어야 합니다.") int page,
+            @RequestParam(defaultValue = "20")
+            @Min(value = 1, message = "size는 1 이상 100 이하여야 합니다.")
+            @Max(value = 100, message = "size는 1 이상 100 이하여야 합니다.") int size) {
         return ApiResponseTemplate.ok()
                 .code("200")
                 .message("앨범 목록 조회 성공")

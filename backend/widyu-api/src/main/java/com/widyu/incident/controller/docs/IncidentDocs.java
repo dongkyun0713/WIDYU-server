@@ -10,6 +10,8 @@ import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
 import com.widyu.incident.dto.response.HelpRequestResult;
 import com.widyu.incident.dto.response.HelpRequestCancelResult;
+import com.widyu.incident.dto.request.PromptDisplayedRequest;
+import com.widyu.incident.dto.response.PromptDisplayedResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -40,6 +42,21 @@ public interface IncidentDocs {
     @ApiResponse(responseCode = "409", description = "열린 도움 요청 아님, INCIDENT_4093")
     ApiResponseTemplate<HelpRequestCancelResult> cancelHelpRequest(String incidentRef);
 
+    @Operation(summary = "본인확인 화면 수신 완료", description = """
+            시니어 앱(폰·워치)이 심박 위급 확인 화면을 띄우는 즉시 호출합니다.
+
+            - 마감 전 첫 호출이면 응답 마감을 서버 수신 시각 + 60초로 옮기고 `deadlineExtended=true`입니다.
+              앱은 응답의 `respondByMs`로 남은 시간을 표시합니다.
+            - 이 호출이 열린 시각 + 90초 안에 없으면 화면을 받지 못한 것으로 보고 무응답 처리합니다.
+            - 두 번째 호출(다른 기기 포함)·마감 뒤·응답 뒤·심박 외 사건은 값을 바꾸지 않고
+              `deadlineExtended=false`와 현재 값을 돌려줍니다. 다시 보내도 안전합니다.
+            - 본인 사건이 아니면 404(`INCIDENT_4040`)입니다.
+            """)
+    @ApiResponse(responseCode = "200", description = "수신 기록, INCIDENT_2009")
+    @ApiResponse(responseCode = "400", description = "via 누락 또는 잘못된 값")
+    @ApiResponse(responseCode = "404", description = "사건 없음 또는 다른 시니어 소유")
+    ApiResponseTemplate<PromptDisplayedResult> markPromptDisplayed(String incidentId, PromptDisplayedRequest request);
+
     @Operation(
             summary = "본인확인 응답",
             description = """
@@ -47,7 +64,8 @@ public interface IncidentDocs {
 
                     - `OK`면 상태가 `OK_CLOSED`, `HELP`면 `ESCALATED`가 됩니다.
                     - 원 단말 클릭 시각 `deviceRespondedAtMs`는 선택값입니다. 서버 수신 시각으로 마감을 판단합니다.
-                    - 응답 마감(열린 시각 + 60초)과 같은 시각 또는 그 뒤에 온 `OK`는
+                    - 심박 응답 마감은 확인 화면 수신 전 열린 시각 + 90초, 수신 뒤 수신 시각 + 60초입니다
+                      (낙상은 열린 시각 + 60초). 마감과 같은 시각 또는 그 뒤에 온 `OK`는
                       응답만 남기고 `ESCALATED`를 유지합니다.
                     - 마감 안의 심박 `OK`는 보호자에게 S08 일반 안내를 예약하고
                       `okNoticeSentAtMs`에 예약 시각을 기록합니다. 늦은 `OK`에는 안내가 없습니다.
@@ -72,7 +90,7 @@ public interface IncidentDocs {
             이미 끝난 사건에 늦게 도착한 확인도 활성 보호자라면 200으로 저장하되 2차 알림은 취소하지 않고
             `incidentEnded=true`를 반환합니다. S12 화면의 확인은 이 API를 호출하지 않습니다.
             화면 열람·푸시 탭·읽음·메시지 작성 화면만 연 것은 멈춤이 아닙니다.
-            잘못된 입력은 400(`REQ_4000`), 사건 없음·다른 가족·시니어 요청은 먼저
+            종류 누락은 400(`REQ_4001`), 알 수 없는 종류 값은 400(`REQ_4002`), 사건 없음·다른 가족·시니어 요청은 먼저
             404(`INCIDENT_4040`), 같은 가족의 비활성 보호자는 403(`AUTH_4030`)입니다.
             """)
     @ApiResponse(responseCode = "200", description = "보호자 멈춤 기록 또는 같은 종류의 멱등 재호출")

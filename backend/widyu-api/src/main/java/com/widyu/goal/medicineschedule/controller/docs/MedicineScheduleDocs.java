@@ -20,6 +20,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -199,9 +201,15 @@ public interface MedicineScheduleDocs {
     })
     ApiResponseTemplate<MedicineMonthlyResponse> getMonthlyStats(
             @Parameter(description = "연도", example = "2024", required = true)
-            @RequestParam int year,
+            @RequestParam
+            @Min(value = 2000, message = "year는 2000 이상 2100 이하여야 합니다.")
+            @Max(value = 2100, message = "year는 2000 이상 2100 이하여야 합니다.")
+            int year,
             @Parameter(description = "월", example = "11", required = true)
-            @RequestParam int month,
+            @RequestParam
+            @Min(value = 1, message = "month는 1 이상 12 이하여야 합니다.")
+            @Max(value = 12, message = "month는 1 이상 12 이하여야 합니다.")
+            int month,
             @Parameter(description = "대상 시니어 ID (null이면 본인)", example = "1")
             @RequestParam(required = false) Long memberId
     );

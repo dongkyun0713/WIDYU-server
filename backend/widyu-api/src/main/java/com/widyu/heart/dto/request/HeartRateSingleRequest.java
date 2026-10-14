@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 /** 측정값 1건을 즉시 전송하는 요청(ADR-0017). */
@@ -17,6 +18,7 @@ public record HeartRateSingleRequest(
         @NotNull(message = "측정 시각은 필수입니다.")
         LocalDateTime measuredAt,
 
+        @Size(max = 500, message = "위치 주소는 500자 이하여야 합니다.")
         String location, // 현재 위치 주소 (이상치 감지 시 위급상황 기록에 사용)
 
         @Pattern(

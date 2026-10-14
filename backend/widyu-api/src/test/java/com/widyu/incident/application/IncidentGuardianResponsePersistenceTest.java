@@ -77,7 +77,7 @@ class IncidentGuardianResponsePersistenceTest {
         given(seniorProfiles.findFamilyIdByMemberId(101L)).willReturn(Optional.of(10L));
         given(memberships.existsByFamilyIdAndGuardianId(10L, 201L)).willReturn(true);
         given(memberships.existsByFamilyIdAndGuardianId(10L, 202L)).willReturn(true);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000L, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000L, false, 5, 90));
 
         TransactionTemplate outer = new TransactionTemplate(transactionManager);
         TransactionTemplate committed = new TransactionTemplate(transactionManager);
@@ -122,7 +122,7 @@ class IncidentGuardianResponsePersistenceTest {
         given(members.findById(201L)).willReturn(Optional.of(guardian));
         given(seniorProfiles.findFamilyIdByMemberId(101L)).willReturn(Optional.of(10L));
         given(memberships.existsByFamilyIdAndGuardianId(10L, 201L)).willReturn(true);
-        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000L, false, 5));
+        given(sensorProperties.incident()).willReturn(new SensorProperties.Incident(60, 5000L, false, 5, 90));
         Long id = new TransactionTemplate(transactionManager).execute(status -> {
             Incident incident = Incident.builder().incidentRef("inc-status-read-only-740").memberId(101L)
                     .kind(IncidentKind.HR_ANOMALY).openedAtMs(lastDetectedAtMs)

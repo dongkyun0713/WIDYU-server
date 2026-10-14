@@ -14,6 +14,8 @@ import com.widyu.incident.dto.response.IncidentResponse;
 import com.widyu.incident.dto.response.IncidentStatusResponse;
 import com.widyu.incident.dto.response.HelpRequestResult;
 import com.widyu.incident.dto.response.HelpRequestCancelResult;
+import com.widyu.incident.dto.request.PromptDisplayedRequest;
+import com.widyu.incident.dto.response.PromptDisplayedResult;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +49,17 @@ public class IncidentController implements IncidentDocs {
         HelpRequestCancelResult result = incidentService.cancelHelpRequest(
                 securityUtil.getCurrentMemberId(), incidentRef);
         return ApiResponseTemplate.ok().code("INCIDENT_2008").message("도움 요청 취소 완료").body(result);
+    }
+
+    @Override
+    @PostMapping("/{incidentId}/prompt-displayed")
+    public ApiResponseTemplate<PromptDisplayedResult> markPromptDisplayed(
+            @PathVariable String incidentId,
+            @Valid @RequestBody PromptDisplayedRequest request
+    ) {
+        PromptDisplayedResult result = incidentService.markPromptDisplayed(
+                securityUtil.getCurrentMemberId(), incidentId, request);
+        return ApiResponseTemplate.ok().code("INCIDENT_2009").message("확인 화면 수신 기록 완료").body(result);
     }
 
     @Override
