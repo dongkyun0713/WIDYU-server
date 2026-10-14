@@ -1,6 +1,7 @@
 package com.widyu.album.dto.response;
 
 import com.widyu.album.Album;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +12,9 @@ public record AlbumMediaResponse(
         String type,
         Integer duration,
         String thumbnailUrl,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        @Schema(description = "소속 앨범 전체의 잠금 해제 가격(포인트)", example = "50")
+        Long price
 ) {
 
     public static List<AlbumMediaResponse> fromAlbum(Album album) {
@@ -47,7 +50,8 @@ public record AlbumMediaResponse(
                     type,
                     duration, // 동영상은 실제 duration, 이미지는 null
                     thumbnailUrl,
-                    album.getCreatedAt()
+                    album.getCreatedAt(),
+                    Album.UNLOCK_PRICE
             ));
         }
         
