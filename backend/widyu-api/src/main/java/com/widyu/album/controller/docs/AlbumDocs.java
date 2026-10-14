@@ -207,6 +207,7 @@ public interface AlbumDocs {
                     - 동영상 썸네일 지원
                     - 미디어 타입 구분 (image/video)
                     - 동영상 길이 정보 포함 (초 단위, 이미지는 null)
+                    - price는 소속 앨범 전체의 잠금 해제 가격(50포인트)이며, 미디어별 별도 과금이 아닙니다.
                     - 페이지 크기: 10개 고정
                     
                     **무한 스크롤 사용법:**
@@ -234,7 +235,8 @@ public interface AlbumDocs {
                                                     "type": "video",
                                                     "duration": 52,
                                                     "thumbnailUrl": "https://s3.bucket.com/thumbnails/video_thumb.jpg",
-                                                    "createdAt": "2024-12-21T14:30:00"
+                                                    "createdAt": "2024-12-21T14:30:00",
+                                                    "price": 50
                                                   },
                                                   {
                                                     "id": 11901,
@@ -242,7 +244,8 @@ public interface AlbumDocs {
                                                     "type": "image",
                                                     "duration": null,
                                                     "thumbnailUrl": "https://s3.bucket.com/albums/photo.jpg",
-                                                    "createdAt": "2024-12-21T14:25:00"
+                                                    "createdAt": "2024-12-21T14:25:00",
+                                                    "price": 50
                                                   }
                                                 ],
                                                 "hasNext": true,
