@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
 import com.widyu.global.error.BusinessException;
@@ -26,10 +27,12 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("개발용 심박 위급 발생 서비스 테스트")
@@ -43,13 +46,16 @@ class DevIncidentServiceTest {
     @Mock private IncidentRepository incidentRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private FamilyAccessService familyAccessService;
+    @Mock private PlatformTransactionManager transactionManager;
     @InjectMocks private DevIncidentService devIncidentService;
 
     @Test
-    @DisplayName("시니어가 호출하면 열린 심박 사건을 끝내고 본인 사건을 새로 연다")
-    void 시니어가_호출하면_열린_심박_사건을_끝내고_본인_사건을_새로_연다() {
+    @DisplayName("시니어가 호출하면 회원을 잠근 뒤 열린 심박 사건을 끝내고 본인 사건을 새로 연다")
+    void 시니어가_호출하면_회원을_잠근_뒤_열린_심박_사건을_끝내고_본인_사건을_새로_연다() {
         // given
-        given(memberRepository.findById(SENIOR_ID)).willReturn(Optional.of(member(SENIOR_ID, MemberType.SENIOR)));
+        Member senior = member(SENIOR_ID, MemberType.SENIOR);
+        given(memberRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        given(memberRepository.findByIdForUpdate(SENIOR_ID)).willReturn(Optional.of(senior));
         Incident previous = incident("inc-old");
         given(incidentRepository.findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
                 eq(SENIOR_ID), eq(IncidentKind.HR_ANOMALY), anyList())).willReturn(Optional.of(previous));
@@ -61,6 +67,12 @@ class DevIncidentServiceTest {
         // then
         assertThat(previous.getSituationEndedAtMs()).isNotNull();
         assertThat(response.incidentId()).isEqualTo("inc-new");
+        // 동시 호출이 앞 요청의 새 사건을 보도록 잠금이 열린 사건 조회보다 먼저다.
+        InOrder order = inOrder(memberRepository, incidentRepository, incidentService);
+        order.verify(memberRepository).findByIdForUpdate(SENIOR_ID);
+        order.verify(incidentRepository).findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
+                eq(SENIOR_ID), eq(IncidentKind.HR_ANOMALY), anyList());
+        order.verify(incidentService).openForAlert(SENIOR_ID, IncidentKind.HR_ANOMALY);
     }
 
     @Test
@@ -68,6 +80,8 @@ class DevIncidentServiceTest {
     void 보호자가_시니어를_지정하면_가족을_확인한_뒤_그_시니어_사건을_연다() {
         // given
         given(memberRepository.findById(GUARDIAN_ID)).willReturn(Optional.of(member(GUARDIAN_ID, MemberType.GUARDIAN)));
+        given(memberRepository.findByIdForUpdate(SENIOR_ID))
+                .willReturn(Optional.of(member(SENIOR_ID, MemberType.SENIOR)));
         given(incidentRepository.findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
                 eq(SENIOR_ID), eq(IncidentKind.HR_ANOMALY), anyList())).willReturn(Optional.empty());
         given(incidentService.openForAlert(SENIOR_ID, IncidentKind.HR_ANOMALY)).willReturn(incident("inc-new"));

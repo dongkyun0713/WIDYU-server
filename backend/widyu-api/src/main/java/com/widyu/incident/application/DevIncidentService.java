@@ -17,7 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 프론트 테스트용 심박 위급 강제 발생(개발·로컬 전용). 사건·알림은 실제 단건 심박 위급 경로를 그대로 쓴다.
@@ -34,20 +35,32 @@ public class DevIncidentService {
     private final IncidentRepository incidentRepository;
     private final MemberRepository memberRepository;
     private final FamilyAccessService familyAccessService;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
+    /**
+     * 호출자 확인은 트랜잭션 밖에서 먼저 한다. 같은 트랜잭션에서 잠금 전에 일반 SELECT를 하면 REPEATABLE READ
+     * 스냅샷이 그 시점에 고정돼, 잠금을 기다린 뒤에도 동시 요청이 방금 만든 사건을 보지 못한다.
+     */
     public IncidentResponse triggerHeartEmergency(Long callerId, DevHeartEmergencyRequest request) {
         Long seniorId = resolveSenior(callerId, request);
+        Incident opened = new TransactionTemplate(transactionManager)
+                .execute(status -> reopenHeartEmergency(seniorId));
+        log.info("개발용 심박 위급 발생: callerId={}, seniorId={}, incidentRef={}",
+                callerId, seniorId, opened.getIncidentRef());
+        return IncidentResponse.from(opened);
+    }
+
+    private Incident reopenHeartEmergency(Long seniorId) {
+        // 잠금을 트랜잭션의 첫 쿼리로 둔다. 동시 호출은 여기서 줄을 서고, 뒤 요청은 앞 요청이 만든 사건을 보고 끝낸다.
+        memberRepository.findByIdForUpdate(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         // 실제 경로는 5분 안 재감지를 같은 사건에 붙여 새 푸시가 없다. 테스트마다 새 사건이 열리도록 먼저 끝낸다.
         incidentRepository
                 .findFirstByMemberIdAndKindAndStateInAndSituationEndedAtMsIsNullOrderByOpenedAtMsDesc(
                         seniorId, IncidentKind.HR_ANOMALY, OPEN_STATES)
                 .ifPresent(open -> open.endSituation(System.currentTimeMillis()));
         incidentRepository.flush();
-        Incident opened = incidentService.openForAlert(seniorId, IncidentKind.HR_ANOMALY);
-        log.info("개발용 심박 위급 발생: callerId={}, seniorId={}, incidentRef={}",
-                callerId, seniorId, opened.getIncidentRef());
-        return IncidentResponse.from(opened);
+        return incidentService.openForAlert(seniorId, IncidentKind.HR_ANOMALY);
     }
 
     private Long resolveSenior(Long callerId, DevHeartEmergencyRequest request) {
