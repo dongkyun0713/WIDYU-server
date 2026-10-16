@@ -31,19 +31,19 @@
 - 한 기기에서 여러 회원에게 동시에 알림을 보내는 정책
 - FCM 토큰 이력 테이블 또는 감사 로그 추가
 - FCM 발송 실패 재시도와 토큰 무효화 정책 변경
-- API 요청·응답 계약과 DB 스키마 변경
+- 토큰 소유권 정책 외의 발송·토큰 수명 변경
 
 ## 3. 인터페이스 / API
 
-기존 API 계약을 유지한다.
+성공 응답과 토큰 소유권 계약을 유지한다. #714에서 사용하지 않는 기기 정보를 제거했다.
 
 - `POST /api/v1/fcm/token/login`
-- 요청: `token`, `deviceInfo`
+- 요청: `token`만 받는다. 구버전 앱의 `deviceInfo`는 무시한다.
 - 응답: 기존 성공 응답 유지
 
 ## 4. 데이터 모델
 
-`MemberFcmToken`의 기존 데이터 모델을 유지한다.
+`MemberFcmToken`의 토큰·소유자·활성 상태 모델을 유지한다. #714에서 `deviceInfo` 필드는 제거했다.
 
 - `token` 유니크 제약을 유지한다.
 - 기존 토큰 행의 `member_id`를 현재 로그인 회원으로 변경할 수 있도록 도메인 메서드를 추가한다.
@@ -51,7 +51,7 @@
 
 ## 5. 처리 흐름
 
-`MemberFcmTokenService.saveOrActivateFcmToken(fcmToken, deviceInfo)`
+`MemberFcmTokenService.saveOrActivateFcmToken(fcmToken)`
 
 1. 현재 로그인 회원을 조회한다.
 2. 토큰 값으로 기존 `MemberFcmToken`을 조회한다.
@@ -70,13 +70,14 @@
 - [x] 다른 회원 소유의 기존 토큰을 현재 회원이 등록하면 해당 토큰은 현재 회원에게 귀속되고 활성 상태가 된다.
 - [x] 현재 회원 소유의 비활성 토큰을 다시 등록하면 토큰은 활성 상태가 된다.
 - [x] 처음 등록한 토큰은 현재 회원 소유의 활성 행으로 저장된다.
-- [x] 토큰 값 유니크 제약과 기존 로그인 API 계약은 유지된다.
+- [x] 토큰 값 유니크 제약과 기존 로그인 성공 응답은 유지된다.
+- [x] #714: 토큰만 있는 요청 및 기기 정보를 포함한 구버전 요청이 모두 토큰만 읽으며 기기 정보를 저장·반환하지 않는다.
 - [x] `./gradlew :backend:widyu-api:test`가 통과한다.
 
 ## 8. 영향 범위 / 마이그레이션
 
-- DB 스키마 변경 없음.
-- API 계약 변경 없음.
+- #428에서는 DB 스키마·API 계약 변경 없음. #714에서는 기기 정보를 요청·모델·관리자 응답에서 제거한다.
+- 기존 DB의 `device_info` 컬럼은 새 서버 전체 배포 및 이전 버전 롤백 종료 후 `scripts/mysql/drop_fcm_token_device_info.sql`로 수동 삭제한다. JPA `ddl-auto=update`는 컬럼을 삭제하지 않는다.
 - 같은 기기에서 계정을 전환한 뒤 마지막 로그인 회원이 FCM 알림 수신자가 된다.
 
 ## 9. 미결정 사항 (Open Questions)

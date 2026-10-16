@@ -36,8 +36,6 @@ public class MemberFcmToken {
     @Column(nullable = false)
     private boolean active; // 현재 유효한 토큰인지 여부 (예: 로그아웃 시 false)
 
-    private String deviceInfo; // 선택: 기기 정보 (e.g., Android, iOS 등)
-
     private LocalDateTime registeredAt;
 
     private LocalDateTime expiredAt;

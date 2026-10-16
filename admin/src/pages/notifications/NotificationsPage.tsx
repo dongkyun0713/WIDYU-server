@@ -4,7 +4,6 @@ import client from '../../api/client'
 interface InactiveTokenEntry {
   memberId: number
   memberName: string
-  deviceInfo: string | null
   expiredAt: string | null
 }
 
@@ -110,7 +109,6 @@ export default function NotificationsPage() {
                 <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-2 text-left">회원</th>
-                    <th className="px-4 py-2 text-left">기기</th>
                     <th className="px-4 py-2 text-left">비활성화</th>
                   </tr>
                 </thead>
@@ -121,7 +119,6 @@ export default function NotificationsPage() {
                         <span className="font-medium text-gray-800">{t.memberName}</span>
                         <span className="text-xs text-gray-400 ml-1">#{t.memberId}</span>
                       </td>
-                      <td className="px-4 py-2 text-gray-500 text-xs">{t.deviceInfo ?? '-'}</td>
                       <td className="px-4 py-2 text-gray-400 text-xs whitespace-nowrap">
                         {t.expiredAt
                           ? new Date(t.expiredAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })

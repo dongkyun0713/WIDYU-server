@@ -27,8 +27,7 @@ public class MemberFcmTokenController implements MemberFcmTokenDocs {
             @Valid @RequestBody FcmTokenLoginRequest fcmTokenLoginRequest
     ) {
         memberFcmTokenService.saveOrActivateFcmToken(
-                fcmTokenLoginRequest.token(),
-                fcmTokenLoginRequest.deviceInfo()
+                fcmTokenLoginRequest.token()
         );
 
         return ApiResponseTemplate.ok()

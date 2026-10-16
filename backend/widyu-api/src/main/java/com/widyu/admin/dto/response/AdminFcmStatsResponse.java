@@ -21,7 +21,6 @@ public record AdminFcmStatsResponse(
     public record InactiveTokenEntry(
             Long memberId,
             String memberName,
-            String deviceInfo,
             LocalDateTime expiredAt
     ) {}
 

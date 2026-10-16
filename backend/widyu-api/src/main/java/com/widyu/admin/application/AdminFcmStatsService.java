@@ -36,7 +36,6 @@ public class AdminFcmStatsService {
                 .map(t -> new InactiveTokenEntry(
                         t.getMember().getId(),
                         t.getMember().getName(),
-                        t.getDeviceInfo(),
                         t.getExpiredAt()
                 ))
                 .toList();
