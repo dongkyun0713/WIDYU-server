@@ -9,6 +9,7 @@ fcm:
     snapshot-ttl: 24h
     lease: 60s
     stream-max-len: 10000
+    reconcile-batch: 100
 
 spring:
   config:

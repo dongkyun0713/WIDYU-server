@@ -28,3 +28,6 @@ fcm:
     poll-ms: ${FCM_DEGRADED_POLL_MS:1000}
     lease: ${FCM_DEGRADED_LEASE:60s}
     stream-max-len: ${FCM_DEGRADED_STREAM_MAX_LEN:10000}
+    # DB 복구 후 저하 경로 발송 기록을 알림 이력으로 옮기는 주기와 한 번에 옮길 건수(LLD-0087).
+    reconcile-ms: ${FCM_DEGRADED_RECONCILE_MS:10000}
+    reconcile-batch: ${FCM_DEGRADED_RECONCILE_BATCH:100}

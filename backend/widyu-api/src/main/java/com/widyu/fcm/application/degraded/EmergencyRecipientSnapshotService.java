@@ -14,6 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 보호자 토큰 스냅샷을 Redis에 주기적으로 다시 만든다(LLD-0086 5.1).
@@ -33,6 +38,7 @@ public class EmergencyRecipientSnapshotService {
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
     private final FcmDegradedProperties properties;
+    private final PlatformTransactionManager transactionManager;
 
     /** 기동 직후 바로 한 번 돌고 이후 fixedDelay마다 돈다(initialDelay 없음). */
     @Scheduled(fixedDelayString = "${fcm.degraded.snapshot-refresh-ms:300000}")
@@ -43,12 +49,52 @@ public class EmergencyRecipientSnapshotService {
         refresh(null);
     }
 
-    /** 가족 하나만 다시 만든다. 가족 제외·탈퇴 직후 훅(LLD-0087)이 부른다. */
+    /** 가족 하나만 다시 만든다. 가족 제외·탈퇴 커밋 뒤 {@link #refreshFamilyAfterCommit}이 부른다. */
     public void refreshFamily(Long familyId) {
-        if (familyId == null) {
+        if (familyId == null || !properties.enabled()) {
             return;
         }
         refresh(familyId);
+    }
+
+    /**
+     * 현재 트랜잭션이 커밋된 뒤 그 가족의 스냅샷을 다시 만든다(LLD-0087 5.2). 롤백되면 하지 않는다.
+     * afterCommit에서는 끝난 트랜잭션의 자원이 아직 묶여 있어 읽기 전용 새 트랜잭션으로 조회한다.
+     * 실패는 경고로 끝내 이미 커밋된 요청을 실패시키지 않는다. 다음 주기 갱신이 다시 만든다.
+     */
+    public void refreshFamilyAfterCommit(Long familyId) {
+        afterCommit(familyId, () -> {
+            TransactionTemplate readOnly = new TransactionTemplate(transactionManager);
+            readOnly.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            readOnly.setReadOnly(true);
+            readOnly.executeWithoutResult(status -> refreshFamily(familyId));
+        });
+    }
+
+    /**
+     * 가족이 해체돼 시니어가 가족에서 빠지면 가족 ID로는 그 시니어를 찾을 수 없으므로, 커밋 뒤 키를 바로 지운다.
+     * 받을 보호자가 없는 시니어의 스냅샷은 지우는 것이 갱신 결과와 같다.
+     */
+    public void evictAfterCommit(Long familyId, List<Long> seniorMemberIds) {
+        if (seniorMemberIds.isEmpty()) {
+            return;
+        }
+        List<String> keys = seniorMemberIds.stream().map(seniorId -> KEY_PREFIX + seniorId).toList();
+        afterCommit(familyId, () -> redis.delete(keys));
+    }
+
+    private void afterCommit(Long familyId, Runnable task) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    task.run();
+                } catch (RuntimeException exception) {
+                    log.warn("가족 변경 후 긴급 수신자 스냅샷 갱신 실패: familyId={}, type={}",
+                            familyId, exception.getClass().getSimpleName());
+                }
+            }
+        });
     }
 
     public Optional<EmergencyRecipientSnapshot> find(Long seniorId) {

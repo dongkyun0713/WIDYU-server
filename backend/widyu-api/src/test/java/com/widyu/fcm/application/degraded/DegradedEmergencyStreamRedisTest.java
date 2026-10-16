@@ -26,6 +26,7 @@ import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.connection.stream.PendingMessages;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * XADD → XREADGROUP → XACK와 pending lease 회수를 실제 Redis로 검증한다. 소비자 그룹·pending 동작은 mock으로 확인할 수 없다.
@@ -119,7 +120,7 @@ class DegradedEmergencyStreamRedisTest {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         EmergencyRecipientSnapshotService snapshots = new EmergencyRecipientSnapshotService(
                 mock(FamilyMembershipRepository.class), mock(SeniorProfileRepository.class), redis,
-                new ObjectMapper(), properties);
+                new ObjectMapper(), properties, mock(PlatformTransactionManager.class));
         return new DegradedEmergencyAlertService(new DegradedAlertMarker(redis, delivery(), meterRegistry),
                 snapshots, redis, properties, delivery(), meterRegistry);
     }
@@ -130,7 +131,7 @@ class DegradedEmergencyStreamRedisTest {
     }
 
     private static FcmDegradedProperties properties(Duration lease) {
-        return new FcmDegradedProperties(true, Duration.ofHours(24), lease, 10000L);
+        return new FcmDegradedProperties(true, Duration.ofHours(24), lease, 10000L, 100);
     }
 
     private static FcmDeliveryProperties delivery() {

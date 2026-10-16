@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -13,6 +14,7 @@ import com.widyu.auth.application.guardian.unlink.SocialUnlinkService;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.event.MemberWithdrawnEvent;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.fcm.application.degraded.EmergencyRecipientSnapshotService;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.infrastructure.s3.deletion.S3ObjectDeletionTaskService;
@@ -32,6 +34,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +55,7 @@ class MemberWithdrawServiceTest {
     @Mock private SocialUnlinkService socialUnlinkService;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private S3ObjectDeletionTaskService s3ObjectDeletionTaskService;
+    @Mock private EmergencyRecipientSnapshotService emergencyRecipientSnapshots;
 
     @InjectMocks
     private MemberWithdrawService memberWithdrawService;
@@ -111,6 +115,53 @@ class MemberWithdrawServiceTest {
         verify(familyMembershipRepository).deleteByGuardianId(1L);
         verify(familyRepository).incrementOrderRevision(100L);
         verify(familyRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("방장이 아닌 구성원이 탈퇴하면 커밋 뒤 그 가족의 긴급 수신자 스냅샷을 다시 만들도록 예약한다")
+    void 방장_아닌_구성원이_탈퇴하면_커밋뒤_스냅샷_갱신을_예약한다() {
+        // given
+        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
+        Family family = Family.createFamily("ABCDEF");
+        ReflectionTestUtils.setField(family, "id", 100L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(familyMembershipRepository.findByGuardianId(1L))
+                .willReturn(Optional.of(FamilyMembership.createMembership(family, member)));
+
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+
+        // then
+        verify(emergencyRecipientSnapshots).refreshFamilyAfterCommit(100L);
+        verify(emergencyRecipientSnapshots, never()).evictAfterCommit(any(), any());
+    }
+
+    @Test
+    @DisplayName("마지막 구성원인 방장이 탈퇴하면 가족 해체 전에 잡은 시니어들의 스냅샷을 커밋 뒤 지우도록 예약한다")
+    void 마지막_방장이_탈퇴하면_해체전_시니어들의_스냅샷_삭제를_예약한다() {
+        // given
+        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        ReflectionTestUtils.setField(member, "socialAccounts", new ArrayList<>());
+        Family family = Family.createFamily("ABCDEF");
+        ReflectionTestUtils.setField(family, "id", 100L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(familyMembershipRepository.findByGuardianId(1L))
+                .willReturn(Optional.of(FamilyMembership.createLeaderMembership(family, member)));
+        given(familyMembershipRepository.countByFamilyId(100L)).willReturn(1L);
+        given(seniorProfileRepository.findSeniorMemberIds(100L)).willReturn(List.of(7L, 8L));
+
+        // when
+        memberWithdrawService.withdrawMember(new MemberWithdrawRequest("탈퇴 사유"));
+
+        // then
+        InOrder order = inOrder(seniorProfileRepository);
+        order.verify(seniorProfileRepository).findSeniorMemberIds(100L);
+        order.verify(seniorProfileRepository).clearFamilyByFamilyId(100L);
+        verify(emergencyRecipientSnapshots).evictAfterCommit(100L, List.of(7L, 8L));
+        verify(emergencyRecipientSnapshots, never()).refreshFamilyAfterCommit(any());
     }
 
     @Test
