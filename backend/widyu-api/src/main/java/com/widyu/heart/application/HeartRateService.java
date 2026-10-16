@@ -1,5 +1,6 @@
 package com.widyu.heart.application;
 
+import com.widyu.fcm.application.degraded.DegradedEmergencyAlertService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
@@ -26,7 +27,9 @@ import java.util.List;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
@@ -53,29 +56,60 @@ public class HeartRateService {
     private final HeartRateEventRepository heartRateEventRepository;
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final MemberRepository memberRepository;
+    private final DegradedEmergencyAlertService degradedEmergencyAlertService;
 
-    /** 측정값 1건을 수신 즉시 판정·저장한다(LLD-0023). */
+    /**
+     * 측정값 1건을 수신 즉시 판정·저장한다(LLD-0023). DB 접근이 실패하면 AI 판정만으로 응답하고 위급이면
+     * DB 없이 보호자에게 알린다(LLD-0086 5.2). 이 메서드에 @Transactional을 붙이지 않는다. 붙이면 catch 지점이
+     * 롤백 전용 트랜잭션 안이 되어 응답 뒤 커밋에서 다시 실패한다.
+     */
     public HeartRateStatusResponse processHeartRate(Long memberId, HeartRateSingleRequest request) {
-        validateMemberExists(memberId);
-
-        if (heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, request.measuredAt())) {
-            return getHeartRateStatus(memberId);
+        try {
+            validateMemberExists(memberId);
+            if (heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, request.measuredAt())) {
+                return getHeartRateStatus(memberId);
+            }
+        } catch (DataAccessException | TransactionException exception) {
+            return respondWithoutDatabase(memberId, request, null, exception);
         }
 
-        DetectionResult detection = heartRateAnomalyDetector.detect(
-                memberId,
-                request.toMeasurement(),
-                request.normalizedContext()
-        );
+        DetectionResult detection = detect(memberId, request);
 
-        HeartRateResult result = heartRatePersistenceService.saveMeasurement(
-                memberId,
-                request,
-                detection.status(),
-                detection.emergency()
-        );
+        HeartRateResult result;
+        try {
+            result = heartRatePersistenceService.saveMeasurement(
+                    memberId,
+                    request,
+                    detection.status(),
+                    detection.emergency()
+            );
+        } catch (DataAccessException | TransactionException exception) {
+            return respondWithoutDatabase(memberId, request, detection, exception);
+        }
 
         return HeartRateStatusResponse.from(result);
+    }
+
+    private DetectionResult detect(Long memberId, HeartRateSingleRequest request) {
+        return heartRateAnomalyDetector.detect(memberId, request.toMeasurement(), request.normalizedContext());
+    }
+
+    /** 측정값은 저장하지 못한 채로 둔다. 로그에는 bpm·AI 응답을 넣지 않는다(#639). */
+    private HeartRateStatusResponse respondWithoutDatabase(
+            Long memberId, HeartRateSingleRequest request, DetectionResult detection, RuntimeException cause) {
+        if (!degradedEmergencyAlertService.enabled()) {
+            throw cause;
+        }
+        DetectionResult judged = detection;
+        if (judged == null) {
+            judged = detect(memberId, request);
+        }
+        if (judged.emergency()) {
+            degradedEmergencyAlertService.alertWithoutDatabase(memberId, request.measuredAt());
+        }
+        log.warn("심박 DB 접근 실패, AI 판정만으로 응답: memberId={}, type={}, emergency={}",
+                memberId, cause.getClass().getSimpleName(), judged.emergency());
+        return HeartRateStatusResponse.of(memberId, judged.status(), request.heartRate(), request.measuredAt());
     }
 
     public HeartRateStatusResponse getHeartRateStatus(Long memberId) {

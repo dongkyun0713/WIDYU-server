@@ -4,6 +4,11 @@ fcm:
     max-retries: 5
     normal-ttl: 24h
     emergency-ttl: 5m
+  degraded:
+    enabled: true
+    snapshot-ttl: 24h
+    lease: 60s
+    stream-max-len: 10000
 
 spring:
   config:

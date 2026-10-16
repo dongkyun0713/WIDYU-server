@@ -29,6 +29,12 @@ public record HeartRateStatusResponse(
         );
     }
 
+    /** DB에 저장하지 못한 측정값을 AI 판정만으로 응답할 때 쓴다(LLD-0086 5.2). */
+    public static HeartRateStatusResponse of(
+            Long memberId, HeartRateStatus status, Integer heartRate, LocalDateTime measuredAt) {
+        return new HeartRateStatusResponse(memberId, status, heartRate, measuredAt);
+    }
+
     public static HeartRateStatusResponse unknown(Long memberId) {
         return new HeartRateStatusResponse(
                 memberId,

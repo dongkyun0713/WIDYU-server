@@ -20,3 +20,11 @@ fcm:
     max-retries: ${FCM_DELIVERY_MAX_RETRIES:5}
     normal-ttl: ${FCM_DELIVERY_NORMAL_TTL:86400s}
     emergency-ttl: ${FCM_DELIVERY_EMERGENCY_TTL:300s}
+  # DB 장애 중 심박 긴급 알림 저하 경로(LLD-0086). 운영 기본 ON은 사용자 승인 대기이며 환경변수로 끌 수 있다.
+  degraded:
+    enabled: ${FCM_DEGRADED_ENABLED:true}
+    snapshot-ttl: ${FCM_DEGRADED_SNAPSHOT_TTL:24h}
+    snapshot-refresh-ms: ${FCM_DEGRADED_SNAPSHOT_REFRESH_MS:300000}
+    poll-ms: ${FCM_DEGRADED_POLL_MS:1000}
+    lease: ${FCM_DEGRADED_LEASE:60s}
+    stream-max-len: ${FCM_DEGRADED_STREAM_MAX_LEN:10000}

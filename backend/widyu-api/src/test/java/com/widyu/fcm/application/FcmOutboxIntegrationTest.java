@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.*;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.*;
+import com.widyu.fcm.application.degraded.DegradedAlertMarker;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.GuardianDeepLinks;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -71,6 +72,7 @@ class FcmOutboxIntegrationTest {
     @Autowired FamilyMembershipRepository memberships;
     @Autowired SeniorProfileRepository seniorProfiles;
     @Autowired PlatformTransactionManager transactionManager;
+    @MockBean DegradedAlertMarker degradedAlertMarker;
     @MockBean FcmOutboxDispatcher immediate;
     @MockBean JPAQueryFactory queryFactory;
     @MockBean MemberUtil memberUtil;

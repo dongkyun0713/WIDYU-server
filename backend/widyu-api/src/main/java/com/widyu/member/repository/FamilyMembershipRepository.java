@@ -58,4 +58,24 @@ public interface FamilyMembershipRepository extends JpaRepository<FamilyMembersh
            "WHERE fm.guardian.id = :guardianId AND sp.id = :seniorProfileId AND fm.isLeader = true")
     boolean existsByGuardianIdAndSeniorProfileIdAndIsLeaderTrue(@Param("guardianId") Long guardianId,
                                                                  @Param("seniorProfileId") Long seniorProfileId);
+
+    /**
+     * DB 장애 대비 긴급 수신자 스냅샷의 원천(LLD-0086 5.1). 시니어·보호자가 ACTIVE이고 활성 토큰이 있으며
+     * 안전 알림을 끄지 않은 보호자만 한 번에 읽는다. 방장은 안전 알림이 필수라 설정과 무관하게 포함한다
+     * ({@code NotificationSettingService.isNotificationEnabled}와 같은 규칙). familyId가 null이면 전체다.
+     */
+    @Query("SELECT new com.widyu.member.repository.EmergencyRecipientRow(" +
+           "sm.id, sm.name, sm.profileImage, g.id, t.id, t.token) " +
+           "FROM SeniorProfile sp JOIN sp.member sm " +
+           "JOIN FamilyMembership fm ON fm.family = sp.family " +
+           "JOIN fm.guardian g " +
+           "JOIN MemberFcmToken t ON t.member = g " +
+           "LEFT JOIN MemberNotificationSetting ns ON ns.member = g " +
+           "AND ns.category = com.widyu.fcm.PushSettingGroup.SAFETY " +
+           "WHERE sm.status = com.widyu.global.entity.Status.ACTIVE " +
+           "AND g.status = com.widyu.global.entity.Status.ACTIVE " +
+           "AND t.active = true " +
+           "AND (fm.isLeader = true OR ns.id IS NULL OR ns.enabled = true) " +
+           "AND (:familyId IS NULL OR sp.family.id = :familyId)")
+    List<EmergencyRecipientRow> findEmergencyRecipients(@Param("familyId") Long familyId);
 }

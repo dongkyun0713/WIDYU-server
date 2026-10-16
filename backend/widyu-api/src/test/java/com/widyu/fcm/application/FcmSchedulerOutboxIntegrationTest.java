@@ -3,6 +3,7 @@ package com.widyu.fcm.application;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
+import com.widyu.fcm.application.degraded.DegradedAlertMarker;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.event.goal.healthschedule.listener.HealthScheduleNotificationListener;
@@ -60,6 +61,7 @@ class FcmSchedulerOutboxIntegrationTest {
     @Autowired FcmOutboxTransactions transactions;
     @Autowired PlatformTransactionManager transactionManager;
     @SpyBean FcmService fcm;
+    @MockBean DegradedAlertMarker degradedAlertMarker;
     @MockBean FcmOutboxDispatcher immediate;
     @MockBean FcmTransport transport;
     @MockBean JPAQueryFactory queryFactory;
