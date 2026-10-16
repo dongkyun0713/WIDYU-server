@@ -21,7 +21,7 @@ public class MemberFcmTokenService {
 
     // 로그인 시 FCM 토큰 저장 (중복 저장 방지)
     @Transactional
-    public void saveOrActivateFcmToken(String fcmToken, String deviceInfo) {
+    public void saveOrActivateFcmToken(String fcmToken) {
         Member currentMember = memberUtil.getCurrentMember();
 
         Optional<MemberFcmToken> tokenOpt = memberFcmTokenRepository.findByToken(fcmToken);
@@ -40,7 +40,6 @@ public class MemberFcmTokenService {
             MemberFcmToken newToken = MemberFcmToken.builder()
                     .member(currentMember)
                     .token(fcmToken)
-                    .deviceInfo(deviceInfo)
                     .registeredAt(LocalDateTime.now())
                     .active(true)
                     .build();

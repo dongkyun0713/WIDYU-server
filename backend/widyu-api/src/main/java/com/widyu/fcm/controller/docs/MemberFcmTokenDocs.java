@@ -38,15 +38,14 @@ public interface MemberFcmTokenDocs {
     ApiResponseTemplate<Void> saveFcmToken(
             @RequestBody(
                     required = true,
-                    description = "FCM 토큰과 디바이스 정보",
+                    description = "FCM 토큰",
                     content = @Content(
                             schema = @Schema(implementation = FcmTokenLoginRequest.class),
                             examples = @ExampleObject(
                                     name = "요청 예시",
                                     value = """
                                             {
-                                              "token": "fcm_token_string",
-                                              "deviceInfo": "iPhone 13 - iOS 17"
+                                              "token": "fcm_token_string"
                                             }
                                             """
                             )

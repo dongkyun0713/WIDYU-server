@@ -110,8 +110,7 @@ POST /api/v1/fcm/token/login
 
 ```json
 {
-  "token": "fcm-token",
-  "deviceInfo": "iOS 17"
+  "token": "fcm-token"
 }
 ```
 
@@ -143,7 +142,6 @@ member_fcm_token
 ├── member_id (FK, ManyToOne)
 ├── token (String, 기기 FCM 토큰)
 ├── active (Boolean) ← false면 발송 제외
-├── device_info (String)
 ├── registered_at
 ├── expired_at
 └── last_used_at
@@ -284,7 +282,8 @@ GET /api/v1/fcm?category=ALL&cursor=42
 
 ## 8. 영향 범위 / 마이그레이션
 
-- 기존 구현 완료 상태, 스키마 변경 없음
+- #714: 토큰 등록의 기기 정보 수집·저장과 관리자 응답·화면 표시를 제거했다. 구버전 앱의 `deviceInfo`는 무시한다. 기존 `device_info` 컬럼은 새 서버 전체 배포 및 이전 버전 롤백 종료 후 `scripts/mysql/drop_fcm_token_device_info.sql`로 수동 삭제한다. 토큰·활성 상태·소유자 변경·발송 정책은 유지한다.
+- 기존 발송 구조의 스키마는 유지한다. #714의 토큰 기기 정보 컬럼 제거는 위 수동 정리 절차를 따른다.
 - `member_notification_setting`의 `(member_id, category)` UNIQUE 제약 주의: 중복 설정 저장 시 DB 예외
 - 현재 발송 실패 재시도와 outbox가 없으므로, FCM 장애 시 알림 유실 가능성이 있다. 또한 HTTP 런타임 예외를 별도로 삼키지 않기 때문에 동기 이벤트 호출자에 영향을 줄 수 있다. 재시도·격리 보장은 별도 ADR/LLD로 분리한다.
 

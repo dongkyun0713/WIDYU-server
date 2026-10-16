@@ -40,7 +40,7 @@ class MemberFcmTokenServiceTest {
         given(memberFcmTokenRepository.findByToken("fcm-token")).willReturn(Optional.of(existingToken));
 
         // when
-        memberFcmTokenService.saveOrActivateFcmToken("fcm-token", "iPhone");
+        memberFcmTokenService.saveOrActivateFcmToken("fcm-token");
 
         // then
         assertThat(existingToken.getMember()).isEqualTo(currentMember);
@@ -59,7 +59,7 @@ class MemberFcmTokenServiceTest {
         given(memberFcmTokenRepository.findByToken("fcm-token")).willReturn(Optional.of(existingToken));
 
         // when
-        memberFcmTokenService.saveOrActivateFcmToken("fcm-token", "iPhone");
+        memberFcmTokenService.saveOrActivateFcmToken("fcm-token");
 
         // then
         assertThat(existingToken.getMember()).isEqualTo(currentMember);
@@ -78,14 +78,13 @@ class MemberFcmTokenServiceTest {
         ArgumentCaptor<MemberFcmToken> tokenCaptor = ArgumentCaptor.forClass(MemberFcmToken.class);
 
         // when
-        memberFcmTokenService.saveOrActivateFcmToken("new-fcm-token", "Android");
+        memberFcmTokenService.saveOrActivateFcmToken("new-fcm-token");
 
         // then
         then(memberFcmTokenRepository).should().save(tokenCaptor.capture());
         MemberFcmToken savedToken = tokenCaptor.getValue();
         assertThat(savedToken.getMember()).isEqualTo(currentMember);
         assertThat(savedToken.getToken()).isEqualTo("new-fcm-token");
-        assertThat(savedToken.getDeviceInfo()).isEqualTo("Android");
         assertThat(savedToken.isActive()).isTrue();
         assertThat(savedToken.getRegisteredAt()).isNotNull();
     }
@@ -100,7 +99,6 @@ class MemberFcmTokenServiceTest {
         return MemberFcmToken.builder()
                 .member(member)
                 .token("fcm-token")
-                .deviceInfo("iPhone")
                 .registeredAt(LocalDateTime.now().minusDays(1))
                 .active(false)
                 .expiredAt(LocalDateTime.now().minusHours(1))

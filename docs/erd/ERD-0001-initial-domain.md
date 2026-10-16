@@ -23,6 +23,7 @@
 - enum은 `@Enumerated(EnumType.STRING)` 기준으로 문자열 저장한다.
 - 엔티티는 `widyu-domain` 모듈에만 위치한다.
 - Redis 엔티티(`@RedisHash`)는 MySQL 테이블이 아니다. 별도 섹션에 정리한다.
+- FCM 토큰의 기기 정보(`device_info`)는 #714에서 모델에서 제거했다. 기존 DB 컬럼은 새 서버 전체 배포와 이전 버전 롤백 종료 후 `scripts/mysql/drop_fcm_token_device_info.sql`로 수동 정리한다.
 
 ## Mermaid ERD
 
