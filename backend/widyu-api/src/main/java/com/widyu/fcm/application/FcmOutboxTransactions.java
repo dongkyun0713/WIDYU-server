@@ -2,6 +2,7 @@ package com.widyu.fcm.application;
 
 import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmOutbox;
+import com.widyu.fcm.application.degraded.DegradedAlertMarker;
 import com.widyu.fcm.repository.FcmOutboxRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import java.time.Duration;
@@ -21,6 +22,7 @@ public class FcmOutboxTransactions {
     private final FcmDeliveryProperties properties;
     private final MemberFcmTokenRepository tokens;
     private final DecisionRecordRepository decisions;
+    private final DegradedAlertMarker degradedAlerts;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FcmDelivery claim(Long id) {
@@ -32,6 +34,11 @@ public class FcmOutboxTransactions {
         FcmOutbox.State before = row.getState();
         if (!row.claim(now, properties.lease(), properties.maxRetries())) {
             logIfFinallyFailed(row, before, finalStateReason(row));
+            return null;
+        }
+        // DB 장애 중 저하 경로가 이미 알린 위급이면 커밋은 됐지만 응답이 늦은 경우라도 다시 보내지 않는다(LLD-0086 5.5).
+        if (degradedAlerts.alreadyAlerted(row)) {
+            row.cancel();
             return null;
         }
         if (!eligibility.eligible(row)) {

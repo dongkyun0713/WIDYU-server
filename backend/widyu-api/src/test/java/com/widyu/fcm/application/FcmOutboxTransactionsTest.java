@@ -14,11 +14,13 @@ import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.application.degraded.DegradedAlertMarker;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.repository.FcmOutboxRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -30,6 +32,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +49,7 @@ class FcmOutboxTransactionsTest {
     @Mock private FcmEligibility eligibility;
     @Mock private MemberFcmTokenRepository tokens;
     @Mock private DecisionRecordRepository decisions;
+    @Mock private StringRedisTemplate redis;
 
     @Test
     @DisplayName("전송이 성공하면 그 판정에 알림 도달 사실이 채워진다")
@@ -241,8 +246,82 @@ class FcmOutboxTransactionsTest {
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.EXHAUSTED);
     }
 
+    // 저하 경로 중복 차단 (LLD-0086 5.5)
+
+    @Test
+    @DisplayName("저하 경로 표식이 있는 시니어의 심박 위급 행을 선점하면 취소하고 중복 차단 수를 센다")
+    void 저하경로_표식이_있는_시니어의_심박위급_행을_선점하면_취소한다() {
+        // given
+        FcmOutbox row = pendingEmergency(NotificationType.HEART_RATE_EMERGENCY);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        given(redis.hasKey("fcm:degraded:alerted:1023")).willReturn(true);
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+        // when
+        FcmDelivery delivery = transactions(meterRegistry).claim(ROW_ID);
+
+        // then
+        assertThat(delivery).isNull();
+        assertThat(row.getState()).isEqualTo(FcmOutbox.State.CANCELLED);
+        assertThat(meterRegistry.counter("fcm.degraded.deduped").count()).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("저하 경로 표식을 읽지 못하면 심박 위급 행을 그대로 선점한다")
+    void 저하경로_표식을_읽지_못하면_심박위급_행을_그대로_선점한다() {
+        // given
+        FcmOutbox row = pendingEmergency(NotificationType.HEART_RATE_EMERGENCY);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        given(redis.hasKey("fcm:degraded:alerted:1023")).willThrow(new RedisConnectionFailureException("down"));
+        given(eligibility.eligible(row)).willReturn(true);
+
+        // when
+        FcmDelivery delivery = transactions().claim(ROW_ID);
+
+        // then
+        assertThat(delivery).isNotNull();
+        assertThat(row.getState()).isEqualTo(FcmOutbox.State.CLAIMED);
+    }
+
+    @Test
+    @DisplayName("심박 위급이 아닌 알림은 저하 경로 표식과 무관하게 선점한다")
+    void 심박위급이_아닌_알림은_저하경로_표식과_무관하게_선점한다() {
+        // given
+        FcmOutbox general = pendingEmergency(NotificationType.ALBUM_CREATED);
+        ReflectionTestUtils.setField(general, "emergency", false);
+        FcmOutbox selfHelp = pendingEmergency(NotificationType.SELF_HELP_REQUESTED);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(general), Optional.of(selfHelp));
+        given(eligibility.eligible(general)).willReturn(true);
+        given(eligibility.eligible(selfHelp)).willReturn(true);
+
+        // when
+        FcmOutboxTransactions transactions = transactions();
+        FcmDelivery generalDelivery = transactions.claim(ROW_ID);
+        FcmDelivery selfHelpDelivery = transactions.claim(ROW_ID);
+
+        // then
+        assertThat(generalDelivery).isNotNull();
+        assertThat(selfHelpDelivery).isNotNull();
+        assertThat(general.getState()).isEqualTo(FcmOutbox.State.CLAIMED);
+        assertThat(selfHelp.getState()).isEqualTo(FcmOutbox.State.CLAIMED);
+        then(redis).shouldHaveNoInteractions();
+    }
+
     private FcmOutboxTransactions transactions() {
-        return new FcmOutboxTransactions(outbox, eligibility, properties(), tokens, decisions);
+        return transactions(new SimpleMeterRegistry());
+    }
+
+    private FcmOutboxTransactions transactions(SimpleMeterRegistry meterRegistry) {
+        return new FcmOutboxTransactions(outbox, eligibility, properties(), tokens, decisions,
+                new DegradedAlertMarker(redis, properties(), meterRegistry));
+    }
+
+    /** 선점 전 대기 중인 심박 위급 행. 관련 회원(시니어)은 1023이다. */
+    private FcmOutbox pendingEmergency(NotificationType type) {
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
+        ReflectionTestUtils.setField(row, "notificationType", type);
+        return row;
     }
 
     private FcmDeliveryProperties properties() {

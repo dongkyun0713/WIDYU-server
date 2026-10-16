@@ -10,6 +10,10 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.widyu.fcm.application.degraded.DegradedEmergencyAlertService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.heart.HeartRateEmergency;
@@ -27,16 +31,25 @@ import com.widyu.heart.repository.HeartRateResultRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionSystemException;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("HeartRateService 예외 처리 단위 테스트")
@@ -48,6 +61,7 @@ class HeartRateServiceTest {
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private HeartRateEmergencyRepository heartRateEmergencyRepository;
     @Mock private MemberRepository memberRepository;
+    @Mock private DegradedEmergencyAlertService degradedEmergencyAlertService;
 
     @InjectMocks
     private HeartRateService heartRateService;
@@ -545,6 +559,189 @@ class HeartRateServiceTest {
                 .isInstanceOf(BusinessException.class);
         then(heartRatePersistenceService).should(never())
                 .saveMeasurement(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
+    }
+
+    // DB 장애 중 저하 경로 (LLD-0086 5.2)
+
+    static Stream<RuntimeException> DB_접근_예외() {
+        return Stream.of(
+                new DataAccessResourceFailureException("db down"),
+                new CannotCreateTransactionException("no connection"),
+                new TransactionSystemException("commit failed"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("DB_접근_예외")
+    @DisplayName("저장 중 DB 접근 예외가 나고 위급이면 DB 없이 알림을 적재하고 AI 판정값으로 응답한다")
+    void 저장중_DB접근예외가_나고_위급이면_DB없이_알림을_적재하고_판정값으로_응답한다(RuntimeException dbFailure) {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willThrow(dbFailure);
+        given(degradedEmergencyAlertService.enabled()).willReturn(true);
+
+        // when
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
+
+        // then
+        assertThat(response).isEqualTo(
+                HeartRateStatusResponse.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
+        then(degradedEmergencyAlertService).should().alertWithoutDatabase(memberId, measuredAt);
+    }
+
+    @Test
+    @DisplayName("회원 조회부터 DB 연결이 안 되면 AI 판정만 호출해 위급 알림을 적재한다")
+    void 회원조회부터_DB연결이_안되면_AI판정만_호출해_위급알림을_적재한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 1);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        given(memberRepository.findById(memberId)).willThrow(new CannotCreateTransactionException("no connection"));
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(degradedEmergencyAlertService.enabled()).willReturn(true);
+
+        // when
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
+
+        // then
+        assertThat(response.heartRateStatus()).isEqualTo(HeartRateStatus.EMERGENCY);
+        then(degradedEmergencyAlertService).should().alertWithoutDatabase(memberId, measuredAt);
+        then(heartRatePersistenceService).should(never())
+                .saveMeasurement(anyLong(), any(), any(HeartRateStatus.class), anyBoolean());
+    }
+
+    @Test
+    @DisplayName("DB 접근 예외가 나도 위급이 아니면 알림을 적재하지 않고 판정값으로 응답한다")
+    void DB접근예외가_나도_위급이_아니면_알림을_적재하지_않고_판정값으로_응답한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 2);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(78, measuredAt, "서울시", "REST");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.NORMAL, false))
+                .willThrow(new DataAccessResourceFailureException("db down"));
+        given(degradedEmergencyAlertService.enabled()).willReturn(true);
+
+        // when
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
+
+        // then
+        assertThat(response).isEqualTo(HeartRateStatusResponse.of(memberId, HeartRateStatus.NORMAL, 78, measuredAt));
+        then(degradedEmergencyAlertService).should(never()).alertWithoutDatabase(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("저하 경로가 꺼져 있으면 DB 접근 예외를 그대로 던지고 알림을 적재하지 않는다")
+    void 저하경로가_꺼져_있으면_DB접근예외를_그대로_던지고_알림을_적재하지_않는다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 3);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        DataAccessResourceFailureException dbFailure = new DataAccessResourceFailureException("db down");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willThrow(dbFailure);
+        given(degradedEmergencyAlertService.enabled()).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> heartRateService.processHeartRate(memberId, request)).isSameAs(dbFailure);
+        then(degradedEmergencyAlertService).should(never()).alertWithoutDatabase(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("DB가 정상이면 위급이어도 저하 경로를 쓰지 않고 저장 결과로 응답한다")
+    void DB가_정상이면_위급이어도_저하경로를_쓰지_않고_저장결과로_응답한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 4);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willReturn(HeartRateResult.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
+
+        // when
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
+
+        // then
+        assertThat(response).isEqualTo(
+                HeartRateStatusResponse.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
+        then(degradedEmergencyAlertService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("회원이 없는 업무 예외는 저하 경로로 보내지 않고 그대로 던진다")
+    void 회원이_없는_업무예외는_저하경로로_보내지_않고_그대로_던진다() {
+        // given
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 5);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        given(memberRepository.findById(1L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> heartRateService.processHeartRate(1L, request))
+                .isInstanceOf(BusinessException.class);
+        then(degradedEmergencyAlertService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("저하 경로로 응답해도 로그에 심박 값을 남기지 않는다")
+    void 저하경로로_응답해도_로그에_심박값을_남기지_않는다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 6);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        given(memberRepository.findById(memberId)).willThrow(new DataAccessResourceFailureException("db down"));
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", "TACHYCARDIA"));
+        given(degradedEmergencyAlertService.enabled()).willReturn(true);
+        Logger logger = (Logger) LoggerFactory.getLogger(HeartRateService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            heartRateService.processHeartRate(memberId, request);
+
+            // then
+            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).singleElement().asString()
+                    .contains("memberId=1", "DataAccessResourceFailureException", "emergency=true")
+                    .doesNotContain("187", "TACHYCARDIA");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("심박 단건 처리에 트랜잭션을 걸지 않아 DB 예외를 잡는 지점이 롤백 전용 트랜잭션 밖이다")
+    void 심박단건처리에_트랜잭션을_걸지_않는다() throws NoSuchMethodException {
+        // given
+        Method method = HeartRateService.class.getMethod(
+                "processHeartRate", Long.class, HeartRateSingleRequest.class);
+
+        // when & then
+        assertThat(method.isAnnotationPresent(Transactional.class)).isFalse();
+        assertThat(HeartRateService.class.isAnnotationPresent(Transactional.class)).isFalse();
     }
 
     private HeartRateEvent heartRateEvent(Integer heartRate, LocalDateTime measuredAt, HeartRateStatus status) {
