@@ -10,7 +10,7 @@
 
 ## 1. 목적 / 배경
 
-앱은 WebSocket을 30초 일회용 토큰(`/ws?token=`)으로만 연결한다. 이 경로는 핸드셰이크에서 회원 ID를 세션 속성에만 넣고, Spring 사용자(Principal)는 CONNECT에 `Authorization` 헤더가 있을 때만 등록한다. Principal이 없으면 `convertAndSendToUser(memberId, ...)`의 전달 대상이 0개라 **시니어 앱이 심박 처리 결과 ACK를 받지 못한다**(Spring 6.1.14 사용자 목적지 변환으로 재현). 같은 회원의 다른 Principal 세션이 있으면 ACK가 그 세션으로 간다.
+앱은 WebSocket을 30초 일회용 토큰(`/ws/location?token=`)으로만 연결한다. 이 경로는 핸드셰이크에서 회원 ID를 세션 속성에만 넣고, Spring 사용자(Principal)는 CONNECT에 `Authorization` 헤더가 있을 때만 등록한다. Principal이 없으면 `convertAndSendToUser(memberId, ...)`의 전달 대상이 0개라 **시니어 앱이 심박 처리 결과 ACK를 받지 못한다**(Spring 6.1.14 사용자 목적지 변환으로 재현). 같은 회원의 다른 Principal 세션이 있으면 ACK가 그 세션으로 간다.
 
 인증 주체가 두 갈래(세션 속성 / Principal)라서 사용자 키·세션 키·ACK 목적지가 경로마다 달라졌고, 2026-09-08 심박 부하 측정에서도 ACK 대상 키 문제로 ACK를 받지 못했다. 인증 경로를 일회용 토큰 하나로 줄이고, 그 결과를 Principal 하나로 표현하며, 요청 응답은 요청한 세션에만 보낸다.
 
