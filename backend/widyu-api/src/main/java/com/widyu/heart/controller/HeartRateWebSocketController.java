@@ -6,15 +6,16 @@ import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
 import io.micrometer.core.annotation.Timed;
 import jakarta.validation.Valid;
-import java.util.Map;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
 @Slf4j
@@ -34,11 +35,10 @@ public class HeartRateWebSocketController {
     @Timed(value = "heart.websocket.processing", extraTags = {"path", "single"})
     public void sendHeartRate(
             @Valid @Payload HeartRateSingleRequest request,
-            @AuthenticationPrincipal PrincipalDetails principal,
             SimpMessageHeaderAccessor headerAccessor
     ) {
         String sessionId = headerAccessor.getSessionId();
-        Long memberId = resolveMemberId(principal, headerAccessor);
+        Long memberId = resolveMemberId(headerAccessor.getUser());
 
         HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
 
@@ -56,24 +56,25 @@ public class HeartRateWebSocketController {
         );
     }
 
-    private Long resolveMemberId(PrincipalDetails principal, SimpMessageHeaderAccessor headerAccessor) {
-        if (principal != null && principal.getMemberId() != null) {
+    /**
+     * STOMP 요청의 회원은 CONNECT가 핸드셰이크 회원으로 등록한 Principal로만 식별한다(LLD-0088).
+     */
+    private Long resolveMemberId(Principal user) {
+        if (user instanceof Authentication authentication
+                && authentication.getPrincipal() instanceof PrincipalDetails principal) {
             return principal.getMemberId();
         }
-
-        Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
-        if (sessionAttributes != null && sessionAttributes.get("memberId") instanceof Long memberId) {
-            log.debug("세션 속성에서 memberId 조회 - memberId: {}", memberId);
-            return memberId;
-        }
-
         throw new IllegalStateException("인증 정보가 없습니다. WebSocket 연결 시 유효한 JWT 토큰이 필요합니다.");
     }
 
-    private Map<String, Object> sessionHeader(String sessionId) {
+    /**
+     * 발신 세션 헤더. {@code toMap()} 같은 일반 Map을 넘기면 SimpMessagingTemplate이 모든 키를 STOMP 네이티브 헤더로 옮겨
+     * 세션 ID가 사라지고, 같은 회원의 모든 세션으로 ACK가 퍼진다. accessor가 붙은 MessageHeaders를 넘겨 그대로 쓰게 한다(LLD-0088).
+     */
+    private MessageHeaders sessionHeader(String sessionId) {
         SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
         accessor.setSessionId(sessionId);
         accessor.setLeaveMutable(true);
-        return accessor.toMap();
+        return accessor.getMessageHeaders();
     }
 }

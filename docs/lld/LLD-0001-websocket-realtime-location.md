@@ -44,6 +44,8 @@
 STOMP CONNECT 인증: Authorization: Bearer {accessToken} native header
 ```
 
+> 2026-10-17 변경(LLD-0088): 핸드셰이크는 `?token={wsToken}`만 허용하고 `Authorization` JWT 경로를 제거했다. CONNECT는 `Authorization` 헤더를 보지 않고 핸드셰이크 회원을 Principal로 등록한다. 아래 JWT 경로 서술은 변경 전 기록이다.
+
 ```http
 POST /api/v1/ws/token
 Authorization: Bearer {accessToken}
@@ -206,6 +208,7 @@ STOMP CONNECT 시
 브라우저 WebSocket 제약 때문에 쿼리 파라미터를 사용하되, URL에 장기 access token을 넣지 않는다.
 쿼리 파라미터에는 30초 TTL의 1회용 UUID 토큰만 전달하며, Redis `GETDEL`로 조회와 삭제를 단일 원자 명령으로 처리한다.
 `Authorization` 헤더 기반 JWT 핸드셰이크는 하위 호환 경로로 유지한다.
+(2026-10-17 LLD-0088에서 이 하위 호환 경로와 CONNECT `Authorization` 처리를 제거했다.)
 
 ### 5-2. 위치 업데이트 (`updateAndBroadcast`)
 

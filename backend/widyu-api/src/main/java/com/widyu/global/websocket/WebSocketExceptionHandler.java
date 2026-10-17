@@ -25,7 +25,7 @@ public class WebSocketExceptionHandler {
     private static final String NONE = "-";
 
     @MessageExceptionHandler
-    @SendToUser("/queue/errors")
+    @SendToUser(destinations = "/queue/errors", broadcast = false)
     public Map<String, String> handleException(
             final Exception exception,
             final HandlerMethod handlerMethod,

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.error.BusinessException;
@@ -15,7 +16,6 @@ import com.widyu.sensor.application.SensorBatchService;
 import com.widyu.sensor.dto.response.SensorBatchResult;
 import com.widyu.sensor.dto.response.SensorBatchResultResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +27,7 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("SensorBatchWebSocketController 단위 테스트")
@@ -62,7 +63,7 @@ class SensorBatchWebSocketControllerTest {
 
         // when
         SensorBatchResultResponse response = sensorBatchWebSocketController.ingestBatch(
-                message(payload), principal, headerAccessor(null));
+                message(payload), headerAccessor(principal));
 
         // then
         assertThat(response.batchId()).isEqualTo(BATCH_ID);
@@ -82,7 +83,7 @@ class SensorBatchWebSocketControllerTest {
 
         // when
         SensorBatchResultResponse response = sensorBatchWebSocketController.ingestBatch(
-                message(payload), principal, headerAccessor(null));
+                message(payload), headerAccessor(principal));
 
         // then
         assertThat(response.batchId()).isEqualTo(BATCH_ID);
@@ -102,7 +103,7 @@ class SensorBatchWebSocketControllerTest {
 
         // when & then
         assertThatThrownBy(() -> sensorBatchWebSocketController.ingestBatch(
-                message(payload), principal, headerAccessor(null)))
+                message(payload), headerAccessor(principal)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(thrown -> ((BusinessException) thrown).getErrorCode())
                 .isEqualTo(ErrorCode.FILE_UPLOAD_FAILED);
@@ -120,38 +121,33 @@ class SensorBatchWebSocketControllerTest {
 
         // when & then
         assertThatThrownBy(() -> sensorBatchWebSocketController.ingestBatch(
-                message(payload), principal, headerAccessor(null)))
+                message(payload), headerAccessor(principal)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(thrown -> ((BusinessException) thrown).getErrorCode())
                 .isEqualTo(ErrorCode.SENSOR_PAYLOAD_INVALID);
     }
 
     @Test
-    @DisplayName("Principal이 없으면 세션 속성의 회원 ID로 배치를 저장한다")
-    void Principal이_없으면_세션_속성의_회원_ID로_저장한다() {
+    @DisplayName("Principal 없이 배치를 전송하면 저장하지 않고 예외가 발생한다")
+    void Principal_없이_배치를_전송하면_예외가_발생한다() {
         // given
-        Long memberId = 42L;
         byte[] payload = BATCH_JSON.getBytes(StandardCharsets.UTF_8);
-        given(sensorBatchService.ingest(memberId, payload))
-                .willReturn(SensorBatchResultResponse.of(BATCH_ID, SEQ, SensorBatchResult.STORED));
 
-        // when
-        SensorBatchResultResponse response = sensorBatchWebSocketController.ingestBatch(
-                message(payload), null, headerAccessor(memberId));
-
-        // then
-        assertThat(response.result()).isEqualTo(SensorBatchResult.STORED);
+        // when / then
+        assertThatThrownBy(() -> sensorBatchWebSocketController.ingestBatch(message(payload), headerAccessor(null)))
+                .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(sensorBatchService);
     }
 
     private Message<byte[]> message(byte[] payload) {
         return MessageBuilder.withPayload(payload).build();
     }
 
-    private SimpMessageHeaderAccessor headerAccessor(Long sessionMemberId) {
+    private SimpMessageHeaderAccessor headerAccessor(PrincipalDetails principal) {
         SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
         accessor.setSessionId("sensor-session-1");
-        if (sessionMemberId != null) {
-            accessor.setSessionAttributes(Map.of("memberId", sessionMemberId));
+        if (principal != null) {
+            accessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
         }
         return accessor;
     }

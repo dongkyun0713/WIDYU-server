@@ -29,7 +29,7 @@ flowchart LR
 
 ## 4. Request Flow
 
-1. Authorization JWT 또는 30초 일회용 WS 토큰으로 handshake를 인증하고 서버 세션에 회원 ID·버전을 저장한다.
+1. 30초 일회용 WS 토큰(`?token=`)으로만 handshake를 인증하고 서버 세션에 회원 ID·버전을 저장한다. CONNECT에서 그 회원을 Principal로 등록하며, CONNECT의 `Authorization` 헤더는 쓰지 않는다. 개인 ACK·오류 응답은 요청한 세션에만 보낸다(LLD-0088).
 2. SUBSCRIBE/SEND는 아래 정확한 목적지만 허용한다. 가족 토픽은 대상 시니어와 보호자의 현재 가족 관계를 검사한다.
 3. 위치 발신자 ID는 인증 회원과 대조한다. 심박은 인증 회원 ID로 단건 처리한다.
 4. 서버가 broker로 전달한다. `WsSessionGuard`는 inbound/outbound handler 실행 직전에 상태·버전 및 가족 토픽 권한을 검사한다.

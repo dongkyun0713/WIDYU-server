@@ -1,10 +1,6 @@
 package com.widyu.global.websocket;
 
-import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
-
-import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.global.security.ActiveMemberValidator;
-import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.member.MemberRole;
 import java.util.Map;
 import java.io.UnsupportedEncodingException;
@@ -12,36 +8,27 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
+/**
+ * WebSocket 핸드셰이크를 30초 일회용 토큰({@code ?token=})으로만 인증한다. HTTP {@code Authorization} JWT는 받지 않는다(LLD-0088).
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
-    private final JwtTokenProvider jwtTokenProvider;
     private final WsTokenService wsTokenService;
     private final ActiveMemberValidator activeMemberValidator;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                     WebSocketHandler wsHandler, Map<String, Object> attributes) {
-
-        String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-
-        if (authHeader == null || authHeader.isEmpty()) {
-            String query = request.getURI().getQuery();
-            if (query != null && query.contains("token=")) {
-                return authenticateWithWsToken(extractTokenFromQuery(query), attributes);
-            }
-        }
-
-        return authenticateWithJwt(authHeader, attributes);
+        return authenticateWithWsToken(extractTokenFromQuery(request.getURI().getQuery()), attributes);
     }
 
     @Override
@@ -76,31 +63,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         }
     }
 
-    private boolean authenticateWithJwt(String authHeader, Map<String, Object> attributes) {
-        if (authHeader == null || !authHeader.startsWith(TOKEN_PREFIX)) {
-            log.warn("WebSocket handshake 실패 - Authorization 헤더 없음");
-            return false;
-        }
-
-        String token = authHeader.replace(TOKEN_PREFIX, "");
-        AccessTokenDto accessTokenDto = jwtTokenProvider.retrieveAccessToken(token);
-
-        if (accessTokenDto == null) {
-            log.warn("WebSocket handshake 실패 - 유효하지 않은 JWT");
-            return false;
-        }
-        if (!activeMemberValidator.isActive(accessTokenDto.memberId())) {
-            log.warn("WebSocket handshake 실패 - 비활성 회원 memberId: {}", accessTokenDto.memberId());
-            return false;
-        }
-
-        attributes.put("memberId", accessTokenDto.memberId());
-        attributes.put("memberRole", accessTokenDto.memberRole());
-        log.info("WebSocket handshake 성공 (JWT) - memberId: {}", accessTokenDto.memberId());
-        return true;
-    }
-
     private String extractTokenFromQuery(String query) {
+        if (query == null) {
+            return null;
+        }
         for (String param : query.split("&")) {
             if (param.startsWith("token=")) {
                 return param.substring(6);
