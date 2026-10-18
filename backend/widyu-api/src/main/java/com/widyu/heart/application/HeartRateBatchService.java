@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -68,6 +69,7 @@ public class HeartRateBatchService {
         boolean aiCalled = false;
         int stored = 0;
         int skipped = 0;
+        int raceSkipped = 0;
         int aiSkipped = 0;
         int aiTargetCount = 0;
 
@@ -102,14 +104,20 @@ public class HeartRateBatchService {
                     aiAvailable = false;
                 }
             }
-            if (!assessed) {
-                aiSkipped++;
-            }
 
             // 판정 행은 여기서 심박 이벤트·위급·알림 발행과 한 트랜잭션으로 저장된다. 따로 커밋하면
             // 뒤이은 심박 저장이 실패했을 때 알림 없이 판정만 남는다(LLD-0053 5.1).
-            heartRatePersistenceService.saveBatchSample(
-                    member, sample.bpm(), measuredAt, status, emergency, sample.accuracy(), batchId, decision);
+            if (!saveUnlessConcurrentlyStored(member, sample, measuredAt, status, emergency, batchId, decision)) {
+                raceSkipped++;
+                continue;
+            }
+            if (!assessed) {
+                aiSkipped++;
+            }
+            // 저장된 샘플만 센다. 동시 재전송이 먼저 저장한 샘플까지 세면 같은 판정이 두 번 집계된다(LLD-0089).
+            if (assessed && !emergency) {
+                meterRegistry.counter("heart.decision", "output", NO_ALERT).increment();
+            }
             if (decision != null) {
                 log.info("심박 판정 기록: memberId={}, decisionId={}, output={}, batchId={}",
                         member.getId(), decision.getDecisionId(), decision.getDecisionOutput(), batchId);
@@ -120,16 +128,52 @@ public class HeartRateBatchService {
             lastStatus = status;
         }
 
+        if (raceSkipped > 0) {
+            log.warn("심박 동시 재전송 샘플 건너뜀: memberId={}, batchId={}, count={}",
+                    member.getId(), batchId, raceSkipped);
+        }
         if (lastMeasuredAt != null) {
             heartRatePersistenceService.updateLatestResult(
                     member.getId(), lastStatus, lastHeartRate, lastMeasuredAt);
         }
         recordAbstain(member, batchId, runId, samples, stored, aiTargetCount, aiCalled, serverReceivedAtMs);
-        return new BatchOutcome(stored, skipped, aiSkipped);
+        return new BatchOutcome(stored, skipped + raceSkipped, aiSkipped);
     }
 
     /**
-     * 위급이면 판정 행 하나를 조립하고, 그 밖이면 건수만 센다(ADR-0035 결정 1).
+     * 샘플을 저장하고, 같은 배치를 동시에 처리하던 요청이 이 시각을 먼저 저장했으면 false를 돌려준다.
+     *
+     * <p>위의 존재 조회와 이 저장 사이에 다른 요청이 끼어들면 UK (member_id, measured_at) 충돌로만
+     * 드러난다(LLD-0089). 행이 실제로 있을 때만 건너뛰고, 없으면 UK가 아닌 무결성 오류라 그대로 던진다.
+     * 이 메서드는 트랜잭션 밖이고 {@code saveBatchSample}이 자기 트랜잭션이라 예외가 호출 지점에서 난다.
+     */
+    private boolean saveUnlessConcurrentlyStored(
+            Member member, HeartRateBatchRequest.Sample sample, LocalDateTime measuredAt,
+            HeartRateStatus status, boolean emergency, String batchId, DecisionRecord decision) {
+        try {
+            heartRatePersistenceService.saveBatchSample(
+                    member, sample.bpm(), measuredAt, status, emergency, sample.accuracy(), batchId, decision);
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            if (isStored(member.getId(), measuredAt, e)) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    /** 재확인 조회까지 실패하면 원래 무결성 예외를 던진다. 조용히 삼키지 않는다. */
+    private boolean isStored(Long memberId, LocalDateTime measuredAt, DataIntegrityViolationException cause) {
+        try {
+            return heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt);
+        } catch (RuntimeException recheckFailure) {
+            cause.addSuppressed(recheckFailure);
+            throw cause;
+        }
+    }
+
+    /**
+     * 위급이면 판정 행 하나를 조립한다. 그 밖이면 저장 뒤 건수만 센다(ADR-0035 결정 1).
      *
      * <p>저장은 하지 않는다. 심박 저장과 한 트랜잭션에 묶으려고 엔티티만 만들어 넘긴다.
      * 조립이 실패하면(설정 누락 등) 판정 없이 심박만 저장한다.
@@ -138,7 +182,6 @@ public class HeartRateBatchService {
             Member member, String batchId, String runId, HeartRateBatchRequest.Sample sample,
             DetectionResult detected, long serverReceivedAtMs) {
         if (!detected.emergency()) {
-            meterRegistry.counter("heart.decision", "output", NO_ALERT).increment();
             return null;
         }
         if (runId == null) {
