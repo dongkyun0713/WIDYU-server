@@ -1,6 +1,7 @@
 package com.widyu.heart.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.BDDMockito.given;
@@ -15,7 +16,9 @@ import com.widyu.heart.dto.response.HeartRateStatusResponse;
 import com.widyu.member.MemberRole;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,10 +27,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.support.ExecutorSubscribableChannel;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("HeartRateWebSocketController 단위 테스트")
@@ -52,11 +58,12 @@ class HeartRateWebSocketControllerTest {
         PrincipalDetails principal = new PrincipalDetails(memberId, MemberRole.USER);
         SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
         headerAccessor.setSessionId(sessionId);
+        headerAccessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
         given(heartRateService.processHeartRate(memberId, request)).willReturn(response);
         ArgumentCaptor<Map<String, Object>> headersCaptor = ArgumentCaptor.captor();
 
         // when
-        heartRateWebSocketController.sendHeartRate(request, principal, headerAccessor);
+        heartRateWebSocketController.sendHeartRate(request, headerAccessor);
 
         // then
         then(messagingTemplate).should().convertAndSend(
@@ -71,6 +78,54 @@ class HeartRateWebSocketControllerTest {
         );
         assertThat(headersCaptor.getValue())
                 .containsEntry(SimpMessageHeaderAccessor.SESSION_ID_HEADER, sessionId);
+    }
+
+    @Test
+    @DisplayName("단건 ACK 메시지는 발신 세션 ID를 STOMP 네이티브 헤더가 아닌 세션 헤더로 싣는다")
+    void 단건_ACK_메시지는_발신_세션_ID를_세션_헤더로_싣는다() {
+        // given
+        Long memberId = 42L;
+        String sessionId = "heart-session-1";
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(78, measuredAt, null, null);
+        PrincipalDetails principal = new PrincipalDetails(memberId, MemberRole.USER);
+        SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        headerAccessor.setSessionId(sessionId);
+        headerAccessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        given(heartRateService.processHeartRate(memberId, request))
+                .willReturn(HeartRateStatusResponse.of(memberId, HeartRateStatus.NORMAL, 78, measuredAt));
+        List<Message<?>> sent = new ArrayList<>();
+        ExecutorSubscribableChannel brokerChannel = new ExecutorSubscribableChannel();
+        brokerChannel.subscribe(sent::add);
+        HeartRateWebSocketController controller =
+                new HeartRateWebSocketController(heartRateService, new SimpMessagingTemplate(brokerChannel));
+
+        // when
+        controller.sendHeartRate(request, headerAccessor);
+
+        // then
+        Message<?> ack = sent.stream()
+                .filter(message -> "/user/42/queue/heart-rate/result"
+                        .equals(SimpMessageHeaderAccessor.getDestination(message.getHeaders())))
+                .findFirst()
+                .orElseThrow();
+        assertThat(SimpMessageHeaderAccessor.getSessionId(ack.getHeaders())).isEqualTo(sessionId);
+    }
+
+    @Test
+    @DisplayName("Principal 없이 심박을 전송하면 처리하지 않고 예외가 발생한다")
+    void Principal_없이_심박을_전송하면_예외가_발생한다() {
+        // given
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(78, LocalDateTime.of(2026, 9, 8, 10, 0), null, null);
+        SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        headerAccessor.setSessionId("heart-session-1");
+        headerAccessor.setSessionAttributes(Map.of("memberId", 42L));
+
+        // when / then
+        assertThatThrownBy(() -> heartRateWebSocketController.sendHeartRate(request, headerAccessor))
+                .isInstanceOf(IllegalStateException.class);
+        then(heartRateService).shouldHaveNoInteractions();
+        then(messagingTemplate).shouldHaveNoInteractions();
     }
 
     @Test

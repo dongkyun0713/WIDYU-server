@@ -3,13 +3,11 @@ package com.widyu.global.websocket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
-import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.member.MemberRole;
 import com.widyu.location.access.LocationAccessPath;
@@ -19,7 +17,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
-import com.widyu.auth.dto.AccessTokenDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,7 +43,6 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 @DisplayName("JwtChannelInterceptor SUBSCRIBE 인가 단위 테스트")
 class JwtChannelInterceptorTest {
 
-    @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private FamilyAccessService familyAccessService;
     @Mock private WebSocketSessionRegistry webSocketSessionRegistry;
     @Mock private LocationAccessLogService locationAccessLogService;
@@ -129,8 +125,8 @@ class JwtChannelInterceptorTest {
     }
 
     @Test
-    @DisplayName("세션 속성으로 인증된 보호자가 위치 topic 구독 시 메시지를 통과시킨다")
-    void 세션_속성_인증_보호자가_위치_topic_구독_시_메시지를_통과시킨다() {
+    @DisplayName("Principal 없이 세션 속성만 있는 세션이 위치 topic을 구독하면 null을 반환한다")
+    void Principal_없이_세션_속성만_있는_구독은_null을_반환한다() {
         // given
         Message<?> message = buildSubscribeMessageWithSessionAttrs("/topic/location/senior/42", 100L);
 
@@ -138,7 +134,8 @@ class JwtChannelInterceptorTest {
         Message<?> result = jwtChannelInterceptor.preSend(message, null);
 
         // then
-        assertThat(result).isNotNull();
+        assertThat(result).isNull();
+        verifyNoInteractions(familyAccessService);
     }
 
     @Test
@@ -338,24 +335,77 @@ class JwtChannelInterceptorTest {
     }
 
     @Test
-    @DisplayName("CONNECT로 인증하면 Principal로 SEND를 허용한다")
-    void CONNECT_Principal로_SEND를_허용한다() {
+    @DisplayName("핸드셰이크 회원이 있는 세션이 CONNECT하면 회원 ID를 이름으로 하는 Principal을 등록한다")
+    void 핸드셰이크_회원이_있는_CONNECT는_회원_ID_Principal을_등록한다() {
         // given
-        given(jwtTokenProvider.retrieveAccessToken("test-token"))
-                .willReturn(AccessTokenDto.of(100L, MemberRole.USER, "LOCAL", "test-token"));
-        StompHeaderAccessor connect = StompHeaderAccessor.create(StompCommand.CONNECT);
-        connect.setNativeHeader("Authorization", "Bearer test-token");
-        connect.setLeaveMutable(true);
+        StompHeaderAccessor connect = connectAccessor(Map.of("memberId", 100L));
         Message<?> message = MessageBuilder.createMessage(new byte[0], connect.getMessageHeaders());
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isSameAs(message);
+        assertThat(connect.getUser()).isNotNull();
+        assertThat(connect.getUser().getName()).isEqualTo("100");
+        verify(webSocketSessionRegistry).register("test-session", 100L);
+    }
+
+    @Test
+    @DisplayName("세션 속성에 회원이 없는 CONNECT는 폐기한다")
+    void 세션_속성에_회원이_없는_CONNECT는_폐기한다() {
+        // given
+        StompHeaderAccessor connect = connectAccessor(new HashMap<>());
+        Message<?> message = MessageBuilder.createMessage(new byte[0], connect.getMessageHeaders());
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(result).isNull();
+        assertThat(connect.getUser()).isNull();
+        verifyNoInteractions(webSocketSessionRegistry);
+    }
+
+    @Test
+    @DisplayName("CONNECT에 다른 회원의 Authorization 헤더를 실어도 핸드셰이크 회원으로 Principal을 등록한다")
+    void CONNECT_Authorization_헤더는_Principal_결정에_쓰이지_않는다() {
+        // given
+        StompHeaderAccessor connect = connectAccessor(Map.of("memberId", 100L));
+        connect.setNativeHeader("Authorization", "Bearer other-member-token");
+        Message<?> message = MessageBuilder.createMessage(new byte[0], connect.getMessageHeaders());
+
         // when
         jwtChannelInterceptor.preSend(message, null);
+
+        // then
+        assertThat(connect.getUser().getName()).isEqualTo("100");
+    }
+
+    @Test
+    @DisplayName("CONNECT로 등록한 Principal로 SEND하면 원본 메시지를 통과시킨다")
+    void CONNECT_Principal로_SEND를_허용한다() {
+        // given
+        StompHeaderAccessor connect = connectAccessor(Map.of("memberId", 100L));
+        jwtChannelInterceptor.preSend(MessageBuilder.createMessage(new byte[0], connect.getMessageHeaders()), null);
         StompHeaderAccessor send = StompHeaderAccessor.create(StompCommand.SEND);
         send.setDestination("/app/location/update");
         send.setUser(connect.getUser());
         Message<?> request = MessageBuilder.createMessage(new byte[0], send.getMessageHeaders());
+
+        // when
+        Message<?> result = jwtChannelInterceptor.preSend(request, null);
+
         // then
-        assertThat(connect.getUser()).isNotNull();
-        assertThat(jwtChannelInterceptor.preSend(request, null)).isSameAs(request);
+        assertThat(result).isSameAs(request);
+    }
+
+    private StompHeaderAccessor connectAccessor(Map<String, Object> sessionAttributes) {
+        StompHeaderAccessor connect = StompHeaderAccessor.create(StompCommand.CONNECT);
+        connect.setSessionId("test-session");
+        connect.setSessionAttributes(sessionAttributes);
+        connect.setLeaveMutable(true);
+        return connect;
     }
 
     @ParameterizedTest
@@ -365,7 +415,7 @@ class JwtChannelInterceptorTest {
         // given
         WebSocketSessionRegistry sessionRegistry = new WebSocketSessionRegistry();
         JwtChannelInterceptor brokerInterceptor = new JwtChannelInterceptor(
-                jwtTokenProvider, familyAccessService, sessionRegistry, locationAccessLogService);
+                familyAccessService, sessionRegistry, locationAccessLogService);
         FamilyTopicOutboundInterceptor outboundInterceptor = new FamilyTopicOutboundInterceptor(
                 familyAccessService, sessionRegistry);
         ExecutorSubscribableChannel inbound = new ExecutorSubscribableChannel();
@@ -423,6 +473,8 @@ class JwtChannelInterceptorTest {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setSessionId(sessionId);
         accessor.setSessionAttributes(Map.of("memberId", memberId));
+        accessor.setUser(authentication(memberId));
+        accessor.setLeaveMutable(true);
         if (destination != null) {
             accessor.setDestination(destination);
         }
@@ -446,7 +498,7 @@ class JwtChannelInterceptorTest {
         }
         accessor.setSessionId("test-session");
         if (authenticated) {
-            accessor.setSessionAttributes(Map.of("memberId", 100L));
+            accessor.setUser(authentication(100L));
         }
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
@@ -517,10 +569,7 @@ class JwtChannelInterceptorTest {
         accessor.setSessionId("test-session");
         accessor.setLeaveMutable(true);
 
-        PrincipalDetails principal = new PrincipalDetails(subscriberId, MemberRole.USER);
-        Authentication auth = new UsernamePasswordAuthenticationToken(
-                principal, null, principal.getAuthorities());
-        accessor.setUser(auth);
+        accessor.setUser(authentication(subscriberId));
 
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
@@ -545,5 +594,10 @@ class JwtChannelInterceptorTest {
         accessor.setSessionAttributes(sessionAttrs);
 
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    private Authentication authentication(Long memberId) {
+        PrincipalDetails principal = new PrincipalDetails(memberId, MemberRole.USER);
+        return new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
     }
 }

@@ -9,14 +9,14 @@ import com.widyu.sensor.application.SensorBatchService;
 import com.widyu.sensor.dto.response.SensorBatchResult;
 import com.widyu.sensor.dto.response.SensorBatchResultResponse;
 import java.io.IOException;
-import java.util.Map;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.annotation.SendToUser;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
 /**
@@ -37,10 +37,9 @@ public class SensorBatchWebSocketController {
     @SendToUser(destinations = "/queue/sensor/result", broadcast = false)
     public SensorBatchResultResponse ingestBatch(
             Message<byte[]> message,
-            @AuthenticationPrincipal PrincipalDetails principal,
             SimpMessageHeaderAccessor headerAccessor
     ) {
-        Long memberId = resolveMemberId(principal, headerAccessor);
+        Long memberId = resolveMemberId(headerAccessor.getUser());
         byte[] payload = message.getPayload();
 
         try {
@@ -82,17 +81,14 @@ public class SensorBatchWebSocketController {
         return SensorBatchResultResponse.of(batchId.asText(), seq.asLong(), SensorBatchResult.REJECTED);
     }
 
-    private Long resolveMemberId(PrincipalDetails principal, SimpMessageHeaderAccessor headerAccessor) {
-        if (principal != null && principal.getMemberId() != null) {
+    /**
+     * STOMP 요청의 회원은 CONNECT가 핸드셰이크 회원으로 등록한 Principal로만 식별한다(LLD-0088).
+     */
+    private Long resolveMemberId(Principal user) {
+        if (user instanceof Authentication authentication
+                && authentication.getPrincipal() instanceof PrincipalDetails principal) {
             return principal.getMemberId();
         }
-
-        Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
-        if (sessionAttributes != null && sessionAttributes.get("memberId") instanceof Long memberId) {
-            log.debug("세션 속성에서 memberId 조회 - memberId: {}", memberId);
-            return memberId;
-        }
-
         throw new IllegalStateException("인증 정보가 없습니다. WebSocket 연결 시 유효한 JWT 토큰이 필요합니다.");
     }
 }

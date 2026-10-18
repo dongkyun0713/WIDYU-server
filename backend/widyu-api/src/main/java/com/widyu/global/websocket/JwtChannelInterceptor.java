@@ -1,13 +1,10 @@
 package com.widyu.global.websocket;
 
-import static com.widyu.global.constant.SecurityConstant.TOKEN_PREFIX;
-
-import com.widyu.auth.dto.AccessTokenDto;
 import com.widyu.global.error.BusinessException;
-import com.widyu.global.security.JwtTokenProvider;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.location.access.LocationAccessPath;
 import com.widyu.location.access.application.LocationAccessLogService;
+import com.widyu.member.MemberRole;
 import com.widyu.member.application.FamilyAccessService;
 import java.util.Set;
 import java.util.Map;
@@ -22,7 +19,6 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -46,7 +42,6 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             "/app/sensor/batches/send"
     );
 
-    private final JwtTokenProvider jwtTokenProvider;
     private final FamilyAccessService familyAccessService;
     private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final LocationAccessLogService locationAccessLogService;
@@ -77,27 +72,21 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         return message;
     }
 
+    /**
+     * 핸드셰이크가 일회용 토큰으로 확인한 회원을 Principal로 등록한다. CONNECT 헤더의 {@code Authorization}은 보지 않는다.
+     * Principal 이름(회원 ID)이 있어야 사용자 목적지 ACK가 발신 세션으로 해석된다(LLD-0088).
+     */
     private Message<?> handleConnect(Message<?> message, StompHeaderAccessor accessor) {
-        String authHeader = accessor.getFirstNativeHeader("Authorization");
-
-        if (authHeader != null && authHeader.startsWith(TOKEN_PREFIX)) {
-            String token = authHeader.replace(TOKEN_PREFIX, "");
-            AccessTokenDto accessTokenDto = jwtTokenProvider.retrieveAccessToken(token);
-
-            if (accessTokenDto != null && accessTokenDto.memberId() != null) {
-                PrincipalDetails principal = new PrincipalDetails(
-                        accessTokenDto.memberId(),
-                        accessTokenDto.memberRole()
-                );
-                Authentication auth = new UsernamePasswordAuthenticationToken(
-                        principal, null, principal.getAuthorities()
-                );
-                accessor.setUser(auth);
-                log.info("WebSocket CONNECT 인증 성공 - memberId: {}", accessTokenDto.memberId());
-            }
+        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+        if (sessionAttributes == null || !(sessionAttributes.get("memberId") instanceof Long memberId)) {
+            log.warn("WebSocket CONNECT 거부 - 핸드셰이크 인증 회원 없음, sessionId: {}", accessor.getSessionId());
+            return null;
         }
 
-        webSocketSessionRegistry.register(accessor.getSessionId(), resolveSubscriberId(accessor));
+        PrincipalDetails principal = new PrincipalDetails(memberId, MemberRole.USER);
+        accessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        webSocketSessionRegistry.register(accessor.getSessionId(), memberId);
+        log.info("WebSocket CONNECT 인증 - memberId: {}", memberId);
 
         return message;
     }
@@ -162,17 +151,10 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     }
 
     private Long resolveSubscriberId(StompHeaderAccessor accessor) {
-        java.security.Principal user = accessor.getUser();
-        if (user instanceof UsernamePasswordAuthenticationToken auth
+        if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth
                 && auth.getPrincipal() instanceof PrincipalDetails principal) {
             return principal.getMemberId();
         }
-
-        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
-        if (sessionAttributes != null && sessionAttributes.get("memberId") instanceof Long memberId) {
-            return memberId;
-        }
-
         return null;
     }
 }
