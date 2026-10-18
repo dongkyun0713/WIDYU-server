@@ -15,7 +15,7 @@ import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import io.micrometer.core.annotation.Timed;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
-import com.widyu.heart.repository.HeartRateResultRepository;
+import com.widyu.heart.repository.HeartRateLatestResultWriter;
 import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDateTime;
@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class HeartRatePersistenceService {
 
-    private final HeartRateResultRepository heartRateResultRepository;
+    private final HeartRateLatestResultWriter latestResultWriter;
     private final HeartRateEventRepository heartRateEventRepository;
     private final HeartRateEmergencyRepository heartRateEmergencyRepository;
     private final MemberRepository memberRepository;
@@ -49,7 +49,8 @@ public class HeartRatePersistenceService {
 
         HeartRateResult result = HeartRateResult.of(
                 memberId, status, request.heartRate(), request.measuredAt());
-        heartRateResultRepository.save(result);
+        // 늦게 끝난 과거 측정이 최신값을 되돌리지 않게 더 늦은 측정일 때만 덮어쓴다(LLD-0090).
+        latestResultWriter.saveIfNewer(result);
 
         heartRateEventRepository.save(
                 // 단건 경로에는 정확도도 배치 원문도 없다.
@@ -106,10 +107,10 @@ public class HeartRatePersistenceService {
         }
     }
 
-    /** 배치의 마지막 샘플로 최신값(Redis)을 갱신한다. */
+    /** 배치의 마지막 샘플로 최신값(Redis)을 갱신한다. 저장된 값보다 늦은 측정일 때만 덮어쓴다(LLD-0090). */
     @Transactional
     public void updateLatestResult(
             Long memberId, HeartRateStatus status, Integer heartRate, LocalDateTime measuredAt) {
-        heartRateResultRepository.save(HeartRateResult.of(memberId, status, heartRate, measuredAt));
+        latestResultWriter.saveIfNewer(HeartRateResult.of(memberId, status, heartRate, measuredAt));
     }
 }

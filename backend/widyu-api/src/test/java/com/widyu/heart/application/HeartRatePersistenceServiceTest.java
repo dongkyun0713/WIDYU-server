@@ -18,7 +18,7 @@ import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
-import com.widyu.heart.repository.HeartRateResultRepository;
+import com.widyu.heart.repository.HeartRateLatestResultWriter;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
@@ -38,7 +38,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 @DisplayName("HeartRatePersistenceService 단위 테스트")
 class HeartRatePersistenceServiceTest {
 
-    @Mock private HeartRateResultRepository heartRateResultRepository;
+    @Mock private HeartRateLatestResultWriter latestResultWriter;
     @Mock private HeartRateEventRepository heartRateEventRepository;
     @Mock private HeartRateEmergencyRepository heartRateEmergencyRepository;
     @Mock private MemberRepository memberRepository;
@@ -71,7 +71,7 @@ class HeartRatePersistenceServiceTest {
         assertThat(result.getStatus()).isEqualTo(HeartRateStatus.NORMAL);
         assertThat(result.getHeartRate()).isEqualTo(78);
         assertThat(result.getMeasuredAt()).isEqualTo(measuredAt);
-        then(heartRateResultRepository).should().save(any(HeartRateResult.class));
+        then(latestResultWriter).should().saveIfNewer(any(HeartRateResult.class));
         then(heartRateEventRepository).should().save(any(HeartRateEvent.class));
         then(heartRateEmergencyRepository).should(never()).save(any());
         then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
@@ -149,6 +149,26 @@ class HeartRatePersistenceServiceTest {
         // then
         then(decisionRecordRepository).should(never()).save(any(DecisionRecord.class));
         then(eventPublisher).should().publishEvent(new HeartRateEmergencyEvent(memberId, null));
+    }
+
+    @Test
+    @DisplayName("배치 마지막 샘플로 최신값을 갱신하면 측정 시각 조건부 쓰기로 저장한다")
+    void 배치_마지막_샘플로_최신값을_갱신하면_측정_시각_조건부_쓰기로_저장한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        ArgumentCaptor<HeartRateResult> resultCaptor = ArgumentCaptor.forClass(HeartRateResult.class);
+
+        // when
+        heartRatePersistenceService.updateLatestResult(memberId, HeartRateStatus.NORMAL, 72, measuredAt);
+
+        // then
+        then(latestResultWriter).should().saveIfNewer(resultCaptor.capture());
+        HeartRateResult saved = resultCaptor.getValue();
+        assertThat(saved.getMemberId()).isEqualTo(memberId);
+        assertThat(saved.getStatus()).isEqualTo(HeartRateStatus.NORMAL);
+        assertThat(saved.getHeartRate()).isEqualTo(72);
+        assertThat(saved.getMeasuredAt()).isEqualTo(measuredAt);
     }
 
     private DecisionRecord alert() {
