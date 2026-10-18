@@ -14,6 +14,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface FcmNotificationRepository extends JpaRepository<FcmNotification, Long> {
 
+    /** 저하 경로 보정의 멱등 확인. 값은 "degraded:" + 스트림 ID다(LLD-0087 5.1). */
+    boolean existsByDecisionId(String decisionId);
+
     Optional<FcmNotification> findByRecipientMemberIdAndEventId(Long recipientMemberId, String eventId);
 
     @Query("SELECT DISTINCT n.recipientMember.id FROM FcmNotification n "

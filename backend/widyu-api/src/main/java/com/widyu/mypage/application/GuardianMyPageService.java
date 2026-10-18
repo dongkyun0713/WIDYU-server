@@ -6,6 +6,7 @@ import com.widyu.auth.dto.request.SeniorSignUpRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.repository.PhoneChangeVerifiedRepository;
+import com.widyu.fcm.application.degraded.EmergencyRecipientSnapshotService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
@@ -74,6 +75,7 @@ public class GuardianMyPageService {
     private final PointHistoryRepository pointHistoryRepository;
     private final ParentLocationRepository parentLocationRepository;
     private final GeocodingService geocodingService;
+    private final EmergencyRecipientSnapshotService emergencyRecipientSnapshots;
 
     public GuardianInfoResponse getGuardianInfo() {
         Member member = MyPageProfileService.getCurrentMember(memberUtil);
@@ -355,6 +357,8 @@ public class GuardianMyPageService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND, "가족 구성원을 찾을 수 없습니다."));
         familyMembershipRepository.delete(membership);
         familyRepository.incrementOrderRevision(familyId);
+        // 빠진 보호자가 DB 장애 중 저하 경로 알림을 계속 받지 않게 커밋 뒤 스냅샷을 다시 만든다(LLD-0087 5.2).
+        emergencyRecipientSnapshots.refreshFamilyAfterCommit(familyId);
     }
 
     private void deleteSeniorFromFamily(Long targetMemberId, Long familyId) {

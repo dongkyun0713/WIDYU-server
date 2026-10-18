@@ -18,7 +18,8 @@ class FcmDegradedPropertiesTest {
     @ValueSource(strings = {
             "fcm.degraded.snapshot-ttl=0s", "fcm.degraded.snapshot-ttl=-1s",
             "fcm.degraded.lease=0s", "fcm.degraded.lease=-1s",
-            "fcm.degraded.stream-max-len=0", "fcm.degraded.stream-max-len=-1"})
+            "fcm.degraded.stream-max-len=0", "fcm.degraded.stream-max-len=-1",
+            "fcm.degraded.reconcile-batch=0", "fcm.degraded.reconcile-batch=-1"})
     @DisplayName("저하 경로 설정에 0이나 음수를 주면 기동을 거부한다")
     void 저하경로_설정에_0이나_음수를_주면_기동을_거부한다(String property) {
         // given / when / then
@@ -28,7 +29,7 @@ class FcmDegradedPropertiesTest {
     }
 
     @Test
-    @DisplayName("설정을 주지 않으면 켜진 상태로 스냅샷 24시간, lease 60초, 스트림 상한 10000을 쓴다")
+    @DisplayName("설정을 주지 않으면 켜진 상태로 스냅샷 24시간, lease 60초, 스트림 상한 10000, 보정 100건을 쓴다")
     void 설정을_주지_않으면_기본값을_쓴다() {
         // given / when / then
         runner().run(context -> {
@@ -38,6 +39,7 @@ class FcmDegradedPropertiesTest {
             assertThat(properties.snapshotTtl()).isEqualTo(Duration.ofHours(24));
             assertThat(properties.lease()).isEqualTo(Duration.ofSeconds(60));
             assertThat(properties.streamMaxLen()).isEqualTo(10000L);
+            assertThat(properties.reconcileBatch()).isEqualTo(100);
         });
     }
 
@@ -55,6 +57,7 @@ class FcmDegradedPropertiesTest {
                     FcmDegradedProperties properties = context.getBean(FcmDegradedProperties.class);
                     assertThat(properties.enabled()).isTrue();
                     assertThat(properties.snapshotTtl()).isEqualTo(Duration.ofHours(24));
+                    assertThat(properties.reconcileBatch()).isEqualTo(100);
                 });
     }
 

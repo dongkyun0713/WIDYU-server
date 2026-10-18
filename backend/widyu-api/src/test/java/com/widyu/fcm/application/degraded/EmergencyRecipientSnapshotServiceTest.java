@@ -2,6 +2,7 @@ package com.widyu.fcm.application.degraded;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -37,6 +38,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /** 스냅샷 원천 조회는 JPQL 조건이 곧 수신자 규칙이라 H2에서 실제로 실행해 검증한다. Redis는 mock이다. */
 @DataJpaTest
@@ -50,6 +52,7 @@ class EmergencyRecipientSnapshotServiceTest {
     @Autowired private FamilyMembershipRepository memberships;
     @Autowired private SeniorProfileRepository seniors;
     @Autowired private TestEntityManager entityManager;
+    @Autowired private PlatformTransactionManager transactionManager;
     @MockBean private JPAQueryFactory jpaQueryFactory;
 
     @Test
@@ -119,6 +122,37 @@ class EmergencyRecipientSnapshotServiceTest {
     }
 
     @Test
+    @DisplayName("가족 하나만 다시 만들면 그 가족 시니어의 키만 갱신하고 다른 가족 시니어의 키는 건드리지 않는다")
+    void 가족_하나만_다시_만들면_다른_가족_키는_건드리지_않는다() {
+        // given
+        Family target = entityManager.persist(Family.createFamily("SNP005"));
+        Member targetSenior = senior(target, "대상시니어");
+        token(guardian(target, true), "target-token", true);
+        Family other = entityManager.persist(Family.createFamily("SNP006"));
+        Member otherSenior = senior(other, "다른시니어");
+        token(guardian(other, true), "other-token", true);
+        Family empty = entityManager.persist(Family.createFamily("SNP007"));
+        Member emptySenior = senior(empty, "빈시니어");
+        entityManager.flush();
+        entityManager.clear();
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> values = mock(ValueOperations.class);
+        given(redis.opsForValue()).willReturn(values);
+
+        // when
+        service(redis).refreshFamily(target.getId());
+
+        // then
+        then(values).should().set(eq("fcm:degraded:recipients:" + targetSenior.getId()), anyString(),
+                eq(Duration.ofHours(24)));
+        then(values).should(never()).set(eq("fcm:degraded:recipients:" + otherSenior.getId()), anyString(),
+                any(Duration.class));
+        then(redis).should(never()).delete("fcm:degraded:recipients:" + emptySenior.getId());
+        then(redis).should(never()).delete("fcm:degraded:recipients:" + otherSenior.getId());
+    }
+
+    @Test
     @DisplayName("Redis에 쓰지 못해도 예외를 밖으로 내지 않아 다음 주기에 다시 만든다")
     void Redis에_쓰지_못해도_예외를_밖으로_내지_않는다() {
         // given
@@ -134,7 +168,8 @@ class EmergencyRecipientSnapshotServiceTest {
 
     private EmergencyRecipientSnapshotService service(StringRedisTemplate redis) {
         return new EmergencyRecipientSnapshotService(memberships, seniors, redis, new ObjectMapper(),
-                new FcmDegradedProperties(true, Duration.ofHours(24), Duration.ofSeconds(60), 10000L));
+                new FcmDegradedProperties(true, Duration.ofHours(24), Duration.ofSeconds(60), 10000L, 100),
+                transactionManager);
     }
 
     private Member senior(Family family, String name) {

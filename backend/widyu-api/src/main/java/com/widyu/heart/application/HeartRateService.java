@@ -28,6 +28,7 @@ import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,6 +84,9 @@ public class HeartRateService {
                     detection.status(),
                     detection.emergency()
             );
+        } catch (DataIntegrityViolationException exception) {
+            // 같은 measured_at 동시 재전송의 UK 충돌은 DB 장애가 아니다. 기존처럼 전파한다(LLD-0087 5.3).
+            throw exception;
         } catch (DataAccessException | TransactionException exception) {
             return respondWithoutDatabase(memberId, request, detection, exception);
         }

@@ -196,7 +196,7 @@ class DegradedEmergencyAlertConsumerTest {
 
     private DegradedEmergencyAlertConsumer consumer(SimpleMeterRegistry meterRegistry) {
         return new DegradedEmergencyAlertConsumer(redis, transport,
-                new FcmDegradedProperties(true, Duration.ofHours(24), Duration.ofSeconds(60), 10000L),
+                new FcmDegradedProperties(true, Duration.ofHours(24), Duration.ofSeconds(60), 10000L, 100),
                 new FcmDeliveryProperties(3, Duration.ofHours(24), Duration.ofMinutes(5),
                         Duration.ofSeconds(60), Duration.ofSeconds(30)),
                 new ObjectMapper(), meterRegistry);

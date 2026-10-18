@@ -8,3 +8,6 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       ssl-enabled: ${REDIS_SSL_ENABLED:false}
+      # 명령 응답 대기 상한. 미설정 시 Lettuce 기본 60초라 Redis가 무응답이면 outbox claim의 표식 조회(fail-open)가
+      # 행 잠금을 잡은 채 60초를 기다린다. 앱 전체 Redis 명령에 적용된다(LLD-0087 5.3).
+      timeout: ${REDIS_COMMAND_TIMEOUT:3s}

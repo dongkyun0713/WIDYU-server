@@ -16,6 +16,7 @@ import com.widyu.auth.dto.request.SeniorSignUpRequest;
 import com.widyu.auth.dto.request.SmsCodeRequest;
 import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.repository.PhoneChangeVerifiedRepository;
+import com.widyu.fcm.application.degraded.EmergencyRecipientSnapshotService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
@@ -82,6 +83,7 @@ class GuardianMyPageServiceTest {
     @Mock private PointHistoryRepository pointHistoryRepository;
     @Mock private ParentLocationRepository parentLocationRepository;
     @Mock private GeocodingService geocodingService;
+    @Mock private EmergencyRecipientSnapshotService emergencyRecipientSnapshots;
 
     @InjectMocks
     private GuardianMyPageService guardianMyPageService;
@@ -1047,6 +1049,36 @@ class GuardianMyPageServiceTest {
         // then
         verify(familyMembershipRepository).delete(targetMembership);
         verify(familyRepository).incrementOrderRevision(10L);
+    }
+
+    @Test
+    @DisplayName("방장이 다른 보호자를 삭제하면 커밋 뒤 그 가족의 긴급 수신자 스냅샷을 다시 만들도록 예약한다")
+    void 가족_멤버_삭제_시_커밋뒤_스냅샷_갱신을_예약한다() {
+        // given
+        Member guardian = mock(Member.class);
+        FamilyMembership myMembership = mock(FamilyMembership.class);
+        Family family = mock(Family.class);
+        Member targetMember = mock(Member.class);
+        FamilyMembership targetMembership = mock(FamilyMembership.class);
+
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(guardian.getId()).willReturn(1L);
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(myMembership));
+        given(myMembership.isLeader()).willReturn(true);
+        given(myMembership.getFamily()).willReturn(family);
+        given(family.getId()).willReturn(10L);
+        given(memberRepository.findById(2L)).willReturn(Optional.of(targetMember));
+        given(targetMember.getType()).willReturn(MemberType.GUARDIAN);
+        given(familyMembershipRepository.findByFamilyIdAndGuardianId(10L, 2L))
+                .willReturn(Optional.of(targetMembership));
+
+        // when
+        guardianMyPageService.deleteFamilyMember(2L);
+
+        // then
+        InOrder order = inOrder(familyMembershipRepository, emergencyRecipientSnapshots);
+        order.verify(familyMembershipRepository).delete(targetMembership);
+        order.verify(emergencyRecipientSnapshots).refreshFamilyAfterCommit(10L);
     }
 
     @Test

@@ -47,6 +47,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.transaction.annotation.Transactional;
@@ -685,6 +686,27 @@ class HeartRateServiceTest {
         // then
         assertThat(response).isEqualTo(
                 HeartRateStatusResponse.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
+        then(degradedEmergencyAlertService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("같은 측정 시각 동시 재전송으로 저장이 UK 충돌하면 저하 경로로 보내지 않고 그대로 던진다")
+    void 같은_측정시각_UK충돌은_저하경로로_보내지_않고_그대로_던진다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 6);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        DataIntegrityViolationException duplicate = new DataIntegrityViolationException("uk_heart_rate_event");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willThrow(duplicate);
+
+        // when & then
+        assertThatThrownBy(() -> heartRateService.processHeartRate(memberId, request)).isSameAs(duplicate);
         then(degradedEmergencyAlertService).shouldHaveNoInteractions();
     }
 

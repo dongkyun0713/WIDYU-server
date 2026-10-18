@@ -4,6 +4,7 @@ import com.widyu.auth.application.guardian.unlink.SocialUnlinkService;
 import com.widyu.auth.dto.request.MemberWithdrawRequest;
 import com.widyu.auth.event.MemberWithdrawnEvent;
 import com.widyu.auth.repository.RefreshTokenRepository;
+import com.widyu.fcm.application.degraded.EmergencyRecipientSnapshotService;
 import com.widyu.goal.medicineschedule.application.MedicationProofDeletionService;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -15,6 +16,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.deletion.S3ObjectDeletionTaskService;
 import com.widyu.global.util.MemberUtil;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class MemberWithdrawService {
     private final S3ObjectDeletionTaskService s3ObjectDeletionTaskService;
     private final SocialUnlinkService socialUnlinkService;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmergencyRecipientSnapshotService emergencyRecipientSnapshots;
 
     @Transactional
     public void withdrawMember(MemberWithdrawRequest request) {
@@ -95,15 +98,20 @@ public class MemberWithdrawService {
             return;
         }
         FamilyMembership membership = membershipOpt.get();
+        // 탈퇴한 보호자가 DB 장애 중 저하 경로 알림을 계속 받지 않게 커밋 뒤 스냅샷을 정리한다(LLD-0087 5.2).
         if (membership.isLeader()) {
             Long familyId = membership.getFamily().getId();
+            // 가족이 해체되면 가족 ID로 시니어를 다시 찾을 수 없으므로 해체 전에 잡아 둔다.
+            List<Long> seniorMemberIds = seniorProfileRepository.findSeniorMemberIds(familyId);
             seniorProfileRepository.clearFamilyByFamilyId(familyId);
             familyMembershipRepository.deleteByGuardianId(guardianId);
             familyRepository.deleteById(familyId);
+            emergencyRecipientSnapshots.evictAfterCommit(familyId, seniorMemberIds);
             return;
         }
         Long familyId = membership.getFamily().getId();
         familyMembershipRepository.deleteByGuardianId(guardianId);
         familyRepository.incrementOrderRevision(familyId);
+        emergencyRecipientSnapshots.refreshFamilyAfterCommit(familyId);
     }
 }

@@ -24,7 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 @RequiredArgsConstructor
 public class FcmOutboxService {
-    private static final String RETENTION_POLICY_VERSION = "v1";
+    public static final String RETENTION_POLICY_VERSION = "v1";
     private final FcmOutboxRepository outbox;
     private final FcmNotificationRepository notifications;
     private final MemberRepository members;
