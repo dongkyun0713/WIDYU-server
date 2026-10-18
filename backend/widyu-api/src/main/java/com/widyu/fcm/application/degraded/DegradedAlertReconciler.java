@@ -57,6 +57,10 @@ public class DegradedAlertReconciler {
             } catch (DataAccessException | TransactionException exception) {
                 defer(items.subList(index, items.size()), exception);
                 return;
+            } catch (RuntimeException exception) {
+                // DB 장애가 아닌 예외(모르는 category 등)는 다시 해도 같다. 이 한 건만 버리고 이미 꺼낸 뒤 기록은 계속 옮긴다.
+                dropped("rejected");
+                log.warn("저하 경로 보정 기록 처리 실패: type={}", exception.getClass().getSimpleName());
             }
         }
     }

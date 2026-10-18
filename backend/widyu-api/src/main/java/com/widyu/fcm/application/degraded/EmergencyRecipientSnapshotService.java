@@ -8,6 +8,7 @@ import com.widyu.member.repository.SeniorProfileRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,13 @@ public class EmergencyRecipientSnapshotService {
     private final ObjectMapper objectMapper;
     private final FcmDegradedProperties properties;
     private final PlatformTransactionManager transactionManager;
+
+    /**
+     * 주기 갱신과 커밋 후 갱신·삭제의 「DB 조회 → Redis 쓰기」를 직렬화한다. 없으면 주기 갱신이 보호자 제외 전에
+     * 읽은 목록을, 커밋 후 갱신이 쓴 뒤에 덮어써 제외한 보호자가 다시 스냅샷에 남는다.
+     */
+    // ponytail: JVM 안 락이라 앱 인스턴스가 한 대일 때만 맞다. 여러 대가 되면 키별 버전 비교(Lua)로 바꾼다.
+    private final ReentrantLock writeLock = new ReentrantLock();
 
     /** 기동 직후 바로 한 번 돌고 이후 fixedDelay마다 돈다(initialDelay 없음). */
     @Scheduled(fixedDelayString = "${fcm.degraded.snapshot-refresh-ms:300000}")
@@ -87,11 +95,15 @@ public class EmergencyRecipientSnapshotService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                // 읽기 트랜잭션을 열기 전에 잡아 DB 커넥션을 쥔 채 주기 갱신을 기다리지 않는다.
+                writeLock.lock();
                 try {
                     task.run();
                 } catch (RuntimeException exception) {
                     log.warn("가족 변경 후 긴급 수신자 스냅샷 갱신 실패: familyId={}, type={}",
                             familyId, exception.getClass().getSimpleName());
+                } finally {
+                    writeLock.unlock();
                 }
             }
         });
@@ -111,6 +123,7 @@ public class EmergencyRecipientSnapshotService {
 
     private void refresh(Long familyId) {
         int seniorCount = 0;
+        writeLock.lock();
         try {
             Map<Long, List<EmergencyRecipientRow>> rowsBySenior = memberships.findEmergencyRecipients(familyId)
                     .stream()
@@ -132,6 +145,8 @@ public class EmergencyRecipientSnapshotService {
             // DB·Redis 어느 쪽 실패든 스케줄러를 죽이지 않고 다음 주기에 다시 만든다.
             log.warn("긴급 수신자 스냅샷 갱신 실패: familyId={}, seniors={}, type={}",
                     familyId, seniorCount, exception.getClass().getSimpleName());
+        } finally {
+            writeLock.unlock();
         }
     }
 

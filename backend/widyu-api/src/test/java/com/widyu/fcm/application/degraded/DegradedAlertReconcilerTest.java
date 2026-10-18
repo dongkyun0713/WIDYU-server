@@ -171,6 +171,32 @@ class DegradedAlertReconcilerTest {
                 .isEqualTo(1.0);
     }
 
+    @Test
+    @DisplayName("모르는 category 기록이 있으면 그 한 건만 버리고 이미 꺼낸 뒤 기록은 되돌리지 않고 계속 옮긴다")
+    void 모르는_category_기록은_한건만_버리고_뒤_기록을_계속_옮긴다() throws Exception {
+        // given
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        String unknownCategory = json("1760000000000-0", 201L).replace("HEART_MESSAGE", "RENAMED_CATEGORY");
+        String valid = json("1760000000000-1", 202L);
+        given(redis.opsForList()).willReturn(list);
+        given(list.leftPop(KEY, 100)).willReturn(List.of(unknownCategory, valid));
+        given(notifications.existsByDecisionId(anyString())).willReturn(false);
+        given(tokens.findById(any())).willReturn(Optional.of(
+                MemberFcmToken.builder().member(member(101L)).token("t").active(true).build()));
+        given(members.findById(101L)).willReturn(Optional.of(member(101L)));
+
+        // when
+        reconciler(meterRegistry).reconcile();
+
+        // then
+        ArgumentCaptor<FcmNotification> saved = ArgumentCaptor.forClass(FcmNotification.class);
+        then(notifications).should(times(1)).save(saved.capture());
+        assertThat(saved.getValue().getDecisionId()).isEqualTo("degraded:1760000000000-1");
+        then(list).should(never()).rightPushAll(anyString(), anyList());
+        assertThat(meterRegistry.counter("fcm.degraded.reconcile_dropped", "reason", "rejected").count())
+                .isEqualTo(1.0);
+    }
+
     private DegradedAlertReconciler reconciler(SimpleMeterRegistry meterRegistry) {
         return new DegradedAlertReconciler(redis,
                 new DegradedAlertReconcileTransactions(notifications, tokens, members),

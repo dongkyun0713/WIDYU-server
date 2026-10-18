@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,7 +15,11 @@ import com.widyu.member.repository.EmergencyRecipientRow;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -124,6 +129,65 @@ class EmergencyRecipientSnapshotAfterCommitTest {
 
         // then
         then(redis).should().delete(List.of("fcm:degraded:recipients:1", "fcm:degraded:recipients:2"));
+    }
+
+    @Test
+    @DisplayName("주기 갱신이 보호자 제외 전 목록을 읽는 동안 커밋 후 갱신이 들어와도 마지막에 남는 스냅샷은 제외 뒤 목록이다")
+    void 주기갱신과_커밋후갱신이_겹쳐도_마지막_스냅샷은_제외뒤_목록이다() throws Exception {
+        // given
+        CountDownLatch periodicRead = new CountDownLatch(1);
+        CountDownLatch releasePeriodic = new CountDownLatch(1);
+        List<String> writes = Collections.synchronizedList(new ArrayList<>());
+        given(transactionManager.getTransaction(any())).willReturn(new SimpleTransactionStatus());
+        given(memberships.findEmergencyRecipients(null)).willAnswer(invocation -> {
+            periodicRead.countDown();
+            releasePeriodic.await(5, TimeUnit.SECONDS);
+            return List.of(new EmergencyRecipientRow(1L, "시니어", null, 101L, 201L, "removed-guardian-token"),
+                    new EmergencyRecipientRow(1L, "시니어", null, 102L, 202L, "kept-guardian-token"));
+        });
+        given(memberships.findEmergencyRecipients(10L)).willReturn(
+                List.of(new EmergencyRecipientRow(1L, "시니어", null, 102L, 202L, "kept-guardian-token")));
+        given(seniors.findSeniorMemberIds(null)).willReturn(List.of(1L));
+        given(seniors.findSeniorMemberIds(10L)).willReturn(List.of(1L));
+        given(redis.opsForValue()).willReturn(values);
+        willAnswer(invocation -> writes.add(invocation.getArgument(1)))
+                .given(values).set(eq("fcm:degraded:recipients:1"), anyString(), any(Duration.class));
+        EmergencyRecipientSnapshotService service = service();
+        TransactionSynchronization afterCommit;
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.refreshFamilyAfterCommit(10L);
+            afterCommit = TransactionSynchronizationManager.getSynchronizations().getFirst();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        Thread periodic = new Thread(service::refreshAll);
+        Thread committed = new Thread(afterCommit::afterCommit);
+
+        // when
+        periodic.start();
+        assertThat(periodicRead.await(5, TimeUnit.SECONDS)).isTrue();
+        committed.start();
+        awaitBlockedOrDone(committed);
+        releasePeriodic.countDown();
+        periodic.join(5000);
+        committed.join(5000);
+
+        // then
+        assertThat(writes).hasSize(2);
+        assertThat(writes.getLast()).contains("kept-guardian-token").doesNotContain("removed-guardian-token");
+    }
+
+    /** 커밋 후 갱신 스레드가 락에서 기다리기 시작했거나(락 있음) 이미 끝났을 때(락 없음)까지 기다린다. */
+    private static void awaitBlockedOrDone(Thread thread) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            Thread.State state = thread.getState();
+            if (state == Thread.State.WAITING || state == Thread.State.TERMINATED) {
+                return;
+            }
+            Thread.sleep(5);
+        }
     }
 
     private EmergencyRecipientSnapshotService service() {
