@@ -27,6 +27,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final JwtChannelInterceptor jwtChannelInterceptor;
     private final FamilyTopicOutboundInterceptor familyTopicOutboundInterceptor;
     private final ThreadPoolTaskExecutor websocketInboundExecutor;
+    private final ThreadPoolTaskExecutor websocketOutboundExecutor;
 
     private TaskScheduler messageBrokerTaskScheduler;
 
@@ -66,6 +67,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
+        // 지정하지 않으면 Spring Boot가 유일한 실행기였던 수신 실행기를 응답에도 써, 응답이 수신 대기열을 한 번 더 기다렸다(#782).
+        registration.taskExecutor(websocketOutboundExecutor);
         registration.interceptors(familyTopicOutboundInterceptor);
     }
 }

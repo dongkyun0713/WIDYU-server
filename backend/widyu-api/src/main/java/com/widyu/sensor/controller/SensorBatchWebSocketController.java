@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.security.PrincipalDetails;
+import com.widyu.global.websocket.WebSocketWorkDispatcher;
 import com.widyu.sensor.application.SensorBatchService;
 import com.widyu.sensor.dto.response.SensorBatchResult;
 import com.widyu.sensor.dto.response.SensorBatchResultResponse;
@@ -12,10 +13,10 @@ import java.io.IOException;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
@@ -24,24 +25,39 @@ import org.springframework.stereotype.Controller;
  * REST와 같이 원문 바이트를 그대로 서비스에 넘긴다. 재직렬화 지점을 두면 S3에 저장한 내용이
  * 앱이 보낸 본문과 바이트 단위로 달라진다(지시서 B2).
  * 원시 센서값은 어떤 로그 레벨에도 남기지 않는다(정책 1.6.7).
+ * S3 업로드가 최대 5초 걸리므로 센서 전용 실행기에서 처리하고 ACK는 처리 후 발신 세션에만 보낸다(LLD-0091).
  */
 @Slf4j
 @Controller
 @RequiredArgsConstructor
 public class SensorBatchWebSocketController {
 
+    private static final String API = "SensorBatchWebSocketController.ingestBatch";
+    private static final String ACK_DESTINATION = "/queue/sensor/result";
+
     private final SensorBatchService sensorBatchService;
     private final ObjectMapper objectMapper;
+    private final WebSocketWorkDispatcher workDispatcher;
+    private final TaskExecutor websocketSensorExecutor;
 
     @MessageMapping("/sensor/batches/send")
-    @SendToUser(destinations = "/queue/sensor/result", broadcast = false)
-    public SensorBatchResultResponse ingestBatch(
+    public void ingestBatch(
             Message<byte[]> message,
             SimpMessageHeaderAccessor headerAccessor
     ) {
         Long memberId = resolveMemberId(headerAccessor.getUser());
+        String sessionId = headerAccessor.getSessionId();
         byte[] payload = message.getPayload();
 
+        workDispatcher.dispatch(websocketSensorExecutor, API, headerAccessor, () -> workDispatcher.sendToSession(
+                memberId.toString(), sessionId, ACK_DESTINATION, process(memberId, payload)));
+    }
+
+    /**
+     * 센서 실행기에서 돈다. 저장 결과 또는 검증 실패 {@code REJECTED} ACK를 돌려주고,
+     * 그 밖의 예외는 던져 발신 세션 /user/queue/errors로 가게 한다.
+     */
+    public SensorBatchResultResponse process(Long memberId, byte[] payload) {
         try {
             return sensorBatchService.ingest(memberId, payload);
         } catch (BusinessException e) {

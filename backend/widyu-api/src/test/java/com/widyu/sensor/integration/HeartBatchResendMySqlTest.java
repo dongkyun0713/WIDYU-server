@@ -69,7 +69,6 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -366,12 +365,12 @@ class HeartBatchResendMySqlTest {
                 + " heldFirst=" + heldOutcomes + " copies=" + copyOutcomes + " " + totals);
     }
 
-    /** 운영 WebSocket 컨트롤러를 그대로 부른다. 컨트롤러 밖으로 나온 예외는 REST·WebSocket 처리기가 무엇을 돌려주는지로 바꾼다. */
+    /** 운영 WebSocket 컨트롤러의 처리 메서드를 그대로 부른다. 컨트롤러 밖으로 나온 예외는 REST·WebSocket 처리기가 무엇을 돌려주는지로 바꾼다. */
     private String sendBatch(Long memberId, byte[] payload) {
         SimpMessageHeaderAccessor accessor = accessor(memberId);
         try {
-            SensorBatchResultResponse response = sensorBatchController.ingestBatch(
-                    MessageBuilder.withPayload(payload).build(), accessor);
+            // 운영에서는 센서 실행기가 이 메서드를 부른다(LLD-0091). 수신 스레드 넘김을 건너뛰고 처리 결과만 본다.
+            SensorBatchResultResponse response = sensorBatchController.process(memberId, payload);
             return "ACK:" + response.result();
         } catch (Exception e) {
             return surface(e, accessor);

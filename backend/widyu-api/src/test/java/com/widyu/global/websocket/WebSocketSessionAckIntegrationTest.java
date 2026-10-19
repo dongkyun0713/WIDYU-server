@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,6 +56,7 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.user.UserDestinationMessageHandler;
 import org.springframework.messaging.support.ExecutorChannelInterceptor;
 import org.springframework.messaging.support.ExecutorSubscribableChannel;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.MimeTypeUtils;
@@ -66,7 +68,7 @@ import org.springframework.web.socket.sockjs.client.WebSocketTransport;
 import software.amazon.awssdk.services.s3.S3Client;
 
 /**
- * 실제 STOMP 클라이언트(SockJS)로 요청 응답이 어느 세션에 도착하는지 센다(LLD-0088 AC4·AC5·AC7).
+ * 실제 STOMP 클라이언트(SockJS)로 요청 응답이 어느 세션에 도착하는지 센다(LLD-0088 AC4·AC5·AC7, LLD-0091 AC2·AC3).
  * 인터셉터·브로커·컨트롤러는 실제 빈이고, 토큰 저장소·회원 활성 확인·업무 서비스만 대역이다.
  * 각 시나리오는 `[MEASURE]` 한 줄로 수신 수를 남긴 뒤 단언한다.
  */
@@ -84,7 +86,10 @@ import software.amazon.awssdk.services.s3.S3Client;
         "coolsms.from-phone-number=01000000000",
         "coolsms.verification-code-length=6",
         "coolsms.verification-code-ttl=300",
-        "coolsms.message-template=인증번호: {code}"
+        "coolsms.message-template=인증번호: {code}",
+        // 라우팅을 보는 테스트라 연속 전송 N건이 모두 대기열에 들어가게 한다. 과부하 거절은 WebSocketWorkDispatcherTest가 본다.
+        "websocket.executor.heart.queue-capacity=1000",
+        "websocket.executor.sensor.queue-capacity=1000"
 })
 @DisplayName("WebSocket 요청 응답 세션 라우팅 통합 테스트")
 class WebSocketSessionAckIntegrationTest {
@@ -117,6 +122,13 @@ class WebSocketSessionAckIntegrationTest {
 
     @Autowired private JwtTokenProvider jwtTokenProvider;
     @Autowired @Qualifier("clientInboundChannel") private ExecutorSubscribableChannel clientInboundChannel;
+    @Autowired @Qualifier("clientOutboundChannel") private ExecutorSubscribableChannel clientOutboundChannel;
+    @Autowired @Qualifier("websocketInboundExecutor") private ThreadPoolTaskExecutor websocketInboundExecutor;
+    @Autowired @Qualifier("websocketOutboundExecutor") private ThreadPoolTaskExecutor websocketOutboundExecutor;
+
+    /** 업무 서비스 대역이 실행된 스레드 이름(번호 제외). 느린 처리가 전용 실행기에서 도는지 본다(LLD-0091 AC2). */
+    private final Set<String> heartThreads = ConcurrentHashMap.newKeySet();
+    private final Set<String> sensorThreads = ConcurrentHashMap.newKeySet();
 
     @LocalServerPort private int port;
 
@@ -141,11 +153,14 @@ class WebSocketSessionAckIntegrationTest {
             int heart = client.received(HEART_ACK).size();
             int location = client.received(LOCATION_ACK).size();
             int sensor = client.received(SENSOR_ACK).size();
-            System.out.printf("[MEASURE] S1 token-only single session N=%d heart ack=%d/%d location ack=%d/%d sensor ack=%d/%d%n",
-                    N, heart, N, location, N, sensor, N);
+            System.out.printf("[MEASURE] S1 token-only single session N=%d heart ack=%d/%d location ack=%d/%d sensor ack=%d/%d "
+                            + "heart threads=%s sensor threads=%s%n",
+                    N, heart, N, location, N, sensor, N, heartThreads, sensorThreads);
             assertThat(heart).isEqualTo(N);
             assertThat(location).isEqualTo(N);
             assertThat(sensor).isEqualTo(N);
+            assertThat(heartThreads).containsOnly("websocketHeart-");
+            assertThat(sensorThreads).containsOnly("websocketSensor-");
         }
     }
 
@@ -278,6 +293,14 @@ class WebSocketSessionAckIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("응답 채널은 수신 실행기가 아닌 응답 전용 실행기를 쓴다")
+    void 응답_채널은_응답_전용_실행기를_쓴다() {
+        // when / then
+        assertThat(clientInboundChannel.getExecutor()).isSameAs(websocketInboundExecutor);
+        assertThat(clientOutboundChannel.getExecutor()).isSameAs(websocketOutboundExecutor);
+    }
+
     /** 업무 서비스 대역이 받은 회원 ID. 컨트롤러가 어느 회원으로 요청을 처리했는지 보여준다. */
     private List<Long> processedMemberIds() {
         List<Long> memberIds = new ArrayList<>();
@@ -300,6 +323,7 @@ class WebSocketSessionAckIntegrationTest {
         given(activeMemberValidator.isActive(anyLong())).willReturn(true);
         given(heartRateService.processHeartRate(anyLong(), any(HeartRateSingleRequest.class)))
                 .willAnswer(invocation -> {
+                    heartThreads.add(threadPrefix());
                     HeartRateSingleRequest request = invocation.getArgument(1);
                     return HeartRateStatusResponse.of(invocation.getArgument(0), HeartRateStatus.NORMAL,
                             request.heartRate(), request.measuredAt());
@@ -312,10 +336,15 @@ class WebSocketSessionAckIntegrationTest {
                 });
         given(sensorBatchService.ingest(anyLong(), any(byte[].class)))
                 .willAnswer(invocation -> {
+                    sensorThreads.add(threadPrefix());
                     JsonNode root = JSON.readTree(invocation.getArgument(1, byte[].class));
                     return SensorBatchResultResponse.of(root.get("batch_id").asText(), root.get("seq").asLong(),
                             SensorBatchResult.STORED);
                 });
+    }
+
+    private static String threadPrefix() {
+        return Thread.currentThread().getName().replaceAll("\\d+$", "");
     }
 
     /** 기대 수신 수에 닿거나 시간이 지나면, 늦게 오는 교차 전달까지 세도록 수신 수가 멈출 때까지 기다린다. */
