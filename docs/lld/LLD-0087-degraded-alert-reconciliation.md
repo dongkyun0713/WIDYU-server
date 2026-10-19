@@ -71,7 +71,7 @@ DB 변경 없음. 보정 기록(JSON, LLD-0086 §5.4에서 적재)은 `guardianI
 ### 5.3 PR #773 리뷰 보완
 
 1. **Redis 명령 타임아웃.** `application-redis.yml`의 `spring.data.redis`에 `timeout: ${REDIS_COMMAND_TIMEOUT:3s}`를 추가한다. outbox `claim`의 표식 조회가 행 잠금 안에서 도는데 Redis가 무응답이면 Lettuce 기본 60초를 기다린다. 3초면 fail-open이 실제로 「빨리 포기」가 된다. 앱 전체 Redis 명령에 적용되므로 PR 본문에 영향 범위(refresh token·위치·인증 한도·스트림)를 적는다. 기존 Redis 게이트 테스트가 이 값에 영향받지 않는지 확인한다.
-2. **UK 충돌은 저하 경로가 아니다.** `HeartRateService.processHeartRate`의 두 번째 catch에서 `DataIntegrityViolationException`(같은 `measured_at` 동시 재전송)은 저하 경로로 보내지 않고 그대로 던진다(기존 동작 유지). 첫 번째 catch(회원 확인·중복 확인)는 그대로 둔다. `HeartRateServiceTest`에 케이스 추가.
+2. **UK 충돌은 저하 경로가 아니다.** `HeartRateService.processHeartRate`의 두 번째 catch에서 `DataIntegrityViolationException`(같은 `measured_at` 동시 재전송)은 저하 경로로 보내지 않고 그대로 던진다(기존 동작 유지). 첫 번째 catch(회원 확인·중복 확인)는 그대로 둔다. `HeartRateServiceTest`에 케이스 추가. (LLD-0089에서 UK 충돌은 재확인 후 현재 상태 응답으로 대체)
 3. **저하 모드 수신자 범위를 ADR에 적는다.** ADR-0040 「결정」에 한 항목을 추가한다: 「저하 모드에서는 사건(본인확인·2단계)을 열 수 없으므로 안전 알림을 받는 모든 보호자에게 즉시 보낸다. 정상 경로의 방장 1명·본인확인 우선(ADR-0038·0039)과 다르며, 장애 중에는 늦은 알림보다 넓은 알림을 택한다.」 트레이드오프에도 한 줄 추가. 사용자가 방장으로 좁히기를 원하면 스냅샷 JPQL에 방장 조건만 더하면 되므로 그 사실도 적는다.
 
 ### 5.4 장애 주입 측정 테스트 (`DegradedAlertOutageMeasurementTest`)

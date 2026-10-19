@@ -85,13 +85,27 @@ public class HeartRateService {
                     detection.emergency()
             );
         } catch (DataIntegrityViolationException exception) {
-            // 같은 measured_at 동시 재전송의 UK 충돌은 DB 장애가 아니다. 기존처럼 전파한다(LLD-0087 5.3).
+            // 같은 measured_at 동시 재전송의 UK 충돌은 DB 장애가 아니라 저하 경로로 보내지 않는다(LLD-0087 5.3).
+            // 먼저 저장한 요청이 있으면 순차 재전송과 같은 현재 상태를 준다. 행이 없으면 다른 무결성 오류다(LLD-0089).
+            if (isStored(memberId, request.measuredAt(), exception)) {
+                return getHeartRateStatus(memberId);
+            }
             throw exception;
         } catch (DataAccessException | TransactionException exception) {
             return respondWithoutDatabase(memberId, request, detection, exception);
         }
 
         return HeartRateStatusResponse.from(result);
+    }
+
+    /** 재확인 조회까지 실패하면 원래 무결성 예외를 던진다. 조용히 삼키지 않는다. */
+    private boolean isStored(Long memberId, LocalDateTime measuredAt, DataIntegrityViolationException cause) {
+        try {
+            return heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt);
+        } catch (RuntimeException recheckFailure) {
+            cause.addSuppressed(recheckFailure);
+            throw cause;
+        }
     }
 
     private DetectionResult detect(Long memberId, HeartRateSingleRequest request) {

@@ -1,6 +1,7 @@
 package com.widyu.heart.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -40,6 +41,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClientException;
 
@@ -435,6 +438,102 @@ class HeartRateBatchServiceTest {
         assertThat(outcome.skipped()).isEqualTo(2);
         then(decisionRecordPersistenceService).should(never()).save(any());
         then(heartRateAnomalyDetector).should(never()).detect(anyLong(), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("동시 재전송이 같은 시각을 먼저 저장해 UK 충돌하면 그 샘플을 건너뛰고 나머지를 저장한다")
+    void 동시_재전송이_먼저_저장한_샘플은_건너뛰고_나머지를_저장한다() {
+        // given
+        Member member = member();
+        // 첫 샘플: 조회 없음 → 저장 충돌 → 재확인 있음. 둘째 샘플: 조회 없음.
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
+                .willReturn(false, true, false);
+        given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
+                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", REASON));
+        willThrow(new DataIntegrityViolationException("uk_heart_event_member_time"))
+                .willDoNothing()
+                .given(heartRatePersistenceService).saveBatchSample(
+                        any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
+
+        // when
+        HeartRateBatchService.BatchOutcome outcome = service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(
+                        sample(71, FIRST_TS_MS, "HIGH"),
+                        sample(72, FIRST_TS_MS + 997, "HIGH")),
+                System.currentTimeMillis());
+
+        // then
+        // 늦은 요청은 실패가 아니다. 배치 행 UK 처리로 DUPLICATE가 된다(LLD-0089).
+        assertThat(outcome.stored()).isEqualTo(1);
+        assertThat(outcome.skipped()).isEqualTo(1);
+        then(heartRatePersistenceService).should().updateLatestResult(
+                eq(MEMBER_ID), eq(HeartRateStatus.NORMAL), eq(72), any());
+    }
+
+    @Test
+    @DisplayName("동시 재전송이 먼저 저장한 샘플은 정상 판정 건수에 넣지 않는다")
+    void 동시_재전송이_먼저_저장한_샘플은_정상_판정_건수에_넣지_않는다() {
+        // given
+        Member member = member();
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
+                .willReturn(false, true, false);
+        given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
+                .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", REASON));
+        willThrow(new DataIntegrityViolationException("uk_heart_event_member_time"))
+                .willDoNothing()
+                .given(heartRatePersistenceService).saveBatchSample(
+                        any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
+
+        // when
+        service().storeAndAssess(
+                member, BATCH_ID, RUN_ID, List.of(
+                        sample(71, FIRST_TS_MS, "HIGH"),
+                        sample(72, FIRST_TS_MS + 997, "HIGH")),
+                System.currentTimeMillis());
+
+        // then
+        // AI는 두 번 판정했지만 저장된 것은 하나다. 먼저 저장한 요청이 이미 그 판정을 셌다.
+        assertThat(meterRegistry.get("heart.decision").tag("output", "NO_ALERT").counter().count())
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("무결성 오류 뒤 재확인에서 행이 없으면 원래 예외를 던진다")
+    void 무결성_오류_뒤_행이_없으면_원래_예외를_던진다() {
+        // given
+        Member member = member();
+        givenNoExistingSamples();
+        DataIntegrityViolationException integrityError = new DataIntegrityViolationException("fk_heart_event_member");
+        willThrow(integrityError).given(heartRatePersistenceService).saveBatchSample(
+                any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
+
+        // when & then
+        // UK가 아닌 무결성 오류는 건너뛸 근거가 없다(LLD-0089 AC6).
+        assertThatThrownBy(() -> service().storeAndAssess(
+                member, BATCH_ID, null, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
+                System.currentTimeMillis()))
+                .isSameAs(integrityError);
+    }
+
+    @Test
+    @DisplayName("무결성 오류 뒤 재확인 조회가 실패하면 원래 예외에 재확인 실패를 덧붙여 던진다")
+    void 무결성_오류_뒤_재확인이_실패하면_원래_예외를_던진다() {
+        // given
+        Member member = member();
+        DataIntegrityViolationException integrityError = new DataIntegrityViolationException("uk_heart_event_member_time");
+        DataAccessResourceFailureException recheckFailure = new DataAccessResourceFailureException("연결 끊김");
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
+                .willReturn(false)
+                .willThrow(recheckFailure);
+        willThrow(integrityError).given(heartRatePersistenceService).saveBatchSample(
+                any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
+
+        // when & then
+        assertThatThrownBy(() -> service().storeAndAssess(
+                member, BATCH_ID, null, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
+                System.currentTimeMillis()))
+                .isSameAs(integrityError)
+                .hasSuppressedException(recheckFailure);
     }
 
     private HeartRateBatchService service() {

@@ -690,23 +690,50 @@ class HeartRateServiceTest {
     }
 
     @Test
-    @DisplayName("같은 측정 시각 동시 재전송으로 저장이 UK 충돌하면 저하 경로로 보내지 않고 그대로 던진다")
-    void 같은_측정시각_UK충돌은_저하경로로_보내지_않고_그대로_던진다() {
+    @DisplayName("동시 재전송이 같은 측정 시각을 먼저 저장해 UK 충돌하면 저하 경로 없이 현재 상태를 반환한다")
+    void 동시_재전송이_먼저_저장해_UK충돌하면_현재_상태를_반환한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 7);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        // 처음 조회는 비어 있고, 충돌 뒤 재확인에서는 먼저 온 요청의 행이 보인다.
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false, true);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willThrow(new DataIntegrityViolationException("uk_heart_event_member_time"));
+        given(heartRateResultRepository.findByMemberId(memberId))
+                .willReturn(Optional.of(HeartRateResult.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt)));
+
+        // when
+        HeartRateStatusResponse response = heartRateService.processHeartRate(memberId, request);
+
+        // then
+        assertThat(response).isEqualTo(
+                HeartRateStatusResponse.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
+        then(degradedEmergencyAlertService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("무결성 오류 뒤 재확인에서 행이 없으면 저하 경로로 보내지 않고 그대로 던진다")
+    void 무결성_오류_뒤_행이_없으면_저하경로로_보내지_않고_그대로_던진다() {
         // given
         Long memberId = 1L;
         LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 16, 9, 0, 6);
         HeartRateSingleRequest request = HeartRateSingleRequest.of(187, measuredAt, "서울시", "ACTIVE");
         Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
-        DataIntegrityViolationException duplicate = new DataIntegrityViolationException("uk_heart_rate_event");
+        DataIntegrityViolationException integrityError = new DataIntegrityViolationException("fk_heart_rate_event");
         given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
         given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
         given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
                 .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
         given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
-                .willThrow(duplicate);
+                .willThrow(integrityError);
 
         // when & then
-        assertThatThrownBy(() -> heartRateService.processHeartRate(memberId, request)).isSameAs(duplicate);
+        assertThatThrownBy(() -> heartRateService.processHeartRate(memberId, request)).isSameAs(integrityError);
         then(degradedEmergencyAlertService).shouldHaveNoInteractions();
     }
 
