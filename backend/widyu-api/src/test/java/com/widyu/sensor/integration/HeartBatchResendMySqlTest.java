@@ -14,13 +14,18 @@ import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.response.ApiResponseTemplate;
 import com.widyu.global.security.PrincipalDetails;
 import com.widyu.global.websocket.WebSocketExceptionHandler;
+import com.widyu.heart.HeartRateEmergency;
+import com.widyu.heart.HeartRateEvent;
 import com.widyu.heart.HeartRateStatus;
+import com.widyu.heart.application.HeartEventConflict;
 import com.widyu.heart.application.HeartRateAnomalyDetector;
 import com.widyu.heart.application.HeartRateAnomalyDetector.DetectionResult;
 import com.widyu.heart.application.HeartRateService;
 import com.widyu.heart.dto.request.HeartRateMeasurement;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
+import com.widyu.heart.repository.HeartRateEmergencyRepository;
+import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
@@ -155,6 +160,8 @@ class HeartBatchResendMySqlTest {
     @Autowired private MemberFcmTokenRepository tokens;
     @Autowired private CollectionRunRepository runs;
     @Autowired private RunDeviceAssignmentRepository assignments;
+    @Autowired private HeartRateEventRepository heartEvents;
+    @Autowired private HeartRateEmergencyRepository heartEmergencies;
 
     private final AtomicReference<Hold> hold = new AtomicReference<>();
 
@@ -296,6 +303,49 @@ class HeartBatchResendMySqlTest {
         assertThat(sequentialOutcomes).isEqualTo(Map.of(ok, 2 * r));
         assertThat(concurrentFirst).isEqualTo(Map.of(ok, r));
         assertThat(concurrentSecond).isEqualTo(Map.of(ok, r));
+    }
+
+    @Test
+    @DisplayName("MySQL이 보고한 제약 이름으로 심박 행 UK 충돌과 위급 행 UK 충돌을 가른다")
+    void MySQL_제약_이름으로_심박_UK_충돌을_가른다() throws Exception {
+        // given
+        printDatabaseEvidence();
+        Senior senior = seedSenior();
+        LocalDateTime measuredAt = toSeoul(senior.baseTsMs());
+
+        // when
+        DataIntegrityViolationException eventError = insertTwice(() -> heartEvents.save(HeartRateEvent.of(
+                members.getReferenceById(senior.memberId()), 72, measuredAt, HeartRateStatus.NORMAL, "HIGH", null)));
+        DataIntegrityViolationException emergencyError = insertTwice(() -> heartEmergencies.save(
+                HeartRateEmergency.of(members.getReferenceById(senior.memberId()), 182, measuredAt, null)));
+
+        // then
+        System.out.println("[MEASURE] scenario=constraint_name heartEvent=" + constraintName(eventError)
+                + " heartEmergency=" + constraintName(emergencyError));
+        // 두 UK 모두 (member_id, measured_at)이다. 이름으로만 심박 행 충돌을 가린다(#789).
+        assertThat(HeartEventConflict.violatesMemberTimeUk(eventError)).isTrue();
+        assertThat(HeartEventConflict.violatesMemberTimeUk(emergencyError)).isFalse();
+    }
+
+    /** 같은 행을 트랜잭션 둘로 나눠 두 번 저장하고 두 번째의 무결성 예외를 돌려준다. */
+    private DataIntegrityViolationException insertTwice(Runnable insert) {
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        transaction.executeWithoutResult(status -> insert.run());
+        try {
+            transaction.executeWithoutResult(status -> insert.run());
+        } catch (DataIntegrityViolationException e) {
+            return e;
+        }
+        throw new AssertionError("UK 충돌이 나지 않았습니다.");
+    }
+
+    private static String constraintName(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
+                return violation.getConstraintName();
+            }
+        }
+        return null;
     }
 
     /**
