@@ -334,7 +334,7 @@ class WebSocketSessionAckIntegrationTest {
                     return LocationUpdateResponse.of(invocation.getArgument(1), tag, null,
                             37.5, 127.0, LocalDateTime.now(), "OTHER", null);
                 });
-        given(sensorBatchService.ingest(anyLong(), any(byte[].class)))
+        given(sensorBatchService.ingest(anyLong(), any(byte[].class), anyLong()))
                 .willAnswer(invocation -> {
                     sensorThreads.add(threadPrefix());
                     JsonNode root = JSON.readTree(invocation.getArgument(1, byte[].class));

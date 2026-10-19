@@ -121,8 +121,14 @@ public class SensorBatchService {
     }
 
     public SensorBatchResultResponse ingest(Long memberId, byte[] payload) {
-        long serverReceivedAtMs = System.currentTimeMillis();
+        return ingest(memberId, payload, System.currentTimeMillis());
+    }
 
+    /**
+     * WebSocket 경로는 수신 스레드에서 잡은 수신 시각을 넘긴다. 실행기 대기 시간이 server_received에
+     * 섞이면 수신 시각이 실제보다 늦어진다(정책 1.1.5, LLD-0091).
+     */
+    public SensorBatchResultResponse ingest(Long memberId, byte[] payload, long serverReceivedAtMs) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 

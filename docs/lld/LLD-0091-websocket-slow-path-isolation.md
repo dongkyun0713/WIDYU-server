@@ -112,6 +112,8 @@ STOMP 목적지·페이로드 변경 없음. 바뀌는 것은 시점과 과부�
 
 **테스트(AC3·AC5).** `WebSocketSessionAckIntegrationTest`(심박·센서가 각 실행기 스레드에서만 실행, 수신·응답 채널 실행기 지정 확인 추가. 라우팅 테스트라 대기열을 1000으로 올려 연속 전송이 거절되지 않게 함), `WebSocketWorkDispatcherTest`(가득 찬 실행기에 넘친 3건 → 오류 3건·카운터 3·처리 2건, 작업 중 서버 오류 → 세션 오류 큐·`[WS_EXCEPTION]` 한 줄, 4xx → WARN), `WebSocketExecutorConfigTest`(고정 스레드·AbortPolicy, 종료 시 진행 중 작업 완료), 컨트롤러 단위 테스트 갱신. `verify.sh --base 87b9c18f` 통과(widyu-api 1502건, 실패 0, 건너뜀 28).
 
+**수신 시각 보정(2026-10-19).** 센서 배치 WebSocket 경로는 `server_received_at_ms`를 실행기 작업 시작이 아니라 수신 스레드에서 넘기기 전에 잡아 `SensorBatchService.ingest(memberId, payload, serverReceivedAtMs)`로 넘긴다. 실행기 대기가 수신 시각에 섞이지 않는다(정책 1.1.5). REST는 서비스 진입 시각 그대로이고 `accepted`·`persisted`는 처리 시점이다. 심박 단건 경로는 수신 시각을 기록하지 않아 해당 없음.
+
 **남은 위험.** 앱이 `TEMPORARILY_BUSY`를 받고 재전송하는지 미확인(8절). 대기열을 넘는 몰림(심박 208건, 센서 508건 이상 동시)은 이제 과부하 오류가 된다(이전에는 수신 대기열 1000과 CallerRuns가 받았다). 센서 S3 지연 부하 측정과 실제 서버 측정은 하지 않았다.
 
 ## 8. 영향 범위 / 마이그레이션

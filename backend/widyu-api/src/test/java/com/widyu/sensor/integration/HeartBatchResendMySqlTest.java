@@ -370,7 +370,7 @@ class HeartBatchResendMySqlTest {
         SimpMessageHeaderAccessor accessor = accessor(memberId);
         try {
             // 운영에서는 센서 실행기가 이 메서드를 부른다(LLD-0091). 수신 스레드 넘김을 건너뛰고 처리 결과만 본다.
-            SensorBatchResultResponse response = sensorBatchController.process(memberId, payload);
+            SensorBatchResultResponse response = sensorBatchController.process(memberId, payload, System.currentTimeMillis());
             return "ACK:" + response.result();
         } catch (Exception e) {
             return surface(e, accessor);

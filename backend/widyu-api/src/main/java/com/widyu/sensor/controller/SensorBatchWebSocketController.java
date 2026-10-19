@@ -45,21 +45,23 @@ public class SensorBatchWebSocketController {
             Message<byte[]> message,
             SimpMessageHeaderAccessor headerAccessor
     ) {
+        // 실행기 대기 전에 잡아야 server_received가 실제 수신 시각이 된다(정책 1.1.5).
+        long serverReceivedAtMs = System.currentTimeMillis();
         Long memberId = resolveMemberId(headerAccessor.getUser());
         String sessionId = headerAccessor.getSessionId();
         byte[] payload = message.getPayload();
 
         workDispatcher.dispatch(websocketSensorExecutor, API, headerAccessor, () -> workDispatcher.sendToSession(
-                memberId.toString(), sessionId, ACK_DESTINATION, process(memberId, payload)));
+                memberId.toString(), sessionId, ACK_DESTINATION, process(memberId, payload, serverReceivedAtMs)));
     }
 
     /**
      * 센서 실행기에서 돈다. 저장 결과 또는 검증 실패 {@code REJECTED} ACK를 돌려주고,
      * 그 밖의 예외는 던져 발신 세션 /user/queue/errors로 가게 한다.
      */
-    public SensorBatchResultResponse process(Long memberId, byte[] payload) {
+    public SensorBatchResultResponse process(Long memberId, byte[] payload, long serverReceivedAtMs) {
         try {
-            return sensorBatchService.ingest(memberId, payload);
+            return sensorBatchService.ingest(memberId, payload, serverReceivedAtMs);
         } catch (BusinessException e) {
             if (ErrorCode.FILE_UPLOAD_FAILED.equals(e.getErrorCode())) {
                 // S3 실패는 재전송으로 복구된다. ACK 없이 /user/queue/errors로 보낸다.
