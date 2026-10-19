@@ -30,6 +30,7 @@ import com.widyu.medicine.MedicineSchedule;
 import com.widyu.medicine.MedicineScheduleDetail;
 import com.widyu.walk.Walk;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -210,10 +211,12 @@ public class GoalHomeService {
         );
     }
 
-    // 알람 시간 오름차순 정렬된 목록 기준. 오늘 남은 알람이 없으면 마지막 알람을 그대로 노출한다.
+    // 알람 시간 오름차순 목록에서 인증 마감 전인 첫 일정을 노출하고, 모두 마감됐으면 마지막 일정을 유지한다.
     static MedicineSchedule findNextSchedule(List<MedicineSchedule> schedules, LocalTime now) {
         return schedules.stream()
-                .filter(s -> s.getAlarmTime().isAfter(now))
+                // 시간 차이로 비교해 자정을 넘는 마감 시각이 LocalTime에서 순환하지 않도록 한다.
+                .filter(s -> Duration.between(s.getAlarmTime(), now)
+                        .compareTo(Duration.ofMinutes(MedicationStatus.ALLOWED_WINDOW_MINUTES)) <= 0)
                 .min(Comparator.comparing(MedicineSchedule::getAlarmTime))
                 .orElse(schedules.getLast());
     }

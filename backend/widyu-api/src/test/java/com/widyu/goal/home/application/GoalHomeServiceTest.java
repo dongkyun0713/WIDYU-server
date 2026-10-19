@@ -34,6 +34,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -229,6 +231,89 @@ class GoalHomeServiceTest {
         // then
         assertThat(nextSchedule.getId()).isEqualTo(2L);
         assertThat(nextSchedule.getAlarmTime()).isEqualTo(LocalTime.of(13, 0));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"16:42, 1", "17:12, 1", "17:34, 1", "17:42, 1",
+            "17:42:00.000000001, 2", "17:43, 2", "21:39, 2", "22:10, 2"})
+    @DisplayName("현재 일정을 조회하면 알람 후 30분까지 유지하고 마감 후 다음 일정을 반환한다")
+    void 인증_마감까지_현재_일정을_유지한다(LocalTime now, long expectedId) {
+        // given
+        Member member = mock(Member.class);
+        List<MedicineSchedule> schedules = List.of(
+                alarmSchedule(member, 1L, LocalTime.of(17, 12)),
+                alarmSchedule(member, 2L, LocalTime.of(21, 39)));
+
+        // when
+        MedicineSchedule selected = GoalHomeService.findNextSchedule(schedules, now);
+
+        // then
+        assertThat(selected.getId()).isEqualTo(expectedId);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"17:34, 1", "17:42, 1", "17:42:00.000000001, 2", "17:55:00.000000001, 3"})
+    @DisplayName("인증창이 겹치면 마감되지 않은 일정 중 가장 이른 알람을 반환한다")
+    void 인증창이_겹치면_가장_이른_일정을_유지한다(LocalTime now, long expectedId) {
+        // given
+        Member member = mock(Member.class);
+        List<MedicineSchedule> schedules = List.of(
+                alarmSchedule(member, 1L, LocalTime.of(17, 12)),
+                alarmSchedule(member, 2L, LocalTime.of(17, 25)),
+                alarmSchedule(member, 3L, LocalTime.of(21, 39)));
+
+        // when
+        MedicineSchedule selected = GoalHomeService.findNextSchedule(schedules, now);
+
+        // then
+        assertThat(selected.getId()).isEqualTo(expectedId);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"00:05, 1", "00:10, 1", "00:40, 1", "00:40:00.000000001, 2", "23:59, 2"})
+    @DisplayName("자정 근처에 조회하면 오늘 일정의 인증 마감을 날짜 순환 없이 비교한다")
+    void 자정_근처에도_오늘_일정의_마감을_비교한다(LocalTime now, long expectedId) {
+        // given
+        Member member = mock(Member.class);
+        List<MedicineSchedule> schedules = List.of(
+                alarmSchedule(member, 1L, LocalTime.of(0, 10)),
+                alarmSchedule(member, 2L, LocalTime.of(23, 50)));
+
+        // when
+        MedicineSchedule selected = GoalHomeService.findNextSchedule(schedules, now);
+
+        // then
+        assertThat(selected.getId()).isEqualTo(expectedId);
+    }
+
+    @Test
+    @DisplayName("인증 마감이 자정을 넘는 알람이 여러 개면 오늘 가장 이른 알람을 유지한다")
+    void 인증_마감이_자정을_넘어도_더_이른_일정을_유지한다() {
+        // given
+        Member member = mock(Member.class);
+        List<MedicineSchedule> schedules = List.of(
+                alarmSchedule(member, 1L, LocalTime.of(23, 40)),
+                alarmSchedule(member, 2L, LocalTime.of(23, 50)));
+
+        // when
+        MedicineSchedule selected = GoalHomeService.findNextSchedule(schedules, LocalTime.of(23, 55));
+
+        // then
+        assertThat(selected.getId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("오늘 유효한 복약 일정이 없으면 복약 카드 정보를 반환하지 않는다")
+    void 오늘_일정이_없으면_복약_정보는_null이다() {
+        // given
+        Member member = mock(Member.class);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+
+        // when
+        SeniorGoalHomeResponse response = goalHomeService.getSeniorGoalHome();
+
+        // then
+        assertThat(response.medicine()).isNull();
     }
 
     @Test
