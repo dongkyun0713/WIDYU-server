@@ -17,6 +17,7 @@ import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -52,10 +53,22 @@ public class AlbumFacadeImpl implements AlbumFacade {
                 prep.hasVideos());
 
         if (prep.hasVideos()) {
-            albumVideoProcessingService.processVideosAsync(albumId, currentMember.getId(), prep.videoEntries());
+            submitVideoProcessing(albumId, currentMember.getId(), prep);
         }
 
         return AlbumUploadAcceptedResponse.from(albumId);
+    }
+
+    private void submitVideoProcessing(Long albumId, Long memberId, AlbumFileService.AsyncUploadPreparation prep) {
+        try {
+            albumVideoProcessingService.processVideosAsync(albumId, memberId, prep.videoEntries());
+        } catch (TaskRejectedException e) {
+            // 영상 실행기가 가득 차면 PROCESSING 앨범·사진·임시 파일을 지우고 재시도를 안내한다
+            log.warn("영상 처리 대기열 포화로 업로드 거절: albumId={}", albumId);
+            albumFileService.discardAsyncUpload(prep);
+            albumService.deleteAlbumBySystem(albumId);
+            throw new BusinessException(ErrorCode.TEMPORARILY_BUSY);
+        }
     }
 
     @Override
