@@ -3,9 +3,11 @@ package com.widyu.global.config;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.beans.factory.ObjectProvider;
@@ -103,7 +105,7 @@ public class AsyncConfig implements AsyncConfigurer {
 
     private ThreadPoolTaskExecutor boundedExecutor(String threadNamePrefix, int poolSize, int queueCapacity,
                                                    int awaitSeconds, RejectedExecutionHandler rejectionHandler) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        ThreadPoolTaskExecutor executor = new BoundedShutdownExecutor();
         executor.setCorePoolSize(poolSize);
         executor.setMaxPoolSize(poolSize);
         executor.setQueueCapacity(queueCapacity);
@@ -131,5 +133,25 @@ public class AsyncConfig implements AsyncConfigurer {
 
     private void countRejection(String executorName) {
         meterRegistry.ifAvailable(registry -> registry.counter(REJECTED_METRIC, "name", executorName).increment());
+    }
+
+    /**
+     * 종료 대기에 실제 상한을 둔다. Spring은 {@code awaitTerminationSeconds}가 지나도 경고만 남기고 실행 중 작업을
+     * 끊지 않아, 긴 영상 처리와 대기열이 남으면 비데몬 실행기 스레드가 JVM 종료를 막는다. 대기 시간이 지나면
+     * 실행 중 작업을 중단하고 대기열 작업을 버린 뒤 그 수를 남긴다(LLD-0092 6절).
+     */
+    static class BoundedShutdownExecutor extends ThreadPoolTaskExecutor {
+
+        @Override
+        public void shutdown() {
+            super.shutdown();
+            ThreadPoolExecutor executor = getThreadPoolExecutor();
+            if (executor.isTerminated()) {
+                return;
+            }
+            List<Runnable> dropped = executor.shutdownNow();
+            log.warn("비동기 실행기 종료 대기 시간이 지나 남은 작업을 중단합니다: threadNamePrefix={}, droppedQueued={}",
+                    getThreadNamePrefix(), dropped.size());
+        }
     }
 }
