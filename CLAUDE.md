@@ -59,7 +59,14 @@ WIDYU는 시니어(부모)와 보호자(자녀·가족)가 사진·영상을 공
 
 Java 파일 수정 시 `on-file-edit.sh` 훅이 `scripts/harness/validate-java-rules.sh`로 아래 **훅이 차단하는 규칙 6개**를 검사합니다. 라인 단위 규칙은 HEAD 대비 **추가된 라인만** 봅니다(기존 코드의 위반은 무관한 수정을 막지 않습니다. 파일 전체 검사는 `HARNESS_FULL_FILE=1`).
 
-응답 종료 시에는 `on-stop.sh`가 정적 규칙 → `compileJava` → Codex 시맨틱 검수를 순서대로 실행합니다. 같은 diff는 두 번 검수하지 않고, `auth`·`pay`·`global/security` 변경은 크기와 무관하게 항상 Codex 검수를 거칩니다.
+응답 종료 시에는 `on-stop.sh`가 정적 규칙 → `compileJava` → Codex 시맨틱 검수를 순서대로 실행합니다. 같은 diff는 두 번 검수하지 않고, `auth`·`pay`·`global/security` 변경은 크기와 무관하게 항상 Codex 검수를 거칩니다. 훅 입력의 `cwd`가 같은 저장소의 다른 worktree면 그 worktree의 미커밋 변경을 봅니다.
+
+**push·PR 게이트** (LLD-0093): 커밋된 변경과 서브에이전트 작업은 종료 훅이 놓칠 수 있어, `git push`·`gh pr create` 직전에 `pre-bash-guard.sh`가 Codex 검수 기록을 확인합니다. 브랜치가 `upstream/develop`(없으면 `origin/develop`)과의 merge-base 이후 `backend/*/src/main/java/`를 바꿨다면 HEAD에 대한 검수 기록이 있어야 합니다.
+
+- 커밋을 마친 뒤 그 작업 트리에서 `bash scripts/harness/codex-review.sh --base "$(git merge-base upstream/develop HEAD)"`를 실행합니다. 판정은 `<git-dir>/widyu-codex-review/<HEAD SHA>`에, 감사 이벤트는 원본 체크아웃의 `.claude/audit/`에 남습니다. 커밋을 더하면 HEAD가 바뀌어 다시 검수해야 합니다
+- 기록 없음·BLOCKER는 차단, Codex 실행 실패(FAILED)는 경고 후 통과합니다. BLOCKER를 검토 끝에 수용할 때만 `WIDYU_CODEX_ACCEPT="<사유>" git push ...`로 통과시키며 사유가 감사 로그에 남습니다
+- 서브에이전트는 출력 없이 600초가 지나면 중단됩니다. Codex 검수·`verify.sh`·전체 Gradle 테스트처럼 긴 명령은 백그라운드로 실행하고 출력 파일을 확인합니다
+- 훅은 원본 체크아웃의 스크립트로 실행되므로, 이 게이트는 원본 체크아웃이 최신 develop을 받은 뒤부터 적용됩니다
 
 작업 순서:
 

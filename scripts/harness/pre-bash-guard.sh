@@ -25,6 +25,13 @@
 # 판정할 수 없는 조각은 막지 않고 넘긴다. 막으려는 대상은 적대적 우회가 아니라
 # 평범한 사고이고, 보안 경계는 ADR-0018 대로 .gitignore 와 키 교체가 담당한다.
 #
+# push·PR 게이트 (LLD-0093): git push·gh pr create 의 대상 작업 트리가 기준 브랜치 이후
+# main 소스 Java 를 바꿨다면 HEAD 에 대한 Codex 커밋 범위 검수 기록(codex-review.sh --base)을
+# 요구한다. 기록 없음·BLOCKER 는 차단, FAILED(Codex 실행 실패)는 경고 후 통과(fail-open).
+# 대상 트리나 기준 ref 를 정하지 못하면 경고만 하고 통과시킨다(오탐보다 미탐).
+# 한계: 대상 트리의 HEAD 만 본다. 다른 브랜치를 refspec 으로 push 하거나
+# gh pr create --head 로 다른 브랜치를 지정하면 그 브랜치가 아니라 HEAD 를 확인한다.
+#
 # 판정부를 인용 heredoc(<<'PYEOF')으로 넘긴다. 셸이 내용을 건드리지 않으므로
 # 파이썬 안에서 따옴표를 자유롭게 쓸 수 있다. python3 -c 로 넣던 때는 이스케이프가
 # 꼬여 실제로 문법 오류를 냈다.
@@ -33,8 +40,10 @@ set -uo pipefail
 
 input="$(cat)"
 
-VERDICT="$(python3 - "$input" <<'PYEOF'
-import json, shlex, sys
+HARNESS_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+VERDICT="$(python3 - "$input" "$HARNESS_DIR" <<'PYEOF'
+import datetime, json, os, re, shlex, subprocess, sys
 
 try:
     data = json.loads(sys.argv[1])
@@ -136,7 +145,7 @@ def scan(text):
 
 
 def argv_of(segment):
-    """명령 단위 문자열에서 argv 를 뽑는다. 파싱 못 하면 None."""
+    """명령 단위 문자열에서 (앞쪽 환경변수 대입, argv) 를 뽑는다. 파싱 못 하면 None."""
     try:
         lx = shlex.shlex(segment, posix=True, punctuation_chars=True)
         lx.whitespace_split = True
@@ -144,7 +153,7 @@ def argv_of(segment):
     except ValueError:
         return None
 
-    argv, skip = [], False
+    argv, skip, env = [], False, {}
     for t in toks:
         if skip:
             skip = False; continue
@@ -154,12 +163,13 @@ def argv_of(segment):
 
     i = 0                                  # 앞쪽 환경변수 대입은 명령이 아니다
     while i < len(argv):
-        head = argv[i].split("=", 1)[0]
+        head, _, value = argv[i].partition("=")
         if "=" in argv[i] and head and (head[0].isalpha() or head[0] == "_"):
+            env[head] = value
             i += 1
         else:
             break
-    return argv[i:]
+    return env, argv[i:]
 
 
 def shorts(args):
@@ -238,11 +248,124 @@ def verdict(argv):
     return None
 
 
+JAVA_MAIN = re.compile(r"^backend/[^/]+/src/main/java/.+\.java$")
+REVIEW_SCRIPT = os.path.join(sys.argv[2], "codex-review.sh")
+
+
+def git_out(tree, *args):
+    try:
+        r = subprocess.run(["git", "-C", tree, *args], capture_output=True,
+                           text=True, timeout=5)
+    except Exception:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def gate_kind(argv):
+    """push·PR 생성이면 (종류, git -C 경로) 를, 아니면 (None, None) 을 돌려준다."""
+    name, args, tree = argv[0].rsplit("/", 1)[-1], argv[1:], None
+    if name == "git" and len(args) >= 2 and args[0] == "-C":
+        tree, args = args[1], args[2:]
+    if name == "git" and args[:1] == ["push"]:
+        rest = args[1:]
+        # 원격 브랜치 삭제와 드라이런은 커밋을 내보내지 않는다.
+        if shorts(rest) & set("dn") or longs(rest) & {"delete", "dry-run"}:
+            return None, None
+        return "git push", tree
+    if name == "gh" and args[:2] == ["pr", "create"]:
+        return "gh pr create", None
+    return None, None
+
+
+def audit(top, **fields):
+    try:
+        common = os.path.join(top, git_out(top, "rev-parse", "--git-common-dir"))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        out = os.path.join(os.path.dirname(os.path.abspath(common)), ".claude", "audit")
+        os.makedirs(out, exist_ok=True)
+        sid = data.get("session_id", "")
+        record = {"ts": now.isoformat(timespec="milliseconds"), "session_id": sid,
+                  "sid_prefix": sid[:8], "event": "codex_gate", **fields}
+        with open(os.path.join(out, "audit-" + now.strftime("%Y-%m") + ".jsonl"), "a") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def push_gate(env, argv, cwd):
+    kind, ctree = gate_kind(argv)
+    if not kind:
+        return None
+    tree = os.path.join(cwd, os.path.expanduser(os.path.expandvars(ctree))) if ctree else cwd
+
+    def skip(why):
+        sys.stderr.write(f"경고: Codex 검수 게이트를 건너뜁니다 — {why}\n")
+        return None
+
+    top = git_out(tree, "rev-parse", "--show-toplevel")
+    if not top:
+        return skip(f"git 작업 트리를 찾지 못했습니다({tree})")
+    head = git_out(top, "rev-parse", "HEAD")
+    base = None
+    for ref in ("upstream/develop", "origin/develop"):
+        if git_out(top, "rev-parse", "--verify", "-q", ref + "^{commit}"):
+            base = git_out(top, "merge-base", ref, "HEAD")
+            break
+    if not head or not base:
+        return skip("기준 브랜치(upstream/develop·origin/develop)와의 merge-base 를 찾지 못했습니다")
+    changed = git_out(top, "diff", "--no-renames", "--name-only", base, "HEAD")
+    if changed is None:
+        return skip("기준 대비 변경 목록을 읽지 못했습니다")
+    if not any(JAVA_MAIN.match(p) and "/generated/" not in p for p in changed.splitlines()):
+        return None
+
+    verdict_ = None
+    git_dir = git_out(top, "rev-parse", "--absolute-git-dir")
+    try:
+        with open(os.path.join(git_dir, "widyu-codex-review", head)) as f:
+            verdict_ = json.load(f).get("verdict")
+    except Exception:
+        pass                               # 기록 없음·손상은 같은 취급
+    info = {"command": kind, "head": head, "base": base, "tree": top, "verdict": verdict_ or "NONE"}
+    review = f"cd {shlex.quote(top)} && bash {shlex.quote(REVIEW_SCRIPT)} --base {base}"
+
+    if verdict_ == "APPROVE":
+        audit(top, result="allow", **info)
+        return None
+    if verdict_ == "FAILED":
+        audit(top, result="allow_failed_open", **info)
+        sys.stderr.write("경고: 이 HEAD 의 Codex 검수가 실행 실패(FAILED)로 끝났습니다. "
+                         f"수동 검수가 필요합니다. 재시도: {review}\n")
+        return None
+    if verdict_ == "BLOCKER":
+        reason = env.get("WIDYU_CODEX_ACCEPT", "").strip()
+        if reason:
+            audit(top, result="accept", reason=reason[:200], **info)
+            return None
+        audit(top, result="block", **info)
+        return (f"HEAD({head[:12]})의 Codex 검수 판정이 BLOCKER 입니다. BLOCKER 를 고쳐 커밋한 뒤 "
+                f"다시 검수하세요: {review}  검토 끝에 수용한다면 명령 앞에 "
+                f"WIDYU_CODEX_ACCEPT=\"<사유>\" 를 붙이세요.")
+    audit(top, result="block", **info)
+    return (f"main 소스 Java 를 바꾼 브랜치를 Codex 검수 없이 {kind} 하려 합니다"
+            f"(HEAD {head[:12]}에 검수 기록 없음). 먼저 실행하세요: {review}  "
+            "(Codex 는 수 분 걸릴 수 있습니다. 서브에이전트는 백그라운드로 실행하세요)")
+
+
+cwd = data.get("cwd") or os.getcwd()
 for seg in scan(cmd):
-    argv = argv_of(seg)
-    if argv is None:
+    parsed = argv_of(seg)
+    if parsed is None:
         continue          # 판정 불가한 조각은 막지 않는다
+    env, argv = parsed
     msg = verdict(argv)
+    if msg:
+        print(msg)
+        sys.exit(2)
+    if argv and argv[0] == "cd":           # 같은 명령의 앞선 cd 가 대상 작업 트리를 정한다
+        cwd = os.path.join(cwd, os.path.expanduser(os.path.expandvars(argv[1] if len(argv) > 1 else "~")))
+        continue
+    msg = push_gate(env, argv, cwd) if argv else None
     if msg:
         print(msg)
         sys.exit(2)

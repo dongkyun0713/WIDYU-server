@@ -61,6 +61,32 @@ with open(out, 'a') as f:
 fi
 
 SID_PREFIX="${SESSION_ID:0:8}"
+
+# ─── 작업 트리 결정 (LLD-0093) ────────────────────────────────────────────────
+#
+# 스크립트는 원본 체크아웃($CLAUDE_PROJECT_DIR)에서 실행되지만 작업은 다른 worktree 에서
+# 일어날 수 있다. 훅 입력 cwd 가 같은 저장소(git-common-dir 이 같은)의 작업 트리면 그곳의
+# 미커밋 변경을 본다. 아니면 기존처럼 원본 체크아웃을 본다.
+# 상태·감사·제안 파일은 계속 원본 체크아웃의 .claude 아래에 둔다.
+WORK_DIR="$ROOT_DIR"
+HOOK_CWD=$(python3 -c "
+import json, sys
+try:
+    print(json.loads(sys.argv[1]).get('cwd') or '')
+except Exception:
+    print('')
+" "$STDIN_JSON" 2>/dev/null || true)
+if [[ -n "$HOOK_CWD" ]]; then
+  CAND=$(git -C "$HOOK_CWD" rev-parse --show-toplevel 2>/dev/null || true)
+  CAND_COMMON=$(git -C "${CAND:-/nonexistent}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  ROOT_COMMON=$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  if [[ -n "$CAND_COMMON" && "$CAND_COMMON" == "$ROOT_COMMON" ]]; then
+    WORK_DIR="$CAND"
+  fi
+fi
+# validate-java-rules.sh·codex-review.sh 는 호출 위치의 git 작업 트리를 본다.
+cd "$WORK_DIR" || exit 0
+
 STATE_FILE="$STATE_DIR/codex-round-${SID_PREFIX}.json"
 
 # ─── 헬퍼: 감사 로그 ─────────────────────────────────────────────────────────
@@ -137,7 +163,7 @@ json.dump(state, open(path, 'w'))
 # -z 로 NUL 구분 출력을 받는다. 기본 porcelain 은 공백·개행이 든 경로를 따옴표로
 # 감싸고 이스케이프해서, 줄 단위 파싱이 그런 경로를 조용히 빠뜨린다.
 _changed_java() {
-  git -C "$ROOT_DIR" status --porcelain -z --untracked-files=all 2>/dev/null \
+  git -C "$WORK_DIR" status --porcelain -z --untracked-files=all 2>/dev/null \
     | python3 -c "
 import sys
 data = sys.stdin.buffer.read().split(b'\0')
@@ -178,13 +204,13 @@ fi
 # 같아 해시가 일치하고, 직전 브랜치의 reviewed_hash 로 새 브랜치 검수를 건너뛴다.
 _diff_hash() {
   {
-    git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo "no-head"
-    git -C "$ROOT_DIR" diff HEAD -- '*src/main/java*.java'
+    git -C "$WORK_DIR" rev-parse HEAD 2>/dev/null || echo "no-head"
+    git -C "$WORK_DIR" diff HEAD -- '*src/main/java*.java'
     # untracked 신규 파일은 diff 에 안 잡히므로 내용을 직접 이어 붙인다.
     _changed_java | while IFS= read -r f; do
-      if ! git -C "$ROOT_DIR" ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      if ! git -C "$WORK_DIR" ls-files --error-unmatch "$f" >/dev/null 2>&1; then
         echo "--- $f"
-        cat "$ROOT_DIR/$f" 2>/dev/null
+        cat "$WORK_DIR/$f" 2>/dev/null
       fi
     done
   } 2>/dev/null | shasum -a 256 | cut -d' ' -f1
@@ -197,7 +223,7 @@ DIFF_HASH=$(_diff_hash)
 RULE_REPORT=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  OUT=$(bash "$ROOT_DIR/scripts/harness/validate-java-rules.sh" "$ROOT_DIR/$f" 2>&1)
+  OUT=$(bash "$ROOT_DIR/scripts/harness/validate-java-rules.sh" "$WORK_DIR/$f" 2>&1)
   RC=$?
   if [[ $RC -ne 0 ]]; then RULE_REPORT+="$OUT"$'\n'; fi
 done <<< "$CHANGED_JAVA"
@@ -257,7 +283,7 @@ fi
 # 결정적이고 warm 기준 ~7초. 컴파일도 안 되는 상태로 Codex(최대 480초)를 부르는 건
 # 순수 낭비이므로 여기서 먼저 거른다.
 
-if ! COMPILE_OUT=$("$ROOT_DIR/gradlew" -p "$ROOT_DIR" compileJava --console=plain -q 2>&1); then
+if ! COMPILE_OUT=$("$WORK_DIR/gradlew" -p "$WORK_DIR" compileJava --console=plain -q 2>&1); then
   # 포기한 diff 는 다시 막지 않는다. 카운터만 0으로 되돌리면 다음 정지에서
   # 같은 실패로 라운드 1부터 또 차단해 루프가 끝나지 않는다.
   if [[ "$(_read_state_field "compile_gave_up_hash" "")" == "$DIFF_HASH" ]]; then
@@ -295,7 +321,7 @@ _write_state_field "compile_round" 0
 
 # diff HEAD: staged+unstaged 모두 포함 (git diff 단독은 staged 누락 → 게이트 우회 구멍)
 # untracked 신규 파일은 numstat에 안 잡히지만 NEW_FILES=0 조건이 걸러줌
-DIFF_LOC=$(git -C "$ROOT_DIR" diff HEAD --numstat -- '*src/main/java*.java' 2>/dev/null \
+DIFF_LOC=$(git -C "$WORK_DIR" diff HEAD --numstat -- '*src/main/java*.java' 2>/dev/null \
   | grep -v '/generated/' \
   | awk '{a+=$1+$2} END{print a+0}')
 FILE_COUNT=$(echo "$CHANGED_JAVA" | grep -c . || true)
@@ -304,7 +330,7 @@ FILE_COUNT=$(echo "$CHANGED_JAVA" | grep -c . || true)
 # 공백이 든 경로의 신규 파일이 0개로 잡혀 소규모 변경 게이트로 검수가 새어나간다.
 NEW_FILES=$(echo "$CHANGED_JAVA" | while IFS= read -r f; do
   [ -n "$f" ] || continue
-  git -C "$ROOT_DIR" ls-files --error-unmatch "$f" >/dev/null 2>&1 || echo "$f"
+  git -C "$WORK_DIR" ls-files --error-unmatch "$f" >/dev/null 2>&1 || echo "$f"
 done | grep -c . || true)
 # 민감 경로는 실제 패키지명 기준이어야 한다. com.widyu.pay 를 'payment' 로 적으면
 # 결제 도메인 전체가 게이트를 그냥 통과한다.
