@@ -33,7 +33,7 @@ import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
-import com.widyu.heart.repository.HeartRateResultRepository;
+import com.widyu.heart.repository.HeartRateLatestResultWriter;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
@@ -96,7 +96,7 @@ class HeartRatePersistenceRetryIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private EntityManager entityManager;
     @SpyBean private HeartRateEmergencyRepository heartRateEmergencyRepository;
-    @MockBean private HeartRateResultRepository heartRateResultRepository;
+    @MockBean private HeartRateLatestResultWriter latestResultWriter;
     @MockBean private FcmOutboxDispatcher dispatcher;
     @MockBean private JPAQueryFactory queryFactory;
     @MockBean private MemberUtil memberUtil;
