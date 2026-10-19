@@ -266,20 +266,16 @@ public class WalkService {
                 continue;
             }
 
-            // 과거 날짜는 기록이 없으면 그날 목표가 없었던 것이므로 채우지 않는다.
-            // (기본 목표를 소급 적용하면 목표 설정 이전의 지난 날짜까지 오염됨)
-            if (date.isBefore(today)) {
-                continue;
+            // 미수신 날짜도 0걸음으로 반환하되 현재 기본 목표를 과거에 소급하지 않는다.
+            Integer goalSteps = null;
+            if (!date.isBefore(today)) {
+                goalSteps = defaultWalkGoal;
             }
-
-            if (defaultWalkGoal != null) {
-                // 오늘·미래 날짜는 기록이 없어도 defaultWalkGoal이 있으면 기본 목표로 반환
-                dailyData.add(WalkMonthlyResponse.WalkDaily.of(
-                        date.toString(),
-                        defaultWalkGoal,
-                        0
-                ));
-            }
+            dailyData.add(WalkMonthlyResponse.WalkDaily.of(
+                    date.toString(),
+                    goalSteps,
+                    0
+            ));
         }
 
         return dailyData;
