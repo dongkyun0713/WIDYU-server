@@ -21,6 +21,7 @@ import com.widyu.goal.walk.repository.WalkRepository;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -245,19 +246,27 @@ public class WalkService {
         Map<LocalDate, Walk> walkMap = walks.stream()
                 .collect(Collectors.toMap(Walk::getWalkDate, walk -> walk));
 
-        // defaultWalkGoal 확인
         Integer defaultWalkGoal = null;
         if (member.getSeniorProfile() != null && member.getSeniorProfile().hasDefaultWalkGoal()) {
             defaultWalkGoal = member.getSeniorProfile().getDefaultWalkGoal();
         }
 
+        // 목표를 처음 설정하거나 바꾸는 날에는 그날 기록이 반드시 생긴다(setOrUpdateGoal).
+        // 그래서 첫 기록 이전은 목표가 없던 날이고, 기록 사이 미수신 날의 목표는 다음 기록의 목표와 같다.
+        LocalDate firstWalkDate = walkRepository.findFirstByMemberOrderByWalkDateAsc(member)
+                .map(Walk::getWalkDate)
+                .orElse(null);
+        Integer nextGoal = walkRepository.findFirstByMemberAndWalkDateAfterOrderByWalkDateAsc(member, endDate)
+                .map(Walk::getGoalSteps)
+                .orElse(defaultWalkGoal);
+
         LocalDate today = LocalDate.now();
 
         List<WalkMonthlyResponse.WalkDaily> dailyData = new ArrayList<>();
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+        for (LocalDate date = endDate; !date.isBefore(startDate); date = date.minusDays(1)) {
             Walk walk = walkMap.get(date);
             if (walk != null) {
-                // Walk 기록이 있으면 실제 기록 반환
+                nextGoal = walk.getGoalSteps();
                 dailyData.add(WalkMonthlyResponse.WalkDaily.of(
                         date.toString(),
                         walk.getGoalSteps(),
@@ -266,19 +275,27 @@ public class WalkService {
                 continue;
             }
 
-            // 미수신 날짜도 0걸음으로 반환하되 현재 기본 목표를 과거에 소급하지 않는다.
-            Integer goalSteps = null;
-            if (!date.isBefore(today)) {
-                goalSteps = defaultWalkGoal;
-            }
             dailyData.add(WalkMonthlyResponse.WalkDaily.of(
                     date.toString(),
-                    goalSteps,
+                    goalForMissingDate(date, today, firstWalkDate, nextGoal, defaultWalkGoal),
                     0
             ));
         }
+        Collections.reverse(dailyData);
 
         return dailyData;
+    }
+
+    /** 기록 없는 날의 목표. 오늘·미래는 기본 목표, 첫 기록 이전은 목표 없음(null), 그 사이는 다음 기록의 목표. */
+    private Integer goalForMissingDate(LocalDate date, LocalDate today, LocalDate firstWalkDate,
+                                       Integer nextGoal, Integer defaultWalkGoal) {
+        if (!date.isBefore(today)) {
+            return defaultWalkGoal;
+        }
+        if (firstWalkDate == null || date.isBefore(firstWalkDate)) {
+            return null;
+        }
+        return nextGoal;
     }
 
     private Member getMember(Long memberId) {
