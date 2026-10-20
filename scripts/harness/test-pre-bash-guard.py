@@ -9,6 +9,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 GUARD = Path(__file__).with_name("pre-bash-guard.sh")
@@ -126,8 +127,15 @@ CASES = [
 ]
 
 
+# push·PR 게이트(LLD-0093)는 cwd 의 git 브랜치를 본다. 명령 판정 케이스가 실행 위치의
+# 브랜치 상태에 흔들리지 않게 git 저장소가 아닌 임시 디렉터리를 cwd 로 준다.
+# 게이트 자체는 test_codex_review_gate.py 가 임시 저장소로 검증한다.
+NEUTRAL_CWD = tempfile.mkdtemp(prefix="guard-cwd-")
+
+
 def run(cmd):
-    payload = json.dumps({"session_id": "t", "tool_input": {"command": cmd}})
+    payload = json.dumps({"session_id": "t", "cwd": NEUTRAL_CWD,
+                          "tool_input": {"command": cmd}})
     return subprocess.run(["bash", str(GUARD)], input=payload,
                           capture_output=True, text=True)
 
