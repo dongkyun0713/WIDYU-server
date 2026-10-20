@@ -23,6 +23,8 @@ import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
+import com.widyu.member.SeniorProfile;
+import com.widyu.walk.Walk;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -151,6 +153,85 @@ class GoalHomeServiceTest {
                 11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX));
         verify(walkRepository, times(1))
                 .findByMemberAndWalkDateBetweenOrderByWalkDateAsc(member, lastWeekStart, thisWeekEnd);
+    }
+
+    @Test
+    @DisplayName("걸음 수를 받지 못한 날도 걷기 목표가 있었으면 미달성으로 달성률 분모에 포함한다")
+    void 걸음_미수신_날도_걷기_목표를_분모에_포함한다() {
+        // given: 약 1건은 오늘 복용, 걸음 기록은 기간 내에 없음, 첫 걸음 기록은 지난주보다 앞섬
+        LocalDate today = LocalDate.now();
+        LocalDate thisWeekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        LocalDate thisWeekEnd = thisWeekStart.plusDays(6);
+        LocalDate lastWeekStart = thisWeekStart.minusWeeks(1);
+        Member member = mock(Member.class);
+        SeniorProfile seniorProfile = mock(SeniorProfile.class);
+        MedicineSchedule schedule = mock(MedicineSchedule.class);
+        MedicationProof proof = mock(MedicationProof.class);
+        Walk firstWalk = mock(Walk.class);
+
+        given(memberRepository.findById(11L)).willReturn(Optional.of(member));
+        given(member.getId()).willReturn(11L);
+        given(member.getSeniorProfile()).willReturn(seniorProfile);
+        given(seniorProfile.hasDefaultWalkGoal()).willReturn(true);
+        given(firstWalk.getWalkDate()).willReturn(lastWeekStart.minusDays(10));
+        given(walkRepository.findFirstByMemberOrderByWalkDateAsc(member)).willReturn(Optional.of(firstWalk));
+        given(schedule.getId()).willReturn(1L);
+        given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
+        given(proof.getMedicineSchedule()).willReturn(schedule);
+        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(today, java.time.LocalTime.NOON));
+        given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
+                member, Status.ACTIVE, lastWeekStart, thisWeekEnd)).willReturn(List.of(schedule));
+        given(medicationProofRepository.findByMemberIdAndDateRange(
+                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX)))
+                .willReturn(List.of(proof));
+        given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
+                member, lastWeekStart, thisWeekEnd)).willReturn(List.of());
+
+        // when
+        GuardianGoalStatsResponse response = goalHomeService.getGuardianGoalStats(11L);
+
+        // then: 오늘은 약 1/1 + 걷기 0/1 = 0.5 (걷기가 빠지면 1.0이 된다)
+        assertThat(response.todayGoalRate()).isEqualTo(0.5);
+        assertThat(response.thisWeekGoalRates()).filteredOn(rate -> rate != 0.0).containsExactly(0.5);
+    }
+
+    @Test
+    @DisplayName("첫 걸음 기록 이전 날짜는 걷기 목표 없이 약 복용만으로 달성률을 계산한다")
+    void 첫_걸음_기록_이전은_약_복용만_계산한다() {
+        // given: 기본 목표는 있지만 첫 걸음 기록이 이번 주 이후
+        LocalDate today = LocalDate.now();
+        LocalDate thisWeekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        LocalDate thisWeekEnd = thisWeekStart.plusDays(6);
+        LocalDate lastWeekStart = thisWeekStart.minusWeeks(1);
+        Member member = mock(Member.class);
+        SeniorProfile seniorProfile = mock(SeniorProfile.class);
+        MedicineSchedule schedule = mock(MedicineSchedule.class);
+        MedicationProof proof = mock(MedicationProof.class);
+        Walk firstWalk = mock(Walk.class);
+
+        given(memberRepository.findById(11L)).willReturn(Optional.of(member));
+        given(member.getId()).willReturn(11L);
+        given(member.getSeniorProfile()).willReturn(seniorProfile);
+        given(seniorProfile.hasDefaultWalkGoal()).willReturn(true);
+        given(firstWalk.getWalkDate()).willReturn(thisWeekEnd.plusDays(1));
+        given(walkRepository.findFirstByMemberOrderByWalkDateAsc(member)).willReturn(Optional.of(firstWalk));
+        given(schedule.getId()).willReturn(1L);
+        given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
+        given(proof.getMedicineSchedule()).willReturn(schedule);
+        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(today, java.time.LocalTime.NOON));
+        given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
+                member, Status.ACTIVE, lastWeekStart, thisWeekEnd)).willReturn(List.of(schedule));
+        given(medicationProofRepository.findByMemberIdAndDateRange(
+                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX)))
+                .willReturn(List.of(proof));
+        given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
+                member, lastWeekStart, thisWeekEnd)).willReturn(List.of());
+
+        // when
+        GuardianGoalStatsResponse response = goalHomeService.getGuardianGoalStats(11L);
+
+        // then
+        assertThat(response.todayGoalRate()).isEqualTo(1.0);
     }
 
     @Test
