@@ -31,27 +31,43 @@ public class WebSocketExceptionHandler {
             final HandlerMethod handlerMethod,
             final SimpMessageHeaderAccessor accessor
     ) {
-        final String destination = destinationOf(accessor);
-        final String actor = ApiRequestContext.actorOf(accessor.getUser());
+        return handle(exception, handlerName(handlerMethod), accessor.getDestination(),
+                ApiRequestContext.actorOf(accessor.getUser()));
+    }
+
+    /**
+     * 예외를 분류해 로그를 남기고 /user/queue/errors 응답 본문을 만든다. 전용 실행기에서 난 예외는
+     * {@code @MessageExceptionHandler}가 잡지 못해 {@link WebSocketWorkDispatcher}가 이 메서드를 직접 부른다(LLD-0091).
+     */
+    public Map<String, String> handle(
+            final Exception exception,
+            final String api,
+            final String destination,
+            final String actor
+    ) {
+        String resolvedDestination = destination;
+        if (resolvedDestination == null) {
+            resolvedDestination = NONE;
+        }
         if (isClientError(exception)) {
             log.warn("WebSocket 요청 거부: destination={}, actor={}, exceptionType={}",
-                    destination, actor, exception.getClass().getSimpleName());
+                    resolvedDestination, actor, exception.getClass().getSimpleName());
             return Map.of("error", exception.getClass().getSimpleName(), "message", messageOf(exception));
         }
-        log.error(toLogString(exception, handlerMethod, destination, actor));
+        log.error(toLogString(exception, api, resolvedDestination, actor));
         // 서버 오류의 내부 메시지는 클라이언트에 돌려주지 않는다(REST 500과 같은 기준).
         return Map.of("error", exception.getClass().getSimpleName(), "message", ErrorCode.INTERNAL_SERVER_ERROR.getMessage());
     }
 
     static String toLogString(
             final Exception exception,
-            final HandlerMethod handlerMethod,
+            final String api,
             final String destination,
             final String actor
     ) {
         return String.format(
                 "[WS_EXCEPTION] Api=%s Destination=%s Actor=%s ExceptionType=%s Message=%s StackTrace=%s",
-                handlerName(handlerMethod),
+                api,
                 destination,
                 actor,
                 exception.getClass().getName(),
@@ -72,13 +88,6 @@ public class WebSocketExceptionHandler {
             return "unknown";
         }
         return handlerMethod.getBeanType().getSimpleName() + "." + handlerMethod.getMethod().getName();
-    }
-
-    private static String destinationOf(final SimpMessageHeaderAccessor accessor) {
-        if (accessor.getDestination() == null) {
-            return NONE;
-        }
-        return accessor.getDestination();
     }
 
     private static String messageOf(final Exception exception) {

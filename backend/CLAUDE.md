@@ -49,6 +49,7 @@
   - 시니어 전송: `/app/heart-rate/send-single`(1건)
   - 보호자 구독 `/topic/heart-rate/{memberId}` / ACK `/user/queue/heart-rate/result`
   - 단건 경로만 지원하며 결과 ACK는 발신 세션에만 전달한다 → ADR-0017, LLD-0023
+  - WebSocket 심박·센서 처리는 수신 스레드가 아니라 전용 실행기(`WebSocketExecutorConfig`, `websocket.executor.*`)에서 돌고 ACK는 처리 후 `WebSocketWorkDispatcher.sendToSession`으로 보낸다. 대기열이 가득 차면 실행하지 않고 발신 세션 `/user/queue/errors`에 `TEMPORARILY_BUSY`를 보낸다. 작업 중 예외는 `WebSocketExceptionHandler.handle`로 같은 로그 형식을 남긴다 → LLD-0091
 - **위급 사이클**: 위험 감지 후 5분 유지, 그 안에 재감지되면 마지막 감지 기준 연장. "마지막 감지 + 5분" == "최근 5분 내 감지 존재"이므로 상태를 저장하지 않고 조회 윈도우로만 판정. **그래프 조회 범위 산정에만 사용**하며, `/emergency/recent`는 사이클과 무관하게 최근 15분 내 기록 유무만 반환
 - **조회 범위 규칙**: 그래프는 응급 화면이므로 events·max·min·firstEmergency가 **진행 중인 사이클 시작 5분 전 ~ 현재**. 사이클 없으면 빈 배열. `emergencyHistory`의 count·events는 전체 기간이지만 `totalDuration`은 현재 사이클 지속 시간(첫 감지~마지막 감지, 분). 갱신(`/graph/refresh`)은 `since` 지정 시 그 이후 신규 이벤트만, 미지정 시 최근 5개
 - **배치 v2(#646)는 sensor 파이프라인을 탄다**: `stream: "hr"`로 같은 endpoint에 오고 원문은 S3, 봉투는 `sensor_batch`, 샘플은 `heart_rate_event`(+`accuracy`·`batch_id`)에 저장된다 → ADR-0031, LLD-0047
@@ -67,7 +68,7 @@
 - **불변식**: 나노초 시각(`anchor_elapsed_ns`·`t0_elapsed_ns`)은 **JSON 문자열**로 받는다(number면 `SENSOR_PAYLOAD_INVALID`). `dt_ns`는 길이 n−1·`0 < dt ≤ 4294967295`, 값 배열은 n행 3열. 시계 다섯 값은 원본 그대로 두고 `measured_at_start/end_ms`만 서버가 환산
 - 가속도·자이로는 **한 배치에 오되 시간축이 독립**. `gyro: null`은 null로 저장(0 배열 금지 — AI가 정지로 읽는다). 생략인지 결측인지는 `collection_mode`로 가린다
 - 시각을 단계별로 남긴다: `server_received` → `accepted` → `persisted` = `model_available_at_server`. 하나로 합치지 않고 소급하지 않는다(정책 1.1.5)
-- S3 PUT은 수신 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. 서비스에 `@Transactional` 없음. 무결성 예외는 `findByBatchId` 재조회 후 원문 해시까지 같을 때만 `DUPLICATE`
+- S3 PUT은 처리 스레드에서 동기(`apiCallTimeout` 5s), 인덱스 INSERT는 그 뒤. WebSocket 경로의 처리 스레드는 센서 전용 실행기다(LLD-0091). 서비스에 `@Transactional` 없음. 무결성 예외는 `findByBatchId` 재조회 후 원문 해시까지 같을 때만 `DUPLICATE`
 - **원시 센서값을 어떤 로그 레벨에도 남기지 않는다** (정책 1.6.7). memberId·stream·seq·accN·gyroN·result만
 - 시계 매핑은 `clock_mapping` 테이블(기기 단위 UK `clock_mapping_id`). 같은 id에 다른 다섯 값·다른 기기면 409(`SENSOR_4090`). 등록은 S3 PUT 앞, 자기 트랜잭션 → LLD-0044
 - **수집 설정 하달**: `GET /api/v1/sensor/config`가 설정 전체와 호출자 기준 `collectionMode`를 준다. 모드는 **열린 회차 유무**로 정하고(있으면 research) 회차 열기·닫기가 곧 전환 수단이라 변경 API가 없다. 배치가 실어 보낸 `collection_mode`·`gyro_mode`·`fs_hz_requested`가 지시값과 다르면 `config_mismatch=true`로 표시만 하고 **거부하지 않는다** → LLD-0046
