@@ -450,7 +450,7 @@ class HeartRateBatchServiceTest {
                 .willReturn(false, true, false);
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", REASON));
-        willThrow(new DataIntegrityViolationException("uk_heart_event_member_time"))
+        willThrow(IntegrityViolationFixture.violating(IntegrityViolationFixture.HEART_EVENT_UK))
                 .willDoNothing()
                 .given(heartRatePersistenceService).saveBatchSample(
                         any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
@@ -479,7 +479,7 @@ class HeartRateBatchServiceTest {
                 .willReturn(false, true, false);
         given(heartRateAnomalyDetector.detect(eq(MEMBER_ID), any(), anyString()))
                 .willReturn(new DetectionResult(HeartRateStatus.NORMAL, false, "NORMAL", REASON));
-        willThrow(new DataIntegrityViolationException("uk_heart_event_member_time"))
+        willThrow(IntegrityViolationFixture.violating(IntegrityViolationFixture.HEART_EVENT_UK))
                 .willDoNothing()
                 .given(heartRatePersistenceService).saveBatchSample(
                         any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
@@ -498,17 +498,38 @@ class HeartRateBatchServiceTest {
     }
 
     @Test
-    @DisplayName("무결성 오류 뒤 재확인에서 행이 없으면 원래 예외를 던진다")
-    void 무결성_오류_뒤_행이_없으면_원래_예외를_던진다() {
+    @DisplayName("심박 UK 충돌 뒤 재확인에서 행이 없으면 원래 예외를 던진다")
+    void 심박_UK_충돌_뒤_행이_없으면_원래_예외를_던진다() {
         // given
         Member member = member();
         givenNoExistingSamples();
-        DataIntegrityViolationException integrityError = new DataIntegrityViolationException("fk_heart_event_member");
+        DataIntegrityViolationException integrityError = IntegrityViolationFixture.violating(IntegrityViolationFixture.HEART_EVENT_UK);
         willThrow(integrityError).given(heartRatePersistenceService).saveBatchSample(
                 any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
 
         // when & then
-        // UK가 아닌 무결성 오류는 건너뛸 근거가 없다(LLD-0089 AC6).
+        // 이름이 UK여도 행이 없으면 건너뛸 근거가 없다(LLD-0089 AC6).
+        assertThatThrownBy(() -> service().storeAndAssess(
+                member, BATCH_ID, null, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
+                System.currentTimeMillis()))
+                .isSameAs(integrityError);
+    }
+
+    @Test
+    @DisplayName("같은 트랜잭션의 다른 제약에 걸리면 그 사이 같은 시각 행이 생겼어도 원래 예외를 던진다")
+    void 다른_제약에_걸리면_같은_시각_행이_있어도_원래_예외를_던진다() {
+        // given
+        Member member = member();
+        // 첫 조회는 비어 있고, 이후에는 동시 요청이 저장한 행이 보이는 상황이다.
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
+                .willReturn(false, true);
+        DataIntegrityViolationException integrityError =
+                IntegrityViolationFixture.violating(IntegrityViolationFixture.HEART_EMERGENCY_UK);
+        willThrow(integrityError).given(heartRatePersistenceService).saveBatchSample(
+                any(), anyInt(), any(), any(), anyBoolean(), anyString(), anyString(), any());
+
+        // when & then
+        // 위급·판정 행의 실패를 중복으로 삼키면 알림이 빠진 채 DUPLICATE가 나간다(#789).
         assertThatThrownBy(() -> service().storeAndAssess(
                 member, BATCH_ID, null, List.of(sample(0, FIRST_TS_MS, "UNRELIABLE")),
                 System.currentTimeMillis()))
@@ -520,7 +541,7 @@ class HeartRateBatchServiceTest {
     void 무결성_오류_뒤_재확인이_실패하면_원래_예외를_던진다() {
         // given
         Member member = member();
-        DataIntegrityViolationException integrityError = new DataIntegrityViolationException("uk_heart_event_member_time");
+        DataIntegrityViolationException integrityError = IntegrityViolationFixture.violating(IntegrityViolationFixture.HEART_EVENT_UK);
         DataAccessResourceFailureException recheckFailure = new DataAccessResourceFailureException("연결 끊김");
         given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(eq(MEMBER_ID), any()))
                 .willReturn(false)

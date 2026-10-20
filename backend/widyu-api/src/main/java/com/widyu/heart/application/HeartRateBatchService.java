@@ -144,7 +144,8 @@ public class HeartRateBatchService {
      * 샘플을 저장하고, 같은 배치를 동시에 처리하던 요청이 이 시각을 먼저 저장했으면 false를 돌려준다.
      *
      * <p>위의 존재 조회와 이 저장 사이에 다른 요청이 끼어들면 UK (member_id, measured_at) 충돌로만
-     * 드러난다(LLD-0089). 행이 실제로 있을 때만 건너뛰고, 없으면 UK가 아닌 무결성 오류라 그대로 던진다.
+     * 드러난다(LLD-0089). 위반한 제약이 그 UK이고 행이 실제로 있을 때만 건너뛴다. 판정·위급 행의 다른 제약
+     * 위반은 그 사이 심박 행이 생겼어도 그대로 던진다.
      * 이 메서드는 트랜잭션 밖이고 {@code saveBatchSample}이 자기 트랜잭션이라 예외가 호출 지점에서 난다.
      */
     private boolean saveUnlessConcurrentlyStored(
@@ -155,20 +156,10 @@ public class HeartRateBatchService {
                     member, sample.bpm(), measuredAt, status, emergency, sample.accuracy(), batchId, decision);
             return true;
         } catch (DataIntegrityViolationException e) {
-            if (isStored(member.getId(), measuredAt, e)) {
+            if (HeartEventConflict.storedByConcurrentRequest(e, heartRateEventRepository, member.getId(), measuredAt)) {
                 return false;
             }
             throw e;
-        }
-    }
-
-    /** 재확인 조회까지 실패하면 원래 무결성 예외를 던진다. 조용히 삼키지 않는다. */
-    private boolean isStored(Long memberId, LocalDateTime measuredAt, DataIntegrityViolationException cause) {
-        try {
-            return heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt);
-        } catch (RuntimeException recheckFailure) {
-            cause.addSuppressed(recheckFailure);
-            throw cause;
         }
     }
 
