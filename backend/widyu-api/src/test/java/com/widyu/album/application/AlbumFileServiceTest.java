@@ -38,6 +38,26 @@ class AlbumFileServiceTest {
     private AlbumFileService albumFileService;
 
     @Test
+    @DisplayName("영상 처리를 시작하지 못한 업로드를 버리면 올린 사진과 영상 임시 파일을 지운다")
+    void 시작하지_못한_업로드를_버리면_사진과_임시_파일을_지운다() {
+        // given
+        File videoTemp = new File("source_video.mp4");
+        AlbumFileService.AsyncUploadPreparation prep = new AlbumFileService.AsyncUploadPreparation(
+                List.of("https://cdn/photo.jpg", ""),
+                java.util.Arrays.asList("https://cdn/photo.jpg", null),
+                java.util.Arrays.asList(null, null),
+                List.of(new AlbumVideoProcessingService.VideoEntry(1, videoTemp, "video.mp4", "video/mp4")));
+
+        // when
+        albumFileService.discardAsyncUpload(prep);
+
+        // then
+        then(s3Service).should().deleteFile("https://cdn/photo.jpg");
+        then(s3Service).should(never()).deleteFile("");
+        then(videoCompressionService).should().cleanupTempFile(videoTemp);
+    }
+
+    @Test
     @DisplayName("미디어 업로드 중 BusinessException이 발생하면 원본 errorCode를 보존한다")
     void 미디어_업로드_중_비즈니스_예외는_원본_errorCode를_보존한다() {
         // given

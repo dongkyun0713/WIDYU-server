@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.exception.SdkException;
 
@@ -159,6 +160,12 @@ public class AlbumUploadSessionFacadeImpl implements AlbumUploadSessionFacade {
             try {
                 albumVideoProcessingService.processStagedVideosAsync(
                         albumId, currentMember.getId(), toStagedEntries(session));
+            } catch (TaskRejectedException e) {
+                // 영상 실행기가 가득 차면 앨범·스테이징 객체·세션을 정리하고 재시도를 안내한다
+                log.warn("영상 처리 대기열 포화로 업로드 거절: sessionId={}, albumId={}", sessionId, albumId);
+                compensateAlbumCreation(session, copiedPhotoUrls, albumId);
+                deleteSessionQuietly(sessionId);
+                throw new BusinessException(ErrorCode.TEMPORARILY_BUSY);
             } catch (Exception e) {
                 log.error("영상 비동기 처리 제출 실패, 앨범 보상 삭제: sessionId={}, albumId={}, error={}",
                         sessionId, albumId, e.getMessage(), e);

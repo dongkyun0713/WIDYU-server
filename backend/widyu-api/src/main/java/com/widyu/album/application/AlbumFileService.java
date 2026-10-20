@@ -293,6 +293,17 @@ public class AlbumFileService {
         return tmp.toFile();
     }
 
+    /** 영상 처리를 시작하지 못한 업로드 준비물(먼저 올린 사진, 영상 임시 파일)을 지운다. */
+    public void discardAsyncUpload(AsyncUploadPreparation prep) {
+        List<String> photoUrls = prep.mediaUrls().stream()
+                .filter(url -> !url.isEmpty())
+                .toList();
+        cleanupUploadedFiles(photoUrls);
+        for (AlbumVideoProcessingService.VideoEntry entry : prep.videoEntries()) {
+            cleanupTemp(entry.tempFile());
+        }
+    }
+
     private void cleanupTemp(File f) {
         if (f == null) {
             return;

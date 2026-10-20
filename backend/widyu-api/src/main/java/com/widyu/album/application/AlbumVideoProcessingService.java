@@ -5,6 +5,7 @@ import com.widyu.album.repository.AlbumRepository;
 import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.config.AsyncConfig;
 import com.widyu.global.infrastructure.s3.S3DirectUploadService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,13 +41,13 @@ public class AlbumVideoProcessingService {
 
     public record StagedVideoEntry(int index, String objectKey, String originalFileName, String contentType) {}
 
-    @Async
+    @Async(AsyncConfig.ALBUM_VIDEO_EXECUTOR)
     @Transactional
     public void processVideosAsync(Long albumId, Long memberId, List<VideoEntry> videoEntries) {
         processVideos(albumId, memberId, videoEntries);
     }
 
-    @Async
+    @Async(AsyncConfig.ALBUM_VIDEO_EXECUTOR)
     @Transactional
     public void processStagedVideosAsync(Long albumId, Long memberId, List<StagedVideoEntry> stagedEntries) {
         List<VideoEntry> videoEntries = new ArrayList<>();

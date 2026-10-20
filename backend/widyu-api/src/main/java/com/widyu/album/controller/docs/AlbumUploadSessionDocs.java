@@ -227,6 +227,22 @@ public interface AlbumUploadSessionDocs {
                                             """
                             )
                     )
+            ),
+            @ApiResponse(
+                    responseCode = "503",
+                    description = "영상 처리 대기열이 가득 참. 앨범·업로드 세션·스테이징 파일은 정리되므로 업로드 세션 생성부터 다시 시도해야 함",
+                    content = @Content(
+                            examples = @ExampleObject(
+                                    name = "영상 처리 대기열 포화",
+                                    value = """
+                                            {
+                                              "code": "SRV_5031",
+                                              "message": "요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
             )
     })
     ResponseEntity<ApiResponseTemplate<AlbumUploadAcceptedResponse>> completeUpload(

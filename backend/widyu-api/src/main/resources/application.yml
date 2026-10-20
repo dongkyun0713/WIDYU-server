@@ -54,6 +54,21 @@ websocket:
       threads: ${WS_OUTBOUND_THREADS:4}
       queue-capacity: ${WS_OUTBOUND_QUEUE_CAPACITY:1000}
 
+# @Async 실행기 상한(LLD-0092). 운영 서버 1~2 vCPU, Hikari 커넥션 풀 기본 10 기준.
+async:
+  # 실행기를 지정하지 않은 @Async(위치 이벤트 등). 작업마다 DB 트랜잭션을 열므로 커넥션 2개까지만 쓴다.
+  # 대기열이 차면 버리고 WARN·async.executor.rejected 카운터를 남긴다(위치는 약 1초 뒤 다음 갱신이 같은 판정을 다시 한다).
+  default:
+    pool-size: ${ASYNC_DEFAULT_POOL_SIZE:2}
+    queue-capacity: ${ASYNC_DEFAULT_QUEUE_CAPACITY:100}
+    await-termination-seconds: ${ASYNC_DEFAULT_AWAIT_SECONDS:10}
+  # 영상 처리(FFmpeg 변환·썸네일, CPU 집약). 처리 중 DB 커넥션을 붙잡으므로 동시 2건으로 묶고,
+  # 대기열이 차면 업로드 요청에 503(TEMPORARILY_BUSY)을 돌려준다. 서버 경유 업로드(multipart)는 대기 중에도 영상 임시 파일을 디스크에 둔다.
+  album-video:
+    pool-size: ${ASYNC_ALBUM_VIDEO_POOL_SIZE:2}
+    queue-capacity: ${ASYNC_ALBUM_VIDEO_QUEUE_CAPACITY:10}
+    await-termination-seconds: ${ASYNC_ALBUM_VIDEO_AWAIT_SECONDS:30}
+
 swagger:
   version: ${SWAGGER_VERSION:0.0.1}
   url: ${SWAGGER_URL:http://localhost:8080}

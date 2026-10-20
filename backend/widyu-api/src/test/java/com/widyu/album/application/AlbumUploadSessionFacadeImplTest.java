@@ -36,6 +36,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -299,6 +300,38 @@ class AlbumUploadSessionFacadeImplTest {
         assertThatThrownBy(() -> albumUploadSessionFacade.completeUpload("session-1", request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FILE_UPLOAD_FAILED);
+        then(albumService).should().deleteAlbumBySystem(300L);
+        then(s3DirectUploadService).should().deleteObject(VIDEO_STAGING_KEY);
+        then(albumUploadSessionService).should().deleteSession("session-1");
+        then(albumUploadSessionService).should().releaseCompletionLock("session-1");
+    }
+
+    @Test
+    @DisplayName("영상 실행기가 가득 차 제출이 거절되면 앨범·스테이징·세션을 정리하고 재시도 가능한 503 예외를 던진다")
+    void 영상_실행기가_가득_차면_정리하고_재시도_가능한_예외가_발생한다() {
+        // given
+        Member member = memberWithId(1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        AlbumUploadSession session = AlbumUploadSession.createWaiting("session-1", 1L, List.of(videoSessionFile()));
+        given(albumUploadSessionService.getSession("session-1")).willReturn(session);
+        given(albumUploadSessionService.tryAcquireCompletionLock("session-1")).willReturn(true);
+        given(s3DirectUploadService.headObject(VIDEO_STAGING_KEY))
+                .willReturn(Optional.of(new S3DirectUploadService.ObjectMetadata(2048L, "video/mp4")));
+        given(albumService.saveAlbum(eq(member), any(), anyList(), anyList(), anyList(), eq(true)))
+                .willReturn(300L);
+        willThrow(new TaskRejectedException("album-video saturated"))
+                .given(albumVideoProcessingService).processStagedVideosAsync(eq(300L), eq(1L), anyList());
+
+        AlbumUploadCompleteRequest request = completeRequest(List.of(
+                new AlbumUploadCompleteRequest.CompletedFile(1, List.of(
+                        new AlbumUploadCompleteRequest.CompletedPart(1, "\"etag-1\"")))
+        ));
+
+        // when & then
+        assertThatThrownBy(() -> albumUploadSessionFacade.completeUpload("session-1", request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.TEMPORARILY_BUSY);
+        assertThat(ErrorCode.TEMPORARILY_BUSY.getHttpStatus().value()).isEqualTo(503);
         then(albumService).should().deleteAlbumBySystem(300L);
         then(s3DirectUploadService).should().deleteObject(VIDEO_STAGING_KEY);
         then(albumUploadSessionService).should().deleteSession("session-1");

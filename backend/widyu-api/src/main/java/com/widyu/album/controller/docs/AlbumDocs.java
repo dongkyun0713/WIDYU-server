@@ -114,6 +114,22 @@ public interface AlbumDocs {
                                             """
                             )
                     )
+            ),
+            @ApiResponse(
+                    responseCode = "503",
+                    description = "영상 처리 대기열이 가득 참. 앨범은 만들어지지 않으며 같은 요청을 잠시 후 다시 보내면 됨",
+                    content = @Content(
+                            examples = @ExampleObject(
+                                    name = "영상 처리 대기열 포화",
+                                    value = """
+                                            {
+                                              "code": "SRV_5031",
+                                              "message": "요청이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                                              "data": null
+                                            }
+                                            """
+                            )
+                    )
             )
     })
     ResponseEntity<ApiResponseTemplate<AlbumUploadAcceptedResponse>> uploadAlbum(@Valid AlbumUploadRequest request);
