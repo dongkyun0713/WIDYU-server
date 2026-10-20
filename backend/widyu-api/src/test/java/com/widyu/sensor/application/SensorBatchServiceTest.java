@@ -119,6 +119,26 @@ class SensorBatchServiceTest {
     }
 
     @Test
+    @DisplayName("호출자가 넘긴 수신 시각을 그대로 기록하고 수락·저장 시각은 처리 시점에 잡는다")
+    void 호출자가_넘긴_수신_시각을_그대로_기록한다() {
+        // given: WebSocket 수신 스레드가 잡은 시각. 실행기 대기로 처리 시작보다 앞선다.
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        byte[] payload = batch(ACC, "null").getBytes(UTF_8);
+        given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+        long receivedAtMs = System.currentTimeMillis() - 3_000L;
+        long processingStart = System.currentTimeMillis();
+
+        // when
+        service().ingest(MEMBER_ID, payload, receivedAtMs);
+
+        // then
+        SensorBatch saved = savedBatch();
+        assertThat(saved.getServerReceivedAtMs()).isEqualTo(receivedAtMs);
+        assertThat(saved.getAcceptedAtMs()).isGreaterThanOrEqualTo(processingStart);
+        assertThat(saved.getPersistedAtMs()).isGreaterThanOrEqualTo(saved.getAcceptedAtMs());
+    }
+
+    @Test
     @DisplayName("자이로가 null이면 자이로 축 컬럼이 null로 남고 0으로 채워지지 않는다")
     void 자이로가_null이면_자이로_축_컬럼이_null로_남고_0으로_채워지지_않는다() {
         // given

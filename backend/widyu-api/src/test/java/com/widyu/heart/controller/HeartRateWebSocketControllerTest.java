@@ -2,18 +2,23 @@ package com.widyu.heart.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import com.widyu.global.security.PrincipalDetails;
+import com.widyu.global.websocket.WebSocketExceptionHandler;
+import com.widyu.global.websocket.WebSocketWorkDispatcher;
 import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.application.HeartRateService;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import com.widyu.heart.dto.response.HeartRateStatusResponse;
 import com.widyu.member.MemberRole;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -24,9 +29,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -41,9 +47,6 @@ class HeartRateWebSocketControllerTest {
 
     @Mock private HeartRateService heartRateService;
     @Mock private SimpMessagingTemplate messagingTemplate;
-
-    @InjectMocks
-    private HeartRateWebSocketController heartRateWebSocketController;
 
     @Test
     @DisplayName("단건 처리 결과는 인증 회원의 현재 WebSocket 세션에 ACK로 전달한다")
@@ -63,7 +66,7 @@ class HeartRateWebSocketControllerTest {
         ArgumentCaptor<Map<String, Object>> headersCaptor = ArgumentCaptor.captor();
 
         // when
-        heartRateWebSocketController.sendHeartRate(request, headerAccessor);
+        controller(messagingTemplate, new SyncTaskExecutor()).sendHeartRate(request, headerAccessor);
 
         // then
         then(messagingTemplate).should().convertAndSend(
@@ -98,7 +101,7 @@ class HeartRateWebSocketControllerTest {
         ExecutorSubscribableChannel brokerChannel = new ExecutorSubscribableChannel();
         brokerChannel.subscribe(sent::add);
         HeartRateWebSocketController controller =
-                new HeartRateWebSocketController(heartRateService, new SimpMessagingTemplate(brokerChannel));
+                controller(new SimpMessagingTemplate(brokerChannel), new SyncTaskExecutor());
 
         // when
         controller.sendHeartRate(request, headerAccessor);
@@ -122,10 +125,39 @@ class HeartRateWebSocketControllerTest {
         headerAccessor.setSessionAttributes(Map.of("memberId", 42L));
 
         // when / then
-        assertThatThrownBy(() -> heartRateWebSocketController.sendHeartRate(request, headerAccessor))
+        assertThatThrownBy(() -> controller(messagingTemplate, new SyncTaskExecutor()).sendHeartRate(request, headerAccessor))
                 .isInstanceOf(IllegalStateException.class);
         then(heartRateService).shouldHaveNoInteractions();
         then(messagingTemplate).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("심박을 받으면 처리를 심박 실행기에 넘기고 바로 반환하며 ACK는 넘긴 작업이 끝난 뒤 보낸다")
+    void 심박을_받으면_처리를_심박_실행기에_넘기고_ACK는_작업이_끝난_뒤_보낸다() {
+        // given
+        Long memberId = 42L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(78, measuredAt, null, null);
+        PrincipalDetails principal = new PrincipalDetails(memberId, MemberRole.USER);
+        SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        headerAccessor.setSessionId("heart-session-1");
+        headerAccessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        given(heartRateService.processHeartRate(memberId, request))
+                .willReturn(HeartRateStatusResponse.of(memberId, HeartRateStatus.NORMAL, 78, measuredAt));
+        List<Runnable> handedOff = new ArrayList<>();
+        HeartRateWebSocketController controller = controller(messagingTemplate, handedOff::add);
+
+        // when
+        controller.sendHeartRate(request, headerAccessor);
+
+        // then
+        assertThat(handedOff).hasSize(1);
+        then(heartRateService).shouldHaveNoInteractions();
+        then(messagingTemplate).shouldHaveNoInteractions();
+
+        handedOff.get(0).run();
+        then(messagingTemplate).should().convertAndSendToUser(
+                eq("42"), eq("/queue/heart-rate/result"), any(), anyMap());
     }
 
     @Test
@@ -140,6 +172,13 @@ class HeartRateWebSocketControllerTest {
         // then
         assertThat(mappings)
                 .containsExactly("/heart-rate/send-single");
+    }
+
+    private HeartRateWebSocketController controller(SimpMessagingTemplate template, TaskExecutor heartExecutor) {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        WebSocketWorkDispatcher dispatcher =
+                new WebSocketWorkDispatcher(template, new WebSocketExceptionHandler(), registry);
+        return new HeartRateWebSocketController(heartRateService, template, dispatcher, heartExecutor, registry);
     }
 
     private String[] messageMapping(Method method) {

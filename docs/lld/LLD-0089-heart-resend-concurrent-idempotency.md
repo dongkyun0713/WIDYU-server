@@ -58,7 +58,7 @@ HTTP·STOMP 계약 변경 없음. 동시 재전송의 늦은 요청이 받는 �
 ## 6. 예외 / 에러 처리
 
 - 재확인 조회 자체가 실패하면 원래 `DataIntegrityViolationException`을 던진다(조용히 삼키지 않는다).
-- UK가 아닌 무결성 오류(FK 등)는 재확인에서 행이 없으므로 그대로 전파된다.
+- UK가 아닌 무결성 오류(FK, 판정·위급 행의 제약 등)는 재확인 없이 그대로 전파된다. 같은 시각 행이 있어도 마찬가지다(2026-10-19 축소, §7 참고).
 - 로그: 건너뛴 경합 샘플은 WARN 이하, memberId·batchId·건수만 남기고 bpm·판정 사유는 남기지 않는다(backend/CLAUDE.md 로그 규칙).
 
 ## 7. 인수조건 (Acceptance Criteria)
@@ -88,6 +88,11 @@ HTTP·STOMP 계약 변경 없음. 동시 재전송의 늦은 요청이 받는 �
 - Hibernate `SqlExceptionHelper`의 ERROR "Duplicate entry" 줄은 run당 140에서 445~455로 늘었다(`heart_rate_event` 325~335, `sensor_batch` 120). 애플리케이션 예외가 아니라 Hibernate가 SQL 오류마다 남기는 로그다. 새 WARN `심박 동시 재전송 샘플 건너뜀`은 run당 130~137줄이다.
 - 단위 테스트: `com.widyu.sensor.*`·`com.widyu.heart.*` 153건 통과, 실패 0, skip 4(MySQL 측정 테스트, `HEART_MYSQL_URL` 없음).
 - `bash scripts/harness/verify.sh --base 7c6915a4`: 규칙 검사 통과, `compileJava` 성공, `:backend:widyu-api:test` 1481건 실패 0·skip 17.
+
+**조건 축소 (2026-10-19, Claude, #789).** 병합 뒤 Codex 리뷰에서 2·4단계의 "무결성 오류 + 같은 시각 행 존재 = 중복" 판단이 너무 넓다는 지적이 나왔다. 같은 트랜잭션의 판정·위급 행이 다른 제약에 걸리고 그 사이 다른 요청이 심박 행을 저장했다면, 실제 오류를 중복으로 삼킨다. 이제 원인 사슬의 Hibernate `ConstraintViolationException#getConstraintName()`에 `uk_heart_event_member_time`이 들어 있을 때만(대소문자 무시) 행을 재확인하고, 다른 제약 위반은 행이 있어도 그대로 던진다. 판별은 `HeartEventConflict` 한 곳에서 하고 배치·단건 경로가 함께 쓴다.
+
+- 실제로 보고되는 이름: MySQL 9.0.1 `heart_rate_event.uk_heart_event_member_time`, H2 2.2.224 `PUBLIC.UK_HEART_EVENT_MEMBER_TIME_INDEX_1`. 위급 행 UK(`uk_heart_emergency_member_time`)는 컬럼이 같아도 걸리지 않는다(H2 `HeartEventConflictTest`, MySQL `HeartBatchResendMySqlTest` 제약 이름 케이스).
+- 같은 조건의 MySQL 재실행(R=20, 1회): S1·S2a·S2b·S3 실패 응답 0건, 행·위급·판정·사건·outbox 각 1/반복, S2a NO_ALERT 60으로 위 표와 같다. S2a AI 호출은 319(반복당 14~19)로, 실행마다 달라지는 값이다.
 
 ## 8. 영향 범위 / 마이그레이션
 

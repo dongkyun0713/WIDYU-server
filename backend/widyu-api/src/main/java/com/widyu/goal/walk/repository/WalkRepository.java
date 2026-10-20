@@ -40,6 +40,10 @@ public interface WalkRepository extends JpaRepository<Walk, Long> {
 
     boolean existsByMemberAndWalkDate(Member member, LocalDate walkDate);
 
+    Optional<Walk> findFirstByMemberOrderByWalkDateAsc(Member member);
+
+    Optional<Walk> findFirstByMemberAndWalkDateAfterOrderByWalkDateAsc(Member member, LocalDate walkDate);
+
     @Query("SELECT w FROM Walk w " +
            "WHERE w.walkDate = :date " +
            "AND w.actualSteps < w.goalSteps")
