@@ -294,7 +294,7 @@ public class GoalHomeService {
         Walk walk = periodData.walksByDate().get(date);
 
         int totalGoals = schedules.size();
-        if (walk != null) {
+        if (walk != null || periodData.hasDefaultWalkGoalOn(date)) {
             totalGoals++;
         }
 
@@ -360,7 +360,20 @@ public class GoalHomeService {
                 .stream()
                 .collect(Collectors.toMap(Walk::getWalkDate, walk -> walk));
 
-        return new GoalPeriodData(schedules, verifiedScheduleIdsByDate, walksByDate);
+        return new GoalPeriodData(schedules, verifiedScheduleIdsByDate, walksByDate, defaultWalkGoalStart(member));
+    }
+
+    /**
+     * 기록 없는 날에도 걷기 목표가 있었다고 볼 첫 날짜. 목표를 처음 설정하는 날에는 그날 기록이 생기므로
+     * 첫 기록 날짜부터이며, 기본 목표가 없으면 null이다(WalkService 월별 조회와 같은 기준).
+     */
+    private LocalDate defaultWalkGoalStart(Member member) {
+        if (member.getSeniorProfile() == null || !member.getSeniorProfile().hasDefaultWalkGoal()) {
+            return null;
+        }
+        return walkRepository.findFirstByMemberOrderByWalkDateAsc(member)
+                .map(Walk::getWalkDate)
+                .orElse(null);
     }
 
     private GuardianGoalHomeResponse.MedicineInfo getGuardianMedicineInfo(Member member, LocalDate today) {
@@ -491,8 +504,14 @@ public class GoalHomeService {
     private record GoalPeriodData(
             List<MedicineSchedule> schedules,
             Map<LocalDate, Set<Long>> verifiedScheduleIdsByDate,
-            Map<LocalDate, Walk> walksByDate
+            Map<LocalDate, Walk> walksByDate,
+            LocalDate defaultWalkGoalStart
     ) {
+
+        /** 걸음 기록이 없는 날에도 걷기 목표가 있었는지. 미수신이면 미달성으로 센다. */
+        private boolean hasDefaultWalkGoalOn(LocalDate date) {
+            return defaultWalkGoalStart != null && !date.isBefore(defaultWalkGoalStart);
+        }
     }
 
     private record GoalCounts(int total, int completed) {
