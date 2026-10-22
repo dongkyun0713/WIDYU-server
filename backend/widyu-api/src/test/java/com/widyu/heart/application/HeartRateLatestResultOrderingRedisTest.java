@@ -227,7 +227,8 @@ class HeartRateLatestResultOrderingRedisTest {
                 mock(HeartRateEmergencyRepository.class),
                 memberRepository,
                 mock(DecisionRecordRepository.class),
-                mock(ApplicationEventPublisher.class));
+                mock(ApplicationEventPublisher.class),
+                new SimpleMeterRegistry());
     }
 
     private static LocalDateTime latestMeasuredAt(HeartRateRedisFixture redis, Long memberId) {
