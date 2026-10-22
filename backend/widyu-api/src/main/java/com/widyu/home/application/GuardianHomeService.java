@@ -26,7 +26,6 @@ import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.walk.Walk;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -144,11 +143,8 @@ public class GuardianHomeService {
             return null;
         }
 
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
-
         Map<Long, MedicationProof> proofMap = medicationProofRepository
-                .findByMemberIdAndDateRange(senior.getId(), startOfDay, endOfDay)
+                .findByMemberIdAndDateRange(senior.getId(), today, today)
                 .stream()
                 .collect(Collectors.toMap(
                         p -> p.getMedicineSchedule().getId(),

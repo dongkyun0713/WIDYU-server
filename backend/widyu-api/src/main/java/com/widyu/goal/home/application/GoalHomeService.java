@@ -181,9 +181,6 @@ public class GoalHomeService {
             return null;
         }
 
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
-
         // 스케줄 수정·삭제로 오늘 유효 목록에서 빠진 버전의 인증은 제외한다 (takenCount가 totalCount를 넘지 않도록)
         Set<Long> scheduleIds = schedules.stream()
                 .map(MedicineSchedule::getId)
@@ -191,7 +188,7 @@ public class GoalHomeService {
 
         // 오늘 복용 인증 정보 (스케줄별 1건)
         Map<Long, MedicationProof> proofsByScheduleId = medicationProofRepository
-                .findByMemberIdAndDateRange(member.getId(), startOfDay, endOfDay)
+                .findByMemberIdAndDateRange(member.getId(), today, today)
                 .stream()
                 .filter(proof -> scheduleIds.contains(proof.getMedicineSchedule().getId()))
                 .collect(Collectors.toMap(
@@ -348,10 +345,10 @@ public class GoalHomeService {
                 .findEffectiveByMemberAndDateRange(member, Status.ACTIVE, startDate, endDate);
 
         Map<LocalDate, Set<Long>> verifiedScheduleIdsByDate = medicationProofRepository
-                .findByMemberIdAndDateRange(member.getId(), startDate.atStartOfDay(), endDate.atTime(LocalTime.MAX))
+                .findByMemberIdAndDateRange(member.getId(), startDate, endDate)
                 .stream()
                 .collect(Collectors.groupingBy(
-                        proof -> proof.getVerifiedAt().toLocalDate(),
+                        MedicationProof::getVerifiedDate,
                         Collectors.mapping(proof -> proof.getMedicineSchedule().getId(), Collectors.toSet())
                 ));
 
@@ -384,13 +381,11 @@ public class GoalHomeService {
             return null;
         }
 
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
         LocalDateTime now = LocalDateTime.now();
 
         // 오늘 복용 인증 정보 조회
         Map<Long, MedicationProof> proofMap = medicationProofRepository
-                .findByMemberIdAndDateRange(member.getId(), startOfDay, endOfDay)
+                .findByMemberIdAndDateRange(member.getId(), today, today)
                 .stream()
                 .collect(Collectors.toMap(
                         p -> p.getMedicineSchedule().getId(),

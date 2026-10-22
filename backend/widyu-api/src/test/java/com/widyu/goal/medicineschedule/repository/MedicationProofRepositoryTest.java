@@ -54,6 +54,16 @@ class MedicationProofRepositoryTest {
         return proof;
     }
 
+    // 지금은 저장 시 verifiedAt의 날짜로 채워지므로, 두 값이 다른 행은 직접 바꿔 만든다.
+    private void setVerifiedDate(MedicationProof proof, LocalDate verifiedDate) {
+        entityManager.getEntityManager()
+                .createNativeQuery("UPDATE medication_proof SET verified_date = ?1 WHERE id = ?2")
+                .setParameter(1, verifiedDate)
+                .setParameter(2, proof.getId())
+                .executeUpdate();
+        entityManager.clear();
+    }
+
     @Test
     @DisplayName("본인의 기간 내 인증만 조회하고 다른 회원·기간 밖 인증은 제외한다")
     void 본인의_기간_내_인증만_조회한다() {
@@ -69,13 +79,38 @@ class MedicationProofRepositoryTest {
 
         // when
         List<MedicationProof> proofs = medicationProofRepository.findByMemberIdAndDateRange(
-                member.getId(),
-                LocalDateTime.of(2026, 8, 1, 0, 0),
-                LocalDateTime.of(2026, 8, 14, 23, 59, 59)
-        );
+                member.getId(), LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 14));
 
         // then
         assertThat(proofs).extracting(MedicationProof::getId).containsExactly(inRange.getId());
+    }
+
+    @Test
+    @DisplayName("날짜 조회는 인증 시각이 아니라 복용 기준일로 그날의 인증을 고른다")
+    void 날짜_조회는_인증_시각이_아니라_복용_기준일로_그날의_인증을_고른다() {
+        // given: 8월 11일 00:05에 했지만 복용 기준일이 8월 10일인 인증(자정을 넘는 알람 창)
+        Member member = persistSenior("01099990000");
+        MedicineSchedule schedule = persistSchedule(member, LocalDate.of(2026, 8, 1));
+        MedicationProof proof = persistProof(schedule, member, LocalDateTime.of(2026, 8, 11, 0, 5));
+        setVerifiedDate(proof, LocalDate.of(2026, 8, 10));
+        LocalDate doseDate = LocalDate.of(2026, 8, 10);
+        LocalDate verifiedAtDate = LocalDate.of(2026, 8, 11);
+
+        // when & then
+        assertThat(medicationProofRepository.findByMemberIdAndDateRange(member.getId(), doseDate, doseDate))
+                .extracting(MedicationProof::getId).containsExactly(proof.getId());
+        assertThat(medicationProofRepository.findByMemberIdAndDateRange(member.getId(), verifiedAtDate, verifiedAtDate))
+                .isEmpty();
+        assertThat(medicationProofRepository.findVerifiedScheduleIds(List.of(schedule.getId()), doseDate))
+                .containsExactly(schedule.getId());
+        assertThat(medicationProofRepository.findVerifiedScheduleIds(List.of(schedule.getId()), verifiedAtDate))
+                .isEmpty();
+        assertThat(medicationProofRepository.findVerifiedScheduleIdsByMemberAndDate(member.getId(), doseDate))
+                .containsExactly(schedule.getId());
+        assertThat(medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, doseDate)).isTrue();
+        assertThat(medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, verifiedAtDate)).isFalse();
+        assertThat(medicationProofRepository.countByMemberAndVerifiedDate(member, doseDate)).isEqualTo(1L);
+        assertThat(medicationProofRepository.countByMemberAndVerifiedDate(member, verifiedAtDate)).isZero();
     }
 
     @Test

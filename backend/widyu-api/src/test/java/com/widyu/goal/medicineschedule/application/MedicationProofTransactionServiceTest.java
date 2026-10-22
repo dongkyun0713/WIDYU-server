@@ -59,7 +59,7 @@ class MedicationProofTransactionServiceTest {
         given(memberRepository.findByIdForUpdate(10L)).willReturn(Optional.of(member));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(2L);
 
         // when
@@ -113,7 +113,7 @@ class MedicationProofTransactionServiceTest {
         given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(3L);
         savedProofHasId(55L);
 
@@ -136,7 +136,7 @@ class MedicationProofTransactionServiceTest {
         given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(3L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(3L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(3L);
         savedProofHasId(77L);
 
@@ -162,7 +162,7 @@ class MedicationProofTransactionServiceTest {
         given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(1L);
         savedProofHasId(88L);
 
@@ -194,7 +194,7 @@ class MedicationProofTransactionServiceTest {
         }).given(seniorProfileService).addPointsToMember(eq(10L), eq(10L), any(), any());
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(2L);
 
         // when
@@ -213,7 +213,7 @@ class MedicationProofTransactionServiceTest {
         given(member.getSeniorProfile()).willReturn(null);
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.countByMemberAndVerifiedAtBetween(eq(member), any(), any())).willReturn(1L);
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L);
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(2L);
 
         // when
@@ -232,7 +232,7 @@ class MedicationProofTransactionServiceTest {
         MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
                 .willReturn(Optional.of(schedule));
-        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(eq(schedule), any(), any()))
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(eq(schedule), any()))
                 .willReturn(true);
 
         // when & then

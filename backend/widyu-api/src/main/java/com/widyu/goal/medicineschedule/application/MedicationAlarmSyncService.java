@@ -7,7 +7,6 @@ import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.member.Member;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +28,7 @@ public class MedicationAlarmSyncService {
         Member member = memberUtil.getCurrentMember();
         LocalDate today = LocalDate.now(TIME_ZONE_ID);
         List<Long> completedIds = medicationProofRepository.findVerifiedScheduleIdsByMemberAndDate(
-                member.getId(), today.atStartOfDay(), today.atTime(LocalTime.MAX));
+                member.getId(), today);
         List<String> completed = completedIds.stream().map(id -> id + ":" + today).toList();
         return MedicationAlarmSyncResponse.of(member.getMedicationAlarmRevision(), TIME_ZONE,
                 medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(member, Status.ACTIVE, today), completed);

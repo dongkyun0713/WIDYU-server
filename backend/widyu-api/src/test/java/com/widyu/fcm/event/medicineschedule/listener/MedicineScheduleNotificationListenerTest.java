@@ -89,7 +89,7 @@ class MedicineScheduleNotificationListenerTest {
         // 세 번의 조회(+10분·+20분·+30분)가 모두 같은 미인증 스케줄을 돌려준다
         given(medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(any(), eq(Status.ACTIVE), any()))
                 .willReturn(List.of(schedule));
-        given(medicationProofRepository.findVerifiedScheduleIds(any(), any(), any())).willReturn(List.of());
+        given(medicationProofRepository.findVerifiedScheduleIds(any(), any())).willReturn(List.of());
         given(familyMembershipRepository.findAllByFamilyIdWithGuardian(100L))
                 .willReturn(List.of(FamilyMembership.createMembership(family, guardian)));
 
@@ -133,7 +133,7 @@ class MedicineScheduleNotificationListenerTest {
         ReflectionTestUtils.setField(schedule, "id", 15L);
         given(medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(any(), eq(Status.ACTIVE), any()))
                 .willReturn(List.of(schedule));
-        given(medicationProofRepository.findVerifiedScheduleIds(any(), any(), any()))
+        given(medicationProofRepository.findVerifiedScheduleIds(any(), any()))
                 .willReturn(List.of(15L));
 
         // when
@@ -211,7 +211,7 @@ class MedicineScheduleNotificationListenerTest {
         LocalDate date = LocalDate.of(2026, 10, 2);
         given(medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(
                 LocalTime.of(8, 0), Status.ACTIVE, date)).willReturn(List.of(schedule));
-        given(medicationProofRepository.findVerifiedScheduleIds(any(), any(), any()))
+        given(medicationProofRepository.findVerifiedScheduleIds(any(), any()))
                 .willReturn(List.of(15L));
 
         // when

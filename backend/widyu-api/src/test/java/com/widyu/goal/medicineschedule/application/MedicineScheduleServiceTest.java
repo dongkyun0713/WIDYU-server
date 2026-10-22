@@ -35,7 +35,6 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -447,7 +446,7 @@ class MedicineScheduleServiceTest {
 
         MedicationProof proof = mock(MedicationProof.class);
         given(proof.getMedicineSchedule()).willReturn(schedule);
-        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(2026, 7, 15, 9, 0));
+        given(proof.getVerifiedDate()).willReturn(LocalDate.of(2026, 7, 15));
 
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(any(), any(), any(), any()))
                 .willReturn(List.of(schedule));
@@ -482,7 +481,7 @@ class MedicineScheduleServiceTest {
 
         MedicationProof proof = mock(MedicationProof.class);
         given(proof.getMedicineSchedule()).willReturn(oldSchedule);
-        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(2026, 7, 15, 9, 0));
+        given(proof.getVerifiedDate()).willReturn(LocalDate.of(2026, 7, 15));
 
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(any(), any(), any(), any()))
                 .willReturn(List.of(oldSchedule, currentSchedule));

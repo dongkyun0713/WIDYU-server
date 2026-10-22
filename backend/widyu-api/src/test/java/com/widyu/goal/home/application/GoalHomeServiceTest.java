@@ -74,11 +74,11 @@ class GoalHomeServiceTest {
         given(schedule.getId()).willReturn(1L);
         given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
         given(proof.getMedicineSchedule()).willReturn(schedule);
-        given(proof.getVerifiedAt()).willReturn(today.atTime(12, 0));
+        given(proof.getVerifiedDate()).willReturn(today);
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
                 member, Status.ACTIVE, startOfWeek, endOfWeek)).willReturn(List.of(schedule));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, startOfWeek.atStartOfDay(), endOfWeek.atTime(java.time.LocalTime.MAX)))
+                11L, startOfWeek, endOfWeek))
                 .willReturn(List.of(proof));
         given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
                 member, startOfWeek, endOfWeek)).willReturn(List.of());
@@ -101,7 +101,7 @@ class GoalHomeServiceTest {
         verify(medicineScheduleRepository, times(1))
                 .findEffectiveByMemberAndDateRange(member, Status.ACTIVE, startOfWeek, endOfWeek);
         verify(medicationProofRepository, times(1))
-                .findByMemberIdAndDateRange(11L, startOfWeek.atStartOfDay(), endOfWeek.atTime(java.time.LocalTime.MAX));
+                .findByMemberIdAndDateRange(11L, startOfWeek, endOfWeek);
         verify(walkRepository, times(1))
                 .findByMemberAndWalkDateBetweenOrderByWalkDateAsc(member, startOfWeek, endOfWeek);
     }
@@ -123,11 +123,11 @@ class GoalHomeServiceTest {
         given(schedule.getId()).willReturn(1L);
         given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
         given(proof.getMedicineSchedule()).willReturn(schedule);
-        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(today, java.time.LocalTime.NOON));
+        given(proof.getVerifiedDate()).willReturn(today);
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
                 member, Status.ACTIVE, lastWeekStart, thisWeekEnd)).willReturn(List.of(schedule));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX)))
+                11L, lastWeekStart, thisWeekEnd))
                 .willReturn(List.of(proof));
         given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
                 member, lastWeekStart, thisWeekEnd)).willReturn(List.of());
@@ -150,7 +150,7 @@ class GoalHomeServiceTest {
         verify(medicineScheduleRepository, times(1))
                 .findEffectiveByMemberAndDateRange(member, Status.ACTIVE, lastWeekStart, thisWeekEnd);
         verify(medicationProofRepository, times(1)).findByMemberIdAndDateRange(
-                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX));
+                11L, lastWeekStart, thisWeekEnd);
         verify(walkRepository, times(1))
                 .findByMemberAndWalkDateBetweenOrderByWalkDateAsc(member, lastWeekStart, thisWeekEnd);
     }
@@ -178,11 +178,11 @@ class GoalHomeServiceTest {
         given(schedule.getId()).willReturn(1L);
         given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
         given(proof.getMedicineSchedule()).willReturn(schedule);
-        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(today, java.time.LocalTime.NOON));
+        given(proof.getVerifiedDate()).willReturn(today);
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
                 member, Status.ACTIVE, lastWeekStart, thisWeekEnd)).willReturn(List.of(schedule));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX)))
+                11L, lastWeekStart, thisWeekEnd))
                 .willReturn(List.of(proof));
         given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
                 member, lastWeekStart, thisWeekEnd)).willReturn(List.of());
@@ -218,11 +218,11 @@ class GoalHomeServiceTest {
         given(schedule.getId()).willReturn(1L);
         given(schedule.isEffectiveOn(any(LocalDate.class))).willReturn(true);
         given(proof.getMedicineSchedule()).willReturn(schedule);
-        given(proof.getVerifiedAt()).willReturn(LocalDateTime.of(today, java.time.LocalTime.NOON));
+        given(proof.getVerifiedDate()).willReturn(today);
         given(medicineScheduleRepository.findEffectiveByMemberAndDateRange(
                 member, Status.ACTIVE, lastWeekStart, thisWeekEnd)).willReturn(List.of(schedule));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, lastWeekStart.atStartOfDay(), thisWeekEnd.atTime(java.time.LocalTime.MAX)))
+                11L, lastWeekStart, thisWeekEnd))
                 .willReturn(List.of(proof));
         given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
                 member, lastWeekStart, thisWeekEnd)).willReturn(List.of());
@@ -248,7 +248,7 @@ class GoalHomeServiceTest {
 
         MedicationProof proof = mock(MedicationProof.class);
         given(proof.getMedicineSchedule()).willReturn(currentVersion);
-        given(proof.getVerifiedAt()).willReturn(today.atTime(LocalTime.NOON));
+        given(proof.getVerifiedDate()).willReturn(today);
 
         given(memberUtil.getCurrentMember()).willReturn(member);
         given(member.getId()).willReturn(11L);
@@ -256,7 +256,7 @@ class GoalHomeServiceTest {
                 member, Status.ACTIVE, startOfWeek, endOfWeek))
                 .willReturn(List.of(closedVersion, currentVersion));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, startOfWeek.atStartOfDay(), endOfWeek.atTime(LocalTime.MAX)))
+                11L, startOfWeek, endOfWeek))
                 .willReturn(List.of(proof));
         given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
                 member, startOfWeek, endOfWeek)).willReturn(List.of());
@@ -413,7 +413,7 @@ class GoalHomeServiceTest {
                 member, Status.ACTIVE, today)).willReturn(List.of(schedule));
         // 조회 쿼리에 정렬이 없으므로 늦은 인증이 먼저 반환되는 순서를 재현한다.
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, today.atStartOfDay(), today.atTime(LocalTime.MAX)))
+                11L, today, today))
                 .willReturn(List.of(later, earlier));
         given(walkRepository.findByMemberAndWalkDate(member, today)).willReturn(Optional.empty());
         given(healthScheduleRepository.findByMemberIdAndWeek(any(), any(), any())).willReturn(List.of());
@@ -441,7 +441,7 @@ class GoalHomeServiceTest {
         given(medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(
                 member, Status.ACTIVE, today)).willReturn(List.of(currentSchedule));
         given(medicationProofRepository.findByMemberIdAndDateRange(
-                11L, today.atStartOfDay(), today.atTime(LocalTime.MAX)))
+                11L, today, today))
                 .willReturn(List.of(closedProof));
         given(walkRepository.findByMemberAndWalkDate(member, today)).willReturn(Optional.empty());
         given(healthScheduleRepository.findByMemberIdAndWeek(any(), any(), any())).willReturn(List.of());
