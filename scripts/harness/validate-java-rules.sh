@@ -105,7 +105,8 @@ fi
 # 규칙 2: DTO 직접 생성 금지 (Service/Facade)
 # ──────────────────────────────────────────────
 if [[ "$BASENAME" == *Service* || "$BASENAME" == *Facade* ]]; then
-    DTO_NEW=$(grep -nE 'new [A-Z][a-zA-Z]*(Response|Request|Dto|Res|Req)\(' "$FILE" \
+    # 중첩 타입 생성 `new XResponse.Inner(...)`도 DTO 직접 생성이다. 접미사 뒤의 `.Inner`를 허용해야 잡힌다.
+    DTO_NEW=$(grep -nE 'new [A-Z][A-Za-z0-9]*(Response|Request|Dto|Res|Req)(\.[A-Z][A-Za-z0-9]*)*\(' "$FILE" \
         | grep -v '^\s*//' \
         | filter_added)
     if [[ -n "$DTO_NEW" ]]; then
