@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import client from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
@@ -17,7 +18,12 @@ export default function LoginPage() {
       const { data } = await client.post('/auth/admin/login', { email, password })
       setToken(data.accessToken)
       navigate('/')
-    } catch {
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status !== 401) {
+        // 403(관리자 아님)·429(요청 제한)·네트워크 오류는 비밀번호 오류와 구분해 보여준다.
+        setError(err.response?.data?.message ?? '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.')
+        return
+      }
       setError('이메일 또는 비밀번호가 올바르지 않습니다.')
     }
   }

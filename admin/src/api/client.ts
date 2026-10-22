@@ -30,7 +30,10 @@ client.interceptors.response.use(
   async (error) => {
     const original = error.config
 
-    if (error.response?.status !== 401 || original._retry) {
+    // 관리자 인증 API(로그인·refresh·로그아웃)의 401은 토큰 만료가 아니라 인증 실패 결과다.
+    // 여기서 refresh를 시도하면 로그인 화면이 새로고침돼 호출자가 오류를 표시하지 못한다.
+    const isAuthRequest = original.url?.startsWith('/auth/admin/')
+    if (error.response?.status !== 401 || original._retry || isAuthRequest) {
       return Promise.reject(error)
     }
 
