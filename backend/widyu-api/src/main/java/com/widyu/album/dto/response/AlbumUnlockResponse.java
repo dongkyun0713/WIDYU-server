@@ -14,8 +14,9 @@ public record AlbumUnlockResponse(
 ) {
     
     public static AlbumUnlockResponse from(AlbumUnlock albumUnlock, Long remainingPoints) {
+        // 캡션은 선택 입력이라 null일 수 있다. 피드·상세처럼 null 그대로 내려준다.
         String albumTitle = albumUnlock.getAlbum().getContent();
-        if (albumTitle.length() > 50) {
+        if (albumTitle != null && albumTitle.length() > 50) {
             albumTitle = albumTitle.substring(0, 50) + "...";
         }
         return new AlbumUnlockResponse(
