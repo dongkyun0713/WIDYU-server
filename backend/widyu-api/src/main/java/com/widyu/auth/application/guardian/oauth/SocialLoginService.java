@@ -32,6 +32,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; // ★ 추가
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Service
@@ -80,14 +82,32 @@ public class SocialLoginService {
         TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
         Member member = findAppleMemberByEmail(request.email());
 
-        if (member.getPhoneNumber() != null && !member.getPhoneNumber().isBlank()) {
+        if (memberRepository.fillPhoneNumberIfEmpty(member.getId(), temporaryMember.getPhoneNumber()) == 0) {
             log.warn("전화번호가 이미 있는 애플 회원의 번호 보강 거부: memberId={}", member.getId());
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        member.updatePhoneNumber(temporaryMember.getPhoneNumber());
-        temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
+        deleteTemporaryMemberAfterCommit(temporaryMember.getId());
         log.info("애플 사용자 전화번호 업데이트 완료: memberId={}, email={}", member.getId(), PiiMaskingUtil.maskEmail(request.email()));
+    }
+
+    // 번호 반영이 롤백되면 임시 토큰을 다시 쓸 수 있어야 하므로 커밋 뒤에 지운다
+    private void deleteTemporaryMemberAfterCommit(String temporaryMemberId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            temporaryMemberUtil.deleteTemporaryMember(temporaryMemberId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // afterCommit 예외는 이미 커밋된 요청을 실패로 돌려보낸다. 남은 임시 회원은 30분 TTL로 사라지고, 같은 회원에 다시 써도 빈 번호가 아니라 거부된다
+                try {
+                    temporaryMemberUtil.deleteTemporaryMember(temporaryMemberId);
+                } catch (RuntimeException e) {
+                    log.warn("커밋 후 임시 회원 삭제 실패: errorType={}", e.getClass().getSimpleName());
+                }
+            }
+        });
     }
 
     public TokenPairResponse integrateSocialAccount(HttpServletRequest httpServletRequest) {
