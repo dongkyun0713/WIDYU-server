@@ -14,6 +14,7 @@ import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,11 +43,11 @@ public class MedicationProofTransactionService {
     private final ApplicationEventPublisher eventPublisher;
 
     public void validateBeforeUpload(Long memberId, Long scheduleId) {
-        validateBeforeUploadAt(memberId, scheduleId, LocalDateTime.now());
+        validateBeforeUpload(memberId, scheduleId, Clock.systemDefaultZone());
     }
 
-    // 테스트가 시각을 고정할 수 있게 now를 받는다. 트랜잭션은 위 public 메서드가 연다.
-    void validateBeforeUploadAt(Long memberId, Long scheduleId, LocalDateTime now) {
+    // 테스트가 시각을 고정할 수 있게 Clock을 받는다. 트랜잭션은 위 public 메서드가 연다.
+    void validateBeforeUpload(Long memberId, Long scheduleId, Clock clock) {
         Member currentMember = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
@@ -56,18 +57,17 @@ public class MedicationProofTransactionService {
                         "존재하지 않는 약 복용 스케줄입니다."));
 
         validateScheduleOwner(schedule, currentMember);
-        LocalDate doseDate = resolveDoseDate(schedule, now);
+        LocalDate doseDate = resolveDoseDate(schedule, LocalDateTime.now(clock));
         validateNotVerified(schedule, doseDate);
     }
 
     @Transactional
     public MedicationProofResponse verifyMedication(Long memberId, Long scheduleId, List<String> imageUrls) {
-        return verifyMedicationAt(memberId, scheduleId, imageUrls, LocalDateTime.now());
+        return verifyMedication(memberId, scheduleId, imageUrls, Clock.systemDefaultZone());
     }
 
-    // 테스트가 시각을 고정할 수 있게 now를 받는다. 트랜잭션은 위 public 메서드가 연다.
-    MedicationProofResponse verifyMedicationAt(Long memberId, Long scheduleId, List<String> imageUrls,
-                                               LocalDateTime now) {
+    // 테스트가 시각을 고정할 수 있게 Clock을 받는다. 트랜잭션은 위 public 메서드가 연다.
+    MedicationProofResponse verifyMedication(Long memberId, Long scheduleId, List<String> imageUrls, Clock clock) {
         Member currentMember = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
@@ -77,6 +77,8 @@ public class MedicationProofTransactionService {
                         "존재하지 않는 약 복용 스케줄입니다."));
 
         validateScheduleOwner(schedule, currentMember);
+        // 회원 잠금을 얻은 뒤의 시각으로 검증한다. 잠금을 기다리는 동안 인증 창이 닫힐 수 있다.
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDate doseDate = resolveDoseDate(schedule, now);
         validateNotVerified(schedule, doseDate);
 

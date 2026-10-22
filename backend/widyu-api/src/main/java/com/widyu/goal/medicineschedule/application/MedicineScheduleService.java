@@ -201,6 +201,7 @@ public class MedicineScheduleService {
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
         LocalDate today = LocalDate.now();
         LocalDate effectiveFromDate = today.plusDays(1);
+        validateNoNextDayProof(schedule, today, "수정");
 
         if (schedule.startedOn(effectiveFromDate)) {
             // 아직 시작하지 않은 내일 버전은 오늘 알람에 영향을 주지 않으므로 그대로 수정한다.
@@ -267,11 +268,24 @@ public class MedicineScheduleService {
 
         // 오늘 알람은 유지하고 내일부터 중단한다. 내일 시작 버전은 빈 유효기간이 된다.
         LocalDate today = LocalDate.now();
+        validateNoNextDayProof(schedule, today, "삭제");
         schedule.closeAsOf(today);
         long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_DELETED,
                 scheduleId, today.plusDays(1));
         log.info("약 복용 스케줄 삭제(내일부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
         return MedicineScheduleChangeResponse.of(revision, today.plusDays(1));
+    }
+
+    /**
+     * 자정을 넘는 인증 창(LLD-0101)에서는 23:30 이후에 다음 날 00:30 이전 알람을 미리 인증할 수 있다.
+     * 그 뒤 자정 전에 수정·삭제하면 다음 날 인증이 다음 날 유효하지 않은 버전에 남거나(마감),
+     * 바뀐 복약에 그대로 남는다(시작 전 버전 그대로 수정). 인증·적립이 어긋나지 않게 자정이 지난 뒤에만 허용한다.
+     */
+    private void validateNoNextDayProof(MedicineSchedule schedule, LocalDate today, String action) {
+        if (medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(schedule, today)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "다음 날 복용분을 이미 인증한 스케줄은 자정이 지난 뒤에 " + action + "할 수 있습니다.");
+        }
     }
 
     private LocalTime parseAlarmTime(String alarmTimeStr) {

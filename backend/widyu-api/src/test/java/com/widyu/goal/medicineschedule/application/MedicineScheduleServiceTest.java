@@ -393,6 +393,52 @@ class MedicineScheduleServiceTest {
     }
 
     @Test
+    @DisplayName("다음 날 복용분을 이미 인증한 스케줄을 자정 전에 수정하면 예외가 발생하고 버전을 바꾸지 않는다")
+    void 다음_날_복용분을_인증한_스케줄을_자정_전에_수정하면_예외가_발생한다() {
+        // given: 23:50에 다음 날 00:10 알람을 미리 인증해 둔 상태(LLD-0101)
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(
+                scheduleId, targetMember, LocalTime.of(0, 10), today().minusDays(5));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(existing));
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(existing, today()))
+                .willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> medicineScheduleService.updateSchedule(scheduleId, updateRequest("09:00"), memberId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("자정이 지난 뒤");
+        assertThat(existing.isCurrent()).isTrue();
+        then(medicineScheduleRepository).should(never()).save(any());
+        then(fcmService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("다음 날 복용분을 이미 인증한 스케줄을 자정 전에 삭제하면 예외가 발생하고 마감하지 않는다")
+    void 다음_날_복용분을_인증한_스케줄을_자정_전에_삭제하면_예외가_발생한다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(
+                scheduleId, targetMember, LocalTime.of(0, 10), today().minusDays(5));
+        given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(existing, today()))
+                .willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> medicineScheduleService.deleteSchedule(scheduleId, memberId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("자정이 지난 뒤");
+        assertThat(existing.isCurrent()).isTrue();
+        then(fcmService).shouldHaveNoInteractions();
+    }
+
+    @Test
     @DisplayName("이미 종료된 과거 버전을 수정하면 예외가 발생한다")
     void 종료된_과거_버전_수정_시_예외가_발생한다() {
         // given

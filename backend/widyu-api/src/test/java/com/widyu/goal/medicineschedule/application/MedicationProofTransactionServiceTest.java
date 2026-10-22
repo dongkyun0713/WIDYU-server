@@ -22,9 +22,12 @@ import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -257,7 +260,7 @@ class MedicationProofTransactionServiceTest {
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(member, Status.ACTIVE, alarmDate)).willReturn(2L);
 
         // when
-        transactionService.verifyMedicationAt(10L, 1L, List.of(), now);
+        transactionService.verifyMedication(10L, 1L, List.of(), clockAt(now));
 
         // then
         MedicationProof saved = savedProof();
@@ -279,7 +282,7 @@ class MedicationProofTransactionServiceTest {
         given(medicineScheduleRepository.countEffectiveByMemberAndDate(member, Status.ACTIVE, alarmDate)).willReturn(2L);
 
         // when
-        transactionService.verifyMedicationAt(10L, 1L, List.of(), now);
+        transactionService.verifyMedication(10L, 1L, List.of(), clockAt(now));
 
         // then
         assertThat(savedProof().getVerifiedDate()).isEqualTo(alarmDate);
@@ -299,12 +302,12 @@ class MedicationProofTransactionServiceTest {
                 .willReturn(Optional.of(earlyAlarm));
 
         // when & then: 23:45 + 30분 = 00:15, 00:10 - 30분 = 23:40
-        assertThatThrownBy(() -> transactionService.validateBeforeUploadAt(
-                10L, 1L, LocalDateTime.of(2026, 8, 11, 0, 16)))
+        assertThatThrownBy(() -> transactionService.validateBeforeUpload(
+                10L, 1L, clockAt(LocalDateTime.of(2026, 8, 11, 0, 16))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("전후 30분");
-        assertThatThrownBy(() -> transactionService.validateBeforeUploadAt(
-                10L, 2L, LocalDateTime.of(2026, 8, 10, 23, 39)))
+        assertThatThrownBy(() -> transactionService.validateBeforeUpload(
+                10L, 2L, clockAt(LocalDateTime.of(2026, 8, 10, 23, 39))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("전후 30분");
     }
@@ -322,10 +325,64 @@ class MedicationProofTransactionServiceTest {
                 .willReturn(true);
 
         // when & then
-        assertThatThrownBy(() -> transactionService.validateBeforeUploadAt(
-                10L, 1L, LocalDateTime.of(2026, 8, 11, 0, 5)))
+        assertThatThrownBy(() -> transactionService.validateBeforeUpload(
+                10L, 1L, clockAt(LocalDateTime.of(2026, 8, 11, 0, 5))))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미");
+    }
+
+    @Test
+    @DisplayName("회원 잠금을 기다리는 동안 인증 창이 닫히면 잠금 뒤 시각으로 거부한다")
+    void 회원_잠금을_기다리는_동안_인증_창이_닫히면_거부한다() {
+        // given: 23:45 알람의 창 끝(00:15)에 들어와 잠금을 얻은 시각은 00:16이다.
+        Member member = mock(Member.class);
+        given(member.getId()).willReturn(10L);
+        MedicineSchedule schedule = scheduleAt(member, LocalTime.of(23, 45));
+        MutableClock clock = new MutableClock(LocalDateTime.of(2026, 8, 11, 0, 15));
+        given(memberRepository.findByIdForUpdate(10L)).willAnswer(invocation -> {
+            clock.set(LocalDateTime.of(2026, 8, 11, 0, 16));
+            return Optional.of(member);
+        });
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
+                .willReturn(Optional.of(schedule));
+
+        // when & then
+        assertThatThrownBy(() -> transactionService.verifyMedication(10L, 1L, List.of(), clock))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("전후 30분");
+        then(medicationProofRepository).should(never()).saveAndFlush(any());
+    }
+
+    private Clock clockAt(LocalDateTime now) {
+        return Clock.fixed(now.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+    }
+
+    // 잠금 대기 중 시간이 흐르는 상황을 흉내 낸다.
+    private static final class MutableClock extends Clock {
+        private Instant instant;
+
+        MutableClock(LocalDateTime now) {
+            set(now);
+        }
+
+        void set(LocalDateTime now) {
+            this.instant = now.atZone(ZoneId.systemDefault()).toInstant();
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.systemDefault();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
     }
 
     private MedicineSchedule scheduleAt(Member member, LocalTime alarmTime) {

@@ -105,6 +105,9 @@ class MedicationProofRepositoryTest {
         assertThat(medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, verifiedAtDate)).isFalse();
         assertThat(medicationProofRepository.countByMemberAndVerifiedDate(member, doseDate)).isEqualTo(1L);
         assertThat(medicationProofRepository.countByMemberAndVerifiedDate(member, verifiedAtDate)).isZero();
+        assertThat(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(
+                schedule, doseDate.minusDays(1))).isTrue();
+        assertThat(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(schedule, doseDate)).isFalse();
     }
 
     @Test
