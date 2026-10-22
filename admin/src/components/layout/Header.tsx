@@ -4,13 +4,15 @@ import { useAuthStore } from '../../store/authStore'
 import SearchModal from '../SearchModal'
 import client from '../../api/client'
 
+// dev 서버와 운영 배포가 모두 production mode로 빌드되므로 MODE 대신 배포 워크플로가 주입하는 VITE_APP_ENV로 구분한다.
+// deploy-dev.yml은 dev, deploy-prod.yml은 prod를 넣고, 값이 없는 로컬 실행·CI 빌드는 LOCAL로 표시한다.
 const ENV_MAP: Record<string, { label: string; style: string }> = {
-  production: { label: 'PROD', style: 'bg-red-500 text-white' },
-  development: { label: 'DEV', style: 'bg-yellow-400 text-yellow-900' },
+  prod: { label: 'PROD', style: 'bg-red-500 text-white' },
+  dev: { label: 'DEV', style: 'bg-yellow-400 text-yellow-900' },
 }
 
 function EnvBadge() {
-  const env = ENV_MAP[import.meta.env.MODE] ?? { label: 'LOCAL', style: 'bg-gray-400 text-white' }
+  const env = ENV_MAP[import.meta.env.VITE_APP_ENV] ?? { label: 'LOCAL', style: 'bg-gray-400 text-white' }
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-bold tracking-wide ${env.style}`}>
       {env.label}

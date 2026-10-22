@@ -47,7 +47,7 @@ jobs:
           python3 -m unittest discover -s scripts/docker -p 'test_*.py'
           ./gradlew :backend:widyu-domain:test :backend:widyu-api:test --no-daemon
           npm --prefix admin ci
-          npm --prefix admin run build
+          VITE_APP_ENV=prod npm --prefix admin run build
           mkdir -p admin/dist/.well-known
           cp -R .well-known/. admin/dist/.well-known/
       - uses: docker/setup-qemu-action@v3
