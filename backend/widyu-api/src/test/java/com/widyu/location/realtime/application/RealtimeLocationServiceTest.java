@@ -414,6 +414,29 @@ class RealtimeLocationServiceTest {
     }
 
     @Test
+    @DisplayName("좌표가 빠진 체류 정보가 저장돼 있으면 키를 지우고 이전 체류 없이 위치를 갱신한다")
+    void 좌표가_빠진_체류_정보면_키를_지우고_이전_체류_없이_갱신한다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile(10L, member)));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        LinkedHashMap<String, Object> incomplete = new LinkedHashMap<>();
+        incomplete.put("locationType", "HOME");
+        given(valueOperations.get("location:stay:1")).willReturn(incomplete);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(request, 1L);
+
+        // then
+        assertThat(response.locationType()).isNull();
+        then(redisTemplate).should().delete("location:stay:1");
+        then(safeZoneAlertService).should().handleSafeZoneTransition(1L, null, null);
+    }
+
+    @Test
     @DisplayName("연결되지 않은 보호자가 이동 경로 조회 시 FORBIDDEN 예외를 던진다")
     void 연결되지_않은_보호자_이동_경로_조회_시_예외가_발생한다() {
         // given

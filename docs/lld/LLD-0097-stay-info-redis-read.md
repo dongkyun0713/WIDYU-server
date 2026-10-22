@@ -53,7 +53,7 @@ DB·Redis 스키마 변경 없음. 저장 형식(타입 정보 없는 JSON, `sta
 
 1. `opsForValue().get("location:stay:{memberId}")`로 값을 읽는다. 없으면 `null`.
 2. `RedisConfig.redisObjectMapper().convertValue(raw, StayInfo.class)`로 변환해 돌려준다.
-3. `SerializationException`·`IllegalArgumentException`(값 손상)이면 WARN 후 키를 지우고 `null`.
+3. `SerializationException`·`IllegalArgumentException`(값 손상)이면 WARN 후 키를 지우고 `null`. 변환은 됐지만 `latitude`·`longitude`·`startTime` 중 하나가 없으면 거리 계산·체류 시간에서 null로 실패하므로 같은 손상으로 처리한다.
 4. `DataAccessException`(연결·시간 초과)이면 WARN 후 키를 두고 `null`.
 
 `calculateStayInfo`는 이 결과로 이전 위치 타입을 정하고, 새 체류 정보 커밋 후 저장(LLD-0058)과 `SafeZoneAlertService` 전이 판정(LLD-0078)은 그대로 쓴다.
@@ -71,6 +71,7 @@ DB·Redis 스키마 변경 없음. 저장 형식(타입 정보 없는 JSON, `sta
 - [x] AC4. 격리 Redis에서 30m 안의 재전송은 첫 체류 시작 시각을 유지한다.
 - [x] AC5. 격리 Redis에서 이탈 갱신이 롤백되면 체류 정보와 알림 키가 이전 상태로 남아 다음 갱신이 이탈을 다시 감지한다(LLD-0058 경로 도달).
 - [x] AC6. Redis 연결 오류로 읽지 못하면 키를 지우지 않고, 값을 읽을 수 없으면 키를 지운다.
+- [x] AC6-1. 좌표·시작 시각이 빠진 값은 키를 지우고 이전 체류가 없는 것으로 위치를 갱신한다(예외 없음).
 - [x] AC7. 변경한 테스트 클래스와 `compileJava`가 통과한다.
 
 ## 8. 영향 범위 / 마이그레이션

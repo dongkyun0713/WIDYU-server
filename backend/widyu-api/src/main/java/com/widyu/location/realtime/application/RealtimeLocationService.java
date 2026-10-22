@@ -319,7 +319,12 @@ public class RealtimeLocationService {
             if (raw == null) {
                 return null;
             }
-            return redisValueMapper.convertValue(raw, StayInfo.class);
+            StayInfo stay = redisValueMapper.convertValue(raw, StayInfo.class);
+            // 좌표·시작 시각이 빠진 값은 이후 거리 계산·체류 시간에서 null로 터지므로 깨진 값과 같이 처리한다.
+            if (stay.latitude() == null || stay.longitude() == null || stay.startTime() == null) {
+                throw new IllegalArgumentException("체류 정보 필수 값 누락");
+            }
+            return stay;
         } catch (SerializationException | IllegalArgumentException e) {
             log.warn("체류 정보를 읽을 수 없어 삭제 - stayKey: {}, cause: {}", stayKey, e.getClass().getSimpleName());
             redisTemplate.delete(stayKey);
