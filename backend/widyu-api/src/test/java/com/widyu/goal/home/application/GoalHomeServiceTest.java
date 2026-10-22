@@ -456,9 +456,7 @@ class GoalHomeServiceTest {
     }
 
     private MedicationProof proof(MedicineSchedule schedule, Member member, LocalDateTime verifiedAt, String imageUrl) {
-        MedicationProof proof = MedicationProof.create(schedule, member, List.of(imageUrl));
-        ReflectionTestUtils.setField(proof, "verifiedAt", verifiedAt);
-        return proof;
+        return MedicationProof.create(schedule, member, List.of(imageUrl), verifiedAt, verifiedAt.toLocalDate());
     }
 
     private MedicineSchedule alarmSchedule(Member member, Long id, LocalTime alarmTime) {

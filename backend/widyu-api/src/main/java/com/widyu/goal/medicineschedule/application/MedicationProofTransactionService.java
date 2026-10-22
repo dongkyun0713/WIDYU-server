@@ -14,6 +14,7 @@ import com.widyu.member.application.SeniorProfileService;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -41,6 +42,11 @@ public class MedicationProofTransactionService {
     private final ApplicationEventPublisher eventPublisher;
 
     public void validateBeforeUpload(Long memberId, Long scheduleId) {
+        validateBeforeUploadAt(memberId, scheduleId, LocalDateTime.now());
+    }
+
+    // 테스트가 시각을 고정할 수 있게 now를 받는다. 트랜잭션은 위 public 메서드가 연다.
+    void validateBeforeUploadAt(Long memberId, Long scheduleId, LocalDateTime now) {
         Member currentMember = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
@@ -50,13 +56,18 @@ public class MedicationProofTransactionService {
                         "존재하지 않는 약 복용 스케줄입니다."));
 
         validateScheduleOwner(schedule, currentMember);
-        LocalDateTime now = LocalDateTime.now();
-        validateScheduleTime(schedule, now);
-        validateNotVerifiedToday(schedule, now);
+        LocalDate doseDate = resolveDoseDate(schedule, now);
+        validateNotVerified(schedule, doseDate);
     }
 
     @Transactional
     public MedicationProofResponse verifyMedication(Long memberId, Long scheduleId, List<String> imageUrls) {
+        return verifyMedicationAt(memberId, scheduleId, imageUrls, LocalDateTime.now());
+    }
+
+    // 테스트가 시각을 고정할 수 있게 now를 받는다. 트랜잭션은 위 public 메서드가 연다.
+    MedicationProofResponse verifyMedicationAt(Long memberId, Long scheduleId, List<String> imageUrls,
+                                               LocalDateTime now) {
         Member currentMember = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST,
                         "존재하지 않는 사용자입니다."));
@@ -66,21 +77,21 @@ public class MedicationProofTransactionService {
                         "존재하지 않는 약 복용 스케줄입니다."));
 
         validateScheduleOwner(schedule, currentMember);
-        LocalDateTime now = LocalDateTime.now();
-        validateScheduleTime(schedule, now);
-        validateNotVerifiedToday(schedule, now);
+        LocalDate doseDate = resolveDoseDate(schedule, now);
+        validateNotVerified(schedule, doseDate);
 
-        MedicationProof proof = MedicationProof.create(schedule, currentMember, imageUrls);
+        MedicationProof proof = MedicationProof.create(schedule, currentMember, imageUrls, now, doseDate);
         saveProof(proof, scheduleId);
         currentMember.incrementMedicationAlarmRevision();
 
-        long proofCount = medicationProofRepository.countByMemberAndVerifiedDate(currentMember, now.toLocalDate());
+        // 즉시 적립의 하루 완료 판정도 복용 기준일로 센다(자정 넘어 인증한 어제 분은 어제 몫).
+        long proofCount = medicationProofRepository.countByMemberAndVerifiedDate(currentMember, doseDate);
         long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
-                currentMember, Status.ACTIVE, now.toLocalDate());
+                currentMember, Status.ACTIVE, doseDate);
         long earnedPoints = MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
         rewardPoints(currentMember, proof, earnedPoints, proofCount == totalSchedules && totalSchedules > 0);
-        log.info("약 복용 인증 완료: scheduleId={}, memberId={}, verifiedAt={}, earnedPoints={}",
-                scheduleId, currentMember.getId(), now, earnedPoints);
+        log.info("약 복용 인증 완료: scheduleId={}, memberId={}, verifiedAt={}, doseDate={}, earnedPoints={}",
+                scheduleId, currentMember.getId(), now, doseDate, earnedPoints);
         return MedicationProofResponse.of(currentPoints(currentMember), earnedPoints);
     }
 
@@ -90,21 +101,36 @@ public class MedicationProofTransactionService {
         }
     }
 
-    private void validateScheduleTime(MedicineSchedule schedule, LocalDateTime now) {
-        if (!schedule.isEffectiveOn(now.toLocalDate())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "오늘 유효하지 않은 약 복용 스케줄입니다.");
+    /**
+     * 복용 기준일: now가 알람 ±30분 안에 드는 알람의 날짜(어제·오늘·내일 중, LLD-0101).
+     * 23:45 알람을 00:05에 인증하면 어제, 00:10 알람을 23:50에 인증하면 내일이다.
+     * 창(60분)이 하루보다 훨씬 짧아 맞는 날짜는 많아야 하나다.
+     */
+    private LocalDate resolveDoseDate(MedicineSchedule schedule, LocalDateTime now) {
+        for (int dayOffset = -1; dayOffset <= 1; dayOffset++) {
+            LocalDate date = now.toLocalDate().plusDays(dayOffset);
+            if (isWithinWindow(date.atTime(schedule.getAlarmTime()), now)) {
+                validateEffectiveOn(schedule, date);
+                return date;
+            }
         }
+        throw new BusinessException(ErrorCode.BAD_REQUEST,
+                String.format("약 복용 인증은 알람 시간 전후 %d분 이내에만 가능합니다.", ALLOWED_TIME_WINDOW_MINUTES));
+    }
 
-        LocalDateTime alarmDateTime = now.toLocalDate().atTime(schedule.getAlarmTime());
-        if (now.isBefore(alarmDateTime.minusMinutes(ALLOWED_TIME_WINDOW_MINUTES))
-                || now.isAfter(alarmDateTime.plusMinutes(ALLOWED_TIME_WINDOW_MINUTES))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST,
-                    String.format("약 복용 인증은 알람 시간 전후 %d분 이내에만 가능합니다.", ALLOWED_TIME_WINDOW_MINUTES));
+    private boolean isWithinWindow(LocalDateTime alarmAt, LocalDateTime now) {
+        return !now.isBefore(alarmAt.minusMinutes(ALLOWED_TIME_WINDOW_MINUTES))
+                && !now.isAfter(alarmAt.plusMinutes(ALLOWED_TIME_WINDOW_MINUTES));
+    }
+
+    private void validateEffectiveOn(MedicineSchedule schedule, LocalDate doseDate) {
+        if (!schedule.isEffectiveOn(doseDate)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "오늘 유효하지 않은 약 복용 스케줄입니다.");
         }
     }
 
-    private void validateNotVerifiedToday(MedicineSchedule schedule, LocalDateTime now) {
-        if (medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, now.toLocalDate())) {
+    private void validateNotVerified(MedicineSchedule schedule, LocalDate doseDate) {
+        if (medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, doseDate)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "오늘은 이미 해당 약 복용을 인증했습니다.");
         }
     }

@@ -179,7 +179,8 @@ erDiagram
         Long id PK
         Long medicine_schedule_id FK
         Long member_id FK
-        LocalDateTime verifiedAt
+        LocalDateTime verifiedAt "실제 인증 시각"
+        LocalDate verifiedDate "복용 기준일(인증한 알람의 날짜, LLD-0101), UK (medicine_schedule_id, verified_date)"
     }
 
     Walk {

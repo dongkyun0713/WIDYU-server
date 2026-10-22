@@ -8,6 +8,8 @@ import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.medicine.MedicationProof;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,7 +35,8 @@ class MedicationProofDeletionServiceTest {
         Member member = Member.createMember(MemberType.SENIOR, "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", 1L);
         MedicationProof proof = MedicationProof.create(null, null,
-                List.of("https://cdn.example.com/medication-proof/1/proof.jpg"));
+                List.of("https://cdn.example.com/medication-proof/1/proof.jpg"),
+                LocalDateTime.of(2026, 8, 10, 8, 5), LocalDate.of(2026, 8, 10));
         given(medicationProofRepository.findAllByMember(member)).willReturn(List.of(proof));
 
         // when

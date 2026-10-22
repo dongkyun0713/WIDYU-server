@@ -35,6 +35,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -179,7 +180,8 @@ class MedicineScheduleServiceTest {
                     ReflectionTestUtils.setField(newSchedule, "id", 101L);
                     return newSchedule;
                 });
-        MedicationProof proof = MedicationProof.create(existing, targetMember, List.of());
+        MedicationProof proof = MedicationProof.create(
+                existing, targetMember, List.of(), LocalDateTime.now(), LocalDate.now());
 
         // when
         MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
