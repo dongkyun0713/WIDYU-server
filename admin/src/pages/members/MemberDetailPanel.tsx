@@ -104,7 +104,9 @@ export default function MemberDetailPanel({ memberId, onClose }: Props) {
     if (!data) return
     const confirmed = window.confirm(
       `${data.name}(ID ${data.id}) 계정을 비활성화할까요?\n\n` +
-        '비활성화하면 이 회원의 앱 요청이 모두 차단됩니다. 하단의 "계정 복구"로 되돌릴 수 있습니다.'
+        '비활성화 이후 이 회원의 앱 API 요청과 새 실시간 연결이 차단됩니다. ' +
+        '이미 연결된 실시간(WebSocket) 연결은 바로 끊기지 않습니다.\n' +
+        '하단의 "계정 복구"로 되돌릴 수 있습니다.'
     )
     if (confirmed) changeStatus('INACTIVE')
   }

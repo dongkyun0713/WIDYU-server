@@ -67,7 +67,7 @@ export default function MembersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">회원 관리</h1>
-        {data && (
+        {data && !isError && (
           <span className="text-sm text-gray-400">총 {data.totalElements.toLocaleString()}명</span>
         )}
       </div>

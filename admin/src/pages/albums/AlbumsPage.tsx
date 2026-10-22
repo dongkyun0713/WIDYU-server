@@ -47,7 +47,7 @@ export default function AlbumsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">앨범 관리</h1>
-        {data && (
+        {data && !isError && (
           <span className="text-sm text-gray-400">총 {data.totalElements.toLocaleString()}건</span>
         )}
       </div>
