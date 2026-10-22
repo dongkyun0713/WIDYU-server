@@ -145,10 +145,11 @@ class ClockMappingServiceTest {
     @DisplayName("동시에 처음 보는 매핑이 들어와 유니크 키 경합이 나면 재조회해 대조하고 통과한다")
     void 동시에_처음_보는_매핑이_들어와_유니크_키_경합이_나면_재조회해_대조하고_통과한다() {
         // given
-        given(clockMappingRepository.findByClockMappingId(MAPPING_ID))
-                .willReturn(Optional.empty(), Optional.of(registeredMapping()));
+        given(clockMappingRepository.findByClockMappingId(MAPPING_ID)).willReturn(Optional.empty());
         org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("uk_clock_mapping_id"))
                 .given(clockMappingInsertService).insert(any(ClockMapping.class));
+        // 상대가 커밋한 행은 호출 트랜잭션의 스냅샷에 보이지 않아 새 트랜잭션에서 읽는다(LLD-0044 5.1, LLD-0103).
+        given(clockMappingInsertService.findCommitted(MAPPING_ID)).willReturn(Optional.of(registeredMapping()));
 
         // when & then
         assertThatCode(() ->
@@ -165,6 +166,7 @@ class ClockMappingServiceTest {
         given(clockMappingRepository.findByClockMappingId(MAPPING_ID)).willReturn(Optional.empty());
         org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("not_a_unique_key_conflict"))
                 .given(clockMappingInsertService).insert(any(ClockMapping.class));
+        given(clockMappingInsertService.findCommitted(MAPPING_ID)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() ->

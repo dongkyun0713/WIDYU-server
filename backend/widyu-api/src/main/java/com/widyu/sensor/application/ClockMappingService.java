@@ -47,7 +47,7 @@ public class ClockMappingService {
                 return;
             } catch (DataIntegrityViolationException e) {
                 // 같은 매핑을 처음 보는 요청 둘이 동시에 왔다. 한 행만 남고 둘 다 대조로 넘어간다.
-                registered = clockMappingRepository.findByClockMappingId(clock.clockMappingId())
+                registered = clockMappingInsertService.findCommitted(clock.clockMappingId())
                         .orElseThrow(() -> e);
             }
         }
