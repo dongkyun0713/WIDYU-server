@@ -20,5 +20,15 @@ public record MedicineSearchResponse(
             String usage,
             String efficacy
 
-    ) {}
+    ) {
+        public static MedicineItem of(
+                Long medicineId,
+                String itemName,
+                String itemImage,
+                String usage,
+                String efficacy
+        ) {
+            return new MedicineItem(medicineId, itemName, itemImage, usage, efficacy);
+        }
+    }
 }

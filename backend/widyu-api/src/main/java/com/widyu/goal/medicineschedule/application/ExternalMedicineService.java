@@ -119,7 +119,7 @@ public class ExternalMedicineService {
 
     private MedicineSearchResponse toSearchResponse(List<Medicine> medicines) {
         List<MedicineSearchResponse.MedicineItem> items = medicines.stream()
-                .map(m -> new MedicineSearchResponse.MedicineItem(
+                .map(m -> MedicineSearchResponse.MedicineItem.of(
                         m.getId(),
                         m.getItemName(),
                         m.getItemImage(),

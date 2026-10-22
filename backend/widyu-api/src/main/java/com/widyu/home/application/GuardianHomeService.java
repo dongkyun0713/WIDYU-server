@@ -172,7 +172,7 @@ public class GuardianHomeService {
 
         int totalCount = schedules.size();
 
-        return new GuardianHomeCardsResponse.MedicineInfo(totalCount, latestProofImageUrl, scheduleStatuses);
+        return GuardianHomeCardsResponse.MedicineInfo.of(totalCount, latestProofImageUrl, scheduleStatuses);
     }
 
     private List<GuardianHomeCardsResponse.AlbumInfo> getScoredAlbums(Member senior, LocalDate today) {

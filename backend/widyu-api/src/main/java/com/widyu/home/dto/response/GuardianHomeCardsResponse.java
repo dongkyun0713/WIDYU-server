@@ -89,7 +89,15 @@ public record GuardianHomeCardsResponse(
 
             @Schema(description = "스케줄별 복용 상태 (동그라미 색상용, 복용 시간 오름차순)")
             List<ScheduleStatus> scheduleStatuses
-    ) {}
+    ) {
+        public static MedicineInfo of(
+                Integer totalCount,
+                String latestProofImageUrl,
+                List<ScheduleStatus> scheduleStatuses
+        ) {
+            return new MedicineInfo(totalCount, latestProofImageUrl, scheduleStatuses);
+        }
+    }
 
     public record ScheduleStatus(
             @Schema(description = "복용 시간 (HH:mm)", example = "08:00")

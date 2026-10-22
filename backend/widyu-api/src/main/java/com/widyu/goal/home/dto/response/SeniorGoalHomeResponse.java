@@ -81,6 +81,9 @@ public record SeniorGoalHomeResponse(
             @Schema(description = "목표 걸음 수", example = "10000")
             Integer goal
     ) {
+        public static StepsInfo of(Integer steps, Integer goal) {
+            return new StepsInfo(steps, goal);
+        }
     }
 
     @Schema(description = "병원 일정 정보")
