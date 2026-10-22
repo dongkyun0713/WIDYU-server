@@ -3,7 +3,15 @@ spring:
     activate:
       on-profile: "datasource"
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${DB_NAME}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&sslMode=${MYSQL_SSL_MODE:PREFERRED}
+    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${DB_NAME}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&sslMode=${MYSQL_SSL_MODE:PREFERRED}&connectTimeout=${DB_CONNECT_TIMEOUT_MS:3000}&socketTimeout=${DB_SOCKET_TIMEOUT_MS:60000}
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}
+    # DB 무응답 시 대기 상한(LLD-0106). 기본 30초면 심박 1건이 회원 확인·구독자 인가마다 30초씩 막혀 저하 경로(ADR-0040)가 밀린다.
+    # Hikari 시간 값은 밀리초 정수만 받는다. URL의 connectTimeout은 새 연결, socketTimeout은 실행 중 쿼리의 응답 대기다.
+    hikari:
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:3000}
+      # 빌려주기 전 생존 확인. 커넥션 대기(3초)보다 짧아야 죽은 커넥션을 버리고 다음 것을 볼 수 있다.
+      validation-timeout: ${DB_POOL_VALIDATION_TIMEOUT_MS:1000}
+      # Hikari 기본값과 같다. @Async 실행기 상한(LLD-0092)이 이 값을 기준으로 잡혀 있다.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}

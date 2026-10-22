@@ -1,6 +1,10 @@
 spring:
   application:
     name: WIDYU-backend
+  # 영속성 컨텍스트와 DB 커넥션을 서비스 트랜잭션 동안만 연다(LLD-0106). 켜면 HTTP 요청이 응답을 다 쓸 때까지
+  # 커넥션을 잡는다. 모든 프로파일(test 포함)에 같은 값을 적용하려고 공통 파일에 둔다.
+  jpa:
+    open-in-view: false
   profiles:
     group:
       local: "local, datasource, fcm, pay, s3"
