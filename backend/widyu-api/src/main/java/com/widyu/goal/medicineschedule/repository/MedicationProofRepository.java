@@ -42,7 +42,7 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
 
     long countByMemberAndVerifiedDate(Member member, LocalDate verifiedDate);
 
-    boolean existsByMedicineScheduleAndVerifiedDateAfter(MedicineSchedule medicineSchedule, LocalDate date);
+    boolean existsByMemberAndVerifiedDateAfter(Member member, LocalDate date);
 
     @Query("SELECT DISTINCT mp.medicineSchedule.id FROM MedicationProof mp " +
            "WHERE mp.medicineSchedule.id IN :scheduleIds AND mp.verifiedDate = :date")

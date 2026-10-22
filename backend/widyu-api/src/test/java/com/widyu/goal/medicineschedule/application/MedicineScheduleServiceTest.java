@@ -393,8 +393,8 @@ class MedicineScheduleServiceTest {
     }
 
     @Test
-    @DisplayName("다음 날 복용분을 이미 인증한 스케줄을 자정 전에 수정하면 예외가 발생하고 버전을 바꾸지 않는다")
-    void 다음_날_복용분을_인증한_스케줄을_자정_전에_수정하면_예외가_발생한다() {
+    @DisplayName("다음 날 복용분을 이미 인증했으면 자정 전 스케줄 수정은 예외가 발생하고 버전을 바꾸지 않는다")
+    void 다음_날_복용분을_인증했으면_자정_전_스케줄_수정은_예외가_발생한다() {
         // given: 23:50에 다음 날 00:10 알람을 미리 인증해 둔 상태(LLD-0101)
         Long memberId = 1L;
         Long scheduleId = 100L;
@@ -404,7 +404,7 @@ class MedicineScheduleServiceTest {
                 scheduleId, targetMember, LocalTime.of(0, 10), today().minusDays(5));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
                 .willReturn(Optional.of(existing));
-        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(existing, today()))
+        given(medicationProofRepository.existsByMemberAndVerifiedDateAfter(targetMember, today()))
                 .willReturn(true);
 
         // when & then
@@ -417,8 +417,8 @@ class MedicineScheduleServiceTest {
     }
 
     @Test
-    @DisplayName("다음 날 복용분을 이미 인증한 스케줄을 자정 전에 삭제하면 예외가 발생하고 마감하지 않는다")
-    void 다음_날_복용분을_인증한_스케줄을_자정_전에_삭제하면_예외가_발생한다() {
+    @DisplayName("다음 날 복용분을 이미 인증했으면 자정 전 스케줄 삭제는 예외가 발생하고 마감하지 않는다")
+    void 다음_날_복용분을_인증했으면_자정_전_스케줄_삭제는_예외가_발생한다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
@@ -427,7 +427,7 @@ class MedicineScheduleServiceTest {
         MedicineSchedule existing = scheduleEffectiveFrom(
                 scheduleId, targetMember, LocalTime.of(0, 10), today().minusDays(5));
         given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
-        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDateAfter(existing, today()))
+        given(medicationProofRepository.existsByMemberAndVerifiedDateAfter(targetMember, today()))
                 .willReturn(true);
 
         // when & then
@@ -435,6 +435,23 @@ class MedicineScheduleServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("자정이 지난 뒤");
         assertThat(existing.isCurrent()).isTrue();
+        then(fcmService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("다음 날 복용분을 이미 인증했으면 자정 전 스케줄 등록은 예외가 발생하고 저장하지 않는다")
+    void 다음_날_복용분을_인증했으면_자정_전_스케줄_등록은_예외가_발생한다() {
+        // given: 다음 날 일정이 하나뿐일 때 미리 인증해 완주 보너스를 받은 상태. 일정을 더하면 보너스가 다시 나간다.
+        Long memberId = 1L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicationProofRepository.existsByMemberAndVerifiedDateAfter(targetMember, today())).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> medicineScheduleService.createSchedule(createRequest("08:00"), memberId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("자정이 지난 뒤");
+        then(medicineScheduleRepository).should(never()).save(any());
         then(fcmService).shouldHaveNoInteractions();
     }
 
