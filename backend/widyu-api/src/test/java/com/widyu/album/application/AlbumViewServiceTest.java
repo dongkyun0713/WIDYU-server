@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 
 import com.widyu.album.Album;
 import com.widyu.album.AlbumView;
+import com.widyu.album.repository.AlbumRepository;
 import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
 import com.widyu.member.Member;
@@ -28,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AlbumViewServiceTest {
 
     @Mock private AlbumViewRepository albumViewRepository;
+    @Mock private AlbumRepository albumRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -49,6 +51,7 @@ class AlbumViewServiceTest {
 
         // then
         verify(albumViewRepository).save(any(AlbumView.class));
+        verify(albumRepository).incrementViewCount(10L);
         verify(album).incrementViewCount();
         verify(eventPublisher).publishEvent(any(AlbumViewedEvent.class));
     }
@@ -67,6 +70,7 @@ class AlbumViewServiceTest {
 
         // then
         verify(albumViewRepository, never()).save(any(AlbumView.class));
+        verify(albumRepository, never()).incrementViewCount(any());
         verify(album, never()).incrementViewCount();
         verify(eventPublisher, never()).publishEvent(any());
     }
