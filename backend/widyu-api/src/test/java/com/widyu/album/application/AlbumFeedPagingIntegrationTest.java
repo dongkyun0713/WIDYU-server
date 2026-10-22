@@ -7,6 +7,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.album.Album;
 import com.widyu.album.dto.request.AlbumFeedRequest;
 import com.widyu.album.dto.response.AlbumFeedResponse;
+import com.widyu.album.dto.response.AlbumMediaResponse;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.dto.CursorPage;
 import com.widyu.global.util.MemberUtil;
@@ -78,6 +79,26 @@ class AlbumFeedPagingIntegrationTest {
         assertThat(last.hasNext()).isFalse();
     }
 
+    @Test
+    @DisplayName("미디어 피드는 앨범 11개를 첫 페이지 앨범 10개, 마지막 페이지 1개로 나눠 반환한다")
+    void 미디어_피드는_앨범_11개를_10개와_1개로_나눠_반환한다() {
+        // given
+        Member guardian = persistGuardianAsCurrentMember();
+        List<Long> newestFirstIds = persistAlbums(guardian, 11);
+
+        // when
+        CursorPage<AlbumMediaResponse> first = albumFeedService.getMediaFeed(null, null);
+        AlbumFeedRequest cursor = AlbumFeedRequest.from(first.nextCursor(), null);
+        CursorPage<AlbumMediaResponse> last = albumFeedService.getMediaFeed(
+                cursor.lastCreatedAt(), cursor.lastAlbumId());
+
+        // then
+        assertThat(postIds(first)).containsExactlyElementsOf(newestFirstIds.subList(0, 10));
+        assertThat(first.hasNext()).isTrue();
+        assertThat(postIds(last)).containsExactly(newestFirstIds.get(10));
+        assertThat(last.hasNext()).isFalse();
+    }
+
     private Member persistGuardianAsCurrentMember() {
         Member guardian = entityManager.persist(Member.createMember(MemberType.GUARDIAN, "보호자", "01011112222"));
         given(memberUtil.getCurrentMember()).willReturn(guardian);
@@ -89,8 +110,9 @@ class AlbumFeedPagingIntegrationTest {
     private List<Long> persistAlbums(Member writer, int count) {
         List<Long> newestFirstIds = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            Album album = entityManager.persistAndFlush(
-                    Album.createAlbumWithMetadata(writer, "앨범 " + i, List.of(), List.of(), List.of()));
+            String photoUrl = "https://cdn.test/photo-" + i + ".jpg";
+            Album album = entityManager.persistAndFlush(Album.createAlbumWithMetadata(
+                    writer, "앨범 " + i, List.of(photoUrl), List.of(photoUrl), List.of()));
             entityManager.getEntityManager()
                     .createNativeQuery("UPDATE album SET created_at = ?1 WHERE album_id = ?2")
                     .setParameter(1, BASE_TIME.plusMinutes(i))
@@ -104,5 +126,9 @@ class AlbumFeedPagingIntegrationTest {
 
     private List<Long> albumIds(CursorPage<AlbumFeedResponse> page) {
         return page.items().stream().map(AlbumFeedResponse::albumId).toList();
+    }
+
+    private List<Long> postIds(CursorPage<AlbumMediaResponse> page) {
+        return page.items().stream().map(AlbumMediaResponse::postId).toList();
     }
 }
