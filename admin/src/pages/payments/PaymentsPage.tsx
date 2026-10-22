@@ -49,7 +49,7 @@ export default function PaymentsPage() {
   const [page, setPage] = useState(0)
   const SIZE = 20
 
-  const { data, isLoading } = useQuery<PageResponse<PaymentItem>>({
+  const { data, isLoading, isError } = useQuery<PageResponse<PaymentItem>>({
     queryKey: ['admin-payments', page],
     queryFn: async () => {
       const { data } = await client.get('/admin/payments', { params: { page, size: SIZE } })
@@ -93,6 +93,10 @@ export default function PaymentsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-gray-400">불러오는 중...</td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-red-400">데이터를 불러오지 못했습니다.</td>
               </tr>
             ) : data?.content.length === 0 ? (
               <tr>

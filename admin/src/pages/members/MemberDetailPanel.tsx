@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import client from '../../api/client'
 
 interface FamilyInfo {
@@ -87,7 +88,7 @@ export default function MemberDetailPanel({ memberId, onClose }: Props) {
     enabled: memberId !== null,
   })
 
-  const { mutate: changeStatus, isPending } = useMutation({
+  const { mutate: changeStatus, isPending, error: statusError } = useMutation({
     mutationFn: async (status: 'ACTIVE' | 'INACTIVE') => {
       await client.patch(`/admin/members/${memberId}/status`, null, { params: { status } })
     },
@@ -98,6 +99,23 @@ export default function MemberDetailPanel({ memberId, onClose }: Props) {
   })
 
   if (memberId === null) return null
+
+  const handleDeactivate = () => {
+    if (!data) return
+    const confirmed = window.confirm(
+      `${data.name}(ID ${data.id}) 계정을 비활성화할까요?\n\n` +
+        '비활성화하면 이 회원의 앱 요청이 모두 차단됩니다. 하단의 "계정 복구"로 되돌릴 수 있습니다.'
+    )
+    if (confirmed) changeStatus('INACTIVE')
+  }
+
+  let statusErrorMessage = ''
+  if (statusError) {
+    statusErrorMessage = '상태 변경에 실패했습니다. 잠시 후 다시 시도해주세요.'
+    if (axios.isAxiosError(statusError) && statusError.response?.data?.message) {
+      statusErrorMessage = statusError.response.data.message
+    }
+  }
 
   return (
     <>
@@ -230,7 +248,7 @@ export default function MemberDetailPanel({ memberId, onClose }: Props) {
           <div className="px-5 py-4 border-t border-gray-100">
             {data.status === 'ACTIVE' ? (
               <button
-                onClick={() => changeStatus('INACTIVE')}
+                onClick={handleDeactivate}
                 disabled={isPending}
                 className="w-full py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
               >
@@ -245,6 +263,7 @@ export default function MemberDetailPanel({ memberId, onClose }: Props) {
                 {isPending ? '처리 중...' : '계정 복구'}
               </button>
             ) : null}
+            {statusErrorMessage && <p className="mt-2 text-xs text-red-500">{statusErrorMessage}</p>}
           </div>
         )}
       </div>

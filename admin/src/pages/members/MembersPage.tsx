@@ -47,7 +47,7 @@ export default function MembersPage() {
     }
   }, [])
 
-  const { data, isLoading } = useQuery<PageResponse<MemberDetail>>({
+  const { data, isLoading, isError } = useQuery<PageResponse<MemberDetail>>({
     queryKey: ['admin-members-list', search, page],
     queryFn: async () => {
       const { data } = await client.get('/admin/members/list', {
@@ -115,6 +115,10 @@ export default function MembersPage() {
               <tr>
                 <td colSpan={7} className="text-center py-12 text-gray-400">불러오는 중...</td>
               </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-red-400">데이터를 불러오지 못했습니다.</td>
+              </tr>
             ) : data?.content.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-gray-400">결과 없음</td>
@@ -151,6 +155,7 @@ export default function MembersPage() {
       </div>
 
       <MemberDetailPanel
+        key={selectedMemberId}
         memberId={selectedMemberId}
         onClose={() => setSelectedMemberId(null)}
       />
