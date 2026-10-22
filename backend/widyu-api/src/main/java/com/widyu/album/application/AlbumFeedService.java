@@ -60,8 +60,8 @@ public class AlbumFeedService {
             date = request.parsedDate();
         }
 
-        // 1) 앨범 ID 커서 페이지 조회 (size+1 로 hasNext 판단)
-        Pageable pageable = pagePlusOne(ALBUM_FEED_SIZE);
+        // 1) 앨범 ID 커서 페이지 조회. Slice가 size+1건을 읽어 hasNext를 정하고 내용은 size건만 준다.
+        Pageable pageable = PageRequest.of(0, ALBUM_FEED_SIZE);
         Slice<Long> idSlice = findAlbumIdSlice(
                 lastCreatedAt,
                 lastAlbumId,
@@ -76,11 +76,8 @@ public class AlbumFeedService {
         // 3) 벌크 변환
         List<AlbumFeedResponse> feed = convertToFeedResponsesBulk(albums, currentMember);
 
-        // 4) 트리밍 & 커서/hasNext
+        // 4) 커서/hasNext
         boolean hasNext = idSlice.hasNext();
-        if (feed.size() > ALBUM_FEED_SIZE) {
-            feed = feed.subList(0, ALBUM_FEED_SIZE);
-        }
         String nextCursor = lastCursorOrNull(feed);
 
         return new CursorPage<>(feed, nextCursor, hasNext);
@@ -90,7 +87,7 @@ public class AlbumFeedService {
     public CursorPage<AlbumMediaResponse> getMediaFeed(LocalDateTime lastCreatedAt, Long lastPostId) {
         Member currentMember = memberUtil.getCurrentMember();
         List<Long> familyMemberIds = familyAccessService.getFamilyMemberIds(currentMember);
-        Pageable pageable = pagePlusOne(MEDIA_FEED_SIZE);
+        Pageable pageable = PageRequest.of(0, MEDIA_FEED_SIZE);
 
         // 1) 앨범 ID 커서 페이지
         Slice<Long> idSlice = findAlbumIdSlice(lastCreatedAt, lastPostId, null, familyMemberIds, pageable);
@@ -114,10 +111,6 @@ public class AlbumFeedService {
         }
 
         return new CursorPage<>(albumMediaResponses, nextCursor, hasNext);
-    }
-
-    private Pageable pagePlusOne(int size) {
-        return PageRequest.of(0, size + 1);
     }
 
     private Slice<Long> findAlbumIdSlice(LocalDateTime lastCreatedAt, Long lastPostId, LocalDate date,
