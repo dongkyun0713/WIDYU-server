@@ -50,6 +50,9 @@ import static org.mockito.BDDMockito.*;
 @Import({JpaAuditingConfig.class, FcmService.class, FcmOutboxService.class, FcmOutboxTransactions.class,
         FcmEligibility.class, NotificationSettingService.class,         WalkNotificationListener.class, HealthScheduleNotificationListener.class})
 class FcmSchedulerOutboxIntegrationTest {
+    /** 14:20 회차의 조회 창은 [15:20, 15:30)이다. 실행 시각의 밀리초는 버린다(LLD-0105). */
+    private static final LocalDateTime RUN_AT = LocalDateTime.of(2026, 10, 22, 14, 20, 0, 37_000_000);
+    private static final LocalDateTime SCHEDULED_AT = LocalDateTime.of(2026, 10, 22, 15, 25);
     @Autowired WalkNotificationListener walkScheduler;
     @Autowired HealthScheduleNotificationListener healthScheduler;
     @Autowired WalkRepository walks;
@@ -99,7 +102,7 @@ class FcmSchedulerOutboxIntegrationTest {
         createSchedule();
         observeEnqueue(false);
         // when
-        healthScheduler.sendHealthScheduleReminder();
+        healthScheduler.sendHealthScheduleReminderAt(RUN_AT);
         // then
         assertCommittedAndDispatch(FcmCategory.HEALTH_SCHEDULE);
     }
@@ -110,10 +113,10 @@ class FcmSchedulerOutboxIntegrationTest {
         // given
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 schedules.save(HealthSchedule.create(guardianWithToken(), "병원 방문", "주소", 37.0, 127.0,
-                        LocalDateTime.now().plusHours(1).plusMinutes(5))));
+                        SCHEDULED_AT)));
 
         // when
-        healthScheduler.sendHealthScheduleReminder();
+        healthScheduler.sendHealthScheduleReminderAt(RUN_AT);
 
         // then
         assertThat(notifications.count()).isZero();
@@ -134,15 +137,39 @@ class FcmSchedulerOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("건강 일정 스케줄러의 커밋이 실패하면 outbox와 송신을 남기지 않는다")
-    void 건강일정_스케줄러_롤백은_송신하지_않는다() {
+    @DisplayName("건강 일정 한 건의 커밋이 실패하면 그 일정의 outbox와 송신을 남기지 않고 스케줄러는 계속한다")
+    void 건강일정_한_건의_커밋이_실패하면_그_일정은_송신하지_않는다() {
         // given
         createSchedule();
         observeEnqueue(true);
-        // when / then
-        assertThatThrownBy(() -> healthScheduler.sendHealthScheduleReminder())
-                .isInstanceOf(IllegalStateException.class).hasMessage("scheduler commit failure");
+        // when / then: 일정마다 따로 커밋하므로 실패는 그 일정 안에서 끝난다.
+        assertThatCode(() -> healthScheduler.sendHealthScheduleReminderAt(RUN_AT)).doesNotThrowAnyException();
         assertRolledBackWithoutDispatch();
+    }
+
+    @Test
+    @DisplayName("건강 일정 한 건의 커밋이 실패해도 같은 회차의 다른 일정 outbox는 커밋한다")
+    void 건강일정_한_건의_커밋이_실패해도_다른_일정은_커밋한다() {
+        // given
+        Long failing = createScheduleFor("01011110001", "first-loopback");
+        Long committed = createScheduleFor("01011110002", "second-loopback");
+        willAnswer(invocation -> {
+            invocation.callRealMethod();
+            if (failing.equals(invocation.getArgument(0))) {
+                failNextCommit();
+            }
+            return null;
+        }).given(fcm).sendMessageToUser(anyLong(), any(FcmSendDto.class));
+
+        // when
+        healthScheduler.sendHealthScheduleReminderAt(RUN_AT);
+
+        // then
+        assertThat(outbox.findAll()).singleElement()
+                .satisfies(row -> assertThat(row.getRecipientMember().getId()).isEqualTo(committed));
+        assertThat(notifications.count()).isEqualTo(1);
+        then(immediate).should().submit(outbox.findAll().getFirst().getId());
+        then(immediate).shouldHaveNoMoreInteractions();
     }
 
     private void observeEnqueue(boolean failCommit) {
@@ -154,15 +181,19 @@ class FcmSchedulerOutboxIntegrationTest {
             then(immediate).shouldHaveNoInteractions();
             then(transport).shouldHaveNoInteractions();
             if (failCommit) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void beforeCommit(boolean readOnly) {
-                        throw new IllegalStateException("scheduler commit failure");
-                    }
-                });
+                failNextCommit();
             }
             return null;
         }).given(fcm).sendMessageToUser(anyLong(), any(FcmSendDto.class));
+    }
+
+    private void failNextCommit() {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void beforeCommit(boolean readOnly) {
+                throw new IllegalStateException("scheduler commit failure");
+            }
+        });
     }
 
     private void assertCommittedAndDispatch(FcmCategory category) {
@@ -222,7 +253,16 @@ class FcmSchedulerOutboxIntegrationTest {
     private void createSchedule() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 schedules.save(HealthSchedule.create(memberWithToken(), "병원 방문", "주소", 37.0, 127.0,
-                        LocalDateTime.now().plusHours(1).plusMinutes(5))));
+                        SCHEDULED_AT)));
+    }
+
+    private Long createScheduleFor(String phone, String token) {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            Member member = members.save(Member.createMember(MemberType.SENIOR, "수신자", phone));
+            tokens.save(MemberFcmToken.builder().member(member).token(token).active(true).build());
+            schedules.save(HealthSchedule.create(member, "병원 방문", "주소", 37.0, 127.0, SCHEDULED_AT));
+            return member.getId();
+        });
     }
 
     private Member memberWithToken() {

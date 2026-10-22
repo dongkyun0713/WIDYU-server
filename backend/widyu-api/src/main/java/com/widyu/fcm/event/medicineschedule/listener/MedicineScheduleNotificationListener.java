@@ -177,9 +177,10 @@ public class MedicineScheduleNotificationListener {
     private void sendGuardianNotification(MedicineSchedule schedule, LocalDate date) {
         Long seniorMemberId = schedule.getMember().getId();
 
-        // 시니어 프로필이 있는지 확인
-        if (schedule.getMember().getSeniorProfile() == null) {
-            log.debug("보호자 알림 스킵: 시니어 프로필이 없는 회원입니다. memberId={}", seniorMemberId);
+        // 시니어 프로필과 가족이 있는지 확인. 방장 탈퇴로 가족이 해제되면 family가 null이다.
+        if (schedule.getMember().getSeniorProfile() == null
+                || schedule.getMember().getSeniorProfile().getFamily() == null) {
+            log.debug("보호자 알림 스킵: 가족에 속하지 않은 시니어입니다. memberId={}", seniorMemberId);
             return;
         }
 
