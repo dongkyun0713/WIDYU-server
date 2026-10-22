@@ -2,6 +2,9 @@ package com.widyu.member.repository;
 
 import com.widyu.member.SeniorProfile;
 import jakarta.persistence.LockModeType;
+import com.widyu.member.Member;
+import com.widyu.global.entity.Status;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,6 +32,12 @@ public interface SeniorProfileRepository extends JpaRepository<SeniorProfile, Lo
     @Query("SELECT sp FROM SeniorProfile sp WHERE sp.inviteCode = :inviteCode AND sp.member.phoneNumber = :phoneNumber")
     Optional<SeniorProfile> findByInviteCodeAndMemberPhoneNumber(@Param("inviteCode") String inviteCode,
                                                                    @Param("phoneNumber") String phoneNumber);
+
+    /** 걷기 기본 목표가 있는데 그날 걸음 기록이 없는 회원. 19시 걷기 목표 미달 알림(W01)의 0걸음 대상이다. */
+    @Query("SELECT sp.member FROM SeniorProfile sp "
+            + "WHERE sp.defaultWalkGoal IS NOT NULL AND sp.member.status = :status "
+            + "AND NOT EXISTS (SELECT w FROM Walk w WHERE w.member = sp.member AND w.walkDate = :date)")
+    List<Member> findMembersWithWalkGoalButNoWalkOn(@Param("date") LocalDate date, @Param("status") Status status);
 
     @Query("SELECT sp FROM SeniorProfile sp JOIN FETCH sp.member WHERE sp.family.id = :familyId")
     List<SeniorProfile> findAllByFamilyIdWithMember(@Param("familyId") Long familyId);
