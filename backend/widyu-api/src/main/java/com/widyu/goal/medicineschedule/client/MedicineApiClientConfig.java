@@ -1,6 +1,8 @@
 package com.widyu.goal.medicineschedule.client;
 
+import com.widyu.global.properties.MedicineProperties;
 import feign.Logger;
+import feign.Request;
 import feign.RequestInterceptor;
 import feign.codec.Decoder;
 import org.springframework.beans.factory.ObjectFactory;
@@ -14,6 +16,13 @@ public class MedicineApiClientConfig {
     @Bean
     Logger.Level feignLoggerLevel() {
         return Logger.Level.FULL;
+    }
+
+    // 검색 경로 타임아웃. 배치는 호출마다 Request.Options를 넘겨 읽기 타임아웃을 늘린다(LLD-0100).
+    @Bean
+    Request.Options medicineRequestOptions(MedicineProperties medicineProperties) {
+        MedicineProperties.Api api = medicineProperties.api();
+        return new Request.Options(api.connectTimeout(), api.readTimeout(), true);
     }
 
     @Bean

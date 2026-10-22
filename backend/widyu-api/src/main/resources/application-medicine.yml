@@ -2,3 +2,9 @@ medicine:
   api:
     url: http://apis.data.go.kr/1471000/DrbEasyDrugInfoService
     service-key: ${MEDICINE_API_SERVICE_KEY}
+    # 공공 약품 API 타임아웃(LLD-0100). 지정하지 않으면 OpenFeign 기본값(연결 10초·읽기 60초)으로 요청이 오래 묶인다.
+    connect-timeout: 2s
+    # 사용자 검색은 DB에 결과가 없을 때만 외부를 부르고, 실패하면 빈 목록을 돌려준다. 오래 기다리지 않는다.
+    read-timeout: 3s
+    # 월간 배치는 100건 페이지를 받고 DB 트랜잭션 밖에서 호출하므로 길게 기다린다.
+    batch-read-timeout: 30s
