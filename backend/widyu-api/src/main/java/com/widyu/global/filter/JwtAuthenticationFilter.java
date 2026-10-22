@@ -36,6 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Set<String> TEMPORARY_TOKEN_PATHS = Set.of(
             "/api/v1/auth/guardians/sign-up/local",
             "/api/v1/auth/guardians/password",
+            "/api/v1/auth/guardians/email",
             "/api/v1/auth/guardians/apple/phone-number",
             "/api/v1/auth/guardians/profile/temporary",
             "/api/v1/auth/guardians/social/integration"

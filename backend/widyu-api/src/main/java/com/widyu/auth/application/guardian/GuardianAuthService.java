@@ -104,8 +104,9 @@ public class GuardianAuthService {
     }
 
     @Transactional(readOnly = true)
-    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
-        return localLoginService.findMemberByPhoneNumberAndName(request);
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request,
+                                                             HttpServletRequest httpServletRequest) {
+        return localLoginService.findMemberByPhoneNumberAndName(request, httpServletRequest);
     }
 
     @Transactional(readOnly = true)

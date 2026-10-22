@@ -5,14 +5,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.widyu.auth.TemporaryMember;
 import com.widyu.auth.infrastructure.AuthLimitStore;
 import com.widyu.auth.infrastructure.ClientIpResolver;
 import com.widyu.auth.dto.request.EmailCheckRequest;
 import com.widyu.auth.dto.request.LocalGuardianSignInRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -23,6 +27,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.LocalAccountRepository;
 import com.widyu.member.repository.MemberRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -195,5 +200,77 @@ class LocalLoginServiceTest {
         assertThatThrownBy(() -> localLoginService.signIn(new LocalGuardianSignInRequest(email, "wrong-password")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_PASSWORD);
+    }
+
+    @Test
+    @DisplayName("SMS 인증한 이름·전화번호로 이메일 찾기를 요청하면 로컬 계정 이메일을 반환한다")
+    void SMS_인증한_이름_전화번호로_이메일_찾기를_요청하면_로컬_계정_이메일을_반환한다() {
+        // given
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        TemporaryMember temporaryMember = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
+        given(temporaryMemberUtil.getTemporaryMemberFromRequest(httpRequest)).willReturn(temporaryMember);
+
+        Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        ReflectionTestUtils.setField(member, "localAccount",
+                LocalAccount.createLocalAccount(member, "guardian@test.com", "encoded"));
+        given(memberRepository.findByPhoneNumberAndName("01012345678", "홍길동")).willReturn(Optional.of(member));
+
+        // when
+        MemberInfoResponse response = localLoginService.findMemberByPhoneNumberAndName(
+                new SmsVerificationRequest("홍길동", "01012345678"), httpRequest);
+
+        // then
+        assertThat(response.email()).isEqualTo("guardian@test.com");
+    }
+
+    @Test
+    @DisplayName("SMS 인증 정보와 다른 이름·전화번호로 이메일 찾기를 요청하면 회원을 조회하지 않고 FORBIDDEN 예외가 발생한다")
+    void SMS_인증_정보와_다른_전화번호로_이메일_찾기를_요청하면_예외가_발생한다() {
+        // given
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        TemporaryMember temporaryMember = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
+        given(temporaryMemberUtil.getTemporaryMemberFromRequest(httpRequest)).willReturn(temporaryMember);
+
+        // when & then
+        assertThatThrownBy(() -> localLoginService.findMemberByPhoneNumberAndName(
+                new SmsVerificationRequest("홍길동", "01099998888"), httpRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        verifyNoInteractions(memberRepository);
+    }
+
+    @Test
+    @DisplayName("임시 토큰 없이 이메일 찾기를 요청하면 회원을 조회하지 않고 UNAUTHORIZED 예외가 발생한다")
+    void 임시_토큰_없이_이메일_찾기를_요청하면_예외가_발생한다() {
+        // given
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        given(temporaryMemberUtil.getTemporaryMemberFromRequest(httpRequest))
+                .willThrow(new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        // when & then
+        assertThatThrownBy(() -> localLoginService.findMemberByPhoneNumberAndName(
+                new SmsVerificationRequest("홍길동", "01012345678"), httpRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.UNAUTHORIZED);
+        verifyNoInteractions(memberRepository);
+    }
+
+    @Test
+    @DisplayName("로컬 계정이 없는 회원의 이메일 찾기를 요청하면 MEMBER_NOT_FOUND 예외가 발생한다")
+    void 로컬_계정이_없는_회원의_이메일_찾기를_요청하면_예외가_발생한다() {
+        // given
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        TemporaryMember temporaryMember = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
+        given(temporaryMemberUtil.getTemporaryMemberFromRequest(httpRequest)).willReturn(temporaryMember);
+
+        Member socialOnlyMember = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
+        given(memberRepository.findByPhoneNumberAndName("01012345678", "홍길동"))
+                .willReturn(Optional.of(socialOnlyMember));
+
+        // when & then
+        assertThatThrownBy(() -> localLoginService.findMemberByPhoneNumberAndName(
+                new SmsVerificationRequest("홍길동", "01012345678"), httpRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MEMBER_NOT_FOUND);
     }
 }
