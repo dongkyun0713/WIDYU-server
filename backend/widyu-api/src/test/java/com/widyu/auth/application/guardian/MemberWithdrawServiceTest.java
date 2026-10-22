@@ -242,7 +242,7 @@ class MemberWithdrawServiceTest {
         Member member = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", 1L);
         SocialAccount appleAccount = SocialAccount.createSocialAccount(
-                "a@a.com", "apple", "apple-id", "apple-refresh-token", member
+                "a@a.com", "APPLE", "apple-id", "apple-refresh-token", member
         );
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
         given(memberUtil.getCurrentMember()).willReturn(member);
@@ -289,7 +289,7 @@ class MemberWithdrawServiceTest {
         ReflectionTestUtils.setField(member, "id", 1L);
         member.updateProfileImage("https://bucket/profile/a.jpg");
         SocialAccount appleAccount = SocialAccount.createSocialAccount(
-                "a@a.com", "apple", "apple-id", "apple-refresh-token", member
+                "a@a.com", "APPLE", "apple-id", "apple-refresh-token", member
         );
         ReflectionTestUtils.setField(member, "socialAccounts", List.of(appleAccount));
         given(memberUtil.getCurrentMember()).willReturn(member);

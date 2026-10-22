@@ -10,7 +10,8 @@ public final class SecurityConstant {
     public static final String NAVER_AUTH_URL = "https://nid.naver.com/oauth2.0/authorize";
     public static final String NAVER_TOKEN_URL = "https://nid.naver.com/oauth2.0/token";
     public static final String NAVER_USER_ME_URL = "https://openapi.naver.com/v1/nid/me";
-    public static final String NAVER_WITHDRAW_URL = "https://nid.naver.com/oauth2.0/token";
+    // 토큰 폐기(연동 해제): https://developers.naver.com/docs/login/devguide/devguide.md (4.3 Token Revocation)
+    public static final String NAVER_WITHDRAW_URL = "https://nid.naver.com/oauth2.0/revoke";
 
     // kakao
     public static final String KAKAO_AUTH_URL = "https://kauth.kakao.com/oauth/authorize";
