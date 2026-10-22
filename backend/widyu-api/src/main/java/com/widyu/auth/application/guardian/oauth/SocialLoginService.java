@@ -75,11 +75,18 @@ public class SocialLoginService {
                 .orElseGet(() -> handleNewSocialAccount(provider, socialResponse, userInfo, socialResponse.oauthId()));
     }
 
+    // ponytail: 이메일만으로 대상 회원을 고르므로 번호가 빈 Apple 회원은 다른 SMS 인증자도 채울 수 있다. Apple 로그인 세션과 결합하려면 클라이언트 변경이 필요하다 (LLD-0094 Open Questions)
     public void updatePhoneNumberIfAppleSignUp(AppleSignUpRequest request, HttpServletRequest httpServletRequest) {
-        Member member = findAppleMemberByEmail(request.email());
         TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+        Member member = findAppleMemberByEmail(request.email());
+
+        if (member.getPhoneNumber() != null && !member.getPhoneNumber().isBlank()) {
+            log.warn("전화번호가 이미 있는 애플 회원의 번호 보강 거부: memberId={}", member.getId());
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
 
         member.updatePhoneNumber(temporaryMember.getPhoneNumber());
+        temporaryMemberUtil.deleteTemporaryMember(temporaryMember.getId());
         log.info("애플 사용자 전화번호 업데이트 완료: memberId={}, email={}", member.getId(), PiiMaskingUtil.maskEmail(request.email()));
     }
 
