@@ -152,6 +152,8 @@ GET /api/location/seniors/{memberId}/trail
 | `location:stay:{memberId}` | Redis String | 86400s (24시간) | StayInfo (lat, lng, startTime, locationType, locationName) |
 | `safezone:alert:{memberId}` | Redis String | 1800s (30분) | 안전구역 이탈 알림 중복 방지 플래그 |
 
+> 2026-10-22 변경(LLD-0098): 위치마다 TTL을 다시 걸어 키가 만료되지 않으므로 `leftPush` 뒤 `LTRIM 0 899`로 최근 900점만 남기고, 조회도 `range(0, 899)`로 읽는다. 위 행의 `range(0,-1)`은 변경 전 기록이다.
+
 **SeniorLocation** (widyu-domain, @RedisHash):
 ```java
 @RedisHash(value = "senior_location", timeToLive = 300)
