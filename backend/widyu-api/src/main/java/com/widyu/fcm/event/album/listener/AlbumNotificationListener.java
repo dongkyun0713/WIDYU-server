@@ -16,6 +16,7 @@ import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
 import com.widyu.fcm.event.album.dto.AlbumLikedEvent;
 import com.widyu.fcm.event.album.dto.AlbumUnlockedEvent;
 import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
+import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -54,6 +55,7 @@ public class AlbumNotificationListener {
     private final AlbumViewRepository albumViewRepository;
     private final AlbumRepository albumRepository;
     private final AlbumUnlockRepository albumUnlockRepository;
+    private final FcmNotificationRepository fcmNotificationRepository;
 
     @EventListener
     @Transactional
@@ -149,6 +151,11 @@ public class AlbumNotificationListener {
                 .build();
         for (SeniorProfile senior : seniorProfileRepository.findAllByFamilyIdWithMember(guardian.familyId())) {
             Long seniorId = senior.getMember().getId();
+            // 같은 날 재실행이면 이미 보낸 알림이다. enqueue는 같은 eventId여도 푸시를 다시 만들므로 여기서 거른다.
+            // 동시 실행은 센터 행 UK(recipient, event_id)가 한쪽 트랜잭션을 outbox째 롤백시킨다.
+            if (fcmNotificationRepository.findByRecipientMemberIdAndEventId(seniorId, dto.eventId()).isPresent()) {
+                continue;
+            }
             try {
                 fcmService.sendMessageToUser(seniorId, dto);
             } catch (RuntimeException e) {

@@ -44,7 +44,7 @@ HTTP 변경 없음. 스케줄 `0 0 10 * * *`와 FCM 제목·본문·카테고리
 2. `from = today-7일 00:00`, `to = today-2일 00:00`으로 후보를 조회한다(마지막 활동 날짜가 today-7 ~ today-3).
 3. 후보마다 `days = 마지막 활동 날짜와 today 사이의 일수`를 구해 3·5·7일 때만 보낸다.
 4. 보호자 가족의 시니어 목록을 읽고 시니어마다 `FcmService.sendMessageToUser`를 호출한다. 이 호출이 자기 쓰기 트랜잭션으로 센터 행·outbox를 커밋한다([ADR-0028](../adr/ADR-0028-fcm-durable-delivery.md)).
-5. `eventId = inactive:{guardianId}:{days}:{today}`. 알림센터 행은 (수신자, eventId)가 유일하므로 같은 날 재실행돼도 센터 행이 늘지 않는다.
+5. `eventId = inactive:{guardianId}:{days}:{today}`. enqueue 전에 (시니어, eventId) 센터 행이 있으면 그 시니어는 건너뛴다. `FcmOutboxService.enqueue`는 같은 eventId 재enqueue에도 기기별 outbox를 다시 만들기 때문이다([LLD-0062](LLD-0062-notification-center-row-per-event.md) §6, at-least-once 유지). 두 인스턴스가 동시에 실행되면 센터 행 UK(recipient_member_id, event_id) 충돌로 늦은 쪽 트랜잭션이 outbox째 롤백된다.
 
 ## 6. 예외 / 에러 처리
 
@@ -52,13 +52,14 @@ HTTP 변경 없음. 스케줄 `0 0 10 * * *`와 FCM 제목·본문·카테고리
 | --- | --- |
 | 시니어 한 명의 enqueue 실패(DB 오류, 길이 초과 등) | 그 호출의 트랜잭션만 롤백, ERROR 로그(guardianId·seniorId) 후 다음 시니어로 진행 |
 | 보호자 가족에 시니어가 없음 | 보내지 않음 |
+| 같은 날 재실행 | 센터 행이 있는 시니어는 건너뜀 |
 | 수신자·보호자 비활성, 가족 불일치 | 기존 `FcmOutboxService.enqueue` 규칙대로 저장하지 않음 |
 
 ## 7. 인수조건 (Acceptance Criteria)
 
 - [x] AC1: 마지막 업로드가 정확히 3·5·7일 전이면 가족 시니어마다 알림 1건, 4·8일 전이면 0건이다. 날짜 경계(전날 23:50, 7일 전 00:00, 8일 전 23:59)도 날짜로 판정한다.
 - [x] AC2: 집계 쿼리는 보호자별 마지막 ACTIVE 업로드 시각을 쓰고 DELETED 앨범은 무시하며, 업로드가 없으면 가입 시각으로 범위를 판정한다.
-- [x] AC3: 같은 날 같은 보호자·일수의 알림은 `inactive:{guardianId}:{days}:{date}` eventId를 가진다.
+- [x] AC3: 같은 날 같은 보호자·일수의 알림은 `inactive:{guardianId}:{days}:{date}` eventId를 가지며, 그 센터 행이 이미 있는 시니어에게는 다시 enqueue하지 않는다.
 - [x] AC4: 한 시니어의 enqueue가 실패해도 같은 실행의 다음 시니어에게 보낸다.
 - [x] AC5: `AlbumNotificationListenerTest`, `AlbumGuardianLastActivityQueryTest`가 통과한다.
 

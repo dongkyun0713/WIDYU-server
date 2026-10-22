@@ -18,6 +18,7 @@ import com.widyu.album.repository.AlbumUnlockRepository;
 import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.album.repository.GuardianLastActivityRow;
 import com.widyu.fcm.DeliveryMode;
+import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -27,6 +28,7 @@ import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
 import com.widyu.fcm.event.album.dto.AlbumLikedEvent;
 import com.widyu.fcm.event.album.dto.AlbumUnlockedEvent;
 import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
+import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -60,6 +62,7 @@ class AlbumNotificationListenerTest {
     @Mock private AlbumViewRepository albumViewRepository;
     @Mock private AlbumRepository albumRepository;
     @Mock private AlbumUnlockRepository albumUnlockRepository;
+    @Mock private FcmNotificationRepository fcmNotificationRepository;
     @InjectMocks private AlbumNotificationListener listener;
 
     @Test
@@ -387,6 +390,29 @@ class AlbumNotificationListenerTest {
         listener.sendInactivityReminders(today);
 
         // then
+        then(fcmService).should().sendMessageToUser(eq(301L), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("같은 날 미업로드 알림을 이미 저장한 시니어에게는 다시 보내지 않는다")
+    void 같은_날_이미_저장한_미업로드_알림은_다시_보내지_않는다() {
+        // given
+        LocalDate today = LocalDate.of(2026, 10, 22);
+        given(albumRepository.findGuardianLastActivityBetween(any(), any())).willReturn(List.of(
+                new GuardianLastActivityRow(3L, "보호자", 9L, LocalDateTime.of(2026, 10, 19, 10, 0))));
+        SeniorProfile notified = mock(SeniorProfile.class);
+        given(notified.getMember()).willReturn(member(300L, MemberType.SENIOR, "받음"));
+        SeniorProfile pending = mock(SeniorProfile.class);
+        given(pending.getMember()).willReturn(member(301L, MemberType.SENIOR, "안받음"));
+        given(seniorProfileRepository.findAllByFamilyIdWithMember(9L)).willReturn(List.of(notified, pending));
+        given(fcmNotificationRepository.findByRecipientMemberIdAndEventId(300L, "inactive:3:3:2026-10-22"))
+                .willReturn(Optional.of(mock(FcmNotification.class)));
+
+        // when
+        listener.sendInactivityReminders(today);
+
+        // then
+        then(fcmService).should(never()).sendMessageToUser(eq(300L), any());
         then(fcmService).should().sendMessageToUser(eq(301L), any(FcmSendDto.class));
     }
 
