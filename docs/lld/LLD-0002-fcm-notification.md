@@ -232,11 +232,11 @@ AlbumNotificationListener (@EventListener, 동기)
 
 ```
 @Scheduled(cron = "0 0 10 * * *")  ← 매일 오전 10시
-  └─ [3일, 5일, 7일] 각 임계값에 대해:
-       └─ 전체 회원 조회
-       └─ 마지막 앨범 업로드일 계산
-       └─ 임계값 이전이면 보호자의 가족 내 시니어들에게 ALBUM 알림
+  └─ 보호자별 마지막 ACTIVE 업로드(없으면 가입) 시각을 집계 쿼리 1개로 조회
+  └─ 그 날짜가 정확히 3·5·7일 전이면 보호자의 가족 내 시니어들에게 ALBUM 알림 (수신자별 커밋)
 ```
+
+상세는 [LLD-0104](LLD-0104-album-inactivity-reminder-exact-day.md).
 
 ### 5-5. 알림 목록 조회
 

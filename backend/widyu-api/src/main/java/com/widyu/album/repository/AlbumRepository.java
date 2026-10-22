@@ -46,8 +46,22 @@ public interface AlbumRepository extends JpaRepository<Album, Long> {
             Pageable pageable
     );
 
-    @Query("SELECT a.createdAt FROM Album a WHERE a.member = :member AND a.status = :status ORDER BY a.createdAt DESC LIMIT 1")
-    Optional<LocalDateTime> findLastUploadDateByMember(@Param("member") Member member, @Param("status") Status status);
+    /**
+     * 앨범 미업로드 알림 대상(LLD-0104). 가족에 속한 ACTIVE 보호자마다 마지막 ACTIVE 업로드 시각(없으면 가입 시각)을
+     * 한 번에 집계하고, 그 시각이 [from, to)인 보호자만 돌려준다.
+     */
+    @Query("""
+            SELECT new com.widyu.album.repository.GuardianLastActivityRow(
+                g.id, g.name, fm.family.id, COALESCE(MAX(a.createdAt), g.createdAt))
+            FROM FamilyMembership fm JOIN fm.guardian g
+            LEFT JOIN Album a ON a.member = g AND a.status = com.widyu.global.entity.Status.ACTIVE
+            WHERE g.status = com.widyu.global.entity.Status.ACTIVE
+            GROUP BY g.id, g.name, g.createdAt, fm.family.id
+            HAVING COALESCE(MAX(a.createdAt), g.createdAt) >= :from
+               AND COALESCE(MAX(a.createdAt), g.createdAt) < :to
+            """)
+    List<GuardianLastActivityRow> findGuardianLastActivityBetween(
+            @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     long countByMemberId(Long id);
 
