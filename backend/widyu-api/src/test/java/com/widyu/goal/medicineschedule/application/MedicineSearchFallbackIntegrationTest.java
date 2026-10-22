@@ -25,6 +25,7 @@ import jakarta.persistence.EntityManagerFactory;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +43,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.jpa.EntityManagerHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Propagation;
@@ -62,9 +64,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 class MedicineSearchFallbackIntegrationTest {
 
     private static final String KEYWORD = "타";
-    private static final String ITEM_SEQ = "200001";
-    private static final String ITEM_NAME = "타이레놀정500밀리그람";
     private static final String SERVICE_KEY = "secret-service-key";
+    // 다른 요청이 먼저 저장하는 약품과, 이번 검색에서만 새로 받는 약품
+    private static final MedicineApiResponse.MedicineItem CONTENDED =
+            item("200001", "타이레놀정500밀리그람");
+    private static final MedicineApiResponse.MedicineItem FRESH =
+            item("200002", "타이레놀8시간이알서방정");
 
     @Autowired private ExternalMedicineService externalMedicineService;
     @Autowired private EntityManagerFactory entityManagerFactory;
@@ -79,19 +84,20 @@ class MedicineSearchFallbackIntegrationTest {
     }
 
     @Test
-    @DisplayName("존재 확인 뒤 다른 요청이 같은 약품을 먼저 저장해 유일 제약과 충돌하면 저장된 약품을 반환한다")
-    void 존재_확인_뒤_다른_요청이_같은_약품을_먼저_저장해_충돌하면_저장된_약품을_반환한다() {
+    @DisplayName("존재 확인 뒤 다른 요청이 같은 약품을 먼저 저장해 충돌해도 함께 받은 신규 약품까지 저장해 반환한다")
+    void 존재_확인_뒤_다른_요청이_같은_약품을_먼저_저장해_충돌해도_신규_약품까지_저장해_반환한다() {
         // given
         given(medicineProperties.api()).willReturn(apiProperties());
         AtomicBoolean transactionActiveDuringApiCall = new AtomicBoolean(true);
         given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
                 .willAnswer(invocation -> {
                     transactionActiveDuringApiCall.set(TransactionSynchronizationManager.isActualTransactionActive());
-                    otherRequestSaves();
-                    return apiResponse();
+                    otherRequestSaves(CONTENDED);
+                    return apiResponse(CONTENDED, FRESH);
                 });
-        // 존재 확인과 INSERT 사이의 경합 창: 확인 시점에는 다른 요청의 커밋이 아직 보이지 않았다.
-        willReturn(Set.of()).given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
+        // 첫 존재 확인은 다른 요청의 커밋 직전이라 아무것도 보지 못하고, 다시 저장할 때는 그 약품을 본다.
+        willReturn(Set.of()).willReturn(Set.of(CONTENDED.itemSeq()))
+                .given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
 
         // when
         MedicineSearchResponse response = externalMedicineService.searchAndSaveMedicines(KEYWORD);
@@ -100,43 +106,23 @@ class MedicineSearchFallbackIntegrationTest {
         assertThat(transactionActiveDuringApiCall).isFalse();
         assertThat(response.medicines())
                 .extracting(MedicineSearchResponse.MedicineItem::itemName)
-                .containsExactly(ITEM_NAME);
-        assertThat(medicineRepository.findByItemSeqIn(List.of(ITEM_SEQ))).hasSize(1);
+                .containsExactlyInAnyOrder(CONTENDED.itemName(), FRESH.itemName());
+        assertThat(medicineRepository.findByItemSeqIn(List.of(CONTENDED.itemSeq(), FRESH.itemSeq()))).hasSize(2);
     }
 
     @Test
-    @DisplayName("존재 확인 전에 다른 요청이 같은 약품을 저장했으면 저장을 건너뛰고 그 약품을 반환한다")
-    void 존재_확인_전에_다른_요청이_같은_약품을_저장했으면_그_약품을_반환한다() {
+    @DisplayName("요청 범위 EntityManager가 열린 OSIV 환경에서도 유일 제약 충돌 뒤 신규 약품까지 저장해 반환한다")
+    void OSIV_환경에서도_유일_제약_충돌_뒤_신규_약품까지_저장해_반환한다() {
         // given
         given(medicineProperties.api()).willReturn(apiProperties());
         given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
                 .willAnswer(invocation -> {
-                    otherRequestSaves();
-                    return apiResponse();
+                    otherRequestSaves(CONTENDED);
+                    return apiResponse(CONTENDED, FRESH);
                 });
-
-        // when
-        MedicineSearchResponse response = externalMedicineService.searchAndSaveMedicines(KEYWORD);
-
-        // then
-        assertThat(response.medicines())
-                .extracting(MedicineSearchResponse.MedicineItem::itemName)
-                .containsExactly(ITEM_NAME);
-        assertThat(medicineRepository.findByItemSeqIn(List.of(ITEM_SEQ))).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("요청 범위 EntityManager가 열린 OSIV 환경에서도 유일 제약 충돌 뒤 저장된 약품을 반환한다")
-    void OSIV_환경에서도_유일_제약_충돌_뒤_저장된_약품을_반환한다() {
-        // given
-        given(medicineProperties.api()).willReturn(apiProperties());
-        given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
-                .willAnswer(invocation -> {
-                    otherRequestSaves();
-                    return apiResponse();
-                });
-        willReturn(Set.of()).given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
-        // 운영은 OSIV가 켜져 있어 요청 내내 같은 EntityManager를 쓴다. 실패한 INSERT가 남긴 엔티티가 재조회를 깨지 않아야 한다.
+        willReturn(Set.of()).willReturn(Set.of(CONTENDED.itemSeq()))
+                .given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
+        // 운영은 OSIV가 켜져 있어 요청 내내 같은 EntityManager를 쓴다. 실패한 INSERT가 남긴 엔티티가 재시도·재조회를 깨지 않아야 한다.
         EntityManager requestScoped = entityManagerFactory.createEntityManager();
         TransactionSynchronizationManager.bindResource(entityManagerFactory, new EntityManagerHolder(requestScoped));
 
@@ -152,7 +138,49 @@ class MedicineSearchFallbackIntegrationTest {
         // then
         assertThat(response.medicines())
                 .extracting(MedicineSearchResponse.MedicineItem::itemName)
-                .containsExactly(ITEM_NAME);
+                .containsExactlyInAnyOrder(CONTENDED.itemName(), FRESH.itemName());
+    }
+
+    @Test
+    @DisplayName("다시 저장할 때도 충돌하면 저장을 포기하고 이미 저장된 약품을 반환한다")
+    void 다시_저장할_때도_충돌하면_이미_저장된_약품을_반환한다() {
+        // given
+        given(medicineProperties.api()).willReturn(apiProperties());
+        given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
+                .willAnswer(invocation -> {
+                    otherRequestSaves(CONTENDED);
+                    return apiResponse(CONTENDED);
+                });
+        willReturn(Set.of()).given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
+
+        // when
+        MedicineSearchResponse response = externalMedicineService.searchAndSaveMedicines(KEYWORD);
+
+        // then
+        assertThat(response.medicines())
+                .extracting(MedicineSearchResponse.MedicineItem::itemName)
+                .containsExactly(CONTENDED.itemName());
+    }
+
+    @Test
+    @DisplayName("존재 확인 전에 다른 요청이 같은 약품을 저장했으면 저장을 건너뛰고 그 약품을 반환한다")
+    void 존재_확인_전에_다른_요청이_같은_약품을_저장했으면_그_약품을_반환한다() {
+        // given
+        given(medicineProperties.api()).willReturn(apiProperties());
+        given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
+                .willAnswer(invocation -> {
+                    otherRequestSaves(CONTENDED);
+                    return apiResponse(CONTENDED);
+                });
+
+        // when
+        MedicineSearchResponse response = externalMedicineService.searchAndSaveMedicines(KEYWORD);
+
+        // then
+        assertThat(response.medicines())
+                .extracting(MedicineSearchResponse.MedicineItem::itemName)
+                .containsExactly(CONTENDED.itemName());
+        assertThat(medicineRepository.findByItemSeqIn(List.of(CONTENDED.itemSeq()))).hasSize(1);
     }
 
     @Test
@@ -173,12 +201,25 @@ class MedicineSearchFallbackIntegrationTest {
     }
 
     @Test
-    @DisplayName("신규 약품 저장이 유일 제약 외의 DB 오류로 실패하면 빈 목록으로 숨기지 않고 예외가 발생한다")
-    void 신규_약품_저장이_유일_제약_외의_DB_오류로_실패하면_예외가_발생한다() {
+    @DisplayName("신규 약품이 중복 외의 무결성 제약을 어기면 빈 목록으로 숨기지 않고 예외가 발생한다")
+    void 신규_약품이_중복_외의_무결성_제약을_어기면_예외가_발생한다() {
         // given
         given(medicineProperties.api()).willReturn(apiProperties());
         given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
-                .willReturn(apiResponse());
+                .willReturn(apiResponse(item("200003", null)));
+
+        // when & then
+        assertThatThrownBy(() -> externalMedicineService.searchAndSaveMedicines(KEYWORD))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("신규 약품 저장이 DB 오류로 실패하면 빈 목록으로 숨기지 않고 예외가 발생한다")
+    void 신규_약품_저장이_DB_오류로_실패하면_예외가_발생한다() {
+        // given
+        given(medicineProperties.api()).willReturn(apiProperties());
+        given(medicineApiClient.searchMedicines(anyString(), eq(KEYWORD), anyInt(), anyInt(), anyString()))
+                .willReturn(apiResponse(FRESH));
         willThrow(new CannotAcquireLockException("lock wait timeout"))
                 .given(medicineRepository).findItemSeqsByItemSeqIn(anyList());
 
@@ -188,9 +229,9 @@ class MedicineSearchFallbackIntegrationTest {
     }
 
     // 외부 API를 기다리는 동안 다른 요청(다른 스레드)이 같은 itemSeq를 저장하고 커밋한다.
-    private void otherRequestSaves() {
+    private void otherRequestSaves(MedicineApiResponse.MedicineItem item) {
         CompletableFuture.runAsync(() -> medicineRepository.saveAndFlush(
-                Medicine.create(ITEM_SEQ, ITEM_NAME, "제약사", null, null, null))).join();
+                Medicine.create(item.itemSeq(), item.itemName(), item.entpName(), null, null, null))).join();
     }
 
     private MedicineProperties.Api apiProperties() {
@@ -198,10 +239,13 @@ class MedicineSearchFallbackIntegrationTest {
                 "http://medicine.test", SERVICE_KEY, Duration.ofSeconds(2), Duration.ofSeconds(3), Duration.ofSeconds(30));
     }
 
-    private MedicineApiResponse apiResponse() {
-        MedicineApiResponse.MedicineItem item = new MedicineApiResponse.MedicineItem(
-                "제약사", ITEM_NAME, ITEM_SEQ, null, null, null);
-        return new MedicineApiResponse(null, new MedicineApiResponse.Body(1, 1, 10, List.of(item), null));
+    private static MedicineApiResponse.MedicineItem item(String itemSeq, String itemName) {
+        return new MedicineApiResponse.MedicineItem("제약사", itemName, itemSeq, null, null, null);
+    }
+
+    private MedicineApiResponse apiResponse(MedicineApiResponse.MedicineItem... items) {
+        List<MedicineApiResponse.MedicineItem> list = Arrays.asList(items);
+        return new MedicineApiResponse(null, new MedicineApiResponse.Body(1, list.size(), 10, list, null));
     }
 
     // Feign이 읽기 타임아웃에 던지는 예외. 메시지와 요청 URL에 serviceKey가 들어 있다.

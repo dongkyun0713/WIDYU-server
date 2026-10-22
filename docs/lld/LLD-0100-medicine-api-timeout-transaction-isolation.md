@@ -65,12 +65,16 @@ HTTP API는 바뀌지 않는다(`GET /api/v1/goals/medicine-schedules/search?key
 3. 공공 API 호출 (검색 타임아웃) — 활성 트랜잭션 없음
    - 예외(타임아웃·연결 실패·5xx·파싱 실패) → errorType만 ERROR 로그, 빈 목록 반환
    - 응답 null/body null/items empty → 빈 목록 반환
-4. MedicineUpsertService.upsertMedicines(apiItems) — 별도 빈의 @Transactional
+4. MedicineUpsertService.upsertMedicines(apiItems) — 별도 빈의 @Transactional, 최대 2회
    - 기존 itemSeq 제외, 응답 내부 중복 제외, 신규만 saveAll (LLD-0005와 같음)
-   - DataIntegrityViolationException → 이 트랜잭션만 롤백. WARN 후 5로 진행
-   - 그 밖의 DB 예외 → 그대로 전파(500). 빈 목록으로 숨기지 않는다
+   - 중복 키 위반(DataIntegrityViolationKind.DUPLICATE: H2 23505, MySQL 1062) → 이 트랜잭션만 롤백, WARN 후 한 번 더 저장
+     · 두 번째 존재 확인은 먼저 커밋된 약품을 보고 건너뛰므로, 함께 받은 나머지 신규 약품이 저장된다
+     · 두 번째도 중복 키 위반이면 저장을 포기하고 5로 진행
+   - 중복 외의 무결성 위반(NOT NULL·길이 초과 등)과 그 밖의 DB 예외 → 그대로 전파(5xx). 빈 목록으로 숨기지 않는다
 5. findByItemSeqIn(API 응답의 itemSeq) 결과로 응답
 ```
+
+다시 저장하는 이유: 한 페이지의 `saveAll`은 한 트랜잭션이라, 약품 하나가 경합으로 충돌하면 함께 받은 다른 신규 약품까지 롤백된다. InnoDB는 상대 트랜잭션이 커밋한 뒤에야 중복 키 오류를 돌려주므로, 다시 시도하는 새 트랜잭션의 존재 확인은 그 약품을 본다. 재시도는 1회로 제한한다(같은 순간 세 번째 요청이 또 겹치면 이미 저장된 것만 응답한다).
 
 5에서 재조회하는 이유: 다른 요청이 같은 약품을 저장하는 시점은 두 가지다. 존재 확인 **뒤**에 커밋하면 4에서 유일 제약 충돌이 나고, 존재 확인 **앞**에 커밋하면 4는 그 약품을 건너뛴다. 기존 구현은 두 번째 경우 "새로 저장한 것"만 반환해 빈 목록을 냈다. API 응답의 `itemSeq`로 다시 읽으면 두 경우 모두 그 약품을 돌려준다. 충돌 재조회를 FULLTEXT 키워드 검색에서 `itemSeq` 조회로 바꾼 것도 같은 이유다(FULLTEXT는 API가 찾은 약품과 다른 행을 찾거나 놓칠 수 있다).
 
@@ -92,7 +96,8 @@ LLD-0005 5-3과 같다. 차이는 (1) 페이지 호출에 배치 읽기 타임�
 |------|------|
 | 공공 API 연결·읽기 타임아웃, 연결 실패, 4xx/5xx, 파싱 실패 | `log.error(errorType)` 후 빈 목록 (200) |
 | 공공 API 응답 null/body null/items empty | 빈 목록 (200) |
-| 신규 저장 `DataIntegrityViolationException` | 저장 트랜잭션만 롤백, `itemSeq` 재조회 결과 반환 (200) |
+| 신규 저장 중복 키 위반 | 저장 트랜잭션만 롤백, 1회 다시 저장, `itemSeq` 재조회 결과 반환 (200) |
+| 신규 저장 중 중복 외의 무결성 위반 | 전파 → `GlobalExceptionHandler` (`DATA_INTEGRITY_ERROR` 등 5xx) |
 | 신규 저장 중 그 밖의 DB 예외 | 전파 → `GlobalExceptionHandler` (5xx). 기존에는 `catch (Exception)`이 빈 목록으로 바꾸려다 커밋 시점에 500이 됐다 |
 | 배치 페이지 실패 | 기존과 같이 최대 3회 재시도, 로그는 `errorType`만 |
 
@@ -101,10 +106,11 @@ LLD-0005 5-3과 같다. 차이는 (1) 페이지 호출에 배치 읽기 타임�
 - [x] 검색 호출은 설정한 읽기 타임아웃(테스트 300ms)을 넘기면 서버 응답(1초)을 기다리지 않고 실패한다 — `MedicineApiClientTimeoutTest`
 - [x] 배치 호출은 검색 읽기 타임아웃보다 늦은 응답도 배치 읽기 타임아웃 안이면 받아 저장한다 — `MedicineApiClientTimeoutTest`, `MedicineSyncSchedulerTest`
 - [x] 공공 API 호출 중 활성 DB 트랜잭션이 없다 — `MedicineSearchFallbackIntegrationTest`
-- [x] 존재 확인 뒤 다른 요청이 같은 `itemSeq`를 저장해 유일 제약과 충돌해도 저장된 약품을 반환한다 (OSIV 유무 각각) — `MedicineSearchFallbackIntegrationTest`
+- [x] 존재 확인 뒤 다른 요청이 같은 `itemSeq`를 저장해 유일 제약과 충돌해도, 함께 받은 신규 약품까지 저장해 둘 다 반환한다 (OSIV 유무 각각) — `MedicineSearchFallbackIntegrationTest`
+- [x] 다시 저장할 때도 충돌하면 이미 저장된 약품을 반환한다 — `MedicineSearchFallbackIntegrationTest`
 - [x] 존재 확인 전에 다른 요청이 같은 `itemSeq`를 저장했으면 그 약품을 반환한다 — `MedicineSearchFallbackIntegrationTest`
 - [x] 공공 API 읽기 타임아웃이면 빈 목록을 반환하고 로그에 `serviceKey`가 없다 — `MedicineSearchFallbackIntegrationTest`
-- [x] 유일 제약 외의 DB 예외는 빈 목록으로 숨기지 않고 전파한다 — `MedicineSearchFallbackIntegrationTest`
+- [x] 중복 외의 무결성 위반(`item_name` NOT NULL)과 그 밖의 DB 예외는 빈 목록으로 숨기지 않고 전파한다 — `MedicineSearchFallbackIntegrationTest`
 - [x] 배치 실패 로그에 Feign 예외 메시지(요청 URL)를 남기지 않는다 — 코드 확인
 - [x] LLD-0005 7절의 기존 인수조건(DB 우선, FULLTEXT/prefix, 신규만 저장, 응답 내부 중복 1회 저장, 배치 청크·재시도)을 유지한다
 
@@ -114,6 +120,8 @@ LLD-0005 5-3과 같다. 차이는 (1) 페이지 호출에 배치 읽기 타임�
 - 공공 API가 3초 넘게 응답하는 검색은 이제 빈 목록이 된다. 같은 검색어의 다음 요청은 다시 공공 API를 부른다.
 - 검색 미스 응답은 "새로 저장한 약품"이 아니라 "API가 찾은 약품 중 DB에 있는 것 전체"다. 이미 저장돼 있었지만 DB 검색에서 빠진 약품도 이제 응답에 포함된다. 응답 순서는 DB 조회 순서다(DB 검색 경로도 순서를 보장하지 않는다).
 - `ExternalMedicineService.upsertMedicines`는 `MedicineUpsertService.upsertMedicines`로 옮겼다.
+- 중복 키 판별에 `GlobalExceptionHandler`가 쓰던 `global.error.DataIntegrityViolationKind`를 공개(public)로 바꿔 재사용한다. 분류 로직은 그대로다.
+- 공공 API가 `item_name` 없는 약품을 돌려주면 그 검색은 빈 목록 대신 5xx가 된다(기존에도 같은 트랜잭션 오류로 500이었다).
 
 ## 9. 미결정 사항 (Open Questions)
 
