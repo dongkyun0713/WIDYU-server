@@ -177,6 +177,8 @@
 | `OAuthState` | OAuth CSRF 방지 |
 | `SeniorLocation` | 실시간 위치 + 이력 |
 
+**`RedisTemplate<String, Object>` 값은 타입 정보 없이 저장된다.** 객체 값을 `get`·`range`로 읽으면 원래 타입이 아니라 `LinkedHashMap`이 돌아오므로 `instanceof`로 꺼내지 않는다. `RedisConfig.redisObjectMapper().convertValue(raw, Type.class)`로 바꾼다. 테스트에서 저장 객체를 그대로 돌려주도록 mock하면 이 문제가 가려진다 → LLD-0097
+
 ## 설정 · 외부 연동
 
 - **Profile**: `application.yml`에 그룹(local/dev/test) 정의, 관심사별 `application-*.yml` 분리(datasource·security·oauth·fcm·pay·redis·s3·coolsms·video·medicine·actuator).
