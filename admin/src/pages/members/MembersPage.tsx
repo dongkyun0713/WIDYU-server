@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import client from '../../api/client'
@@ -35,17 +35,19 @@ export default function MembersPage() {
   const [search, setSearch] = useState('')
   const [inputValue, setInputValue] = useState('')
   const [page, setPage] = useState(0)
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const SIZE = 20
 
-  useEffect(() => {
-    const idParam = searchParams.get('memberId')
-    if (idParam) {
-      setSelectedMemberId(Number(idParam))
+  // 선택한 회원은 URL의 memberId가 기준이다. 이미 /members에 있을 때 ⌘K 검색으로 이동해도 패널이 열린다.
+  const memberIdParam = Number(searchParams.get('memberId'))
+  const selectedMemberId = Number.isInteger(memberIdParam) && memberIdParam > 0 ? memberIdParam : null
+  const setSelectedMemberId = (id: number | null) => {
+    if (id === null) {
       setSearchParams({}, { replace: true })
+      return
     }
-  }, [])
+    setSearchParams({ memberId: String(id) }, { replace: true })
+  }
 
   const { data, isLoading } = useQuery<PageResponse<MemberDetail>>({
     queryKey: ['admin-members-list', search, page],
