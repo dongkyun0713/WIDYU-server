@@ -74,7 +74,13 @@ public interface GoalHomeDocs {
                     **반환 정보:**
                     - **약 스케줄**: 다음 복용 스케줄 ID, 오늘 복용/예정 횟수, 다음 복용 예정 개수, 다음 알람 시간
                     - **걸음 수**: 오늘 걸음 수 및 목표 걸음 수
-                    - **병원 일정**: 가장 가까운 병원 일정 ID, D-day, 일시, 일정명, 주소
+                    - **병원 일정(hospital)**: 현재 시각 이후 1개월 이내 가장 가까운 일정 ID, D-day, 일시, 일정명, 주소
+                    - **오늘 건강 일정(todaySchedules)**: 오늘 00:00~24:00 일정 전체, 일시 오름차순
+
+                    **건강 일정 표시 기준:**
+                    - todaySchedules는 예정 시각이 지난 일정과 완료된 일정도 포함합니다. 항목마다 progressStatus와 elapsed(예정 시각 경과 여부)를 줍니다.
+                    - 오늘 일정이 없으면 todaySchedules는 빈 배열입니다(null 아님).
+                    - 현재 시각 이후 일정이 없으면 hospital은 null이며, 클라이언트는 이 자리에 일정 추가 요청 컴포넌트를 표시합니다.
 
                     **약 스케줄 선택 기준:**
                     - 오늘 유효한 일정 중 인증 마감(알람 시간 + 30분)이 지나지 않은 가장 이른 알람을 표시
@@ -117,7 +123,19 @@ public interface GoalHomeDocs {
                                                   "datetime": "2025-08-26T17:00:00",
                                                   "name": "고려대학교 의과대학 부속병원",
                                                   "address": "서울특별시 성북구 고려대로 73"
-                                                }
+                                                },
+                                                "todaySchedules": [
+                                                  {
+                                                    "healthScheduleId": 12,
+                                                    "scheduleName": "내과 정기검진",
+                                                    "scheduledAt": "2025-08-12T09:30:00",
+                                                    "placeAddress": "서울특별시 성북구 고려대로 73",
+                                                    "latitude": 37.5894,
+                                                    "longitude": 127.0327,
+                                                    "progressStatus": "COMPLETED",
+                                                    "elapsed": true
+                                                  }
+                                                ]
                                               }
                                             }
                                             """
@@ -238,7 +256,13 @@ public interface GoalHomeDocs {
                     **반환 정보:**
                     - **약 스케줄**: 오늘 복용 현황, 각 스케줄별 상세 정보 (복용 상태, 인증 이미지)
                     - **걸음 수**: 오늘 걸음 수 및 목표
-                    - **병원 일정**: 가장 가까운 병원 일정 (D-day, 일시, 병원명, 주소)
+                    - **병원 일정(hospital)**: 현재 시각 이후 1개월 이내 가장 가까운 일정 (D-day, 일시, 병원명, 주소)
+                    - **오늘 건강 일정(todaySchedules)**: 오늘 00:00~24:00 일정 전체, 일시 오름차순
+
+                    **건강 일정 표시 기준:**
+                    - todaySchedules는 예정 시각이 지난 일정과 완료된 일정도 포함합니다. 항목마다 progressStatus와 elapsed(예정 시각 경과 여부)를 줍니다.
+                    - 오늘 일정이 없으면 todaySchedules는 빈 배열입니다(null 아님).
+                    - 현재 시각 이후 일정이 없으면 hospital은 null이며, 클라이언트는 이 자리에 일정 추가 요청 컴포넌트를 표시합니다.
 
                     **약 스케줄 상세:**
                     - 각 알람 시간 (HH:mm 형식, 예: "19:00")
@@ -285,13 +309,19 @@ public interface GoalHomeDocs {
                                                   "steps": 9829,
                                                   "goal": 10000
                                                 },
-                                                "hospital": {
-                                                  "hospitalScheduleId": 1,
-                                                  "dday": 14,
-                                                  "datetime": "2025-08-26T17:00:00",
-                                                  "name": "고려대학교 의과대학 부속병원",
-                                                  "address": "서울특별시 성북구 고려대로 73"
-                                                }
+                                                "hospital": null,
+                                                "todaySchedules": [
+                                                  {
+                                                    "healthScheduleId": 12,
+                                                    "scheduleName": "내과 정기검진",
+                                                    "scheduledAt": "2025-08-12T09:30:00",
+                                                    "placeAddress": "서울특별시 성북구 고려대로 73",
+                                                    "latitude": 37.5894,
+                                                    "longitude": 127.0327,
+                                                    "progressStatus": "INCOMPLETE",
+                                                    "elapsed": true
+                                                  }
+                                                ]
                                               }
                                             }
                                             """
