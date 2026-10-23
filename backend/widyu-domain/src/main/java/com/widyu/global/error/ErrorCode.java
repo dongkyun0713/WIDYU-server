@@ -137,6 +137,8 @@ public enum ErrorCode {
     SENSOR_SAMPLE_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4001", "센서 축 구조가 올바르지 않습니다."),
     SENSOR_PAYLOAD_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4002", "센서 배치 본문을 읽을 수 없습니다."),
     SENSOR_BATCH_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4003", "센서 배치 필드가 올바르지 않습니다."),
+    SENSOR_EXPORT_RANGE_INVALID(HttpStatus.BAD_REQUEST, "SENSOR_4004", "내보내기 시간 범위가 올바르지 않습니다."),
+    SENSOR_EXPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "SENSOR_4040", "센서 내보내기 작업을 찾을 수 없습니다."),
     SENSOR_CLOCK_MAPPING_CONFLICT(HttpStatus.CONFLICT, "SENSOR_4090", "시계 환산 기준점 묶음이 등록된 값과 다릅니다."),
 
     // 위치 원본 관련

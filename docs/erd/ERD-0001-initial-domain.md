@@ -357,6 +357,22 @@ erDiagram
         String serverBuild
     }
 
+    SensorRangeExport {
+        Long id PK
+        String exportId UK "sexp-<UUID hex>"
+        Long memberId FK
+        Long startAtMs "시작 포함 (UTC epoch ms)"
+        Long endAtMs "끝 제외 (UTC epoch ms)"
+        SensorRangeExportStatus status "QUEUED / RUNNING / DONE / FAILED"
+        Long requestedAtMs
+        Long startedAtMs
+        Long finishedAtMs
+        String s3Key "exports/sensor-range/{memberId}/{exportId}.zip"
+        Long bytes
+        String sha256
+        String errorType "예외 클래스명만"
+    }
+
     DecisionRecord {
         Long id PK
         String decisionId UK
@@ -714,6 +730,7 @@ erDiagram
     Member ||--o{ HeartRateEmergency : "심박 이상"
     Member ||--o{ HeartRateEvent : "심박 측정 이력"
     Member ||--o{ SensorBatch : "원시 센서 배치 (S3 인덱스)"
+    Member ||--o{ SensorRangeExport : "시간 범위 센서 ZIP 작업"
     SensorBatch }o--|| ClockMapping : "clock_mapping_id 참조 (FK 없음)"
     Member ||--o{ LocationFix : "위치 원본 (잰 시각·정확도·속도·사유)"
     Member ||--o{ DeviceHeartbeat : "기기 상태 하트비트 (60초)"
@@ -832,6 +849,9 @@ erDiagram
 | `sensor_batch` | `idx_sensor_batch_member_stream_time` | `(member_id, stream, measured_at_start_ms)` | 스트림별 시각 범위 조회 |
 | `sensor_batch` | `idx_sensor_batch_seq` | `(device_id, session_id, seq)` | 순번 누락 검사 |
 | `sensor_batch` | `idx_sensor_batch_run` | `(run_id)` | 회차별 조회 (B8 후속) |
+| `sensor_range_export` | `uk_sensor_range_export_export_id` | `(export_id)` | 내보내기 작업 식별자 |
+| `sensor_range_export` | `idx_sensor_range_export_request` | `(member_id, start_at_ms, end_at_ms, status)` | 동일 구간 진행 중 작업 조회 |
+| `sensor_range_export` | `idx_sensor_range_export_queue` | `(status, requested_at_ms)` | 오래된 작업 선점 |
 | `clock_mapping` | UK `uk_clock_mapping_id` | `(clock_mapping_id)` | 한 식별자의 다섯 값은 불변. 다르면 409 (LLD-0044) |
 | `clock_mapping` | `idx_clock_mapping_device` | `(device_id)` | 기기별 매핑 조회 |
 | `collection_run` | UK `uk_collection_run_run_id` | `(run_id)` | 서버 발급 회차 식별자 |

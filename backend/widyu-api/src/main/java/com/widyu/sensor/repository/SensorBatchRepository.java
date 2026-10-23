@@ -3,6 +3,8 @@ package com.widyu.sensor.repository;
 import com.widyu.sensor.SensorBatch;
 import java.util.Optional;
 import java.util.Collection;
+import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +20,26 @@ public interface SensorBatchRepository extends JpaRepository<SensorBatch, Long> 
             String runId, String stream);
 
     java.util.List<SensorBatch> findByRunIdOrderByMeasuredAtStartMsAsc(String runId);
+
+    /** 회원·스트림·측정 구간이 겹치는 배치를 시각과 PK 순으로 제한해 읽는다. */
+    @Query("""
+            SELECT batch FROM SensorBatch batch
+             WHERE batch.member.id = :memberId
+               AND batch.stream = :stream
+               AND batch.measuredAtEndMs >= :startAtMs
+               AND batch.measuredAtStartMs < :endAtMs
+               AND (batch.measuredAtStartMs > :lastStartMs
+                    OR (batch.measuredAtStartMs = :lastStartMs AND batch.id > :lastId))
+             ORDER BY batch.measuredAtStartMs ASC, batch.id ASC
+            """)
+    List<SensorBatch> findRangePage(
+            @Param("memberId") Long memberId,
+            @Param("stream") String stream,
+            @Param("startAtMs") long startAtMs,
+            @Param("endAtMs") long endAtMs,
+            @Param("lastStartMs") long lastStartMs,
+            @Param("lastId") long lastId,
+            Pageable pageable);
 
     @Query("""
             SELECT batch FROM SensorBatch batch
