@@ -108,6 +108,17 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
     @Query("""
         SELECT n FROM FcmNotification n
         WHERE n.recipientMember.id = :memberId
+        AND n.isRead = false
+        AND (:cursor IS NULL OR n.id < :cursor)
+        ORDER BY n.id DESC
+        """)
+    List<FcmNotification> findUnreadNotificationsWithCursor(@Param("memberId") Long memberId,
+                                                            @Param("cursor") Long cursor,
+                                                            Pageable pageable);
+
+    @Query("""
+        SELECT n FROM FcmNotification n
+        WHERE n.recipientMember.id = :memberId
         AND n.fcmCategory = :category
         AND (:cursor IS NULL OR n.id < :cursor)
         ORDER BY n.id DESC
