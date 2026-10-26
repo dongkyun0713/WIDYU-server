@@ -305,13 +305,13 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("시니어가 일반 푸시를 끄면 일정 센터 행과 data-only 동기화를 유지한다")
-    void 시니어가_일반_푸시를_꺼도_일정_센터_행과_data_only_동기화를_유지한다() {
+    @DisplayName("시니어가 목표 푸시를 끄면 일정 센터 행과 data-only 동기화를 유지한다")
+    void 시니어가_목표_푸시를_꺼도_일정_센터_행과_data_only_동기화를_유지한다() {
         // given
         Long seniorId = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(seniorId).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.GOAL, false)));
         NotificationType visibleType = NotificationType.MEDICATION_SCHEDULE_CREATED;
         NotificationType syncType = NotificationType.MEDICATION_SCHEDULE_SYNC;
 
@@ -577,7 +577,7 @@ class FcmOutboxIntegrationTest {
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.ALBUM, false)));
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
@@ -628,7 +628,7 @@ class FcmOutboxIntegrationTest {
         FcmDelivery delivery = transactions.claim(id);
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.ALBUM, false)));
 
         // when
         boolean allowed = transactions.preflight(delivery);
@@ -652,7 +652,7 @@ class FcmOutboxIntegrationTest {
                 start.await();
                 try {
                     return settingService.updateNotificationSetting(
-                            new UpdateNotificationSettingRequest("GENERAL", false, 0L)).policyRevision();
+                            new UpdateNotificationSettingRequest("ALBUM", false, 0L)).policyRevision();
                 } catch (BusinessException exception) {
                     if (exception.getErrorCode() == ErrorCode.NOTIFICATION_POLICY_REVISION_CONFLICT) {
                         return -1L;
@@ -670,7 +670,7 @@ class FcmOutboxIntegrationTest {
             // then
             assertThat(results).containsExactlyInAnyOrder(1L, -1L);
             assertThat(members.findById(member).orElseThrow().getNotificationPolicyRevision()).isEqualTo(1L);
-            assertThat(settings.findByMemberIdAndCategory(member, PushSettingGroup.GENERAL))
+            assertThat(settings.findByMemberIdAndCategory(member, PushSettingGroup.ALBUM))
                     .hasValueSatisfying(row -> assertThat(row.isEnabled()).isFalse());
         } finally {
             executor.shutdownNow();
