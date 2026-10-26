@@ -57,7 +57,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "개별 알림 읽음 처리",
-            description = "알림 ID를 기준으로 특정 알림을 읽음 상태로 변경합니다."
+            description = "현재 수신자의 알림센터 ID를 읽음 처리합니다. 목록에 저장되는 알림의 FCM data.notificationId는 목록 notificationId와 같은 값인 문자열입니다."
     )
     @ApiResponse(
             responseCode = "200",

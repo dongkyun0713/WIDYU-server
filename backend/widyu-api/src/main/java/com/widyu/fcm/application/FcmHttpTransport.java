@@ -123,6 +123,16 @@ public class FcmHttpTransport implements FcmTransport {
         if (type != null && type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             message.notification(null);
         }
+        HashMap<String, String> data = new HashMap<>(dto.data());
+        if (notificationId != null) {
+            data.put("notificationId", notificationId.toString());
+        } else {
+            data.remove("notificationId");
+        }
+        addTypeData(data, type);
+        if (type != null || !data.isEmpty()) {
+            message.data(data);
+        }
         if (expiresAt != null) {
             Instant now = clock.instant();
             if (!expiresAt.isAfter(now)) {
@@ -130,14 +140,6 @@ public class FcmHttpTransport implements FcmTransport {
             }
             // FCM은 최대 28일까지 받고 Android TTL을 초 단위로 내림한다.
             long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
-            HashMap<String, String> data = new HashMap<>(dto.data());
-            if (notificationId != null) {
-                data.put("notificationId", notificationId.toString());
-            } else {
-                data.remove("notificationId");
-            }
-            addTypeData(data, type);
-            message.data(data);
             if (type == null) {
                 message.android(new FcmMessageDto.Android(ttl + "s"))
                         .apns(new FcmMessageDto.Apns(Map.of("apns-expiration", Long.toString(expiresAt.getEpochSecond()))));
@@ -145,11 +147,6 @@ public class FcmHttpTransport implements FcmTransport {
                 message.android(android(ttl + "s", type))
                         .apns(apns(expiresAt, type));
             }
-        }
-        if (expiresAt == null && (type != null || !dto.data().isEmpty())) {
-            HashMap<String, String> data = new HashMap<>(dto.data());
-            addTypeData(data, type);
-            message.data(data);
         }
         if (expiresAt == null && type != null) {
             message.android(android(null, type)).apns(apns(null, type));

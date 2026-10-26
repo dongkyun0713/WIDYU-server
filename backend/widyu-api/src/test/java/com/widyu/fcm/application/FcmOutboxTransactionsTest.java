@@ -217,6 +217,20 @@ class FcmOutboxTransactionsTest {
     }
 
     @Test
+    @DisplayName("푸시 전용 본인확인 outbox를 복원하면 센터 ID를 만들지 않는다")
+    void 푸시_전용_본인확인_outbox는_센터_ID를_만들지_않는다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+
+        // when
+        FcmDelivery delivery = FcmDelivery.from(row);
+
+        // then
+        assertThat(delivery.notificationId()).isNull();
+    }
+
+    @Test
     @DisplayName("저장된 data JSON이 손상되면 빈 data로 전송하지 않고 예외가 발생한다")
     void 저장된_data_JSON이_손상되면_예외가_발생한다() {
         // given
