@@ -386,6 +386,7 @@ class FcmHttpTransportTest {
             assertThat(result.success()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("EXPIRED_BEFORE_SEND");
             assertThat(requests.get()).isZero();
         } finally {
             transport.close();
@@ -434,6 +435,7 @@ class FcmHttpTransportTest {
             assertThat(result.success()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("PREFLIGHT");
             assertThat(requests.get()).isZero();
         } finally {
             transport.close();
@@ -533,6 +535,7 @@ class FcmHttpTransportTest {
             // then
             assertThat(result.permanentToken()).isTrue();
             assertThat(result.retryable()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_400 " + code);
         } finally {
             transport.close();
             server.stop(0);
@@ -552,6 +555,51 @@ class FcmHttpTransportTest {
             assertThat(result.permanentToken()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.success()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_400 INVALID_ARGUMENT");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("FCM이 거부하면 HTTP 상태와 FCM·APNs 오류 코드만 상세로 남기고 오류 메시지 원문은 버린다")
+    void FCM_거부_상세에_상태와_오류_코드만_남긴다() throws Exception {
+        // given
+        String body = "{\"error\":{\"code\":401,\"message\":\"Auth error for token test-token\","
+                + "\"status\":\"UNAUTHENTICATED\",\"details\":["
+                + "{\"@type\":\"type.googleapis.com/google.firebase.fcm.v1.FcmError\",\"errorCode\":\"THIRD_PARTY_AUTH_ERROR\"},"
+                + "{\"@type\":\"type.googleapis.com/google.firebase.fcm.v1.ApnsError\",\"statusCode\":403,"
+                + "\"reason\":\"InvalidProviderToken\"}]}}";
+        HttpServer server = server(401, body, null, 0);
+        FcmHttpTransport transport = transport(server, Duration.ofSeconds(2));
+        try {
+            // when
+            FcmTransport.Result result = transport.send("test-token", message());
+            // then
+            assertThat(result.retryable()).isFalse();
+            assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail())
+                    .isEqualTo("HTTP_401 UNAUTHENTICATED THIRD_PARTY_AUTH_ERROR InvalidProviderToken")
+                    .doesNotContain("test-token", "Auth error");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("FCM 거부 응답 본문이 JSON이 아니면 HTTP 상태만 상세로 남긴다")
+    void 깨진_거부_응답은_HTTP_상태만_남긴다() throws Exception {
+        // given
+        HttpServer server = server(403, "<html>forbidden test-token</html>", null, 0);
+        FcmHttpTransport transport = transport(server, Duration.ofSeconds(2));
+        try {
+            // when
+            FcmTransport.Result result = transport.send("test-token", message());
+            // then
+            assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_403");
         } finally {
             transport.close();
             server.stop(0);

@@ -2,6 +2,7 @@ package com.widyu.fcm.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.widyu.fcm.dto.FcmMessageDto;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -28,9 +29,14 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 
 @Component
 public class FcmHttpTransport implements FcmTransport {
+    private static final String FCM_ERROR_TYPE = "type.googleapis.com/google.firebase.fcm.v1.FcmError";
+    private static final String APNS_ERROR_TYPE = "type.googleapis.com/google.firebase.fcm.v1.ApnsError";
+    private static final Pattern ERROR_CODE = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,63}");
+
     private final URI endpoint;
     private final ObjectMapper mapper;
     private final AccessTokenProvider credentials;
@@ -110,7 +116,7 @@ public class FcmHttpTransport implements FcmTransport {
             Long notificationId, Instant expiresAt) throws Exception {
         String accessToken = credentials.get();
         if (!beforeSend.getAsBoolean()) {
-            return Result.rejected(false);
+            return Result.rejected(false, Result.PREFLIGHT);
         }
         long remaining = deadline - System.nanoTime();
         if (remaining <= 0 || Thread.currentThread().isInterrupted()) {
@@ -136,7 +142,7 @@ public class FcmHttpTransport implements FcmTransport {
         if (expiresAt != null) {
             Instant now = clock.instant();
             if (!expiresAt.isAfter(now)) {
-                return Result.rejected(false);
+                return Result.rejected(false, Result.EXPIRED_BEFORE_SEND);
             }
             // FCM은 최대 28일까지 받고 Android TTL을 초 단위로 내림한다.
             long ttl = Math.min(Duration.between(now, expiresAt).getSeconds(), Duration.ofDays(28).getSeconds());
@@ -156,7 +162,7 @@ public class FcmHttpTransport implements FcmTransport {
                 .header("Authorization", "Bearer " + accessToken).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))).build();
         if (expiresAt != null && !expiresAt.isAfter(clock.instant())) {
-            return Result.rejected(false);
+            return Result.rejected(false, Result.EXPIRED_BEFORE_SEND);
         }
         if (deadline - System.nanoTime() <= 0 || Thread.currentThread().isInterrupted()) {
             return Result.retry(Duration.ZERO);
@@ -176,7 +182,8 @@ public class FcmHttpTransport implements FcmTransport {
         if (response.statusCode() == 429 || response.statusCode() >= 500) {
             return Result.retry(retryAfter(response.headers().firstValue("Retry-After").orElse("")));
         }
-        return Result.rejected(permanentToken(response.body()));
+        JsonNode error = errorOf(response.body());
+        return Result.rejected(permanentToken(error), rejectionDetail(response.statusCode(), error));
     }
 
     private void addTypeData(Map<String, String> data, NotificationType type) {
@@ -220,22 +227,47 @@ public class FcmHttpTransport implements FcmTransport {
                 new FcmMessageDto.ApnsPayload(new FcmMessageDto.Aps(type.priority().interruptionLevel())));
     }
 
-    private boolean permanentToken(String body) {
+    private JsonNode errorOf(String body) {
         try {
-            JsonNode details = mapper.readTree(body).path("error").path("details");
-            for (JsonNode detail : details) {
-                if (!"type.googleapis.com/google.firebase.fcm.v1.FcmError".equals(detail.path("@type").asText())) {
-                    continue;
-                }
-                String code = detail.path("errorCode").asText();
-                if ("UNREGISTERED".equals(code) || "SENDER_ID_MISMATCH".equals(code)) {
-                    return true;
-                }
-            }
+            return mapper.readTree(body).path("error");
         } catch (IOException ignored) {
-            // 형식이 깨진 오류 응답으로는 토큰을 무효화하지 않는다.
+            // 형식이 깨진 오류 응답으로는 토큰을 무효화하지 않고 상태 코드만 남긴다.
+            return MissingNode.getInstance();
+        }
+    }
+
+    private static boolean permanentToken(JsonNode error) {
+        for (JsonNode detail : error.path("details")) {
+            if (!FCM_ERROR_TYPE.equals(detail.path("@type").asText())) {
+                continue;
+            }
+            String code = detail.path("errorCode").asText();
+            if ("UNREGISTERED".equals(code) || "SENDER_ID_MISMATCH".equals(code)) {
+                return true;
+            }
         }
         return false;
+    }
+
+    /** 예: {@code HTTP_401 UNAUTHENTICATED THIRD_PARTY_AUTH_ERROR}. 오류 메시지 원문은 토큰을 담을 수 있어 남기지 않는다. */
+    private static String rejectionDetail(int statusCode, JsonNode error) {
+        StringBuilder detail = new StringBuilder("HTTP_").append(statusCode);
+        appendCode(detail, error.path("status").asText());
+        for (JsonNode item : error.path("details")) {
+            String type = item.path("@type").asText();
+            if (FCM_ERROR_TYPE.equals(type)) {
+                appendCode(detail, item.path("errorCode").asText());
+            } else if (APNS_ERROR_TYPE.equals(type)) {
+                appendCode(detail, item.path("reason").asText());
+            }
+        }
+        return detail.toString();
+    }
+
+    private static void appendCode(StringBuilder detail, String code) {
+        if (ERROR_CODE.matcher(code).matches()) {
+            detail.append(' ').append(code);
+        }
     }
 
     static Duration retryAfter(String value) {
