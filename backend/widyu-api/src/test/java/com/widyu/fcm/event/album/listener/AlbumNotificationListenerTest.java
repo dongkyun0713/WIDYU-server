@@ -257,6 +257,7 @@ class AlbumNotificationListenerTest {
     void 시니어가_보호자_새_게시물을_모두_읽으면_A07을_전달한다() {
         // given
         Member senior = member(1L, MemberType.SENIOR, "시니어");
+        senior.updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         Member writer = member(2L, MemberType.GUARDIAN, "보호자");
         Album album = mock(Album.class);
         given(album.getMember()).willReturn(writer);
@@ -274,11 +275,35 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_ALL_VIEWED);
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 새 게시물을 모두 확인했어요!");
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(captor.getValue().deepLink()).isNull();
         assertThat(captor.getValue().dataForEnqueue("event-view"))
                 .containsEntry("deepLink", GuardianDeepLinks.album());
         assertThat(captor.getValue().seniorId()).isEqualTo(1L);
         then(fcmService).shouldHaveNoMoreInteractions();
+    }
+
+    @Test
+    @DisplayName("보호자의 게시물 소식이 뜸하면 보호자 본인에게 프로필과 앨범 경로를 보낸다")
+    void 보호자_소식이_뜸하면_프로필과_앨범_경로를_보낸다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN, "보호자");
+        guardian.updateProfileImage("https://cdn.widyu.store/profile/guardian.png");
+        given(memberRepository.findAll()).willReturn(List.of(guardian));
+        given(albumRepository.findLastUploadDateByMember(guardian, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.of(2026, 10, 23, 10, 0)));
+        given(familyMembershipRepository.findByGuardianId(1L))
+                .willReturn(Optional.of(mock(FamilyMembership.class)));
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.notifyInactiveGuardians(LocalDate.of(2026, 10, 26));
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/guardian.png");
+        assertThat(captor.getValue().dataForEnqueue("event-inactive"))
+                .containsEntry("deepLink", "/album");
     }
 
     @Test

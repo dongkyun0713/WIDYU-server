@@ -44,7 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AlbumNotificationListener {
 
-    private static final String ALBUM_DEFAULT_IMAGE = "album.png";
     private static final Set<Long> INACTIVITY_NOTICE_DAYS = Set.of(3L, 5L, 7L);
 
     private final FcmService fcmService;
@@ -67,7 +66,7 @@ public class AlbumNotificationListener {
             uploadDeepLink = GuardianDeepLinks.post(albumId);
         }
         send(author.getId(), FcmSendDto.of(NotificationType.ALBUM_UPLOAD_COMPLETE, uploadCopy,
-                albumId, uploadDeepLink, null, null, ALBUM_DEFAULT_IMAGE));
+                albumId, uploadDeepLink, null, null, author.getProfileImage()));
 
         if (author.getType() == MemberType.SENIOR) {
             Optional<Long> familyId = seniorProfileRepository.findFamilyIdByMemberId(author.getId());
@@ -116,7 +115,7 @@ public class AlbumNotificationListener {
         NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_ALL_VIEWED, "A07",
                 Map.of("시니어 이름", viewer.getName()));
         send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_ALL_VIEWED, copy, null,
-                null, viewer.getId(), viewer.getId(), ALBUM_DEFAULT_IMAGE));
+                null, viewer.getId(), viewer.getId(), viewer.getProfileImage()));
     }
 
     @Scheduled(cron = "0 0 10 * * *")
@@ -145,7 +144,8 @@ public class AlbumNotificationListener {
             return;
         }
         String message = guardian.getName() + "님, " + days + "일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?";
-        FcmSendDto dto = new FcmSendDto(message, "새로운 소식을 공유해보세요.", FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE);
+        FcmSendDto dto = new FcmSendDto(message, "새로운 소식을 공유해보세요.", FcmCategory.ALBUM,
+                "", guardian.getProfileImage()).withData(Map.of("deepLink", "/album"));
         fcmService.sendMessageToUser(guardian.getId(), dto);
     }
 

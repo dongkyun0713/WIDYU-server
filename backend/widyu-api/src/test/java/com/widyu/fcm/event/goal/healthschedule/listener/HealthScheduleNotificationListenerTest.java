@@ -37,6 +37,7 @@ class HealthScheduleNotificationListenerTest {
     void 시니어_일정이_임박하면_OS와_센터_문구를_분리한다() {
         // given
         HealthSchedule schedule = schedule(MemberType.SENIOR, 1L);
+        schedule.getMember().updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         given(healthScheduleRepository.findUpcomingSchedulesInTimeRange(any(), any()))
                 .willReturn(List.of(schedule));
         ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
@@ -54,6 +55,7 @@ class HealthScheduleNotificationListenerTest {
         assertThat(dto.title()).doesNotContain("병원", "15:30");
         assertThat(dto.centerTitle()).isEqualTo("오후 3:30에 병원 진료 일정이 있어요.");
         assertThat(dto.centerBody()).isEqualTo("잊지 않도록 일정을 확인해보세요.");
+        assertThat(dto.image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(dto.dataForEnqueue("event-1")).containsEntry("inAppTitle", dto.centerTitle());
     }
 
