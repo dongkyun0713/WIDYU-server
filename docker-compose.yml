@@ -62,7 +62,7 @@ services:
       # FCM (공통)
       FIREBASE_CONFIG_PATH: ${FIREBASE_CONFIG_PATH:-file:/run/secrets/firebase-service-account.json}
       # 서비스 계정 키(FIREBASE_CREDENTIALS_FILE)와 같은 Firebase 프로젝트여야 한다. 다르면 FCM이 403으로 거부한다.
-      FIREBASE_MESSAGING_URL: ${FIREBASE_MESSAGING_URL:-https://fcm.googleapis.com/v1/projects/widyu-d384f/messages:send}
+      FIREBASE_MESSAGING_URL: ${FIREBASE_MESSAGING_URL:-https://fcm.googleapis.com/v1/projects/widu-87c96/messages:send}
 
       # SMS (공통)
       COOLSMS_API_KEY: ${COOLSMS_API_KEY}
