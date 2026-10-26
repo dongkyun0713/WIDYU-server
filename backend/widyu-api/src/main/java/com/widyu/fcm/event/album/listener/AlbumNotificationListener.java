@@ -25,10 +25,13 @@ import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -42,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AlbumNotificationListener {
 
     private static final String ALBUM_DEFAULT_IMAGE = "album.png";
+    private static final Set<Long> INACTIVITY_NOTICE_DAYS = Set.of(3L, 5L, 7L);
 
     private final FcmService fcmService;
     private final FamilyMembershipRepository familyMembershipRepository;
@@ -118,56 +122,31 @@ public class AlbumNotificationListener {
     @Scheduled(cron = "0 0 10 * * *")
     @Transactional
     public void checkInactiveUsersAndSendNotification() {
-        LocalDateTime now = LocalDateTime.now();
-        checkAndNotifyInactiveUsers(3, now);
-        checkAndNotifyInactiveUsers(5, now);
-        checkAndNotifyInactiveUsers(7, now);
+        notifyInactiveGuardians(LocalDate.now());
     }
 
-    private void checkAndNotifyInactiveUsers(int days, LocalDateTime now) {
-        LocalDateTime cutoffDate = now.minusDays(days);
-        List<Member> allMembers = memberRepository.findAll();
-
-        for (Member member : allMembers) {
-            Optional<LocalDateTime> lastUploadDate = albumRepository.findLastUploadDateByMember(member, Status.ACTIVE);
-
-            boolean shouldNotify = false;
-            if (lastUploadDate.isEmpty()) {
-                if (member.getCreatedAt().isBefore(cutoffDate)) {
-                    shouldNotify = true;
-                }
-            } else {
-                if (lastUploadDate.get().isBefore(cutoffDate)) {
-                    shouldNotify = true;
-                }
+    /** 마지막 업로드일(없으면 가입일)로부터 정확히 3·5·7일째인 보호자 본인에게 한 번씩 보낸다. */
+    void notifyInactiveGuardians(LocalDate today) {
+        for (Member member : memberRepository.findAll()) {
+            if (member.getType() != MemberType.GUARDIAN) {
+                continue;
             }
-
-            if (shouldNotify) {
-                sendInactivityNotificationToSeniors(member, days);
+            LocalDateTime lastActivity = albumRepository.findLastUploadDateByMember(member, Status.ACTIVE)
+                    .orElse(member.getCreatedAt());
+            long days = ChronoUnit.DAYS.between(lastActivity.toLocalDate(), today);
+            if (INACTIVITY_NOTICE_DAYS.contains(days)) {
+                sendInactivityNotification(member, days);
             }
         }
     }
 
-    private void sendInactivityNotificationToSeniors(Member member, int days) {
-        FamilyMembership myMembership = familyMembershipRepository.findByGuardianId(member.getId())
-                .orElse(null);
-        if (myMembership == null) {
+    private void sendInactivityNotification(Member guardian, long days) {
+        if (familyMembershipRepository.findByGuardianId(guardian.getId()).isEmpty()) {
             return;
         }
-
-        List<SeniorProfile> seniors = seniorProfileRepository
-                .findAllByFamilyIdWithMember(myMembership.getFamily().getId());
-        if (seniors.isEmpty()) {
-            return;
-        }
-
-        String message = member.getName() + "님, " + days + "일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?";
-
-        for (SeniorProfile senior : seniors) {
-            FcmSendDto dto = new FcmSendDto(message, "새로운 소식을 공유해보세요.", FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE)
-                    .withRelatedMember(member.getId());
-            fcmService.sendMessageToUser(senior.getMember().getId(), dto);
-        }
+        String message = guardian.getName() + "님, " + days + "일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?";
+        FcmSendDto dto = new FcmSendDto(message, "새로운 소식을 공유해보세요.", FcmCategory.ALBUM, "", ALBUM_DEFAULT_IMAGE);
+        fcmService.sendMessageToUser(guardian.getId(), dto);
     }
 
     @EventListener
