@@ -27,6 +27,7 @@ import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
@@ -34,6 +35,7 @@ import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -255,6 +257,7 @@ class AlbumNotificationListenerTest {
     void 시니어가_보호자_새_게시물을_모두_읽으면_A07을_전달한다() {
         // given
         Member senior = member(1L, MemberType.SENIOR, "시니어");
+        senior.updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         Member writer = member(2L, MemberType.GUARDIAN, "보호자");
         Album album = mock(Album.class);
         given(album.getMember()).willReturn(writer);
@@ -272,11 +275,42 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_ALL_VIEWED);
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 새 게시물을 모두 확인했어요!");
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(captor.getValue().deepLink()).isNull();
         assertThat(captor.getValue().dataForEnqueue("event-view"))
                 .containsEntry("deepLink", GuardianDeepLinks.album());
         assertThat(captor.getValue().seniorId()).isEqualTo(1L);
         then(fcmService).shouldHaveNoMoreInteractions();
+    }
+
+    @Test
+    @DisplayName("보호자의 게시물 소식이 뜸하면 시니어에게 보호자 프로필과 앨범 경로를 보낸다")
+    void 보호자_소식이_뜸하면_프로필과_앨범_경로를_보낸다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN, "보호자");
+        guardian.updateProfileImage("https://cdn.widyu.store/profile/guardian.png");
+        Member senior = member(2L, MemberType.SENIOR, "시니어");
+        Family family = mock(Family.class);
+        FamilyMembership membership = mock(FamilyMembership.class);
+        SeniorProfile profile = mock(SeniorProfile.class);
+        given(memberRepository.findAll()).willReturn(List.of(guardian));
+        given(albumRepository.findLastUploadDateByMember(guardian, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.now().minusDays(4)));
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(membership));
+        given(membership.getFamily()).willReturn(family);
+        given(family.getId()).willReturn(7L);
+        given(seniorProfileRepository.findAllByFamilyIdWithMember(7L)).willReturn(List.of(profile));
+        given(profile.getMember()).willReturn(senior);
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.checkInactiveUsersAndSendNotification();
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/guardian.png");
+        assertThat(captor.getValue().dataForEnqueue("event-inactive"))
+                .containsEntry("deepLink", "/album");
     }
 
     @Test

@@ -787,10 +787,11 @@ class FcmOutboxIntegrationTest {
         assertThat(heart.getRetentionPolicyVersion()).isEqualTo("v1");
         assertThat(zone.getRetentionPolicyVersion()).isEqualTo("v1");
         assertThat(notifications.findNotificationsWithCursor(member, null, PageRequest.of(0, 10))).hasSize(3);
-        assertThat(FcmNotificationResponse.from(legacy).scheme()).isEmpty();
-        assertThat(FcmNotificationResponse.from(heart).scheme())
+        assertThat(FcmNotificationResponse.from(legacy).path()).isEmpty();
+        assertThat(FcmNotificationResponse.from(legacy).isRead()).isFalse();
+        assertThat(FcmNotificationResponse.from(heart).path())
                 .isEqualTo("/location?seniorId=" + member);
-        assertThat(FcmNotificationResponse.from(zone).scheme())
+        assertThat(FcmNotificationResponse.from(zone).path())
                 .isEqualTo("/location?seniorId=" + member);
     }
 

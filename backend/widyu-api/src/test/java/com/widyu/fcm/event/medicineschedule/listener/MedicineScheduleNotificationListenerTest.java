@@ -149,6 +149,7 @@ class MedicineScheduleNotificationListenerTest {
         // given
         given(sensorProperties.medication()).willReturn(new SensorProperties.Medication(true));
         Member senior = Member.createMember(MemberType.SENIOR, "김할머니", "01011112222");
+        senior.updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         ReflectionTestUtils.setField(senior, "id", 1L);
         ReflectionTestUtils.setField(senior, "medicationAlarmRevision", 42L);
         Family family = Family.createFamily("ABCDEF");
@@ -182,7 +183,7 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(onTime.title()).isEqualTo("약 복용 시간이에요!");
         assertThat(onTime.content()).isEqualTo("지금 약을 복용하고 인증해주세요.");
         assertThat(onTime.fcmCategory()).isEqualTo(com.widyu.fcm.FcmCategory.MEDICINE_SCHEDULE);
-        assertThat(onTime.image()).isEqualTo("medicine.png");
+        assertThat(onTime.image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(onTime.scheme()).isEmpty();
         assertThat(onTime.data()).isEqualTo(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"));
         assertThat(seniorMessages.subList(1, 3)).extracting(FcmSendDto::title)
@@ -190,6 +191,8 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.data())
                 .containsEntry("type", dto.notificationType().name())
                 .containsEntry("revision", "42"));
+        assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.image())
+                .isEqualTo("https://cdn.widyu.store/profile/senior.png"));
 
         ArgumentCaptor<FcmSendDto> guardianCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());

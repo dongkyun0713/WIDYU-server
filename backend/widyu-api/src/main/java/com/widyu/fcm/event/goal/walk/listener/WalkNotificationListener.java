@@ -24,8 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class WalkNotificationListener {
 
-    private static final String WALK_DEFAULT_IMAGE = "walk.png";
-
     private final FcmService fcmService;
     private final WalkRepository walkRepository;
     private final SeniorProfileRepository seniorProfileRepository;
@@ -83,7 +81,7 @@ public class WalkNotificationListener {
         NotificationCopy copy = NotificationCopy.of(NotificationType.WALK_GOAL_UNMET, "W01",
                 Map.of("실제 걸음 수", actualSteps.toString()));
         FcmSendDto dto = FcmSendDto.of(NotificationType.WALK_GOAL_UNMET, copy,
-                null, null, null, null, WALK_DEFAULT_IMAGE);
+                null, null, null, null, member.getProfileImage());
         fcmService.sendMessageToUser(member.getId(), dto);
     }
 }
