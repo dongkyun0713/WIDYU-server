@@ -45,7 +45,7 @@ public enum PushSettingGroup {
             case TARGET, HEALTH_SCHEDULE, WALK, MEDICINE_SCHEDULE -> GOAL;
             case HEART_MESSAGE -> HOME;
             case ETC -> ETC;
-            case ALL, SAFE_ZONE, INCIDENT_SELF_CHECK, LOCATION_NOTICE -> null;
+            case ALL, UNREAD, SAFE_ZONE, INCIDENT_SELF_CHECK, LOCATION_NOTICE -> null;
         };
     }
 
@@ -58,7 +58,7 @@ public enum PushSettingGroup {
             case MEDICINE_SCHEDULE -> MEDICATION_CHECK;
             case SAFE_ZONE -> SAFE_ZONE;
             case ALBUM, TARGET, HEALTH_SCHEDULE, WALK, HEART_MESSAGE, ETC -> GENERAL;
-            case ALL, INCIDENT_SELF_CHECK, LOCATION_NOTICE -> null;
+            case ALL, UNREAD, INCIDENT_SELF_CHECK, LOCATION_NOTICE -> null;
         };
     }
 

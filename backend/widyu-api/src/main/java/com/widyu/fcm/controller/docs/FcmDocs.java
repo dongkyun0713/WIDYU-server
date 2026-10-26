@@ -20,7 +20,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "알림 목록 조회",
-            description = "현재 로그인한 유저의 알림 목록을 카테고리별 및 커서 기반으로 조회합니다."
+            description = "현재 로그인한 유저의 알림 목록을 카테고리별 및 커서 기반으로 조회합니다. `category=UNREAD`이면 카테고리와 관계없이 안 읽은 알림만 반환합니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -94,7 +94,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "알림 카테고리 조회",
-            description = "알림 카테고리별 개수를 조회합니다."
+            description = "알림 카테고리별 안 읽은 알림 개수를 조회합니다. `전체` 바로 뒤에 전체 안 읽은 수를 담은 `UNREAD`(안 읽음) 항목이 옵니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -110,6 +110,11 @@ public interface FcmDocs {
                                         {
                                           "label": "ALL",
                                           "name": "전체",
+                                          "count": 5
+                                        },
+                                        {
+                                          "label": "UNREAD",
+                                          "name": "안 읽음",
                                           "count": 5
                                         },
                                         {

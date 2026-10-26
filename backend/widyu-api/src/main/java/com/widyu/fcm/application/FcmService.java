@@ -64,6 +64,9 @@ public class FcmService {
         if ("ALL".equals(category)) {
             notifications = fcmNotificationRepository.findNotificationsWithCursor(
                     member.getId(), cursor, pageable);
+        } else if ("UNREAD".equals(category)) {
+            notifications = fcmNotificationRepository.findUnreadNotificationsWithCursor(
+                    member.getId(), cursor, pageable);
         } else {
             try {
                 FcmCategory fcmCategory = FcmCategory.valueOf(category);
@@ -135,7 +138,7 @@ public class FcmService {
         return Arrays.stream(FcmCategory.values())
                 .map(category -> {
                     long count = switch (category) {
-                        case ALL -> fcmNotificationRepository.countByMemberFcmToken_MemberIdAndIsReadFalse(member.getId());
+                        case ALL, UNREAD -> fcmNotificationRepository.countByMemberFcmToken_MemberIdAndIsReadFalse(member.getId());
                         default -> fcmNotificationRepository.countByMemberFcmToken_MemberIdAndFcmCategoryAndIsReadFalse(member.getId(), category);
                     };
                     return FcmCategoryResponse.of(category, count);
