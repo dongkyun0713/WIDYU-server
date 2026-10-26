@@ -243,6 +243,8 @@ class MedicineScheduleServiceTest {
                 .isEqualTo(NotificationPolicy.medication("M05"));
         assertThat(messageCaptor.getAllValues().get(1).notificationPolicy())
                 .isEqualTo(NotificationPolicy.medicationSync());
+        assertThat(messageCaptor.getAllValues()).extracting(FcmSendDto::eventId)
+                .doesNotContainNull().doesNotHaveDuplicates();
     }
 
     @Test
@@ -276,6 +278,8 @@ class MedicineScheduleServiceTest {
                 .isEqualTo("내일부터 이 알람은 울리지 않아요.");
         assertThat(messages.getAllValues().get(1).notificationPolicy())
                 .isEqualTo(NotificationPolicy.medicationSync());
+        assertThat(messages.getAllValues()).extracting(FcmSendDto::eventId)
+                .doesNotContainNull().doesNotHaveDuplicates();
     }
 
     @Test
@@ -318,6 +322,8 @@ class MedicineScheduleServiceTest {
                 .isEqualTo(today().plusDays(1).toString());
         assertThat(messages.getAllValues().get(1).notificationPolicy())
                 .isEqualTo(NotificationPolicy.medicationSync());
+        assertThat(messages.getAllValues()).extracting(FcmSendDto::eventId)
+                .doesNotContainNull().doesNotHaveDuplicates();
     }
 
     @Test
