@@ -3,6 +3,7 @@ package com.widyu.fcm;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.widyu.member.MemberType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,26 @@ class PushSettingGroupTest {
         assertThat(PushSettingGroup.fromLegacy(FcmCategory.ALBUM))
                 .isEqualTo(PushSettingGroup.GENERAL);
         assertThat(PushSettingGroup.fromLegacy(FcmCategory.LOCATION_NOTICE)).isNull();
+        assertThat(PushSettingGroup.fromLegacy(FcmCategory.ALBUM, MemberType.SENIOR))
+                .isEqualTo(PushSettingGroup.ALBUM);
+        assertThat(PushSettingGroup.fromLegacy(FcmCategory.MEDICINE_SCHEDULE, MemberType.SENIOR))
+                .isEqualTo(PushSettingGroup.GOAL);
+    }
+
+    @Test
+    @DisplayName("회원 역할로 설정 그룹을 고르면 시니어와 보호자의 네 항목이 분리된다")
+    void 역할별_설정_그룹을_고르면_네_항목이_분리된다() {
+        // when / then
+        assertThat(PushSettingGroup.stream().filter(group -> group.visibleFor(MemberType.SENIOR)).toList())
+                .containsExactly(PushSettingGroup.ALBUM, PushSettingGroup.GOAL,
+                        PushSettingGroup.HOME, PushSettingGroup.ETC);
+        assertThat(PushSettingGroup.stream().filter(group -> group.visibleFor(MemberType.GUARDIAN)).toList())
+                .containsExactly(PushSettingGroup.SAFETY, PushSettingGroup.SAFE_ZONE,
+                        PushSettingGroup.MEDICATION_CHECK, PushSettingGroup.GENERAL);
+        assertThat(PushSettingGroup.forSenior(FcmCategory.HEART_MESSAGE))
+                .isEqualTo(PushSettingGroup.HOME);
+        assertThat(PushSettingGroup.forSenior(FcmCategory.ETC))
+                .isEqualTo(PushSettingGroup.ETC);
     }
 
     @Test
