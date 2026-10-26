@@ -2,6 +2,7 @@ package com.widyu.fcm.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
@@ -114,7 +115,7 @@ class FcmEligibilityTest {
         // given
         FcmOutbox outbox = outbox(null);
         activeRecipient(outbox);
-        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.ALBUM)).willReturn(false);
 
         // when
         boolean allowed = eligibility.eligible(outbox);
@@ -139,12 +140,28 @@ class FcmEligibilityTest {
     }
 
     @Test
-    @DisplayName("복약 변경 타입을 판정하면 기존 복약 카테고리보다 일반 그룹을 따른다")
-    void 복약_변경_타입을_판정하면_일반_그룹을_따른다() {
+    @DisplayName("시니어 복약 변경 타입을 판정하면 목표 그룹을 따른다")
+    void 시니어_복약_변경_타입을_판정하면_목표_그룹을_따른다() {
         // given
         FcmOutbox outbox = outbox(null);
         ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_SCHEDULE_CHANGED);
         ReflectionTestUtils.setField(outbox, "fcmCategory", FcmCategory.MEDICINE_SCHEDULE);
+        activeRecipient(outbox);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.GOAL)).willReturn(false);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isFalse();
+    }
+
+    @Test
+    @DisplayName("보호자의 복약 변경 타입을 판정하면 기존 일반 그룹을 따른다")
+    void 보호자_복약_변경_타입을_판정하면_일반_그룹을_따른다() {
+        // given
+        FcmOutbox outbox = outbox(null, MemberType.GUARDIAN);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_SCHEDULE_CHANGED);
         activeRecipient(outbox);
         given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(false);
 
@@ -156,10 +173,42 @@ class FcmEligibilityTest {
     }
 
     @Test
+    @DisplayName("시니어 하트 메시지를 판정하면 홈 그룹을 따른다")
+    void 시니어_하트_메시지를_판정하면_홈_그룹을_따른다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.HEART_MESSAGE_RECEIVED);
+        activeRecipient(outbox);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.HOME)).willReturn(false);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isFalse();
+    }
+
+    @Test
+    @DisplayName("긴급 본인확인을 판정하면 개인 푸시 설정을 건너뛴다")
+    void 긴급_본인확인은_개인_설정을_건너뛴다() {
+        // given
+        FcmOutbox outbox = outbox(null);
+        ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+        activeRecipient(outbox);
+
+        // when
+        boolean allowed = eligibility.eligible(outbox);
+
+        // then
+        assertThat(allowed).isTrue();
+        verifyNoInteractions(settings);
+    }
+
+    @Test
     @DisplayName("복약 미확인 타입을 판정하면 복약 확인 그룹을 따른다")
     void 복약_미확인_타입을_판정하면_복약_확인_그룹을_따른다() {
         // given
-        FcmOutbox outbox = outbox(null);
+        FcmOutbox outbox = outbox(null, MemberType.GUARDIAN);
         ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.MEDICATION_PROOF_MISSING);
         activeRecipient(outbox);
         given(settings.isNotificationEnabled(1L, PushSettingGroup.MEDICATION_CHECK)).willReturn(false);
@@ -175,7 +224,7 @@ class FcmEligibilityTest {
     @DisplayName("안심구역 돌아옴을 판정하면 안심구역 그룹 설정을 따른다")
     void 안심구역_돌아옴을_판정하면_안심구역_그룹을_따른다() {
         // given
-        FcmOutbox outbox = outbox(null);
+        FcmOutbox outbox = outbox(null, MemberType.GUARDIAN);
         ReflectionTestUtils.setField(outbox, "notificationType", NotificationType.SAFE_ZONE_ENTERED);
         ReflectionTestUtils.setField(outbox, "fcmCategory", FcmCategory.SAFE_ZONE);
         activeRecipient(outbox);
@@ -263,11 +312,15 @@ class FcmEligibilityTest {
     }
 
     private void enabled() {
-        given(settings.isNotificationEnabled(1L, PushSettingGroup.GENERAL)).willReturn(true);
+        given(settings.isNotificationEnabled(1L, PushSettingGroup.ALBUM)).willReturn(true);
     }
 
     private FcmOutbox outbox(Long relatedId) {
-        Member recipient = member(1L, Status.ACTIVE);
+        return outbox(relatedId, MemberType.SENIOR);
+    }
+
+    private FcmOutbox outbox(Long relatedId, MemberType type) {
+        Member recipient = member(1L, Status.ACTIVE, type);
         MemberFcmToken token = MemberFcmToken.builder()
                 .id(11L).member(recipient).token("mock-token").active(true).build();
         return FcmOutbox.builder().recipientMember(recipient).memberFcmToken(token)
@@ -275,7 +328,11 @@ class FcmEligibilityTest {
     }
 
     private Member member(Long id, Status status) {
-        Member member = Member.createMember(MemberType.SENIOR, "회원", "01011112222");
+        return member(id, status, MemberType.SENIOR);
+    }
+
+    private Member member(Long id, Status status, MemberType type) {
+        Member member = Member.createMember(type, "회원", "01011112222");
         ReflectionTestUtils.setField(member, "id", id);
         ReflectionTestUtils.setField(member, "status", status);
         return member;

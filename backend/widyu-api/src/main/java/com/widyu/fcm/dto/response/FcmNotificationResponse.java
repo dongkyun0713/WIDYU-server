@@ -10,16 +10,17 @@ public record FcmNotificationResponse(
         String title,
         String content,
         LocalDateTime createdAt,
-        String scheme
+        boolean isRead,
+        String path
 ) {
     public static FcmNotificationResponse from(FcmNotification n) {
         String category = "ALL";
         if (n.getFcmCategory() != null) {
             category = n.getFcmCategory().name();
         }
-        String scheme = "";
+        String path = "";
         if (n.getDeepLink() != null) {
-            scheme = n.getDeepLink();
+            path = n.getDeepLink();
         }
         return new FcmNotificationResponse(
                 n.getId(),
@@ -28,7 +29,8 @@ public record FcmNotificationResponse(
                 n.getTitle(),
                 n.getBody(),
                 n.getCreatedAt(),
-                scheme
+                n.isRead(),
+                path
         );
     }
 }

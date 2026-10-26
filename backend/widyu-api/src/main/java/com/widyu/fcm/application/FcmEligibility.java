@@ -4,6 +4,8 @@ import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.PushSettingGroup;
 import com.widyu.global.entity.Status;
+import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
@@ -35,15 +37,20 @@ public class FcmEligibility {
 
     public boolean eligible(FcmOutbox outbox) {
         Long recipientId = outbox.getRecipientMember().getId();
-        if (!active(recipientId) || !outbox.getMemberFcmToken().isActive()
+        Member recipient = members.findById(recipientId).orElse(null);
+        if (recipient == null || recipient.getStatus() != Status.ACTIVE
+                || !outbox.getMemberFcmToken().isActive()
                 || !recipientId.equals(outbox.getMemberFcmToken().getMember().getId())) {
             return false;
         }
         PushSettingGroup group = null;
         if (outbox.getNotificationType() == null) {
-            group = PushSettingGroup.fromLegacy(outbox.getFcmCategory());
+            group = PushSettingGroup.fromLegacy(outbox.getFcmCategory(), recipient.getType());
         } else if (outbox.getNotificationType().deliveryMode() != DeliveryMode.DATA_ONLY) {
             group = outbox.getNotificationType().settingGroup();
+            if (recipient.getType() == MemberType.SENIOR && group != PushSettingGroup.NONE) {
+                group = PushSettingGroup.forSenior(outbox.getNotificationType().fcmCategory());
+            }
         }
         if (group != null && group != PushSettingGroup.NONE) {
             if (!settings.isNotificationEnabled(recipientId, group)) {

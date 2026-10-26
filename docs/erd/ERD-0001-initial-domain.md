@@ -627,7 +627,7 @@ erDiagram
     MemberNotificationSetting {
         Long id PK
         Long member_id FK
-        PushSettingGroup category "SAFETY/SAFE_ZONE/MEDICATION_CHECK/GENERAL, VARCHAR(32); NONE 저장 금지"
+        PushSettingGroup category "보호자 SAFETY/SAFE_ZONE/MEDICATION_CHECK/GENERAL; 시니어 ALBUM/GOAL/HOME/ETC; VARCHAR(32); NONE 저장 금지"
         Boolean enabled
     }
 
@@ -906,6 +906,7 @@ erDiagram
 
 | 날짜 | 테이블 | 변경 내용 | DDL |
 |------|--------|-----------|-----|
+| 2026-10-26 | `member_notification_setting` | 시니어 `GENERAL=false`를 `ALBUM/GOAL/HOME/ETC=false` 네 행으로 이행하고 시니어 `GENERAL` 행 제거 (LLD-0095) | `scripts/mysql/migrate_senior_notification_settings.sql` |
 | 2026-10-13 | `incident` | 확인 화면 수신 시각·기기 `prompt_displayed_at_ms`·`prompt_displayed_via` 추가 (LLD-0085) | `scripts/mysql/alter_incident_prompt_displayed.sql` |
 | 2026-10-11 | `incident` | 워치 도움 요청 취소 상태를 위한 `state VARCHAR(24)` 확장 (LLD-0083) | `scripts/mysql/alter_incident_state_length.sql` |
 | 2026-10-11 | `incident_response_attempt` | 본인확인 수락·지각·중복 시도 이력 (LLD-0082) | `scripts/mysql/create_incident_response_attempt.sql` |

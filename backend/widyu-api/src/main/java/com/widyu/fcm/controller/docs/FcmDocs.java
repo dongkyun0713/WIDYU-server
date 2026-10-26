@@ -36,12 +36,13 @@ public interface FcmDocs {
                                         "notifications": [
                                           {
                                             "notificationId": 1,
-                                            "image": "~",
+                                            "image": "https://cdn.widyu.store/profile/123.png",
                                             "category": "ALBUM",
                                             "title": "부모님이 올려두신 게시물을 모두 읽었어요!",
                                             "content": "새로운 게시물을 업로드해주세요",
                                             "createdAt": "2025-08-26T14:00:00",
-                                            "scheme": ""
+                                            "isRead": false,
+                                            "path": "/album"
                                           }
                                         ],
                                         "hasNext": true,

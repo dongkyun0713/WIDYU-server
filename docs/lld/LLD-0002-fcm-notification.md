@@ -233,10 +233,12 @@ AlbumNotificationListener (@EventListener, 동기)
 ```
 @Scheduled(cron = "0 0 10 * * *")  ← 매일 오전 10시
   └─ [3일, 5일, 7일] 각 임계값에 대해:
-       └─ 전체 회원 조회
-       └─ 마지막 앨범 업로드일 계산
-       └─ 임계값 이전이면 보호자의 가족 내 시니어들에게 ALBUM 알림
+       └─ 전체 회원 중 보호자만
+       └─ 마지막 앨범 업로드일(없으면 가입일)부터 오늘까지 날짜 차이 계산
+       └─ 정확히 3·5·7일째이고 가족에 속해 있으면 보호자 본인에게 ALBUM 알림 1건
 ```
+
+> #883: 처음 구현(#65)은 문구가 보호자를 부르는데도 같은 가족의 시니어 전원에게 보냈고, "N일 이상 지남" 조건이라 7일이 지나면 시니어마다 매일 3건씩 발송됐다. 수신자를 보호자 본인으로, 조건을 날짜 기준 정확히 N일째로 바꿨다.
 
 ### 5-5. 알림 목록 조회
 
@@ -277,6 +279,7 @@ GET /api/v1/fcm?category=ALL&cursor=42
 - [x] 읽음 처리 후 isRead=true가 된다
 - [x] 알림 설정 그룹 변경 시 그룹에 속한 모든 FcmCategory 설정이 저장 또는 갱신된다
 - [x] 자기 댓글·좋아요는 알림이 발송되지 않는다
+- [x] 앨범 미업로드 알림은 마지막 업로드일(없으면 가입일)로부터 정확히 3·5·7일째에 가족에 속한 보호자 본인에게만 1건 발송되고, 시니어에게는 발송되지 않는다 (#883)
 - [x] Swagger에 알림 목록 / 읽음 처리 응답이 반영된다
 - [x] `./gradlew :backend:widyu-api:test`가 통과한다
 
@@ -294,7 +297,7 @@ GET /api/v1/fcm?category=ALL&cursor=42
 ## 10. 참고
 
 - `FcmService.java`: sendMessageToUser, getNotificationsForCurrentUser
-- `AlbumNotificationListener.java`: @EventListener 5종, @Scheduled 비활성 알림
+- `AlbumNotificationListener.java`: @EventListener 5종, @Scheduled 비활성 알림(`notifyInactiveGuardians`)
 - `NotificationSettingService.java`: 카테고리별 ON/OFF 확인
 - `MemberFcmTokenService.java`: 토큰 등록·비활성화
 - `FcmCategory.java` enum, `FcmSendDto.java` record

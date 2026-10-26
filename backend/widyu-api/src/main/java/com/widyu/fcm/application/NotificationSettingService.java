@@ -38,7 +38,7 @@ public class NotificationSettingService {
                 .collect(Collectors.toMap(MemberNotificationSetting::getCategory, Function.identity()));
 
         return PushSettingGroup.stream()
-                .filter(group -> member.getType() != MemberType.SENIOR || group == PushSettingGroup.GENERAL)
+                .filter(group -> group.visibleFor(member.getType()))
                 .map(group -> response(member, group, leader, settings.get(group)))
                 .toList();
     }
@@ -56,7 +56,7 @@ public class NotificationSettingService {
         if (member.getNotificationPolicyRevision() != request.policyRevision()) {
             throw new BusinessException(ErrorCode.NOTIFICATION_POLICY_REVISION_CONFLICT);
         }
-        if (member.getType() == MemberType.SENIOR && group != PushSettingGroup.GENERAL) {
+        if (!group.visibleFor(member.getType())) {
             throw new BusinessException(ErrorCode.INVALID_FCM_CATEGORY);
         }
         boolean leader = isLeader(member);

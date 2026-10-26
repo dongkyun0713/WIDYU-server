@@ -42,6 +42,7 @@ class WalkNotificationListenerTest {
     void 양수_걸음으로_목표에_미달하면_W01_푸시를_만든다() {
         // given
         Walk walk = walk(6500);
+        walk.getMember().updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         given(walkRepository.findUnachievedWalksByDate(any())).willReturn(List.of(walk));
         ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
 
@@ -54,6 +55,7 @@ class WalkNotificationListenerTest {
         assertThat(captor.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.PUSH_ONLY);
         assertThat(captor.getValue().title()).isEqualTo("오늘 6500걸음 걸으셨어요.");
         assertThat(captor.getValue().content()).isEqualTo("가능하다면 조금 더 걸어보는 건 어떨까요?");
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(captor.getValue().dataForEnqueue("event-1"))
                 .containsEntry("deepLink", "/goal");
     }
