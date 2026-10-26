@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import org.junit.jupiter.api.DisplayName;
@@ -35,12 +35,12 @@ class FamilyLeaderChangedNotificationListenerTest {
         verify(outboxService).enqueue(org.mockito.ArgumentMatchers.eq(27L), message.capture());
         verifyNoMoreInteractions(outboxService);
         FcmSendDto sent = message.getValue();
-        assertThat(sent.notificationPolicy()).isEqualTo(NotificationPolicy.familyLeader());
+        assertThat(sent.notificationType()).isEqualTo(NotificationType.FAMILY_LEADER_CHANGED);
         assertThat(sent.title()).isEqualTo("이제 가족 방장이 되었어요.");
         assertThat(sent.content()).isEqualTo("가족 관리와 중요한 알림을 확인해주세요.");
         assertThat(sent.scheme()).isEqualTo("/family-manage");
         assertThat(sent.dataForEnqueue("event-1"))
-                .doesNotContainKey("type")
+                .containsEntry("type", "FAMILY_LEADER_CHANGED")
                 .containsEntry("deepLink", "/family-manage");
     }
 }

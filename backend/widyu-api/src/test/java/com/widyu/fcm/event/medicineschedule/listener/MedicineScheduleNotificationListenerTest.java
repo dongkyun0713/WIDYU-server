@@ -9,7 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.application.FcmService;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.entity.Status;
 import com.widyu.global.properties.SensorProperties;
@@ -100,22 +100,22 @@ class MedicineScheduleNotificationListenerTest {
         ArgumentCaptor<FcmSendDto> seniorCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(eq(1L), seniorCaptor.capture());
         assertThat(seniorCaptor.getAllValues()).allSatisfy(dto -> assertThat(dto.data())
-                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("type", dto.notificationType().name())
                 .containsEntry("revision", "42"));
-        assertThat(seniorCaptor.getAllValues()).extracting(FcmSendDto::notificationPolicy)
-                .containsExactly(NotificationPolicy.medication("M02"), NotificationPolicy.medication("M03"));
+        assertThat(seniorCaptor.getAllValues()).extracting(FcmSendDto::notificationType)
+                .containsExactly(NotificationType.MEDICATION_REMINDER_10, NotificationType.MEDICATION_REMINDER_20);
         assertThat(seniorCaptor.getAllValues()).extracting(FcmSendDto::title)
                 .containsExactly("약 복용 인증이 아직 안 됐어요.", "약 복용 인증 시간이 10분 남았어요.");
 
         ArgumentCaptor<FcmSendDto> guardianCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());
         assertThat(guardianCaptor.getValue().data())
-                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("type", "MEDICATION_PROOF_MISSING")
                 .containsEntry("revision", "7");
         assertThat(guardianCaptor.getValue().relatedMemberId()).isEqualTo(1L);
         assertThat(guardianCaptor.getValue().seniorId()).isEqualTo(1L);
-        assertThat(guardianCaptor.getValue().notificationPolicy())
-                .isEqualTo(NotificationPolicy.medication("M04"));
+        assertThat(guardianCaptor.getValue().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_PROOF_MISSING);
         assertThat(guardianCaptor.getValue().title())
                 .isEqualTo("김할머니 님의 약 복용 인증이 아직 확인되지 않았어요.");
         assertThat(guardianCaptor.getValue().dataForEnqueue(guardianCaptor.getValue().eventId()))
@@ -176,9 +176,9 @@ class MedicineScheduleNotificationListenerTest {
         ArgumentCaptor<FcmSendDto> seniorCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(3)).sendMessageToUser(eq(1L), seniorCaptor.capture());
         List<FcmSendDto> seniorMessages = seniorCaptor.getAllValues();
-        assertThat(seniorMessages).extracting(FcmSendDto::notificationPolicy)
-                .containsExactly(null, NotificationPolicy.medication("M02"),
-                        NotificationPolicy.medication("M03"));
+        assertThat(seniorMessages).extracting(FcmSendDto::notificationType)
+                .containsExactly(null, NotificationType.MEDICATION_REMINDER_10,
+                        NotificationType.MEDICATION_REMINDER_20);
         FcmSendDto onTime = seniorMessages.get(0);
         assertThat(onTime.title()).isEqualTo("약 복용 시간이에요!");
         assertThat(onTime.content()).isEqualTo("지금 약을 복용하고 인증해주세요.");
@@ -189,15 +189,15 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(seniorMessages.subList(1, 3)).extracting(FcmSendDto::title)
                 .containsExactly("약 복용 인증이 아직 안 됐어요.", "약 복용 인증 시간이 10분 남았어요.");
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.data())
-                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("type", dto.notificationType().name())
                 .containsEntry("revision", "42"));
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.image())
                 .isEqualTo("https://cdn.widyu.store/profile/senior.png"));
 
         ArgumentCaptor<FcmSendDto> guardianCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());
-        assertThat(guardianCaptor.getValue().notificationPolicy())
-                .isEqualTo(NotificationPolicy.medication("M04"));
+        assertThat(guardianCaptor.getValue().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_PROOF_MISSING);
         assertThat(guardianCaptor.getValue().title())
                 .isEqualTo("김할머니 님의 약 복용 인증이 아직 확인되지 않았어요.");
     }

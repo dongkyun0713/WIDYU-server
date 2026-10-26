@@ -2,7 +2,7 @@ package com.widyu.incident.application;
 
 import com.widyu.decision.DecisionRecord;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -155,10 +155,10 @@ public class IncidentService {
         incidentRepository.closeSecondAlertIfPending(locked.getId(), nowMs);
         List<Long> recipients = fcmNotifications.findRecipientMemberIdsByEventId(incidentRef);
         if (!recipients.isEmpty()) {
-            NotificationPolicy type = NotificationPolicy.safety("K02", false);
+            NotificationType type = NotificationType.SELF_HELP_REQUEST_CANCELLED;
             NotificationCopy copy = NotificationCopy.of(type, "K02", Map.of("시니어 이름", senior.getName()));
             FcmSendDto message = FcmSendDto.builder()
-                    .title(copy.title()).content(copy.body()).notificationPolicy(type)
+                    .title(copy.title()).content(copy.body()).notificationType(type)
                     .eventId(incidentRef + ":CX").entityId(incidentRef)
                     .seniorId(memberId).relatedMemberId(memberId)
                     .image(senior.getProfileImage()).emergency(false).build();
@@ -463,7 +463,7 @@ public class IncidentService {
     }
 
     private void enqueueOkNotice(Incident incident) {
-        NotificationPolicy type = NotificationPolicy.safety("S08", false);
+        NotificationType type = NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART;
         Member senior = memberRepository.findById(incident.getMemberId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
         Long familyId = seniorProfileRepository.findFamilyIdByMemberId(senior.getId()).orElse(null);
@@ -473,7 +473,7 @@ public class IncidentService {
         }
         NotificationCopy copy = NotificationCopy.of(type, "S08", Map.of("시니어 이름", senior.getName()));
         FcmSendDto message = FcmSendDto.builder()
-                .title(copy.title()).content(copy.body()).notificationPolicy(type)
+                .title(copy.title()).content(copy.body()).notificationType(type)
                 .eventId(incident.getIncidentRef() + ":OK")
                 .entityId(incident.getIncidentRef()).seniorId(senior.getId())
                 .relatedMemberId(senior.getId()).image(senior.getProfileImage())
@@ -535,16 +535,16 @@ public class IncidentService {
                     .content("지금 상태를 알려주세요. 답이 없으면 가족에게 알립니다.")
                     .fcmCategory(FcmCategory.INCIDENT_SELF_CHECK)
                     .scheme(SELF_CHECK_SCHEME_PREFIX + incident.getIncidentRef())
-                    .data(Map.of("type", NotificationPolicy.selfCheck().dataTypeValue()))
+                    .data(Map.of("type", NotificationType.SAFETY_SELF_CHECK.dataTypeValue()))
                     .emergency(true)
                     .build();
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.selfCheck(), "S01", null);
+        NotificationCopy copy = NotificationCopy.of(NotificationType.SAFETY_SELF_CHECK, "S01", null);
         return FcmSendDto.builder()
                 .title(copy.title())
                 .content(copy.body())
                 .fcmCategory(FcmCategory.INCIDENT_SELF_CHECK)
-                .notificationPolicy(NotificationPolicy.selfCheck())
+                .notificationType(NotificationType.SAFETY_SELF_CHECK)
                 .eventId(incident.getIncidentRef())
                 .entityId(incident.getIncidentRef())
                 .emergency(true)

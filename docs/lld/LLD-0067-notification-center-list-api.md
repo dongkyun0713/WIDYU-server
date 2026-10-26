@@ -1,6 +1,6 @@
 # LLD-0067: 알림센터 목록 API v2
 
-> 2026-10-26 개정: [LLD-0097](LLD-0097-legacy-notification-categories.md)이 상세 enum·저장 타입·필터 조회 설계를 대체한다. NotificationType을 삭제하고 기존 FcmCategory와 정책 값 JSON으로 발송·저장·보존을 처리한다. 센터 필터 스냅샷·DDL/backfill이 필요하며 앱에는 기존 카테고리·경로·기능 트리거만 전달한다. 아래 enum 레지스트리 관련 설명은 도입 당시 이력이다.
+> 2026-10-26 응답 개정: [LLD-0097](LLD-0097-legacy-notification-categories.md)에 따라 항목의 상세 `type` 필드를 제거하고 `category`는 기존 `FcmCategory` 값을 반환한다. 아래 필터·unreadCounts·페이지네이션·읽음 정책은 유지한다.
 
 > Low-Level Design. 이 문서는 이슈 #703 구현과 PR 검수의 기준이다. LLD-0060(타입 레지스트리)과 LLD-0062(수신자×이벤트 센터 행)를 전제로 한다.
 

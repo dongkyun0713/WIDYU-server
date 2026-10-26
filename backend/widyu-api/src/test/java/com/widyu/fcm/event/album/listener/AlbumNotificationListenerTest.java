@@ -15,7 +15,7 @@ import com.widyu.album.repository.AlbumRepository;
 import com.widyu.album.repository.AlbumUnlockRepository;
 import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.fcm.DeliveryMode;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.GuardianDeepLinks;
@@ -78,15 +78,15 @@ class AlbumNotificationListenerTest {
         // then
         then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
         FcmSendDto upload = captor.getValue();
-        assertThat(upload.notificationPolicy()).isEqualTo(NotificationPolicy.album("A01"));
-        assertThat(upload.notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.PUSH_ONLY);
+        assertThat(upload.notificationType()).isEqualTo(NotificationType.ALBUM_UPLOAD_COMPLETE);
+        assertThat(upload.notificationType().deliveryMode()).isEqualTo(DeliveryMode.PUSH_ONLY);
         assertThat(upload.title()).isEqualTo("게시물 업로드가 완료됐어요!");
         assertThat(upload.deepLink()).isEqualTo(GuardianDeepLinks.post("10"));
         assertThat(upload.dataForEnqueue("event-1"))
                 .containsEntry("deepLink", "/post?postId=10");
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         FcmSendDto created = captor.getValue();
-        assertThat(created.notificationPolicy()).isEqualTo(NotificationPolicy.album("A02-S/C"));
+        assertThat(created.notificationType()).isEqualTo(NotificationType.ALBUM_CREATED);
         assertThat(created.title()).isEqualTo("보호자 님이 게시물을 올렸어요!");
         assertThat(created.dataForEnqueue("event-2")).containsEntry("deepLink", "/album/post?postId=10");
     }
@@ -109,7 +109,7 @@ class AlbumNotificationListenerTest {
 
         // then
         then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
-        assertThat(captor.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.album("A01"));
+        assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_UPLOAD_COMPLETE);
         assertThat(captor.getValue().dataForEnqueue("event-1").get("deepLink"))
                 .isEqualTo("/album/post?postId=10");
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
@@ -135,8 +135,8 @@ class AlbumNotificationListenerTest {
 
         // then
         then(fcmService).should(org.mockito.Mockito.times(2)).sendMessageToUser(eq(2L), captor.capture());
-        assertThat(captor.getAllValues()).extracting(FcmSendDto::notificationPolicy)
-                .containsExactly(NotificationPolicy.album("A03"), NotificationPolicy.album("A04"));
+        assertThat(captor.getAllValues()).extracting(FcmSendDto::notificationType)
+                .containsExactly(NotificationType.ALBUM_COMMENTED, NotificationType.ALBUM_REPLIED);
         assertThat(captor.getAllValues().get(0).dataForEnqueue("e-1").get("deepLink"))
                 .isEqualTo(GuardianDeepLinks.postComment("10", "20"));
         assertThat(captor.getAllValues().get(1).dataForEnqueue("e-2").get("deepLink"))
@@ -173,10 +173,10 @@ class AlbumNotificationListenerTest {
 
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
-        assertThat(captor.getValue().notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
+        assertThat(captor.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 게시물에 좋아요를 눌렀어요.");
         assertThat(captor.getValue().content()).isNull();
-        assertThat(captor.getValue().notificationPolicy().foregroundPresentation()).isEqualTo("NONE");
+        assertThat(captor.getValue().notificationType().foregroundPresentation()).isEqualTo("NONE");
         assertThat(captor.getValue().dataForEnqueue("event-like"))
                 .containsEntry("deepLink", "/post?postId=10");
     }
@@ -229,7 +229,7 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().content()).isEqualTo("아직 잠금을 해제하지 않은 새 소식이 없어요.");
         assertThat(captor.getValue().remainingLockedCount()).isZero();
-        assertThat(captor.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.album("A06-L/Z"));
+        assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_UNLOCKED);
         assertThat(captor.getValue().dataForEnqueue("e-4"))
                 .containsEntry("remainingLockedCount", "0");
     }
@@ -273,7 +273,7 @@ class AlbumNotificationListenerTest {
 
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
-        assertThat(captor.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.album("A07"));
+        assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_ALL_VIEWED);
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 새 게시물을 모두 확인했어요!");
         assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(captor.getValue().deepLink()).isNull();

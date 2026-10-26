@@ -560,8 +560,7 @@ erDiagram
         Long member_fcm_token_id FK "nullable; legacy token association"
         Long recipient_member_id FK "nullable legacy only; fixed for new notifications"
         String eventId "nullable VARCHAR(40); recipient+event UK"
-        String policy "nullable TEXT JSON, column type; old strings readable, LLD-0097"
-        String centerFilter "nullable VARCHAR(16), column center_filter"
+        String type "nullable VARCHAR(48) NotificationType"
         String deepLink "nullable"
         String entityId "nullable"
         Long seniorId "nullable"
@@ -593,7 +592,7 @@ erDiagram
         String scheme
         String dataType
         Long dataRevision
-        String notificationPolicy "nullable TEXT JSON, column notification_type; LLD-0097"
+        String notificationType "nullable VARCHAR(48), LLD-0060"
         String dataPayload "nullable TEXT JSON object, LLD-0060"
         FcmCategory fcmCategory
         Boolean emergency
@@ -921,7 +920,6 @@ erDiagram
 | 2026-10-01 | `family_membership`·`family` | `sort_order INT NOT NULL`(가족별 `connected_at, id` 순서 백필)·`family_order_revision BIGINT NOT NULL DEFAULT 0` 추가 (LLD-0064) | `scripts/mysql/alter_family_membership_sort_order.sql` |
 | 2026-10-02 | `fcm_notification` | 잠금 해제 알림의 시니어 이름·남은 잠금 수 nullable 컬럼 (LLD-0066) | `scripts/mysql/alter_fcm_notification_album_unlock.sql` |
 | 2026-10-01 | `fcm_outbox` | `notification_type VARCHAR(48)`·`data_payload TEXT` 추가 (LLD-0060). type별 FCM 표현과 재시도 data 복원, 기존 행은 NULL 폴백 | `scripts/mysql/alter_fcm_outbox_notification_type.sql` |
-| 2026-10-26 | `fcm_notification`, `fcm_outbox` | 상세 enum 제거. 기존 `type`·`notification_type`을 TEXT 정책 JSON으로 전환, `center_filter VARCHAR(16)` 추가·기존 필터 backfill. 구 저장 문자열 읽기 호환, 실제 DB 미적용 (LLD-0097) | `scripts/mysql/alter_fcm_notification_policy_snapshot.sql` |
 | 2026-09-21 | `consent_record` | 신규 테이블 (LLD-0055). 인앱 동의의 항목·판·시각·철회. 추가 전용 | `scripts/mysql/create_consent_record.sql` |
 | 2026-09-21 | `location_access_log` | 신규 테이블 (LLD-0056). 위치 열람 주체·대상·경로·통보 시각 | `scripts/mysql/create_location_access_log.sql` |
 | 2026-09-21 | `fcm_notification`·`member_notification_setting` | `fcm_category`에 `LOCATION_NOTICE` 추가 (LLD-0056). 운영 컬럼이 네이티브 ENUM일 때만 실행 | `scripts/mysql/alter_fcm_category_location_notice.sql` |

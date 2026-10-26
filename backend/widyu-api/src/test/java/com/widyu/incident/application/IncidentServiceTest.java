@@ -15,7 +15,7 @@ import static org.mockito.Mockito.never;
 
 import com.widyu.decision.DecisionRecord;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -227,7 +227,7 @@ class IncidentServiceTest {
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
         assertThat(message.getValue().title()).isEqualTo("괜찮으세요?");
-        assertThat(message.getValue().notificationPolicy()).isNull();
+        assertThat(message.getValue().notificationType()).isNull();
     }
 
     @Test
@@ -321,7 +321,7 @@ class IncidentServiceTest {
         assertThat(answered.getSituationEndedAtMs()).isNotNull();
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outboxService).should().enqueue(eq(GUARDIAN_ID), message.capture());
-        assertThat(message.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.safety("S08", false));
+        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART);
         assertThat(message.getValue().eventId()).isEqualTo(INCIDENT_REF + ":OK");
         assertThat(message.getValue().title()).isEqualTo("시니어 님의 신체 지표가 평소와 달랐어요.");
         assertThat(message.getValue().emergency()).isFalse();

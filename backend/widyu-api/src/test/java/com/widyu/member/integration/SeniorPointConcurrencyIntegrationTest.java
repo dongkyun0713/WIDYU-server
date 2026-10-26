@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.given;
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
 import com.widyu.fcm.application.FcmTransport;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.goal.walk.application.WalkService;
 import com.widyu.goal.walk.dto.request.UpdateStepsRequest;
@@ -119,7 +119,7 @@ class SeniorPointConcurrencyIntegrationTest {
         long earnHistoryCount = countHistoriesByType(seniorProfileId, PointHistoryType.EARN);
         assertThat(earnHistoryCount).isEqualTo(threadCount);
         assertThat(notificationRepository.findAll()).hasSize(threadCount)
-                .allMatch(notification -> NotificationPolicy.point("P01").equals(notification.getPolicy()));
+                .allMatch(notification -> notification.getType() == NotificationType.POINT_EARNED);
     }
 
     @Test
@@ -148,7 +148,7 @@ class SeniorPointConcurrencyIntegrationTest {
         long useHistoryCount = countHistoriesByType(seniorProfileId, PointHistoryType.USE);
         assertThat(useHistoryCount).isEqualTo(expectedSuccess);
         assertThat(notificationRepository.findAll()).hasSize(expectedSuccess)
-                .allMatch(notification -> NotificationPolicy.point("P02").equals(notification.getPolicy()));
+                .allMatch(notification -> notification.getType() == NotificationType.POINT_USED);
     }
 
     @Test
@@ -173,7 +173,7 @@ class SeniorPointConcurrencyIntegrationTest {
         assertThat(pointHistoryRepository.count()).isEqualTo(1L);
         var centers = notificationRepository.findAll();
         assertThat(centers).hasSize(2)
-                .allMatch(center -> NotificationPolicy.goal("G01-S/C").equals(center.getPolicy()))
+                .allMatch(center -> center.getType() == NotificationType.GOAL_ACHIEVED)
                 .allMatch(center -> center.getBody().equals("25P가 자동으로 적립됐어요."));
         assertThat(centers.stream().map(center -> center.getRecipientMember().getId()).collect(java.util.stream.Collectors.toSet()))
                 .isEqualTo(Set.of(seniorId, guardian.getId()));

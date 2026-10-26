@@ -1,7 +1,7 @@
 package com.widyu.heart.application;
 
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.error.BusinessException;
@@ -37,8 +37,8 @@ public class HeartMessageService {
         validateFamilyConnection(sender, receiver);
 
         String title = sender.getName() + "님이 메시지를 보냈어요.";
-        NotificationPolicy type = NotificationPolicy.message("X01-OS/INAPP");
-        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate());
+        NotificationType type = NotificationType.HEART_MESSAGE_RECEIVED;
+        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "type", type.name());
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)

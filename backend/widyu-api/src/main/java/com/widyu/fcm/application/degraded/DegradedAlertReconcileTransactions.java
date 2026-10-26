@@ -3,7 +3,7 @@ package com.widyu.fcm.application.degraded;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.MemberFcmToken;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
@@ -56,10 +56,10 @@ public class DegradedAlertReconcileTransactions {
         if (guardian == null) {
             return Outcome.RECIPIENT_MISSING;
         }
-        NotificationPolicy type = NotificationPolicy.safety("S01/S03/S04/S06", true);
+        NotificationType type = NotificationType.HEART_RATE_EMERGENCY;
         notifications.save(FcmNotification.builder()
                 .recipientMember(guardian).memberFcmToken(token)
-                .eventId(record.streamId()).policy(type)
+                .eventId(record.streamId()).type(type)
                 .fcmCategory(FcmCategory.valueOf(record.category()))
                 .title(record.title()).body(record.body()).image(record.image())
                 .deepLink(type.deepLinkTemplate().replace("{seniorId}", record.seniorId().toString()))

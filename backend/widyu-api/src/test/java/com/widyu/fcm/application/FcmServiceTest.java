@@ -58,7 +58,7 @@ class FcmServiceTest {
 
         // then
         then(outboxService).should().enqueue(eq(2L), captor.capture());
-        assertThat(captor.getValue().notificationPolicy()).isNull();
+        assertThat(captor.getValue().notificationType()).isNull();
         assertThat(captor.getValue().dataForEnqueue("cheer-guardian"))
                 .containsEntry("deepLink", "/notification");
     }
@@ -79,7 +79,7 @@ class FcmServiceTest {
         // then
         then(outboxService).should().enqueue(eq(2L), captor.capture());
         assertThat(captor.getValue().dataForEnqueue("cheer-senior"))
-                .isEqualTo(Map.of("deepLink", "/notification"));
+                .isEqualTo(Map.of("deepLink", "/notification", "type", "CHEER_MESSAGE_RECEIVED"));
     }
 
     @Test

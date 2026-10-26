@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.given;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.global.error.BusinessException;
@@ -36,42 +36,11 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @Import({JpaAuditingConfig.class, NotificationCenterService.class})
 class NotificationCenterServiceIntegrationTest {
-    @Autowired private jakarta.persistence.EntityManager entityManager;
     @Autowired private NotificationCenterService service;
     @Autowired private FcmNotificationRepository notifications;
     @Autowired private MemberRepository members;
     @MockBean private MemberUtil memberUtil;
     @MockBean private JPAQueryFactory queryFactory;
-
-    @Test
-    @DisplayName("이전 상세 문자열과 이관된 필터로 저장된 행을 읽으면 정책과 위치 안읽은 수를 복원한다")
-    void 이전_문자열_행은_정책과_필터를_복원한다() {
-        // given
-        Member guardian = member(MemberType.GUARDIAN);
-        given(memberUtil.getCurrentMember()).willReturn(guardian);
-        FcmNotification saved = notification(guardian,
-                NotificationPolicy.safety("S01/S03/S04/S06", true), FcmCategory.HEART_MESSAGE, null);
-        Long id = saved.getId();
-        entityManager.flush();
-        entityManager.createNativeQuery("UPDATE fcm_notification SET type = 'HEART_RATE_EMERGENCY', "
-                        + "center_filter = 'LOCATION' WHERE id = :id")
-                .setParameter("id", id).executeUpdate();
-        entityManager.clear();
-
-        // when
-        NotificationCenterResponse response = service.list("LOCATION", null);
-
-        // then
-        assertThat(response.items()).singleElement().satisfies(item -> {
-            assertThat(item.notificationId()).isEqualTo(id);
-            assertThat(item.category()).isEqualTo("HEART_MESSAGE");
-            assertThat(item.priority()).isEqualTo("critical");
-            assertThat(item.foregroundPresentation()).isEqualTo("MODAL");
-        });
-        assertThat(response.unreadCounts()).containsEntry("LOCATION", 1).containsEntry("UNREAD", 1);
-        assertThat(notifications.findById(id).orElseThrow().getPolicy())
-                .isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true));
-    }
 
     @Test
     @DisplayName("시니어가 위치 필터를 요청하면 FCM_4002 예외가 발생한다")
@@ -95,10 +64,10 @@ class NotificationCenterServiceIntegrationTest {
         // given
         Member guardian = member(MemberType.GUARDIAN);
         given(memberUtil.getCurrentMember()).willReturn(guardian);
-        FcmNotification safety = notification(guardian, NotificationPolicy.safety("S01/S03/S04/S06", true),
+        FcmNotification safety = notification(guardian, NotificationType.HEART_RATE_EMERGENCY,
                 FcmCategory.HEART_MESSAGE, null);
         FcmNotification legacy = notification(guardian, null, FcmCategory.SAFE_ZONE, null);
-        notification(guardian, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, null);
+        notification(guardian, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, null);
         FcmNotification legacyMessage = notification(guardian, null, FcmCategory.HEART_MESSAGE, null);
 
         // when
@@ -119,7 +88,7 @@ class NotificationCenterServiceIntegrationTest {
         assertThat(response.items().getFirst().deepLink()).isNull();
         assertThat(response.items().getFirst().centerStored()).isTrue();
         assertThat(legacy.getEventId()).isNull();
-        assertThat(legacy.getPolicy()).isNull();
+        assertThat(legacy.getType()).isNull();
     }
 
     @Test
@@ -148,8 +117,8 @@ class NotificationCenterServiceIntegrationTest {
         given(memberUtil.getCurrentMember()).willReturn(senior);
         // DB의 TIMESTAMP 정밀도로 반올림되어 경계 행이 미래가 되지 않도록 맞춘다.
         LocalDateTime now = LocalDateTime.now().withNano(0);
-        notification(senior, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, now.minusDays(1));
-        FcmNotification active = notification(senior, NotificationPolicy.album("A02-S/C"),
+        notification(senior, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, now.minusDays(1));
+        FcmNotification active = notification(senior, NotificationType.ALBUM_CREATED,
                 FcmCategory.ALBUM, now.plusDays(1));
         FcmNotification legacy = notification(senior, null, FcmCategory.ALBUM, null);
 
@@ -166,9 +135,9 @@ class NotificationCenterServiceIntegrationTest {
         // 경계값 자체도 제외한다.
         FcmNotification atBoundary = notification(senior, null, FcmCategory.ALBUM, now);
         assertThat(notifications.countCenterUnreadByCategory(senior.getId(), now,
-                "ALBUM", List.of(FcmCategory.ALBUM))).isEqualTo(2);
+                List.of(NotificationType.ALBUM_CREATED), List.of(FcmCategory.ALBUM))).isEqualTo(2);
         assertThat(notifications.findCenterPageByCategory(senior.getId(), now, null,
-                "ALBUM", List.of(FcmCategory.ALBUM), PageRequest.of(0, 10)))
+                List.of(NotificationType.ALBUM_CREATED), List.of(FcmCategory.ALBUM), PageRequest.of(0, 10)))
                 .extracting(FcmNotification::getId).doesNotContain(atBoundary.getId());
     }
 
@@ -178,9 +147,9 @@ class NotificationCenterServiceIntegrationTest {
         // given
         Member senior = member(MemberType.SENIOR);
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        FcmNotification earned = notification(senior, NotificationPolicy.point("P01"), FcmCategory.TARGET, null);
-        FcmNotification used = notification(senior, NotificationPolicy.point("P02"), FcmCategory.TARGET, null);
-        FcmNotification goal = notification(senior, NotificationPolicy.goal("G01-S/C"), FcmCategory.TARGET, null);
+        FcmNotification earned = notification(senior, NotificationType.POINT_EARNED, FcmCategory.TARGET, null);
+        FcmNotification used = notification(senior, NotificationType.POINT_USED, FcmCategory.TARGET, null);
+        FcmNotification goal = notification(senior, NotificationType.GOAL_ACHIEVED, FcmCategory.TARGET, null);
 
         // when
         NotificationCenterResponse all = service.list("ALL", null);
@@ -195,8 +164,8 @@ class NotificationCenterServiceIntegrationTest {
                 .containsExactly(goal.getId());
         assertThat(goals.unreadCounts()).containsEntry("GOAL", 1).containsEntry("UNREAD", 3);
         assertThat(all.items().get(1).category()).isEqualTo("TARGET");
-        assertThat(NotificationPolicy.point("P01").centerFilter()).isNull();
-        assertThat(NotificationPolicy.point("P02").centerFilter()).isNull();
+        assertThat(NotificationType.POINT_EARNED.centerFilter()).isNull();
+        assertThat(NotificationType.POINT_USED.centerFilter()).isNull();
     }
 
     @Test
@@ -208,7 +177,7 @@ class NotificationCenterServiceIntegrationTest {
         FcmNotification stored = notifications.saveAndFlush(FcmNotification.builder()
                 .recipientMember(senior)
                 .eventId(UUID.randomUUID().toString())
-                .policy(NotificationPolicy.album("A02-S/C"))
+                .type(NotificationType.ALBUM_CREATED)
                 .fcmCategory(FcmCategory.ALBUM)
                 .title("저장된 제목")
                 .body("저장된 본문")
@@ -244,7 +213,7 @@ class NotificationCenterServiceIntegrationTest {
         Member guardian = member(MemberType.GUARDIAN);
         given(memberUtil.getCurrentMember()).willReturn(guardian);
         notifications.saveAndFlush(FcmNotification.builder().recipientMember(guardian)
-                .eventId(UUID.randomUUID().toString()).policy(NotificationPolicy.album("A06-L/Z"))
+                .eventId(UUID.randomUUID().toString()).type(NotificationType.ALBUM_UNLOCKED)
                 .fcmCategory(FcmCategory.ALBUM).title("잠금 해제").isRead(false)
                 .deepLink("/post?postId=91").entityId("91")
                 .retentionPolicyVersion("v1").pushEligible(true)
@@ -266,9 +235,9 @@ class NotificationCenterServiceIntegrationTest {
         given(memberUtil.getCurrentMember()).willReturn(senior);
         List<Long> ids = new ArrayList<>();
         for (int index = 0; index < 12; index++) {
-            ids.add(notification(senior, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, null).getId());
+            ids.add(notification(senior, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, null).getId());
         }
-        FcmNotification otherRow = notification(other, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, null);
+        FcmNotification otherRow = notification(other, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, null);
 
         // when
         NotificationCenterResponse first = service.list("ALL", null);
@@ -311,8 +280,8 @@ class NotificationCenterServiceIntegrationTest {
         Member senior = member(MemberType.SENIOR);
         Member other = member(MemberType.GUARDIAN);
         given(memberUtil.getCurrentMember()).willReturn(senior);
-        FcmNotification own = notification(senior, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, null);
-        FcmNotification otherRow = notification(other, NotificationPolicy.album("A02-S/C"), FcmCategory.ALBUM, null);
+        FcmNotification own = notification(senior, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, null);
+        FcmNotification otherRow = notification(other, NotificationType.ALBUM_CREATED, FcmCategory.ALBUM, null);
 
         // when
         NotificationReadResponse first = service.markAsRead(own.getId());
@@ -335,7 +304,7 @@ class NotificationCenterServiceIntegrationTest {
         return members.saveAndFlush(Member.createMember(type, "회원", "01012345678"));
     }
 
-    private FcmNotification notification(Member member, NotificationPolicy type,
+    private FcmNotification notification(Member member, NotificationType type,
                                          FcmCategory category, LocalDateTime expiresAt) {
         String eventId = null;
         if (type != null) {
@@ -344,7 +313,7 @@ class NotificationCenterServiceIntegrationTest {
         return notifications.saveAndFlush(FcmNotification.builder()
                 .recipientMember(member)
                 .eventId(eventId)
-                .policy(type)
+                .type(type)
                 .fcmCategory(category)
                 .title("알림 제목")
                 .body("알림 본문")

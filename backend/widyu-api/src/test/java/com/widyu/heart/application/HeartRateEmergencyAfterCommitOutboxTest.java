@@ -9,7 +9,7 @@ import static org.mockito.BDDMockito.willAnswer;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import com.widyu.fcm.MemberFcmToken;
 import com.widyu.fcm.FcmOutbox;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmDeliveryProperties;
 import com.widyu.fcm.application.FcmDelivery;
 import com.widyu.fcm.application.FcmEligibility;
@@ -153,11 +153,11 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(alerted.getState()).isEqualTo(IncidentState.ESCALATED);
         assertThat(alerted.getInitialAlertSentAtMs()).isEqualTo(opened.getRespondByMs() + 1);
         assertThat(notifications.findByRecipientMemberIdAndEventId(ids[2], opened.getIncidentRef()))
-                .hasValueSatisfying(center -> assertThat(center.getPolicy())
-                        .isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true)));
+                .hasValueSatisfying(center -> assertThat(center.getType())
+                        .isEqualTo(NotificationType.HEART_RATE_EMERGENCY));
         assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], opened.getIncidentRef())).isEmpty();
         List<FcmOutbox> alerts = outbox.findAll().stream()
-                .filter(row -> NotificationPolicy.safety("S01/S03/S04/S06", true).equals(row.getNotificationPolicy()))
+                .filter(row -> row.getNotificationType() == NotificationType.HEART_RATE_EMERGENCY)
                 .filter(row -> row.getRelatedMemberId().equals(ids[0]))
                 .toList();
         assertThat(alerts).hasSize(1);
@@ -173,7 +173,8 @@ class HeartRateEmergencyAfterCommitOutboxTest {
                 FcmDelivery.from(outbox.findById(alerts.getFirst().getId()).orElseThrow()));
         assertThat(restoredAgain.message().data()).isEqualTo(restored.message().data());
         assertThat(escalation.escalateIfDue(opened.getId(), opened.getRespondByMs() + 2)).isFalse();
-        assertThat(outbox.findAll().stream().filter(row -> NotificationPolicy.safety("S01/S03/S04/S06", true).equals(row.getNotificationPolicy()) && row.getRelatedMemberId().equals(ids[0]))).hasSize(1);
+        assertThat(outbox.findAll().stream().filter(row -> row.getNotificationType()
+                == NotificationType.HEART_RATE_EMERGENCY && row.getRelatedMemberId().equals(ids[0]))).hasSize(1);
     }
 
     @Test
@@ -239,7 +240,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(answered.getOkNoticeSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(firstOutboxCount + 1);
         assertThat(notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef() + ":OK")
-                .orElseThrow().getPolicy()).isEqualTo(NotificationPolicy.safety("S08", false));
+                .orElseThrow().getType()).isEqualTo(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART);
     }
 
     @Test
@@ -344,7 +345,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
         var center = notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())
                 .orElseThrow();
-        assertThat(center.getPolicy()).isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true));
+        assertThat(center.getType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
         assertThat(center.getSeniorId()).isEqualTo(ids[0]);
         assertThat(center.getEventId()).isEqualTo(incident.getIncidentRef());
         assertThat(notifications.findByRecipientMemberIdAndEventId(ids[4], incident.getIncidentRef())).isEmpty();

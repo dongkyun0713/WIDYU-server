@@ -69,7 +69,7 @@ class HeartMessageServiceTest {
         assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
         assertThat(captor.getValue().emergency()).isFalse();
         assertThat(captor.getValue().dataForEnqueue("heart-senior"))
-                .isEqualTo(Map.of("deepLink", "/notification"));
+                .isEqualTo(Map.of("deepLink", "/notification", "type", "HEART_MESSAGE_RECEIVED"));
     }
 
     @Test
@@ -95,7 +95,7 @@ class HeartMessageServiceTest {
 
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
-        assertThat(captor.getValue().notificationPolicy()).isNull();
+        assertThat(captor.getValue().notificationType()).isNull();
         assertThat(captor.getValue().dataForEnqueue("heart-guardian"))
                 .containsEntry("deepLink", "/notification");
     }

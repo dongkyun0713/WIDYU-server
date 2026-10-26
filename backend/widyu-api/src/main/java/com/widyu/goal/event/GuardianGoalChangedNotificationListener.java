@@ -1,6 +1,6 @@
 package com.widyu.goal.event;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -18,7 +18,7 @@ public class GuardianGoalChangedNotificationListener {
 
     @EventListener
     public void onGuardianGoalChanged(GuardianGoalChangedEvent event) {
-        NotificationPolicy type = event.type();
+        NotificationType type = event.type();
         String actorName = event.actorDisplayName();
         if (actorName == null || actorName.isBlank()) {
             actorName = "가족";
@@ -33,7 +33,7 @@ public class GuardianGoalChangedNotificationListener {
         FcmSendDto message = FcmSendDto.builder()
                 .title(copy.title())
                 .content(copy.body())
-                .notificationPolicy(type)
+                .notificationType(type)
                 .entityId(event.entityId())
                 .actorDisplayName(actorName)
                 .build();

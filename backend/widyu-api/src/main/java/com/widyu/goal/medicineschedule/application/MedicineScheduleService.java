@@ -5,7 +5,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -173,7 +173,7 @@ public class MedicineScheduleService {
         }
 
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(schedule);
-        long revision = sendAlarmChanged(targetMember, NotificationPolicy.medication("M08"),
+        long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_CREATED,
                 savedSchedule.getId(), effectiveFromDate);
         log.info("약 복용 스케줄 생성: memberId={}, scheduleId={}",
                 targetMember.getId(), savedSchedule.getId());
@@ -210,7 +210,7 @@ public class MedicineScheduleService {
             schedule.updateAlarmTime(alarmTime);
             schedule.clearCategories();
             addCategories(schedule, request.categories());
-            long revision = sendAlarmChanged(targetMember, NotificationPolicy.medication("M05"),
+            long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_CHANGED,
                     scheduleId, effectiveFromDate);
             log.info("약 복용 스케줄 시작 전 수정: scheduleId={}, memberId={}", scheduleId, targetMember.getId());
             return MedicineScheduleIdResponse.of(scheduleId, revision, effectiveFromDate);
@@ -222,7 +222,7 @@ public class MedicineScheduleService {
         MedicineSchedule newSchedule = MedicineSchedule.create(targetMember, alarmTime, effectiveFromDate);
         addCategories(newSchedule, request.categories());
         MedicineSchedule savedSchedule = medicineScheduleRepository.save(newSchedule);
-        long revision = sendAlarmChanged(targetMember, NotificationPolicy.medication("M05"),
+        long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_CHANGED,
                 savedSchedule.getId(), effectiveFromDate);
 
         log.info("약 복용 스케줄 수정(새 버전 생성): oldScheduleId={}, newScheduleId={}, memberId={}",
@@ -271,7 +271,7 @@ public class MedicineScheduleService {
         // 오늘 알람은 유지하고 내일부터 중단한다. 내일 시작 버전은 빈 유효기간이 된다.
         LocalDate today = LocalDate.now();
         schedule.closeAsOf(today);
-        long revision = sendAlarmChanged(targetMember, NotificationPolicy.medication("M09"),
+        long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_DELETED,
                 scheduleId, today.plusDays(1));
         log.info("약 복용 스케줄 삭제(내일부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
         return MedicineScheduleChangeResponse.of(revision, today.plusDays(1));
@@ -313,7 +313,7 @@ public class MedicineScheduleService {
                         "존재하지 않는 사용자입니다."));
     }
 
-    private long sendAlarmChanged(Member member, NotificationPolicy type, Long scheduleId,
+    private long sendAlarmChanged(Member member, NotificationType type, Long scheduleId,
                                   LocalDate effectiveFromDate) {
         long revision = member.incrementMedicationAlarmRevision();
         Member actor = memberUtil.getCurrentMember();
@@ -329,16 +329,16 @@ public class MedicineScheduleService {
         fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
-                .notificationPolicy(type).entityId(scheduleId.toString())
+                .notificationType(type).entityId(scheduleId.toString())
                 .actorDisplayName(actorName).effectiveFromDate(effectiveFromDate.toString())
-                .eventId(MedicationAlarmPayload.eventId(member.getId() + ":" + revision + ":" + type.copyCode()))
+                .eventId(MedicationAlarmPayload.eventId(member.getId() + ":" + revision + ":" + type.name()))
                 .data(MedicationAlarmPayload.of(revision, type))
                 .build());
-        NotificationPolicy syncType = NotificationPolicy.medicationSync();
+        NotificationType syncType = NotificationType.MEDICATION_SCHEDULE_SYNC;
         fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
-                .notificationPolicy(syncType)
-                .eventId(MedicationAlarmPayload.eventId(member.getId() + ":" + revision + ":sync"))
+                .notificationType(syncType)
+                .eventId(MedicationAlarmPayload.eventId(member.getId() + ":" + revision + ":" + syncType.name()))
                 .data(MedicationAlarmPayload.of(revision, syncType))
                 .build());
         return revision;

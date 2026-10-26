@@ -1,7 +1,7 @@
 package com.widyu.fcm.application.degraded;
 
 import com.widyu.fcm.FcmOutbox;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmDeliveryProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
@@ -49,8 +49,7 @@ public class DegradedAlertMarker {
      * 같은 카테고리지만 다른 사건이라 막지 않는다.
      */
     public boolean alreadyAlerted(FcmOutbox row) {
-        if (!row.isEmergency() || row.getNotificationPolicy() == null
-                || !"HEART_RATE_EMERGENCY".equals(row.getNotificationPolicy().legacyDataType())
+        if (!row.isEmergency() || row.getNotificationType() != NotificationType.HEART_RATE_EMERGENCY
                 || row.getRelatedMemberId() == null) {
             return false;
         }

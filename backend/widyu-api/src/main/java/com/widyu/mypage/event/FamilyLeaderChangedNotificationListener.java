@@ -1,6 +1,6 @@
 package com.widyu.mypage.event;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -17,13 +17,13 @@ public class FamilyLeaderChangedNotificationListener {
 
     @EventListener
     public void onLeaderChanged(FamilyLeaderChangedEvent event) {
-        NotificationPolicy type = NotificationPolicy.familyLeader();
+        NotificationType type = NotificationType.FAMILY_LEADER_CHANGED;
         NotificationCopy copy = NotificationCopy.of(type, "R01", Map.of());
         FcmSendDto message = FcmSendDto.builder()
                 .title(copy.title())
                 .content(copy.body())
                 .fcmCategory(type.fcmCategory())
-                .notificationPolicy(type)
+                .notificationType(type)
                 .scheme(type.deepLinkTemplate())
                 .deepLink(type.deepLinkTemplate())
                 .build();

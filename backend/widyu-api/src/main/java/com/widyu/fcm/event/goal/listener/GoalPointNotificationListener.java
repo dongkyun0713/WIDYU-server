@@ -1,6 +1,6 @@
 package com.widyu.fcm.event.goal.listener;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.GuardianDeepLinks;
@@ -27,16 +27,16 @@ public class GoalPointNotificationListener {
 
     @EventListener
     public void onPointChanged(PointChangedEvent event) {
-        NotificationPolicy type = NotificationPolicy.point("P01");
+        NotificationType type = NotificationType.POINT_EARNED;
         Map<String, String> values = Map.of("포인트", Long.toString(event.points()),
                 "적립 사유", event.description());
         if (event.type() == PointHistoryType.USE) {
-            type = NotificationPolicy.point("P02");
+            type = NotificationType.POINT_USED;
             values = Map.of("포인트", Long.toString(event.points()), "사용 사유", event.description());
         }
         NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), values);
         outboxService.enqueue(event.seniorId(), FcmSendDto.builder()
-                .title(copy.title()).content(copy.body()).notificationPolicy(type)
+                .title(copy.title()).content(copy.body()).notificationType(type)
                 .eventId(event.eventId()).build());
     }
 
@@ -47,10 +47,10 @@ public class GoalPointNotificationListener {
         String seniorName = profile.getMember().getName();
         Map<String, String> seniorValues = Map.of("목표명", event.goalName(),
                 "포인트", Long.toString(event.points()));
-        NotificationCopy seniorCopy = NotificationCopy.of(NotificationPolicy.goal("G01-S/C"), "G01-S", seniorValues);
+        NotificationCopy seniorCopy = NotificationCopy.of(NotificationType.GOAL_ACHIEVED, "G01-S", seniorValues);
         outboxService.enqueue(event.seniorId(), FcmSendDto.builder()
                 .title(seniorCopy.title()).content(seniorCopy.body())
-                .notificationPolicy(NotificationPolicy.goal("G01-S/C")).eventId(event.eventId())
+                .notificationType(NotificationType.GOAL_ACHIEVED).eventId(event.eventId())
                 .entityId(event.entityId()).seniorId(event.seniorId()).build());
 
         if (profile.getFamily() == null) {
@@ -61,11 +61,11 @@ public class GoalPointNotificationListener {
             Map<String, String> guardianValues = Map.of("시니어 이름", seniorName,
                     "목표명", event.goalName(), "포인트", Long.toString(event.points()));
             NotificationCopy guardianCopy = NotificationCopy.of(
-                    NotificationPolicy.goal("G01-S/C"), "G01-C", guardianValues);
+                    NotificationType.GOAL_ACHIEVED, "G01-C", guardianValues);
             String guardianDeepLink = GuardianDeepLinks.medicineGoal(event.seniorId());
             outboxService.enqueue(membership.getGuardian().getId(), FcmSendDto.builder()
                     .title(guardianCopy.title()).content(guardianCopy.body())
-                    .notificationPolicy(NotificationPolicy.goal("G01-S/C")).eventId(event.eventId())
+                    .notificationType(NotificationType.GOAL_ACHIEVED).eventId(event.eventId())
                     .entityId(event.entityId()).seniorId(event.seniorId())
                     .relatedMemberId(event.seniorId()).deepLink(guardianDeepLink).build());
         }

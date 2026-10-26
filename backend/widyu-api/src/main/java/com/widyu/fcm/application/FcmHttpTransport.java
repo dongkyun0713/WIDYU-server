@@ -6,7 +6,7 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.widyu.fcm.dto.FcmMessageDto;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.DeliveryMode;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ResourceLoader;
@@ -119,7 +119,7 @@ public class FcmHttpTransport implements FcmTransport {
         FcmMessageDto.Message.MessageBuilder message = FcmMessageDto.Message.builder().token(token)
                 .notification(FcmMessageDto.Notification.builder().title(dto.title())
                         .body(dto.content()).image(dto.image()).build());
-        NotificationPolicy type = dto.notificationPolicy();
+        NotificationType type = dto.notificationType();
         if (type != null && type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             message.notification(null);
         }
@@ -179,18 +179,18 @@ public class FcmHttpTransport implements FcmTransport {
         return Result.rejected(permanentToken(response.body()));
     }
 
-    private void addClientData(Map<String, String> data, NotificationPolicy type) {
+    private void addClientData(Map<String, String> data, NotificationType type) {
         data.remove("notificationType");
-        NotificationPolicy previousType = type;
+        NotificationType previousType = type;
         if (previousType == null && data.get("type") != null) {
             try {
-                previousType = NotificationPolicy.fromLegacyName(data.get("type"));
+                previousType = NotificationType.valueOf(data.get("type"));
             } catch (IllegalArgumentException ignored) {
                 // 기존 호출자의 독립 트리거 값은 그대로 보존한다.
             }
         }
         if (previousType != null) {
-            String trigger = previousType.legacyDataType();
+            String trigger = legacyTrigger(previousType);
             if (trigger == null) {
                 data.remove("type");
             } else {
@@ -205,7 +205,18 @@ public class FcmHttpTransport implements FcmTransport {
         data.putIfAbsent("deepLink", "");
     }
 
-    private FcmMessageDto.Android android(String ttl, NotificationPolicy type) {
+    private String legacyTrigger(NotificationType type) {
+        return switch (type) {
+            case SAFETY_SELF_CHECK -> "EMERGENCY_CONFIRM_REQUEST";
+            case HEART_RATE_EMERGENCY -> "HEART_RATE_EMERGENCY";
+            case MEDICATION_REMINDER_10, MEDICATION_REMINDER_20, MEDICATION_PROOF_MISSING,
+                    MEDICATION_SCHEDULE_CREATED, MEDICATION_SCHEDULE_CHANGED,
+                    MEDICATION_SCHEDULE_DELETED, MEDICATION_SCHEDULE_SYNC -> "MEDICATION_SCHEDULE_CHANGED";
+            default -> null;
+        };
+    }
+
+    private FcmMessageDto.Android android(String ttl, NotificationType type) {
         if (type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             return new FcmMessageDto.Android(ttl);
         }
@@ -218,7 +229,7 @@ public class FcmHttpTransport implements FcmTransport {
         return new FcmMessageDto.Android(ttl, "normal", new FcmMessageDto.AndroidNotification("widyu_general"));
     }
 
-    private FcmMessageDto.Apns apns(Instant expiresAt, NotificationPolicy type) {
+    private FcmMessageDto.Apns apns(Instant expiresAt, NotificationType type) {
         HashMap<String, String> headers = new HashMap<>();
         if (expiresAt != null) {
             headers.put("apns-expiration", Long.toString(expiresAt.getEpochSecond()));

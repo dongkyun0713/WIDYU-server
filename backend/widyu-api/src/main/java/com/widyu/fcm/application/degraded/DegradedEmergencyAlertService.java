@@ -1,7 +1,7 @@
 package com.widyu.fcm.application.degraded;
 
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmDeliveryProperties;
 import com.widyu.fcm.dto.NotificationCopy;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -50,7 +50,7 @@ public class DegradedEmergencyAlertService {
                 return;
             }
             NotificationCopy copy = NotificationCopy.of(
-                    NotificationPolicy.safety("S01/S03/S04/S06", true), COPY_CODE, copyValues(snapshot.seniorName()));
+                    NotificationType.HEART_RATE_EMERGENCY, COPY_CODE, copyValues(snapshot.seniorName()));
             String expiresAt = Long.toString(System.currentTimeMillis() + delivery.emergencyTtl().toMillis());
             for (EmergencyRecipientSnapshot.Recipient recipient : snapshot.recipients()) {
                 Map<String, String> fields = new HashMap<>();

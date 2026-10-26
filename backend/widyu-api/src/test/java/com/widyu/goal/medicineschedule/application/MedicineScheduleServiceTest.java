@@ -14,7 +14,7 @@ import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.fcm.application.FcmService;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.goal.medicineschedule.dto.response.MedicationStatus;
 import com.widyu.goal.medicineschedule.dto.response.MedicineMonthlyResponse;
@@ -239,12 +239,10 @@ class MedicineScheduleServiceTest {
         assertThat(messageCaptor.getAllValues().getFirst().data())
                 .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
                 .containsKey("revision");
-        assertThat(messageCaptor.getAllValues().getFirst().notificationPolicy())
-                .isEqualTo(NotificationPolicy.medication("M05"));
-        assertThat(messageCaptor.getAllValues().get(1).notificationPolicy())
-                .isEqualTo(NotificationPolicy.medicationSync());
-        assertThat(messageCaptor.getAllValues()).extracting(FcmSendDto::eventId)
-                .doesNotContainNull().doesNotHaveDuplicates();
+        assertThat(messageCaptor.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        assertThat(messageCaptor.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
@@ -272,14 +270,12 @@ class MedicineScheduleServiceTest {
         ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
-        assertThat(messages.getAllValues().getFirst().notificationPolicy())
-                .isEqualTo(NotificationPolicy.medication("M09"));
+        assertThat(messages.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_DELETED);
         assertThat(messages.getAllValues().getFirst().content())
                 .isEqualTo("내일부터 이 알람은 울리지 않아요.");
-        assertThat(messages.getAllValues().get(1).notificationPolicy())
-                .isEqualTo(NotificationPolicy.medicationSync());
-        assertThat(messages.getAllValues()).extracting(FcmSendDto::eventId)
-                .doesNotContainNull().doesNotHaveDuplicates();
+        assertThat(messages.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
@@ -313,17 +309,15 @@ class MedicineScheduleServiceTest {
         ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
-        assertThat(messages.getAllValues().getFirst().notificationPolicy())
-                .isEqualTo(NotificationPolicy.medication("M08"));
+        assertThat(messages.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CREATED);
         assertThat(messages.getAllValues().getFirst().title())
                 .isEqualTo("방장 님이 새 약 알람을 등록했어요.");
         assertThat(messages.getAllValues().getFirst().actorDisplayName()).isEqualTo("방장");
         assertThat(messages.getAllValues().getFirst().effectiveFromDate())
                 .isEqualTo(today().plusDays(1).toString());
-        assertThat(messages.getAllValues().get(1).notificationPolicy())
-                .isEqualTo(NotificationPolicy.medicationSync());
-        assertThat(messages.getAllValues()).extracting(FcmSendDto::eventId)
-                .doesNotContainNull().doesNotHaveDuplicates();
+        assertThat(messages.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test

@@ -65,16 +65,16 @@ class PushSettingGroupTest {
     @DisplayName("이벤트 타입의 설정 그룹을 읽으면 카테고리와 무관하게 승인된 정책을 반환한다")
     void 이벤트_타입의_설정_그룹을_읽으면_승인된_정책을_반환한다() {
         // when / then
-        assertThat(NotificationPolicy.safety("S01/S03/S04/S06", true).settingGroup()).isEqualTo(PushSettingGroup.SAFETY);
-        assertThat(NotificationPolicy.safeZone("Z01").settingGroup()).isEqualTo(PushSettingGroup.SAFE_ZONE);
-        assertThat(NotificationPolicy.medication("M04").settingGroup())
+        assertThat(NotificationType.HEART_RATE_EMERGENCY.settingGroup()).isEqualTo(PushSettingGroup.SAFETY);
+        assertThat(NotificationType.SAFE_ZONE_EXITED.settingGroup()).isEqualTo(PushSettingGroup.SAFE_ZONE);
+        assertThat(NotificationType.MEDICATION_PROOF_MISSING.settingGroup())
                 .isEqualTo(PushSettingGroup.MEDICATION_CHECK);
-        assertThat(NotificationPolicy.medication("M05").settingGroup())
+        assertThat(NotificationType.MEDICATION_SCHEDULE_CHANGED.settingGroup())
                 .isEqualTo(PushSettingGroup.GENERAL);
-        assertThat(NotificationPolicy.safety("S08", false).settingGroup())
+        assertThat(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART.settingGroup())
                 .isEqualTo(PushSettingGroup.GENERAL);
-        assertThat(NotificationPolicy.safeZone("Z02").settingGroup())
+        assertThat(NotificationType.SAFE_ZONE_ENTERED.settingGroup())
                 .isEqualTo(PushSettingGroup.SAFE_ZONE);
-        assertThat(NotificationPolicy.goal("G01-S/C").settingGroup()).isEqualTo(PushSettingGroup.GENERAL);
+        assertThat(NotificationType.GOAL_ACHIEVED.settingGroup()).isEqualTo(PushSettingGroup.GENERAL);
     }
 }

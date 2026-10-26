@@ -1,9 +1,11 @@
 package com.widyu.notification;
 
 import com.widyu.fcm.FcmCategory;
+import com.widyu.fcm.NotificationType;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.MemberType;
+import java.util.Arrays;
 import java.util.List;
 
 public enum NotificationCenterFilter {
@@ -63,4 +65,9 @@ public enum NotificationCenterFilter {
         return legacyCategories;
     }
 
+    public List<NotificationType> types() {
+        return Arrays.stream(NotificationType.values())
+                .filter(type -> name().equals(type.centerFilter()))
+                .toList();
+    }
 }

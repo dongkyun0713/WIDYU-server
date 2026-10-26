@@ -70,7 +70,7 @@ public class NotificationCenterService {
         PageRequest limit = PageRequest.of(0, PAGE_SIZE + 1);
         if (filter.isCategory()) {
             return notifications.findCenterPageByCategory(memberId, now, cursor,
-                    filter.name(), filter.legacyCategories(), limit);
+                    filter.types(), filter.legacyCategories(), limit);
         }
         return notifications.findCenterPage(memberId, now, cursor,
                 filter == NotificationCenterFilter.UNREAD, limit);
@@ -84,7 +84,7 @@ public class NotificationCenterService {
                 count = notifications.countCenterUnread(member.getId(), now);
             } else {
                 count = notifications.countCenterUnreadByCategory(member.getId(), now,
-                        filter.name(), filter.legacyCategories());
+                        filter.types(), filter.legacyCategories());
             }
             counts.put(filter.name(), Math.toIntExact(count));
         }

@@ -1,22 +1,22 @@
 package com.widyu.goal.event;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 
 public record GuardianGoalChangedEvent(
         Long seniorId,
-        NotificationPolicy type,
+        NotificationType type,
         String entityId,
         Integer goalSteps,
         String actorDisplayName
 ) {
     public static GuardianGoalChangedEvent healthSchedule(
-            Long seniorId, NotificationPolicy type, Long scheduleId, String actorDisplayName
+            Long seniorId, NotificationType type, Long scheduleId, String actorDisplayName
     ) {
         return new GuardianGoalChangedEvent(seniorId, type, scheduleId.toString(), null, actorDisplayName);
     }
 
     public static GuardianGoalChangedEvent walkGoal(Long seniorId, Integer goalSteps, String actorDisplayName) {
         return new GuardianGoalChangedEvent(
-                seniorId, NotificationPolicy.walk("W02"), null, goalSteps, actorDisplayName);
+                seniorId, NotificationType.WALK_GOAL_CHANGED, null, goalSteps, actorDisplayName);
     }
 }

@@ -91,7 +91,7 @@ class DegradedEmergencyAlertConsumerTest {
         assertThat(delivery.message().emergency()).isTrue();
         assertThat(delivery.message().relatedMemberId()).isEqualTo(31L);
         assertThat(delivery.message().data())
-                .doesNotContainKey("notificationType")
+                .containsEntry("notificationType", "HEART_RATE_EMERGENCY")
                 .containsEntry("eventId", "1760000000000-0")
                 .containsEntry("deepLink", "/location?seniorId=31");
     }

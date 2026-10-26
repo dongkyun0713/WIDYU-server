@@ -1,6 +1,6 @@
 package com.widyu.goal.medicineschedule.application;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
@@ -20,8 +20,9 @@ public final class MedicationAlarmPayload {
         return Map.of("type", TYPE, "revision", Long.toString(revision));
     }
 
-    public static Map<String, String> of(long revision, NotificationPolicy policy) {
-        return Map.of("type", policy.dataTypeValue(), "revision", Long.toString(revision));
+    public static Map<String, String> of(long revision, NotificationType notificationType) {
+        return Map.of("type", notificationType.dataTypeValue(), "revision", Long.toString(revision),
+                "notificationType", notificationType.name());
     }
 
     public static String eventId(String key) {

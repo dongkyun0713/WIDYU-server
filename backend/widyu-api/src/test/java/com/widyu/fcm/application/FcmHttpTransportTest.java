@@ -2,12 +2,12 @@ package com.widyu.fcm.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -34,16 +34,16 @@ import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
     @ParameterizedTest
-    @MethodSource("com.widyu.fcm.NotificationPolicyFixture#policies")
+    @EnumSource(NotificationType.class)
     @DisplayName("상세 정책 타입을 전송하면 상세 분류 없이 기존 기능 트리거만 보낸다")
-    void 상세_정책_타입을_전송하면_기존_기능_트리거만_보낸다(NotificationPolicy type) throws Exception {
+    void 상세_정책_타입을_전송하면_기존_기능_트리거만_보낸다(NotificationType type) throws Exception {
         // given
         ObjectMapper mapper = new ObjectMapper();
         List<JsonNode> bodies = new CopyOnWriteArrayList<>();
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
-        FcmSendDto message = FcmSendDto.builder().title("알림").notificationPolicy(type)
+        FcmSendDto message = FcmSendDto.builder().title("알림").notificationType(type)
                 .data(Map.of("type", type.name(), "notificationType", type.name(),
                         "eventId", "same-event", "deepLink", "/goal", "revision", "42"))
                 .build();
@@ -56,7 +56,14 @@ class FcmHttpTransportTest {
             // then
             JsonNode data = bodies.getFirst().at("/message/data");
             assertThat(data.has("notificationType")).isFalse();
-            String expected = type.legacyDataType();
+            String expected = switch (type) {
+                case SAFETY_SELF_CHECK -> "EMERGENCY_CONFIRM_REQUEST";
+                case HEART_RATE_EMERGENCY -> "HEART_RATE_EMERGENCY";
+                case MEDICATION_REMINDER_10, MEDICATION_REMINDER_20, MEDICATION_PROOF_MISSING,
+                        MEDICATION_SCHEDULE_CREATED, MEDICATION_SCHEDULE_CHANGED,
+                        MEDICATION_SCHEDULE_DELETED, MEDICATION_SCHEDULE_SYNC -> "MEDICATION_SCHEDULE_CHANGED";
+                default -> null;
+            };
             if (expected == null) {
                 assertThat(data.has("type")).isFalse();
             } else {
@@ -119,7 +126,7 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("새 게시물").content("새 소식이 있어요.")
-                .notificationPolicy(NotificationPolicy.album("A02-S/C"))
+                .notificationType(NotificationType.ALBUM_CREATED)
                 .data(Map.of("eventId", "album-91", "notificationId", "outdated-id",
                         "deepLink", "/album/post?postId=91"))
                 .build();
@@ -146,9 +153,9 @@ class FcmHttpTransportTest {
     }
 
     @ParameterizedTest
-    @MethodSource("com.widyu.fcm.NotificationPolicyFixture#safeZones")
+    @EnumSource(value = NotificationType.class, names = {"SAFE_ZONE_EXITED", "SAFE_ZONE_ENTERED"})
     @DisplayName("안심구역 소식을 전송하면 일반 채널과 보통 우선순위를 사용한다")
-    void 안심구역_소식을_전송하면_일반_채널을_사용한다(NotificationPolicy type) throws Exception {
+    void 안심구역_소식을_전송하면_일반_채널을_사용한다(NotificationType type) throws Exception {
         // given
         ObjectMapper mapper = new ObjectMapper();
         List<JsonNode> bodies = new CopyOnWriteArrayList<>();
@@ -156,7 +163,7 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("안심구역 소식")
-                .notificationPolicy(type).seniorId(17L).eventId("zone-event-1").build();
+                .notificationType(type).seniorId(17L).eventId("zone-event-1").build();
         try {
             // when
             assertThat(transport.send("loopback-token", message).success()).isTrue();
@@ -186,7 +193,7 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
-                .notificationPolicy(NotificationPolicy.selfCheck())
+                .notificationType(NotificationType.SAFETY_SELF_CHECK)
                 .data(Map.of("eventId", "inc-20261001-1"))
                 .build();
         try {
@@ -220,7 +227,7 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("안전 알림").content("위치를 확인해주세요.")
-                .notificationPolicy(NotificationPolicy.safety("S01/S03/S04/S06", true))
+                .notificationType(NotificationType.HEART_RATE_EMERGENCY)
                 .data(Map.of("eventId", "event-1", "deepLink", "/location?seniorId=17",
                         "seniorId", "17")).build();
         FcmDelivery delivery = new FcmDelivery(4072L, 1, "loopback-token", message,
@@ -258,7 +265,7 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto message = FcmSendDto.builder().title("복약 일정 등록").content("내일부터 적용돼요.")
-                .notificationPolicy(NotificationPolicy.medication("M08"))
+                .notificationType(NotificationType.MEDICATION_SCHEDULE_CREATED)
                 .data(Map.of("eventId", "event-2", "type", "stale-type",
                         "revision", "42",
                         "effectiveFromDate", "2026-10-02", "actorDisplayName", "보호자",
@@ -296,7 +303,7 @@ class FcmHttpTransportTest {
         HttpServer server = payloadServer(mapper, bodies);
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
-        FcmSendDto message = FcmSendDto.builder().notificationPolicy(NotificationPolicy.medicationSync())
+        FcmSendDto message = FcmSendDto.builder().notificationType(NotificationType.MEDICATION_SCHEDULE_SYNC)
                 .data(Map.of("eventId", "event-3", "revision", "43")).build();
         FcmDelivery delivery = new FcmDelivery(4074L, 1, "loopback-token", message,
                 Instant.now().plusSeconds(300), null);
@@ -332,11 +339,11 @@ class FcmHttpTransportTest {
         FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
                 () -> "loopback-access-token", Duration.ofSeconds(2));
         FcmSendDto missing = FcmSendDto.builder().title("복약 미인증").content("확인해주세요.")
-                .notificationPolicy(NotificationPolicy.medication("M04")).build();
+                .notificationType(NotificationType.MEDICATION_PROOF_MISSING).build();
         FcmSendDto reminder = FcmSendDto.builder().title("복약 확인").content("인증해주세요.")
-                .notificationPolicy(NotificationPolicy.medication("M02")).build();
+                .notificationType(NotificationType.MEDICATION_REMINDER_10).build();
         FcmSendDto walk = FcmSendDto.builder().title("걷기 목표").content("확인해주세요.")
-                .notificationPolicy(NotificationPolicy.walk("W01")).build();
+                .notificationType(NotificationType.WALK_GOAL_UNMET).build();
         try {
             // when
             assertThat(transport.send("loopback-token", missing).success()).isTrue();

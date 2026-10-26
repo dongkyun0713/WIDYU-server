@@ -1,6 +1,6 @@
 package com.widyu.fcm.dto;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Matcher;
@@ -60,7 +60,7 @@ public record NotificationCopy(String title, String body) {
             copy("K02", "{시니어 이름} 님이 도움 요청을 취소했어요.", null),
             copy("R01", "이제 가족 방장이 되었어요.", "가족 관리와 중요한 알림을 확인해주세요."));
 
-    public static NotificationCopy of(NotificationPolicy type, String code, Map<String, String> values) {
+    public static NotificationCopy of(NotificationType type, String code, Map<String, String> values) {
         if (code == null || code.isBlank()) {
             throw new IllegalArgumentException("알림 문구 코드가 없습니다.");
         }
@@ -78,13 +78,23 @@ public record NotificationCopy(String title, String body) {
         return new NotificationCopy(render(template.title(), safeValues), render(template.body(), safeValues));
     }
 
-    private static boolean allowed(NotificationPolicy type, String code) {
-        for (String allowed : type.copyCode().split("/")) {
-            if (allowed.length() >= 3 && code.startsWith(allowed.substring(0, 3))) {
-                return true;
-            }
+    private static boolean allowed(NotificationType type, String code) {
+        if (type == NotificationType.SAFETY_SELF_CHECK) {
+            return code.equals("S01");
         }
-        return false;
+        if (type == NotificationType.HEART_RATE_EMERGENCY) {
+            return code.equals("S01") || code.equals("S03") || code.equals("S04") || code.equals("S06");
+        }
+        if (type == NotificationType.SAFE_ZONE_EXITED) {
+            return code.equals("Z01");
+        }
+        if (type == NotificationType.SAFE_ZONE_ENTERED) {
+            return code.equals("Z02");
+        }
+        if (type == NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART) {
+            return code.equals("S08");
+        }
+        return code.startsWith(type.copyCode().substring(0, 3));
     }
 
     private static String render(String template, Map<String, String> values) {

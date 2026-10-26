@@ -8,7 +8,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.goal.event.GuardianGoalChangedEvent;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -93,7 +93,7 @@ class HealthScheduleServiceTest {
         ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
         then(eventPublisher).should(times(1)).publishEvent(events.capture());
         assertThat(events.getValue().seniorId()).isEqualTo(2L);
-        assertThat(events.getValue().type()).isEqualTo(NotificationPolicy.health("H02"));
+        assertThat(events.getValue().type()).isEqualTo(NotificationType.HEALTH_SCHEDULE_CREATED);
         assertThat(events.getValue().entityId()).isEqualTo("100");
     }
 
@@ -119,7 +119,7 @@ class HealthScheduleServiceTest {
         ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
         then(eventPublisher).should(times(1)).publishEvent(events.capture());
         assertThat(events.getValue().seniorId()).isEqualTo(2L);
-        assertThat(events.getValue().type()).isEqualTo(NotificationPolicy.health("H03"));
+        assertThat(events.getValue().type()).isEqualTo(NotificationType.HEALTH_SCHEDULE_UPDATED);
         assertThat(events.getValue().entityId()).isEqualTo("100");
     }
 
@@ -144,7 +144,7 @@ class HealthScheduleServiceTest {
         then(healthScheduleRepository).should(times(1)).delete(schedule);
         ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
         then(eventPublisher).should(times(1)).publishEvent(events.capture());
-        assertThat(events.getValue().type()).isEqualTo(NotificationPolicy.health("H04"));
+        assertThat(events.getValue().type()).isEqualTo(NotificationType.HEALTH_SCHEDULE_DELETED);
         assertThat(events.getValue().entityId()).isEqualTo("100");
         assertThat(events.getValue().seniorId()).isEqualTo(2L);
     }

@@ -11,7 +11,7 @@ import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleDetailWithRewardResponse;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleWeekListResponse;
 import com.widyu.goal.event.GuardianGoalChangedEvent;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import java.time.LocalDate;
 import com.widyu.goal.healthschedule.dto.response.HealthScheduleResponse;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -98,7 +98,7 @@ public class HealthScheduleService {
 
         HealthSchedule saved = healthScheduleRepository.save(healthSchedule);
 
-        publishGuardianChange(currentMember, seniorMember, NotificationPolicy.health("H02"), saved.getId());
+        publishGuardianChange(currentMember, seniorMember, NotificationType.HEALTH_SCHEDULE_CREATED, saved.getId());
 
         return HealthScheduleResponse.from(saved);
     }
@@ -126,7 +126,7 @@ public class HealthScheduleService {
         );
 
         publishGuardianChange(memberUtil.getCurrentMember(), healthSchedule.getMember(),
-                NotificationPolicy.health("H03"), healthSchedule.getId());
+                NotificationType.HEALTH_SCHEDULE_UPDATED, healthSchedule.getId());
 
         return HealthScheduleResponse.from(healthSchedule);
     }
@@ -143,7 +143,7 @@ public class HealthScheduleService {
 
         healthScheduleRepository.delete(healthSchedule);
         publishGuardianChange(memberUtil.getCurrentMember(), healthSchedule.getMember(),
-                NotificationPolicy.health("H04"), healthScheduleId);
+                NotificationType.HEALTH_SCHEDULE_DELETED, healthScheduleId);
     }
 
     private void validateEditable(HealthSchedule healthSchedule) {
@@ -152,7 +152,7 @@ public class HealthScheduleService {
         }
     }
 
-    private void publishGuardianChange(Member actor, Member target, NotificationPolicy type, Long scheduleId) {
+    private void publishGuardianChange(Member actor, Member target, NotificationType type, Long scheduleId) {
         if (actor.getType() != MemberType.GUARDIAN || target.getType() != MemberType.SENIOR
                 || actor.getId().equals(target.getId())) {
             return;

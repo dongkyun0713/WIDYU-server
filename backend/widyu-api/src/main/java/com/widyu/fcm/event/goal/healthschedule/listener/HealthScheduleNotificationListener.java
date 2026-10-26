@@ -3,7 +3,7 @@ package com.widyu.fcm.event.goal.healthschedule.listener;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.healthschedule.HealthSchedule;
 import com.widyu.member.Member;
@@ -78,13 +78,13 @@ public class HealthScheduleNotificationListener {
         if (recipient.getType() == MemberType.GUARDIAN) {
             return;
         }
-        NotificationCopy osCopy = NotificationCopy.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"),
+        NotificationCopy osCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
                 "H01-S-OS", Map.of());
-        NotificationCopy inAppCopy = NotificationCopy.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"),
+        NotificationCopy inAppCopy = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
                 "H01-S-INAPP", Map.of(
                         "오전/오후 시각", schedule.getScheduledAt().format(TIME_FORMATTER),
                         "일정명", schedule.getScheduleName()));
-        FcmSendDto dto = FcmSendDto.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"), osCopy,
+        FcmSendDto dto = FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING, osCopy,
                 schedule.getId().toString(), null, null, null, recipient.getProfileImage())
                 .withCenterCopy(inAppCopy);
         fcmService.sendMessageToUser(recipient.getId(), dto);

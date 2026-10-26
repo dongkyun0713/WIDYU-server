@@ -1,6 +1,6 @@
 package com.widyu.incident.application;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -160,10 +160,10 @@ public class IncidentEscalation {
     }
 
     private FcmSendDto notificationFor(Incident incident, Member senior, String stage) {
-        NotificationPolicy type = NotificationPolicy.safety("S01/S03/S04/S06", true);
+        NotificationType type = NotificationType.HEART_RATE_EMERGENCY;
         String copyCode = "S04";
         if (incident.getKind() == IncidentKind.SELF_HELP_REQUEST) {
-            type = NotificationPolicy.safety("K01", true);
+            type = NotificationType.SELF_HELP_REQUESTED;
             copyCode = "K01";
         }
         NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
@@ -179,7 +179,7 @@ public class IncidentEscalation {
             data = Map.copyOf(values);
         }
         return FcmSendDto.builder()
-                .title(copy.title()).content(copy.body()).notificationPolicy(type)
+                .title(copy.title()).content(copy.body()).notificationType(type)
                 .eventId(incident.getIncidentRef()).seniorId(incident.getMemberId())
                 .entityId(incident.getIncidentRef()).relatedMemberId(incident.getMemberId())
                 .image(senior.getProfileImage()).decisionId(incident.getDecisionId())

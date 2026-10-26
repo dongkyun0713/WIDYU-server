@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -12,17 +12,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationEnvelopeTest {
 
     @ParameterizedTest
-    @MethodSource("com.widyu.fcm.NotificationPolicyFixture#policies")
+    @EnumSource(NotificationType.class)
     @DisplayName("상세 정책 타입의 센터 행을 직렬화하면 기존 카테고리만 반환한다")
-    void 상세_정책_타입의_센터_행은_기존_카테고리만_반환한다(NotificationPolicy type) {
+    void 상세_정책_타입의_센터_행은_기존_카테고리만_반환한다(NotificationType type) {
         // given
-        FcmNotification stored = FcmNotification.builder().id(8111L).policy(type)
+        FcmNotification stored = FcmNotification.builder().id(8111L).type(type)
                 .fcmCategory(type.fcmCategory()).eventId("same-event")
                 .deepLink("/goal").isRead(false).build();
 
@@ -60,13 +60,13 @@ class NotificationEnvelopeTest {
         // given
         FcmNotification unlocked = FcmNotification.builder()
                 .id(1L)
-                .policy(NotificationPolicy.album("A06-L/Z"))
+                .type(NotificationType.ALBUM_UNLOCKED)
                 .seniorDisplayName("민수")
                 .remainingLockedCount(0)
                 .build();
         FcmNotification other = FcmNotification.builder()
                 .id(2L)
-                .policy(NotificationPolicy.album("A02-S/C"))
+                .type(NotificationType.ALBUM_CREATED)
                 .build();
         FcmNotification legacyWithValues = FcmNotification.builder()
                 .id(3L)

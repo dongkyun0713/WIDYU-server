@@ -44,12 +44,12 @@ public class FcmEligibility {
             return false;
         }
         PushSettingGroup group = null;
-        if (outbox.getNotificationPolicy() == null) {
+        if (outbox.getNotificationType() == null) {
             group = PushSettingGroup.fromLegacy(outbox.getFcmCategory(), recipient.getType());
-        } else if (outbox.getNotificationPolicy().deliveryMode() != DeliveryMode.DATA_ONLY) {
-            group = outbox.getNotificationPolicy().settingGroup();
+        } else if (outbox.getNotificationType().deliveryMode() != DeliveryMode.DATA_ONLY) {
+            group = outbox.getNotificationType().settingGroup();
             if (recipient.getType() == MemberType.SENIOR && group != PushSettingGroup.NONE) {
-                group = PushSettingGroup.forSenior(outbox.getNotificationPolicy().fcmCategory());
+                group = PushSettingGroup.forSenior(outbox.getNotificationType().fcmCategory());
             }
         }
         if (group != null && group != PushSettingGroup.NONE) {

@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.times;
 
-import com.widyu.fcm.NotificationPolicy;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.event.safezone.dto.SafeZoneEnterEvent;
@@ -51,7 +51,7 @@ class SafeZoneNotificationListenerTest {
         then(outbox).should().enqueue(eq(2L), messages.capture());
         then(outbox).should().enqueue(eq(3L), messages.capture());
         then(outbox).should(times(2)).enqueue(any(), any());
-        assertMessage(messages.getAllValues(), NotificationPolicy.safeZone("Z01"),
+        assertMessage(messages.getAllValues(), NotificationType.SAFE_ZONE_EXITED,
                 "시니어 님이 안심구역을 벗어났어요.");
     }
 
@@ -68,7 +68,7 @@ class SafeZoneNotificationListenerTest {
         ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), messages.capture());
         then(outbox).should().enqueue(eq(3L), messages.capture());
-        assertMessage(messages.getAllValues(), NotificationPolicy.safeZone("Z02"),
+        assertMessage(messages.getAllValues(), NotificationType.SAFE_ZONE_ENTERED,
                 "시니어 님이 안심구역으로 돌아왔어요.");
     }
 
@@ -91,10 +91,10 @@ class SafeZoneNotificationListenerTest {
         given(secondGuardian.getId()).willReturn(3L);
     }
 
-    private void assertMessage(List<FcmSendDto> messages, NotificationPolicy type, String title) {
+    private void assertMessage(List<FcmSendDto> messages, NotificationType type, String title) {
         assertThat(messages).hasSize(2);
         assertThat(messages).allSatisfy(message -> {
-            assertThat(message.notificationPolicy()).isEqualTo(type);
+            assertThat(message.notificationType()).isEqualTo(type);
             assertThat(message.title()).isEqualTo(title);
             assertThat(message.content()).isNull();
             assertThat(message.seniorId()).isEqualTo(1L);
