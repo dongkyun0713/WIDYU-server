@@ -840,16 +840,16 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("본인확인 알림을 넣으면 사건 참조와 읽음 처리용 센터 ID를 함께 저장한다")
-    void 본인확인_알림을_넣으면_사건_참조와_센터_ID를_저장한다() {
+    @DisplayName("앨범 알림을 여러 기기에 넣고 재전송하면 같은 목록 ID를 전달한다")
+    void 앨범_알림을_여러_기기에_넣으면_같은_목록_ID를_전달한다() {
         // given
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
                         .token("second-token").active(true).build()));
-        FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
-                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-20261001-1")
-                .entityId("inc-20261001-1").build();
+        FcmSendDto message = FcmSendDto.builder().title("새 앨범").content("새 게시물이 있어요.")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("album-created-91")
+                .entityId("91").build();
 
         // when
         service.enqueue(member, message);
@@ -857,21 +857,21 @@ class FcmOutboxIntegrationTest {
 
         // then
         FcmOutbox row = outbox.findAll().getFirst();
-        FcmNotification center = notifications.findByRecipientMemberIdAndEventId(member, "inc-20261001-1")
+        FcmNotification center = notifications.findByRecipientMemberIdAndEventId(member, "album-created-91")
                 .orElseThrow();
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(outbox.findAll()).hasSize(4)
                 .allSatisfy(deliveryRow -> assertThat(deliveryRow.getNotificationId()).isEqualTo(center.getId()));
-        assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
-        assertThat(center.getType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(row.getNotificationType()).isEqualTo(NotificationType.ALBUM_CREATED);
+        assertThat(center.getType()).isEqualTo(NotificationType.ALBUM_CREATED);
         assertThat(center.isRead()).isFalse();
         assertThat(row.getNotificationId()).isEqualTo(center.getId());
         FcmDelivery delivery = transactions.claim(row.getId());
         assertThat(delivery.notificationId()).isEqualTo(center.getId());
         assertThat(delivery.message().data())
-                .containsEntry("eventId", "inc-20261001-1")
-                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
-                .containsEntry("deepLink", "");
+                .containsEntry("eventId", "album-created-91")
+                .containsEntry("type", "ALBUM_CREATED")
+                .containsEntry("deepLink", "/album/post?postId=91");
         Integer ignored = new TransactionTemplate(transactionManager).execute(status ->
                 notifications.markAsReadIfUnread(center.getId(), member + 1, LocalDateTime.now()));
         Integer read = new TransactionTemplate(transactionManager).execute(status ->
@@ -882,8 +882,8 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("시니어 기기 토큰이 없어도 본인확인 알림센터 행은 남는다")
-    void 시니어_토큰이_없어도_본인확인_센터_행은_남는다() {
+    @DisplayName("시니어 기기 토큰이 없으면 본인확인은 목록 행을 만들지 않는다")
+    void 시니어_토큰이_없어도_본인확인은_목록_행을_만들지_않는다() {
         // given
         Long member = new TransactionTemplate(transactionManager).execute(status ->
                 members.save(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")).getId());
@@ -896,9 +896,31 @@ class FcmOutboxIntegrationTest {
 
         // then
         assertThat(notifications.findByRecipientMemberIdAndEventId(member, "inc-no-token"))
-                .hasValueSatisfying(center -> assertThat(center.getType())
-                        .isEqualTo(NotificationType.SAFETY_SELF_CHECK));
+                .isEmpty();
         assertThat(outbox.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("본인확인 알림에 사건 참조를 주면 UUID가 아니어도 그대로 저장한다")
+    void 본인확인_알림에_사건_참조를_주면_그대로_저장한다() {
+        // given
+        Long member = memberWithToken();
+        FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
+                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-20261001-1")
+                .entityId("inc-20261001-1").build();
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        FcmOutbox row = outbox.findAll().getFirst();
+        assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(row.getNotificationId()).isNull();
+        assertThat(notifications.count()).isZero();
+        assertThat(transactions.claim(row.getId()).message().data())
+                .containsEntry("eventId", "inc-20261001-1")
+                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
+                .containsEntry("deepLink", "");
     }
 
     @Test

@@ -56,7 +56,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "개별 알림 읽음 처리",
-            description = "현재 수신자의 알림센터 ID를 읽음 처리합니다. 긴급 본인확인 푸시는 FCM data.notificationId에 같은 ID를 문자열로 보냅니다. 읽음 처리는 사건의 본인확인 응답을 대신하지 않습니다."
+            description = "현재 수신자의 알림센터 ID를 읽음 처리합니다. 목록에 저장되는 알림의 FCM data.notificationId는 목록 notificationId와 같은 값인 문자열입니다."
     )
     @ApiResponse(
             responseCode = "200",

@@ -170,33 +170,6 @@ class NotificationCenterServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("본인확인 알림을 조회하고 읽으면 전체에는 남고 안 읽음 수에서 빠진다")
-    void 본인확인_알림을_읽으면_안읽음_수에서_빠진다() {
-        // given
-        Member senior = member(MemberType.SENIOR);
-        given(memberUtil.getCurrentMember()).willReturn(senior);
-        FcmNotification selfCheck = notification(senior, NotificationType.SAFETY_SELF_CHECK,
-                FcmCategory.INCIDENT_SELF_CHECK, LocalDateTime.now().plusDays(90));
-
-        // when
-        NotificationCenterResponse before = service.list("UNREAD", null);
-        NotificationReadResponse read = service.markAsRead(selfCheck.getId());
-        NotificationCenterResponse after = service.list("UNREAD", null);
-        NotificationCenterResponse all = service.list("ALL", null);
-
-        // then
-        assertThat(before.items()).extracting(NotificationEnvelope::notificationId)
-                .containsExactly(selfCheck.getId());
-        assertThat(before.unreadCounts()).containsEntry("UNREAD", 1);
-        assertThat(read.notificationId()).isEqualTo(selfCheck.getId());
-        assertThat(after.items()).isEmpty();
-        assertThat(after.unreadCounts()).containsEntry("UNREAD", 0);
-        assertThat(all.items()).extracting(NotificationEnvelope::notificationId)
-                .containsExactly(selfCheck.getId());
-        assertThat(all.items().getFirst().category()).isNull();
-    }
-
-    @Test
     @DisplayName("푸시 자격이 없는 타입 행을 조회하면 센터 정책 필드를 그대로 반환한다")
     void 푸시_자격이_없는_타입_행을_조회하면_센터_정책을_반환한다() {
         // given

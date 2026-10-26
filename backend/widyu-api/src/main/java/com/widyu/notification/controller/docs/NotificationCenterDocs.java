@@ -43,7 +43,7 @@ public interface NotificationCenterDocs {
     ApiResponseTemplate<NotificationCenterResponse> list(String filter, String cursor);
 
     @Operation(summary = "알림 한 건 읽음 처리",
-            description = "현재 수신자의 알림만 처리하며 이미 읽은 항목도 원래 readAt을 유지하고 200을 반환합니다. 긴급 본인확인 푸시의 data.notificationId도 사용할 수 있으며 읽음은 사건 응답과 별개입니다.")
+            description = "현재 수신자의 알림만 처리하며 이미 읽은 항목도 원래 readAt을 유지하고 200을 반환합니다. 목록에 저장되는 알림은 FCM data.notificationId의 같은 ID로 읽음 처리할 수 있습니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "읽음 처리 성공",
                     content = @Content(schema = @Schema(implementation = ApiResponseTemplate.class),

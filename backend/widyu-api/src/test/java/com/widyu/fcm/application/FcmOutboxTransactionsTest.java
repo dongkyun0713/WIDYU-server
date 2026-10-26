@@ -217,8 +217,8 @@ class FcmOutboxTransactionsTest {
     }
 
     @Test
-    @DisplayName("배포 전 본인확인 outbox를 복원하면 센터 행이 없으므로 알림 ID를 보내지 않는다")
-    void 이전_본인확인_outbox를_복원하면_가짜_알림_ID를_보내지_않는다() {
+    @DisplayName("푸시 전용 본인확인 outbox를 복원하면 센터 ID를 만들지 않는다")
+    void 푸시_전용_본인확인_outbox는_센터_ID를_만들지_않는다() {
         // given
         FcmOutbox row = row(null);
         ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
