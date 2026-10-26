@@ -14,13 +14,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "알림센터", description = "역할별 알림센터 목록과 단건 읽음 처리")
 public interface NotificationCenterDocs {
     @Operation(summary = "알림센터 목록 조회",
-            description = "filter 기본값은 ALL입니다. 시니어는 ALL/UNREAD/ALBUM/GOAL/MESSAGE, 보호자는 LOCATION도 사용할 수 있습니다. cursor는 이전 응답의 nextCursor를 그대로 전달합니다. items의 seniorDisplayName(String)과 remainingLockedCount(Integer, 0 포함)는 ALBUM_UNLOCKED 센터 행의 저장값이며, 값이 없는 행은 null입니다.")
+            description = "filter 기본값은 ALL입니다. 시니어는 ALL/UNREAD/ALBUM/GOAL/MESSAGE, 보호자는 LOCATION도 사용할 수 있습니다. cursor는 이전 응답의 nextCursor를 그대로 전달합니다. items.category는 기존 ALBUM/TARGET/MEDICINE_SCHEDULE/HEART_MESSAGE 등의 카테고리이며 상세 type 필드는 반환하지 않습니다. seniorDisplayName과 remainingLockedCount는 앨범 잠금 해제 알림의 저장값이며, 값이 없는 행은 null입니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "목록 조회 성공",
                     content = @Content(schema = @Schema(implementation = ApiResponseTemplate.class),
                             examples = @ExampleObject(value = """
                                     {"code":"200","message":"OK","data":{"items":[{"notificationId":4072,
-                                    "eventId":"album-unlocked-4072","type":"ALBUM_UNLOCKED","category":"ALBUM",
+                                    "eventId":"album-unlocked-4072","category":"ALBUM",
                                     "priority":"interaction","title":"앨범 잠금이 해제됐어요","body":"게시물을 확인해보세요.",
                                     "imageUrl":null,"occurredAt":"2026-10-02T09:30:00","readAt":null,
                                     "deepLink":"/post?postId=91","entityId":"91","seniorId":12,

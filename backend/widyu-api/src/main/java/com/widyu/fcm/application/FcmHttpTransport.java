@@ -129,7 +129,7 @@ public class FcmHttpTransport implements FcmTransport {
         } else {
             data.remove("notificationId");
         }
-        addTypeData(data, type);
+        addClientData(data, type);
         if (type != null || !data.isEmpty()) {
             message.data(data);
         }
@@ -179,15 +179,41 @@ public class FcmHttpTransport implements FcmTransport {
         return Result.rejected(permanentToken(response.body()));
     }
 
-    private void addTypeData(Map<String, String> data, NotificationType type) {
+    private void addClientData(Map<String, String> data, NotificationType type) {
+        data.remove("notificationType");
+        NotificationType previousType = type;
+        if (previousType == null && data.get("type") != null) {
+            try {
+                previousType = NotificationType.valueOf(data.get("type"));
+            } catch (IllegalArgumentException ignored) {
+                // 기존 호출자의 독립 트리거 값은 그대로 보존한다.
+            }
+        }
+        if (previousType != null) {
+            String trigger = legacyTrigger(previousType);
+            if (trigger == null) {
+                data.remove("type");
+            } else {
+                data.put("type", trigger);
+            }
+        }
         if (type == null) {
             return;
         }
-        data.put("notificationType", type.name());
-        data.put("type", type.dataTypeValue());
         data.put("priority", type.priority().wireValue());
         data.put("foregroundPresentation", type.foregroundPresentation());
         data.putIfAbsent("deepLink", "");
+    }
+
+    private String legacyTrigger(NotificationType type) {
+        return switch (type) {
+            case SAFETY_SELF_CHECK -> "EMERGENCY_CONFIRM_REQUEST";
+            case HEART_RATE_EMERGENCY -> "HEART_RATE_EMERGENCY";
+            case MEDICATION_REMINDER_10, MEDICATION_REMINDER_20, MEDICATION_PROOF_MISSING,
+                    MEDICATION_SCHEDULE_CREATED, MEDICATION_SCHEDULE_CHANGED,
+                    MEDICATION_SCHEDULE_DELETED, MEDICATION_SCHEDULE_SYNC -> "MEDICATION_SCHEDULE_CHANGED";
+            default -> null;
+        };
     }
 
     private FcmMessageDto.Android android(String ttl, NotificationType type) {

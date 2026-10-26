@@ -4,13 +4,11 @@ import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.NotificationPriority;
-import com.widyu.notification.NotificationCenterFilter;
 import java.time.LocalDateTime;
 
 public record NotificationEnvelope(
         Long notificationId,
         String eventId,
-        String type,
         String category,
         String priority,
         String title,
@@ -37,8 +35,7 @@ public record NotificationEnvelope(
             return new NotificationEnvelope(
                     notification.getId(),
                     "legacy:" + notification.getId(),
-                    "LEGACY",
-                    NotificationCenterFilter.categoryOfLegacy(notification.getFcmCategory()),
+                    category(notification),
                     NotificationPriority.INTERACTION.wireValue(),
                     notification.getTitle(),
                     notification.getBody(),
@@ -63,8 +60,7 @@ public record NotificationEnvelope(
         return new NotificationEnvelope(
                 notification.getId(),
                 notification.getEventId(),
-                type.name(),
-                type.centerFilter(),
+                category(notification),
                 type.priority().wireValue(),
                 notification.getTitle(),
                 notification.getBody(),
@@ -84,6 +80,16 @@ public record NotificationEnvelope(
                 notification.getPushEligible(),
                 type.foregroundPresentation()
         );
+    }
+
+    private static String category(FcmNotification notification) {
+        if (notification.getFcmCategory() != null) {
+            return notification.getFcmCategory().name();
+        }
+        if (notification.getType() != null) {
+            return notification.getType().fcmCategory().name();
+        }
+        return "ALL";
     }
 
     private static boolean storesInCenter(DeliveryMode mode) {

@@ -81,8 +81,7 @@ class NotificationCenterServiceIntegrationTest {
         assertThat(messageResponse.items()).extracting(NotificationEnvelope::notificationId)
                 .containsExactly(legacyMessage.getId());
         assertThat(response.items().getFirst().eventId()).isEqualTo("legacy:" + legacy.getId());
-        assertThat(response.items().getFirst().type()).isEqualTo("LEGACY");
-        assertThat(response.items().getFirst().category()).isEqualTo("LOCATION");
+        assertThat(response.items().getFirst().category()).isEqualTo("SAFE_ZONE");
         assertThat(response.items().getFirst().priority()).isEqualTo("interaction");
         assertThat(response.items().getFirst().foregroundPresentation()).isEqualTo("BANNER");
         assertThat(response.items().getFirst().expiresAt()).isNull();
@@ -93,8 +92,8 @@ class NotificationCenterServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("미매핑 레거시 알림을 조회하면 카테고리를 null로 반환한다")
-    void 미매핑_레거시_알림을_조회하면_카테고리를_null로_반환한다() {
+    @DisplayName("레거시 알림을 조회하면 기존 저장 카테고리를 반환한다")
+    void 레거시_알림을_조회하면_기존_카테고리를_반환한다() {
         // given
         Member senior = member(MemberType.SENIOR);
         given(memberUtil.getCurrentMember()).willReturn(senior);
@@ -106,7 +105,7 @@ class NotificationCenterServiceIntegrationTest {
         // then
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().getFirst().notificationId()).isEqualTo(unmapped.getId());
-        assertThat(response.items().getFirst().category()).isNull();
+        assertThat(response.items().getFirst().category()).isEqualTo("INCIDENT_SELF_CHECK");
         assertThat(response.items().getFirst().priority()).isEqualTo("interaction");
     }
 
@@ -164,7 +163,7 @@ class NotificationCenterServiceIntegrationTest {
         assertThat(goals.items()).extracting(NotificationEnvelope::notificationId)
                 .containsExactly(goal.getId());
         assertThat(goals.unreadCounts()).containsEntry("GOAL", 1).containsEntry("UNREAD", 3);
-        assertThat(all.items().get(1).category()).isNull();
+        assertThat(all.items().get(1).category()).isEqualTo("TARGET");
         assertThat(NotificationType.POINT_EARNED.centerFilter()).isNull();
         assertThat(NotificationType.POINT_USED.centerFilter()).isNull();
     }
