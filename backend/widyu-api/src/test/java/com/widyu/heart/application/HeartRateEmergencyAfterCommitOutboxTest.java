@@ -263,6 +263,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         long previousHeartEvents = heartEvents.count();
         long previousIncidents = incidents.count();
         long previousOutbox = outbox.count();
+        long previousNotifications = notifications.count();
 
         // when
         transactions.executeWithoutResult(status -> {
@@ -280,6 +281,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
                 .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
+        assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
     }
 
     @Test
@@ -342,7 +344,9 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(outbox.count()).isEqualTo(previousOutbox + 2);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(ids[0]))
                 .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
-        assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
+        assertThat(notifications.count()).isEqualTo(previousNotifications + 2);
+        assertThat(notifications.findByRecipientMemberIdAndEventId(ids[0], incident.getIncidentRef())
+                .orElseThrow().getType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
         var center = notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())
                 .orElseThrow();
         assertThat(center.getType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
@@ -390,6 +394,6 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
                 .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
-        assertThat(notifications.count()).isEqualTo(previousNotifications);
+        assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
     }
 }

@@ -840,24 +840,65 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("본인확인 알림에 사건 참조를 주면 UUID가 아니어도 그대로 저장한다")
-    void 본인확인_알림에_사건_참조를_주면_그대로_저장한다() {
+    @DisplayName("본인확인 알림을 넣으면 사건 참조와 읽음 처리용 센터 ID를 함께 저장한다")
+    void 본인확인_알림을_넣으면_사건_참조와_센터_ID를_저장한다() {
         // given
         Long member = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
+                        .token("second-token").active(true).build()));
         FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
                 .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-20261001-1")
                 .entityId("inc-20261001-1").build();
 
         // when
         service.enqueue(member, message);
+        service.enqueue(member, message);
 
         // then
         FcmOutbox row = outbox.findAll().getFirst();
+        FcmNotification center = notifications.findByRecipientMemberIdAndEventId(member, "inc-20261001-1")
+                .orElseThrow();
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.findAll()).hasSize(4)
+                .allSatisfy(deliveryRow -> assertThat(deliveryRow.getNotificationId()).isEqualTo(center.getId()));
         assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
-        assertThat(transactions.claim(row.getId()).message().data())
+        assertThat(center.getType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(center.isRead()).isFalse();
+        assertThat(row.getNotificationId()).isEqualTo(center.getId());
+        FcmDelivery delivery = transactions.claim(row.getId());
+        assertThat(delivery.notificationId()).isEqualTo(center.getId());
+        assertThat(delivery.message().data())
                 .containsEntry("eventId", "inc-20261001-1")
                 .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
                 .containsEntry("deepLink", "");
+        Integer ignored = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.markAsReadIfUnread(center.getId(), member + 1, LocalDateTime.now()));
+        Integer read = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.markAsReadIfUnread(center.getId(), member, LocalDateTime.now()));
+        assertThat(ignored).isZero();
+        assertThat(read).isEqualTo(1);
+        assertThat(notifications.findById(center.getId()).orElseThrow().isRead()).isTrue();
+    }
+
+    @Test
+    @DisplayName("시니어 기기 토큰이 없어도 본인확인 알림센터 행은 남는다")
+    void 시니어_토큰이_없어도_본인확인_센터_행은_남는다() {
+        // given
+        Long member = new TransactionTemplate(transactionManager).execute(status ->
+                members.save(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")).getId());
+        FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
+                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-no-token")
+                .entityId("inc-no-token").build();
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        assertThat(notifications.findByRecipientMemberIdAndEventId(member, "inc-no-token"))
+                .hasValueSatisfying(center -> assertThat(center.getType())
+                        .isEqualTo(NotificationType.SAFETY_SELF_CHECK));
+        assertThat(outbox.count()).isZero();
     }
 
     @Test

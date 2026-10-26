@@ -113,7 +113,7 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 15b | `POINT_USED` | TARGET | — | CENTER_ONLY | passive | ROUTINE_90D | NONE | NONE | `/my/point` | P02 |
 | 16 | `HEART_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/notification` | X01-OS/INAPP |
 | 17 | `CHEER_MESSAGE_RECEIVED` | HEART_MESSAGE | MESSAGE | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/notification` | X02-OS/INAPP |
-| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (푸시 전용) | PUSH_ONLY | critical | ROUTINE_90D | NONE | BANNER | 없음(화면 트리거 전용, `data.type=EMERGENCY_CONFIRM_REQUEST`) | S01 |
+| 17a | `SAFETY_SELF_CHECK` | INCIDENT_SELF_CHECK | — (ALL·UNREAD에 노출) | PUSH_AND_CENTER | critical | ROUTINE_90D | NONE | BANNER | 없음(화면 트리거 전용, `data.type=EMERGENCY_CONFIRM_REQUEST`) | S01 |
 | 18 | `HEART_RATE_EMERGENCY` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | S01/S03/S04/S06 |
 | 18a | `SELF_HELP_REQUESTED` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | critical | HEART_EMERGENCY_180D | SAFETY | MODAL | `/location?seniorId={seniorId}` | K01 |
 | 18b | `SELF_HELP_REQUEST_CANCELLED` | HEART_MESSAGE | LOCATION | PUSH_AND_CENTER | interaction | HEART_EMERGENCY_180D | GENERAL | BANNER | `/location?seniorId={seniorId}` | K02 |
@@ -131,7 +131,7 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 
 LLD-0083의 K01/K02는 워치 직접 도움 요청과 취소 안내다. K01은 ①·②에서 같은 `eventId=incident_ref`를 쓰고, K02는 `event_id VARCHAR(40)`에 맞춘 `incident_ref:CX`를 쓴다.
 
-매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08은 심박 OK 안내다. 안심구역은 사건이 아니며 S02·S05·S07·S09 대신 제목만 있는 Z01·Z02를 쓴다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
+매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`는 [LLD-0096](LLD-0096-self-check-push-notification-id.md)에 따라 센터에도 저장하며 `ROUTINE_90D`를 적용한다. S08은 심박 OK 안내다. 안심구역은 사건이 아니며 S02·S05·S07·S09 대신 제목만 있는 Z01·Z02를 쓴다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
 
 ## 5. 처리 흐름
 
@@ -150,7 +150,7 @@ LLD-0083의 K01/K02는 워치 직접 도움 요청과 취소 안내다. K01은 �
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·딥링크 없음·`data.type=EMERGENCY_CONFIRM_REQUEST`·S01을 사용한다(2026-10-11 #746 개정). `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
+- [x] N3: 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_AND_CENTER`·`CRITICAL`·`NONE`·`BANNER`·딥링크 없음·`data.type=EMERGENCY_CONFIRM_REQUEST`·S01을 사용한다(2026-10-26 #884 개정). `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
 - [x] N7: 네 `DeliveryMode`를 타입별로 조회할 수 있으며 4절 전달 정책과 일치한다. W2 구현은 기존 호출자의 센터 저장 단위를 바꾸지 않는다.
 - [x] N8: type 있는 enqueue는 eventId가 비어 있을 때 수신자별 UUID를 생성한다. 명시값이 있으면 UUID 형식과 무관하게 40자 이하의 공백 아닌 값(예: `inc-…`)을 보존하며, 40자 초과는 행을 저장하지 않는다. 같은 수신자의 여러 토큰 행에 동일한 값을 기록한다. FCM data의 `eventId/type/priority/notificationId/deepLink/foregroundPresentation`과 해당 이벤트의 `revision/effectiveFromDate/actorDisplayName`이 문자열로 보존된다. W2 notificationId는 outbox ID다.
 - [x] N8: `FcmDelivery.from`은 `data_payload` 전체를 복원한다. 같은 행의 재시도 2회 뒤에도 key/value가 같고, 이전 행은 `dataType`·`dataRevision` 중 존재하는 키를 각각 복원한다.

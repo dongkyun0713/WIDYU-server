@@ -217,6 +217,20 @@ class FcmOutboxTransactionsTest {
     }
 
     @Test
+    @DisplayName("배포 전 본인확인 outbox를 복원하면 센터 행이 없으므로 알림 ID를 보내지 않는다")
+    void 이전_본인확인_outbox를_복원하면_가짜_알림_ID를_보내지_않는다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+
+        // when
+        FcmDelivery delivery = FcmDelivery.from(row);
+
+        // then
+        assertThat(delivery.notificationId()).isNull();
+    }
+
+    @Test
     @DisplayName("저장된 data JSON이 손상되면 빈 data로 전송하지 않고 예외가 발생한다")
     void 저장된_data_JSON이_손상되면_예외가_발생한다() {
         // given

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.DeliveryMode;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.dto.FcmSendDto;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -29,6 +30,10 @@ public record FcmDelivery(Long id, long fence, String token, FcmSendDto message,
     private static Long notificationId(FcmOutbox row) {
         if (row.getNotificationId() != null) {
             return row.getNotificationId();
+        }
+        // 배포 전 PUSH_ONLY로 저장한 본인확인 outbox에는 센터 행이 없다.
+        if (row.getNotificationType() == NotificationType.SAFETY_SELF_CHECK) {
+            return null;
         }
         if (row.getNotificationType() == null) {
             return row.getId();

@@ -76,9 +76,11 @@ class FcmHttpTransportTest {
                 .notificationType(NotificationType.SAFETY_SELF_CHECK)
                 .data(Map.of("eventId", "inc-20261001-1"))
                 .build();
+        FcmDelivery delivery = new FcmDelivery(4072L, 1, "loopback-token", message,
+                Instant.now().plusSeconds(300), 8111L);
         try {
             // when
-            assertThat(transport.send("loopback-token", message).success()).isTrue();
+            assertThat(transport.send(delivery, () -> true).success()).isTrue();
 
             // then
             JsonNode body = bodies.getFirst();
@@ -86,6 +88,7 @@ class FcmHttpTransportTest {
             assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("SAFETY_SELF_CHECK");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
             assertThat(body.at("/message/data/deepLink").asText()).isEmpty();
+            assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
