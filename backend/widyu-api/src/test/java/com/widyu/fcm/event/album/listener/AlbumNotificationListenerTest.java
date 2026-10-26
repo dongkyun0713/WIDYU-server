@@ -34,6 +34,8 @@ import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -329,6 +331,83 @@ class AlbumNotificationListenerTest {
         assertThatThrownBy(() -> listener.handleAlbumCreated(new AlbumCreatedEvent(10L, 1L)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND);
+        then(fcmService).should(never()).sendMessageToUser(anyLong(), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("보호자가 3일째 게시물을 올리지 않으면 같은 가족 시니어가 아니라 보호자 본인에게 독촉 알림을 보낸다")
+    void 미업로드_3일째_보호자_본인에게만_보낸다() {
+        // given
+        LocalDate today = LocalDate.of(2026, 10, 26);
+        Member guardian = member(1L, MemberType.GUARDIAN, "보호자");
+        Member senior = member(2L, MemberType.SENIOR, "시니어");
+        given(memberRepository.findAll()).willReturn(List.of(guardian, senior));
+        given(albumRepository.findLastUploadDateByMember(guardian, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.of(2026, 10, 23, 23, 50)));
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(mock(FamilyMembership.class)));
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.notifyInactiveGuardians(today);
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
+        assertThat(captor.getValue().title()).isEqualTo("보호자님, 3일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?");
+        then(fcmService).should(never()).sendMessageToUser(eq(2L), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("보호자가 업로드한 적이 없으면 가입일로부터 5일째에 독촉 알림을 보낸다")
+    void 업로드가_없으면_가입일로부터_5일째에_보낸다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN, "보호자");
+        ReflectionTestUtils.setField(guardian, "createdAt", LocalDateTime.of(2026, 10, 21, 9, 0));
+        given(memberRepository.findAll()).willReturn(List.of(guardian));
+        given(albumRepository.findLastUploadDateByMember(guardian, Status.ACTIVE)).willReturn(Optional.empty());
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(mock(FamilyMembership.class)));
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.notifyInactiveGuardians(LocalDate.of(2026, 10, 26));
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
+        assertThat(captor.getValue().title()).startsWith("보호자님, 5일 간");
+    }
+
+    @Test
+    @DisplayName("마지막 업로드로부터 4일째나 8일째이면 독촉 알림을 보내지 않는다")
+    void 미업로드_3_5_7일째가_아니면_보내지_않는다() {
+        // given
+        Member fourDays = member(1L, MemberType.GUARDIAN, "보호자1");
+        Member eightDays = member(2L, MemberType.GUARDIAN, "보호자2");
+        given(memberRepository.findAll()).willReturn(List.of(fourDays, eightDays));
+        given(albumRepository.findLastUploadDateByMember(fourDays, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.of(2026, 10, 22, 10, 0)));
+        given(albumRepository.findLastUploadDateByMember(eightDays, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.of(2026, 10, 18, 10, 0)));
+
+        // when
+        listener.notifyInactiveGuardians(LocalDate.of(2026, 10, 26));
+
+        // then
+        then(fcmService).should(never()).sendMessageToUser(anyLong(), any(FcmSendDto.class));
+    }
+
+    @Test
+    @DisplayName("가족에 속하지 않은 보호자에게는 독촉 알림을 보내지 않는다")
+    void 가족이_없는_보호자에게는_보내지_않는다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN, "보호자");
+        given(memberRepository.findAll()).willReturn(List.of(guardian));
+        given(albumRepository.findLastUploadDateByMember(guardian, Status.ACTIVE))
+                .willReturn(Optional.of(LocalDateTime.of(2026, 10, 19, 10, 0)));
+        given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.empty());
+
+        // when
+        listener.notifyInactiveGuardians(LocalDate.of(2026, 10, 26));
+
+        // then
         then(fcmService).should(never()).sendMessageToUser(anyLong(), any(FcmSendDto.class));
     }
 
