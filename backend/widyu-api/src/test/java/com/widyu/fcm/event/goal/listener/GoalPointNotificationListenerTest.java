@@ -5,7 +5,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 import com.widyu.fcm.DeliveryMode;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.event.goal.dto.GoalAchievedEvent;
@@ -72,8 +72,8 @@ class GoalPointNotificationListenerTest {
 
         // then
         then(outboxService).should().enqueue(org.mockito.ArgumentMatchers.eq(1L), message.capture());
-        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.POINT_EARNED);
-        assertThat(message.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
+        assertThat(message.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.point("P01"));
+        assertThat(message.getValue().notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
         assertThat(message.getValue().title()).isEqualTo("10P를 받았어요.");
         assertThat(message.getValue().content()).isEqualTo("약 복용 인증");
         assertThat(message.getValue().dataForEnqueue("event-1")).containsEntry("deepLink", "/my/point");
@@ -93,8 +93,8 @@ class GoalPointNotificationListenerTest {
 
         // then
         then(outboxService).should().enqueue(org.mockito.ArgumentMatchers.eq(1L), message.capture());
-        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.POINT_USED);
-        assertThat(message.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
+        assertThat(message.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.point("P02"));
+        assertThat(message.getValue().notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.CENTER_ONLY);
         assertThat(message.getValue().title()).isEqualTo("50P를 사용했어요.");
         assertThat(message.getValue().content()).isEqualTo("앨범 해금");
         assertThat(message.getValue().dataForEnqueue("event-1")).containsEntry("deepLink", "/my/point");
@@ -122,7 +122,7 @@ class GoalPointNotificationListenerTest {
         // then
         then(outboxService).should(org.mockito.Mockito.times(2)).enqueue(recipient.capture(), message.capture());
         assertThat(recipient.getAllValues()).containsExactly(1L, 2L);
-        assertThat(message.getAllValues()).allMatch(item -> item.notificationType() == NotificationType.GOAL_ACHIEVED);
+        assertThat(message.getAllValues()).allMatch(item -> NotificationPolicy.goal("G01-S/C").equals(item.notificationPolicy()));
         assertThat(message.getAllValues()).allMatch(item -> item.eventId().equals("G01:W:7"));
         assertThat(message.getAllValues()).allMatch(item -> item.content().equals("25P가 자동으로 적립됐어요."));
         assertThat(message.getAllValues().get(0).title()).isEqualTo("걷기 목표를 달성했어요!");

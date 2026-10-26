@@ -8,7 +8,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmDeliveryProperties;
 import com.widyu.fcm.dto.NotificationCopy;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -96,7 +96,7 @@ class DegradedEmergencyAlertServiceTest {
         ArgumentCaptor<MapRecord> captor = ArgumentCaptor.forClass(MapRecord.class);
         then(stream).should(times(3)).add(captor.capture());
         NotificationCopy normalPathCopy = NotificationCopy.of(
-                NotificationType.HEART_RATE_EMERGENCY, "S04", Map.of("시니어 이름", "김시니어"));
+                NotificationPolicy.safety("S01/S03/S04/S06", true), "S04", Map.of("시니어 이름", "김시니어"));
         List<Map<String, String>> fields = captor.getAllValues().stream()
                 .map(record -> (Map<String, String>) record.getValue())
                 .toList();

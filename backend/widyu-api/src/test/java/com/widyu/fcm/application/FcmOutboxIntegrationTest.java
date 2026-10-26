@@ -140,9 +140,9 @@ class FcmOutboxIntegrationTest {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
                         .token("mock-token-2").active(true).build()));
-        NotificationType type = NotificationType.MEDICATION_SCHEDULE_CREATED;
+        NotificationPolicy type = NotificationPolicy.medication("M08");
         FcmSendDto message = FcmSendDto.builder().title("등록").content("내일부터 적용")
-                .notificationType(type)
+                .notificationPolicy(type)
                 .data(MedicationAlarmPayload.of(42L, type)).actorDisplayName("보호자")
                 .effectiveFromDate("2026-10-02").build();
 
@@ -155,14 +155,14 @@ class FcmOutboxIntegrationTest {
         FcmNotification center = notifications.findAll().getFirst();
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(rows).allMatch(row -> center.getId().equals(row.getNotificationId()));
-        assertThat(rows).allMatch(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_CREATED);
+        assertThat(rows).allMatch(row -> NotificationPolicy.medication("M08").equals(row.getNotificationPolicy()));
         Map<String, String> first = transactions.claim(rows.get(0).getId()).message().data();
         Map<String, String> second = transactions.claim(rows.get(1).getId()).message().data();
         assertThat(first).isEqualTo(second);
         assertThat(center.getEventId()).isEqualTo(first.get("eventId"));
         assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
         assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_CREATED")
+                .doesNotContainKey("notificationType")
                 .containsEntry("revision", "42")
                 .containsEntry("effectiveFromDate", "2026-10-02")
                 .containsEntry("actorDisplayName", "보호자")
@@ -176,9 +176,9 @@ class FcmOutboxIntegrationTest {
     void 복약_후속_푸시를_같은_분에_다시_enqueue하면_기기_작업이_중복된다() {
         // given
         Long seniorId = memberWithToken();
-        NotificationType type = NotificationType.MEDICATION_REMINDER_10;
+        NotificationPolicy type = NotificationPolicy.medication("M02");
         FcmSendDto reminder = FcmSendDto.builder().title("약 복용 인증이 아직 안 됐어요.")
-                .content("약을 복용하셨다면 인증해 주세요.").notificationType(type)
+                .content("약을 복용하셨다면 인증해 주세요.").notificationPolicy(type)
                 .eventId(MedicationAlarmPayload.eventId("reminder:" + seniorId + ":15:2026-10-02"))
                 .entityId("15").data(MedicationAlarmPayload.of(4L, type)).build();
 
@@ -192,8 +192,8 @@ class FcmOutboxIntegrationTest {
         FcmOutbox row = outbox.findAll().getFirst();
         assertThat(row.getNotificationId()).isNull();
         assertThat(transactions.claim(row.getId()).message().data())
-                .containsEntry("type", "MEDICATION_REMINDER_10")
-                .containsEntry("notificationType", "MEDICATION_REMINDER_10");
+                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .doesNotContainKey("notificationType");
     }
 
     @Test
@@ -216,12 +216,12 @@ class FcmOutboxIntegrationTest {
             settings.save(MemberNotificationSetting.create(disabled, PushSettingGroup.MEDICATION_CHECK, false));
             return List.of(enabled.getId(), disabled.getId());
         });
-        NotificationType type = NotificationType.MEDICATION_PROOF_MISSING;
+        NotificationPolicy type = NotificationPolicy.medication("M04");
 
         // when
         for (Long guardianId : guardians) {
             FcmSendDto message = FcmSendDto.builder().title("인증이 아직 확인되지 않았어요.")
-                    .content("직접 확인해보세요.").notificationType(type)
+                    .content("직접 확인해보세요.").notificationPolicy(type)
                     .eventId(MedicationAlarmPayload.eventId("missing:" + seniorId + ":15:" + guardianId))
                     .entityId("15").seniorId(seniorId).relatedMemberId(seniorId)
                     .data(MedicationAlarmPayload.of(0L, type)).build();
@@ -252,11 +252,11 @@ class FcmOutboxIntegrationTest {
         // given
         Long guardianId = guardianWithToken();
         FcmSendDto comment = FcmSendDto.builder().title("댓글 알림").content("댓글을 확인해보세요.")
-                .notificationType(NotificationType.ALBUM_COMMENTED).entityId("31")
+                .notificationPolicy(NotificationPolicy.album("A03")).entityId("31")
                 .deepLink(GuardianDeepLinks.postComment("31", "7"))
                 .data(Map.of("commentId", "7")).build();
         FcmSendDto reply = FcmSendDto.builder().title("답글 알림").content("답글을 확인해보세요.")
-                .notificationType(NotificationType.ALBUM_REPLIED).entityId("31")
+                .notificationPolicy(NotificationPolicy.album("A04")).entityId("31")
                 .deepLink(GuardianDeepLinks.postComment("31", "8"))
                 .data(Map.of("commentId", "8")).build();
 
@@ -267,16 +267,16 @@ class FcmOutboxIntegrationTest {
         // then
         assertThat(notifications.findAll()).hasSize(2).allSatisfy(center -> {
             assertThat(center.getRecipientMember().getId()).isEqualTo(guardianId);
-            if (center.getType() == NotificationType.ALBUM_COMMENTED) {
+            if (NotificationPolicy.album("A03").equals(center.getPolicy())) {
                 assertThat(center.getDeepLink()).isEqualTo("/post?postId=31&commentId=7");
             } else {
-                assertThat(center.getType()).isEqualTo(NotificationType.ALBUM_REPLIED);
+                assertThat(center.getPolicy()).isEqualTo(NotificationPolicy.album("A04"));
                 assertThat(center.getDeepLink()).isEqualTo("/post?postId=31&commentId=8");
             }
         });
         assertThat(outbox.findAll()).hasSize(2).allSatisfy(row -> {
             FcmDelivery delivery = transactions.claim(row.getId());
-            if (row.getNotificationType() == NotificationType.ALBUM_COMMENTED) {
+            if (NotificationPolicy.album("A03").equals(row.getNotificationPolicy())) {
                 assertThat(delivery.message().data()).containsEntry("deepLink", "/post?postId=31&commentId=7");
             } else {
                 assertThat(delivery.message().data()).containsEntry("deepLink", "/post?postId=31&commentId=8");
@@ -299,7 +299,7 @@ class FcmOutboxIntegrationTest {
         // then
         FcmNotification center = notifications.findAll().getFirst();
         FcmDelivery delivery = transactions.claim(outbox.findAll().getFirst().getId());
-        assertThat(center.getType()).isNull();
+        assertThat(center.getPolicy()).isNull();
         assertThat(center.getDeepLink()).isEqualTo("/notification");
         assertThat(delivery.message().data()).containsEntry("deepLink", center.getDeepLink());
     }
@@ -312,30 +312,30 @@ class FcmOutboxIntegrationTest {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(seniorId).orElseThrow(),
                         PushSettingGroup.GOAL, false)));
-        NotificationType visibleType = NotificationType.MEDICATION_SCHEDULE_CREATED;
-        NotificationType syncType = NotificationType.MEDICATION_SCHEDULE_SYNC;
+        NotificationPolicy visibleType = NotificationPolicy.medication("M08");
+        NotificationPolicy syncType = NotificationPolicy.medicationSync();
 
         // when
         service.enqueue(seniorId, FcmSendDto.builder().title("일정 등록").content("내일부터 적용")
-                .notificationType(visibleType).eventId("med-visible-1")
+                .notificationPolicy(visibleType).eventId("med-visible-1")
                 .data(MedicationAlarmPayload.of(7L, visibleType)).build());
-        service.enqueue(seniorId, FcmSendDto.builder().notificationType(syncType)
+        service.enqueue(seniorId, FcmSendDto.builder().notificationPolicy(syncType)
                 .eventId("med-sync-1").data(MedicationAlarmPayload.of(7L, syncType)).build());
 
         // then
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(outbox.count()).isEqualTo(2);
         FcmOutbox visible = outbox.findAll().stream()
-                .filter(row -> row.getNotificationType() == visibleType).findFirst().orElseThrow();
+                .filter(row -> visibleType.equals(row.getNotificationPolicy())).findFirst().orElseThrow();
         FcmOutbox sync = outbox.findAll().stream()
-                .filter(row -> row.getNotificationType() == syncType).findFirst().orElseThrow();
+                .filter(row -> syncType.equals(row.getNotificationPolicy())).findFirst().orElseThrow();
         assertThat(transactions.claim(visible.getId())).isNull();
         FcmDelivery syncDelivery = transactions.claim(sync.getId());
         assertThat(syncDelivery).isNotNull();
         assertThat(syncDelivery.notificationId()).isNull();
         assertThat(syncDelivery.message().data()).containsEntry("revision", "7")
                 .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_SYNC");
+                .doesNotContainKey("notificationType");
     }
 
     @Test
@@ -347,7 +347,7 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).entityId("31").build());
 
         // then
         assertThat(notifications.count()).isEqualTo(1);
@@ -363,7 +363,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto message = FcmSendDto.builder().title("50P를 사용했어요.").content("앨범 해금")
-                .notificationType(NotificationType.POINT_USED).eventId("POINT:U:9").build();
+                .notificationPolicy(NotificationPolicy.point("P02")).eventId("POINT:U:9").build();
 
         // when
         service.enqueue(member, message);
@@ -373,7 +373,7 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(outbox.count()).isZero();
         FcmNotification center = notifications.findAll().getFirst();
-        assertThat(center.getType()).isEqualTo(NotificationType.POINT_USED);
+        assertThat(center.getPolicy()).isEqualTo(NotificationPolicy.point("P02"));
         assertThat(center.getEventId()).isEqualTo("POINT:U:9");
         assertThat(center.getBody()).isEqualTo("앨범 해금");
         assertThat(center.getDeepLink()).isEqualTo("/my/point");
@@ -430,7 +430,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto first = FcmSendDto.builder().title("첫 제목").content("첫 본문")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("fixed-event")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("fixed-event")
                 .entityId("31").build();
         service.enqueue(member, first);
         FcmNotification original = notifications.findAll().getFirst();
@@ -441,7 +441,7 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("다른 제목").content("다른 본문")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("fixed-event")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("fixed-event")
                 .entityId("31").build());
 
         // then
@@ -470,11 +470,11 @@ class FcmOutboxIntegrationTest {
                     members.findById(guardianId).orElseThrow()));
         });
         FcmSendDto first = FcmSendDto.builder().title("첫 알림").content("본문")
-                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-1")
+                .notificationPolicy(NotificationPolicy.safety("S01/S03/S04/S06", true)).eventId("inc-stage-1")
                 .seniorId(seniorId).relatedMemberId(seniorId)
                 .data(Map.of("deliveryStage", "INITIAL_ALERT")).emergency(true).build();
         FcmSendDto second = FcmSendDto.builder().title("두 번째 알림").content("본문")
-                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-1")
+                .notificationPolicy(NotificationPolicy.safety("S01/S03/S04/S06", true)).eventId("inc-stage-1")
                 .seniorId(seniorId).relatedMemberId(seniorId)
                 .data(Map.of("deliveryStage", "SECOND_ALERT")).emergency(true).build();
 
@@ -511,7 +511,7 @@ class FcmOutboxIntegrationTest {
             return guardian.getId();
         });
         FcmSendDto message = FcmSendDto.builder().title("2차 알림").content("본문")
-                .notificationType(NotificationType.HEART_RATE_EMERGENCY).eventId("inc-stage-off")
+                .notificationPolicy(NotificationPolicy.safety("S01/S03/S04/S06", true)).eventId("inc-stage-off")
                 .seniorId(seniorId).relatedMemberId(seniorId)
                 .data(Map.of("deliveryStage", "SECOND_ALERT")).emergency(true).build();
 
@@ -532,7 +532,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto message = FcmSendDto.builder().title("앨범").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("one-event")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("one-event")
                 .entityId("31").build();
         service.enqueue(member, message);
         Long originalId = notifications.findAll().getFirst().getId();
@@ -557,7 +557,7 @@ class FcmOutboxIntegrationTest {
         Long second = new TransactionTemplate(transactionManager).execute(status ->
                 members.save(Member.createMember(MemberType.GUARDIAN, "다른 수신자", "01087654321")).getId());
         FcmSendDto message = FcmSendDto.builder().title("앨범").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("family-event")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("family-event")
                 .entityId("31").build();
 
         // when
@@ -581,7 +581,7 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).entityId("31").build());
         Long rowId = outbox.findAll().getFirst().getId();
         FcmDelivery delivery = transactions.claim(rowId);
 
@@ -607,7 +607,7 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(guardianId, FcmSendDto.builder().title("안심구역").content("본문")
-                .notificationType(NotificationType.SAFE_ZONE_EXITED).seniorId(guardianId).build());
+                .notificationPolicy(NotificationPolicy.safeZone("Z01")).seniorId(guardianId).build());
         Long rowId = outbox.findAll().getFirst().getId();
         FcmDelivery delivery = transactions.claim(rowId);
 
@@ -623,7 +623,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).entityId("31").build());
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).entityId("31").build());
         Long id = outbox.findAll().getFirst().getId();
         FcmDelivery delivery = transactions.claim(id);
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
@@ -688,10 +688,10 @@ class FcmOutboxIntegrationTest {
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("업로드").content("본문")
-                .notificationType(NotificationType.ALBUM_UPLOAD_COMPLETE).entityId("31").build());
+                .notificationPolicy(NotificationPolicy.album("A01")).entityId("31").build());
         service.enqueue(member, FcmSendDto.builder().title("좋아요").content("본문")
-                .notificationType(NotificationType.ALBUM_LIKED).entityId("31").build());
-        service.enqueue(member, FcmSendDto.builder().notificationType(NotificationType.MEDICATION_SCHEDULE_SYNC)
+                .notificationPolicy(NotificationPolicy.album("A05")).entityId("31").build());
+        service.enqueue(member, FcmSendDto.builder().notificationPolicy(NotificationPolicy.medicationSync())
                 .data(Map.of("revision", "42")).build());
 
         // then
@@ -699,10 +699,10 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.findAll().getFirst().getPushEligible()).isFalse();
         assertThat(outbox.count()).isEqualTo(2);
         FcmOutbox pushOnly = outbox.findAll().stream()
-                .filter(row -> row.getNotificationType() == NotificationType.ALBUM_UPLOAD_COMPLETE)
+                .filter(row -> NotificationPolicy.album("A01").equals(row.getNotificationPolicy()))
                 .findFirst().orElseThrow();
         FcmOutbox dataOnly = outbox.findAll().stream()
-                .filter(row -> row.getNotificationType() == NotificationType.MEDICATION_SCHEDULE_SYNC)
+                .filter(row -> NotificationPolicy.medicationSync().equals(row.getNotificationPolicy()))
                 .findFirst().orElseThrow();
         assertThat(pushOnly.getNotificationId()).isNull();
         assertThat(dataOnly.getNotificationId()).isNull();
@@ -718,13 +718,13 @@ class FcmOutboxIntegrationTest {
     void 건강_일정_임박_알림을_넣으면_OS와_센터_문구를_나눠_보관한다() {
         // given
         Long member = memberWithToken();
-        NotificationCopy os = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+        NotificationCopy os = NotificationCopy.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"),
                 "H01-S-OS", Map.of());
-        NotificationCopy inApp = NotificationCopy.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+        NotificationCopy inApp = NotificationCopy.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"),
                 "H01-S-INAPP", Map.of("오전/오후 시각", "오후 3:30", "일정명", "병원 진료"));
 
         // when
-        service.enqueue(member, FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING,
+        service.enqueue(member, FcmSendDto.of(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"),
                 os, "10", null, null, null, null).withCenterCopy(inApp));
 
         // then
@@ -743,11 +743,11 @@ class FcmOutboxIntegrationTest {
     void 잠금_해제_알림을_넣으면_시니어_이름과_0개를_보관한다() {
         // given
         Long member = memberWithToken();
-        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_UNLOCKED,
+        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A06-L/Z"),
                 "A06-Z", Map.of("시니어 이름", "어머니"));
 
         // when
-        service.enqueue(member, FcmSendDto.of(NotificationType.ALBUM_UNLOCKED,
+        service.enqueue(member, FcmSendDto.of(NotificationPolicy.album("A06-L/Z"),
                 copy, "31", null, null, 17L, null)
                 .withSeniorUnlockDetails("어머니", 0));
 
@@ -767,10 +767,10 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         service.enqueue(member, FcmSendDto.builder().title("심박 안내").content("본문")
-                .notificationType(NotificationType.SAFETY_SENIOR_OK_NOTICE_HEART)
+                .notificationPolicy(NotificationPolicy.safety("S08", false))
                 .seniorId(member).eventId("incident:OK").build());
         service.enqueue(member, FcmSendDto.builder().title("안심구역 안내").content("본문")
-                .notificationType(NotificationType.SAFE_ZONE_ENTERED)
+                .notificationPolicy(NotificationPolicy.safeZone("Z02"))
                 .seniorId(member).eventId("zone:OK").build());
         FcmNotification legacy = new TransactionTemplate(transactionManager).execute(status ->
                 notifications.save(FcmNotification.builder().recipientMember(members.findById(member).orElseThrow())
@@ -801,7 +801,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         service.enqueue(member, FcmSendDto.builder().title("알림").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).entityId("31")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).entityId("31")
                 .eventId("940c15b9-79dc-4fa7-ab5d-27fca2cfa6cf").build());
         Long id = outbox.findAll().getFirst().getId();
 
@@ -833,7 +833,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto message = FcmSendDto.builder().title("알림").content("본문")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("x".repeat(41)).build();
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("x".repeat(41)).build();
 
         // when / then
         assertThatThrownBy(() -> service.enqueue(member, message)).isInstanceOf(IllegalArgumentException.class);
@@ -849,7 +849,7 @@ class FcmOutboxIntegrationTest {
                 tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
                         .token("second-token").active(true).build()));
         FcmSendDto message = FcmSendDto.builder().title("새 앨범").content("새 게시물이 있어요.")
-                .notificationType(NotificationType.ALBUM_CREATED).eventId("album-created-91")
+                .notificationPolicy(NotificationPolicy.album("A02-S/C")).eventId("album-created-91")
                 .entityId("91").build();
 
         // when
@@ -863,15 +863,15 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.count()).isEqualTo(1);
         assertThat(outbox.findAll()).hasSize(4)
                 .allSatisfy(deliveryRow -> assertThat(deliveryRow.getNotificationId()).isEqualTo(center.getId()));
-        assertThat(row.getNotificationType()).isEqualTo(NotificationType.ALBUM_CREATED);
-        assertThat(center.getType()).isEqualTo(NotificationType.ALBUM_CREATED);
+        assertThat(row.getNotificationPolicy()).isEqualTo(NotificationPolicy.album("A02-S/C"));
+        assertThat(center.getPolicy()).isEqualTo(NotificationPolicy.album("A02-S/C"));
         assertThat(center.isRead()).isFalse();
         assertThat(row.getNotificationId()).isEqualTo(center.getId());
         FcmDelivery delivery = transactions.claim(row.getId());
         assertThat(delivery.notificationId()).isEqualTo(center.getId());
         assertThat(delivery.message().data())
                 .containsEntry("eventId", "album-created-91")
-                .containsEntry("type", "ALBUM_CREATED")
+                .doesNotContainKey("type")
                 .containsEntry("deepLink", "/album/post?postId=91");
         Integer ignored = new TransactionTemplate(transactionManager).execute(status ->
                 notifications.markAsReadIfUnread(center.getId(), member + 1, LocalDateTime.now()));
@@ -889,7 +889,7 @@ class FcmOutboxIntegrationTest {
         Long member = new TransactionTemplate(transactionManager).execute(status ->
                 members.save(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")).getId());
         FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
-                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-no-token")
+                .notificationPolicy(NotificationPolicy.selfCheck()).eventId("inc-no-token")
                 .entityId("inc-no-token").build();
 
         // when
@@ -907,7 +907,7 @@ class FcmOutboxIntegrationTest {
         // given
         Long member = memberWithToken();
         FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
-                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-20261001-1")
+                .notificationPolicy(NotificationPolicy.selfCheck()).eventId("inc-20261001-1")
                 .entityId("inc-20261001-1").build();
 
         // when
@@ -915,7 +915,7 @@ class FcmOutboxIntegrationTest {
 
         // then
         FcmOutbox row = outbox.findAll().getFirst();
-        assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(row.getNotificationPolicy()).isEqualTo(NotificationPolicy.selfCheck());
         assertThat(row.getNotificationId()).isNull();
         assertThat(notifications.count()).isZero();
         assertThat(transactions.claim(row.getId()).message().data())

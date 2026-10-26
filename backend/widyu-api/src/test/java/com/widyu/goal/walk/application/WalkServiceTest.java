@@ -43,7 +43,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
@@ -76,7 +76,7 @@ class WalkServiceTest {
         ArgumentCaptor<GuardianGoalChangedEvent> events = ArgumentCaptor.forClass(GuardianGoalChangedEvent.class);
         then(eventPublisher).should(times(1)).publishEvent(events.capture());
         assertThat(events.getValue().seniorId()).isEqualTo(2L);
-        assertThat(events.getValue().type()).isEqualTo(NotificationType.WALK_GOAL_CHANGED);
+        assertThat(events.getValue().type()).isEqualTo(NotificationPolicy.walk("W02"));
         assertThat(events.getValue().goalSteps()).isEqualTo(7000);
     }
 

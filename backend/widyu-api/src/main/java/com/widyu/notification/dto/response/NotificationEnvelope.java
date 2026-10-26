@@ -2,7 +2,7 @@ package com.widyu.notification.dto.response;
 
 import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.FcmNotification;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.NotificationPriority;
 import java.time.LocalDateTime;
 
@@ -30,7 +30,7 @@ public record NotificationEnvelope(
         String foregroundPresentation
 ) {
     public static NotificationEnvelope from(FcmNotification notification) {
-        NotificationType type = notification.getType();
+        NotificationPolicy type = notification.getPolicy();
         if (type == null) {
             return new NotificationEnvelope(
                     notification.getId(),
@@ -86,8 +86,8 @@ public record NotificationEnvelope(
         if (notification.getFcmCategory() != null) {
             return notification.getFcmCategory().name();
         }
-        if (notification.getType() != null) {
-            return notification.getType().fcmCategory().name();
+        if (notification.getPolicy() != null) {
+            return notification.getPolicy().fcmCategory().name();
         }
         return "ALL";
     }

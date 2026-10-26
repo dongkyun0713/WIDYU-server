@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.DeliveryMode;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -48,8 +48,8 @@ class HealthScheduleNotificationListenerTest {
         // then
         then(fcmService).should().sendMessageToUser(any(), captor.capture());
         FcmSendDto dto = captor.getValue();
-        assertThat(dto.notificationType()).isEqualTo(NotificationType.HEALTH_SCHEDULE_UPCOMING);
-        assertThat(dto.notificationType().deliveryMode()).isEqualTo(DeliveryMode.PUSH_AND_CENTER);
+        assertThat(dto.notificationPolicy()).isEqualTo(NotificationPolicy.health("H01-S/C-SELF/C-SENIOR-OS/INAPP"));
+        assertThat(dto.notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.PUSH_AND_CENTER);
         assertThat(dto.title()).isEqualTo("건강 일정이 곧 있어요.");
         assertThat(dto.content()).isEqualTo("앱에서 일정 시간과 내용을 확인해주세요.");
         assertThat(dto.title()).doesNotContain("병원", "15:30");

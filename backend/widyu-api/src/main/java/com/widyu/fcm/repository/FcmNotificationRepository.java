@@ -2,7 +2,6 @@ package com.widyu.fcm.repository;
 
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
-import com.widyu.fcm.NotificationType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -52,13 +51,13 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
         WHERE n.recipientMember.id = :memberId
           AND (n.expiresAt IS NULL OR n.expiresAt > :now)
           AND (:cursor IS NULL OR n.id < :cursor)
-          AND (n.type IN :types OR (n.type IS NULL AND n.fcmCategory IN :legacyCategories))
+          AND (n.centerFilter = :filter OR (n.policy IS NULL AND n.fcmCategory IN :legacyCategories))
         ORDER BY n.id DESC
         """)
     List<FcmNotification> findCenterPageByCategory(@Param("memberId") Long memberId,
                                                    @Param("now") LocalDateTime now,
                                                    @Param("cursor") Long cursor,
-                                                   @Param("types") List<NotificationType> types,
+                                                   @Param("filter") String filter,
                                                    @Param("legacyCategories") List<FcmCategory> legacyCategories,
                                                    Pageable pageable);
 
@@ -75,11 +74,11 @@ public interface FcmNotificationRepository extends JpaRepository<FcmNotification
         WHERE n.recipientMember.id = :memberId
           AND (n.expiresAt IS NULL OR n.expiresAt > :now)
           AND n.isRead = false
-          AND (n.type IN :types OR (n.type IS NULL AND n.fcmCategory IN :legacyCategories))
+          AND (n.centerFilter = :filter OR (n.policy IS NULL AND n.fcmCategory IN :legacyCategories))
         """)
     long countCenterUnreadByCategory(@Param("memberId") Long memberId,
                                      @Param("now") LocalDateTime now,
-                                     @Param("types") List<NotificationType> types,
+                                     @Param("filter") String filter,
                                      @Param("legacyCategories") List<FcmCategory> legacyCategories);
 
     @Modifying(clearAutomatically = true)

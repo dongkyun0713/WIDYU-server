@@ -13,7 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.MemberFcmToken;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.member.Member;
@@ -72,7 +72,7 @@ class DegradedAlertReconcilerTest {
         assertThat(notification.getDecisionId()).isEqualTo("degraded:1760000000000-0").hasSizeLessThanOrEqualTo(40);
         assertThat(notification.getRecipientMember()).isSameAs(guardian);
         assertThat(notification.getMemberFcmToken()).isSameAs(token);
-        assertThat(notification.getType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
+        assertThat(notification.getPolicy()).isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true));
         assertThat(notification.getFcmCategory()).isEqualTo(FcmCategory.HEART_MESSAGE);
         assertThat(notification.getEventId()).isEqualTo("1760000000000-0");
         assertThat(notification.getSeniorId()).isEqualTo(31L);

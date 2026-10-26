@@ -7,7 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.entity.Status;
@@ -65,7 +65,7 @@ class IncidentEscalationTest {
         assertThat(queued).isTrue();
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), message.capture());
-        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.SELF_HELP_REQUESTED);
+        assertThat(message.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.safety("K01", true));
         assertThat(message.getValue().title()).isEqualTo("시니어 님이 워치로 직접 도움을 요청했어요.");
         assertThat(message.getValue().content()).isNull();
         assertThat(message.getValue().dataForEnqueue("inc-1"))
@@ -104,7 +104,7 @@ class IncidentEscalationTest {
         assertThat(queued).isTrue();
         ArgumentCaptor<FcmSendDto> message = ArgumentCaptor.forClass(FcmSendDto.class);
         then(outbox).should().enqueue(eq(2L), message.capture());
-        assertThat(message.getValue().notificationType()).isEqualTo(NotificationType.SELF_HELP_REQUESTED);
+        assertThat(message.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.safety("K01", true));
         assertThat(message.getValue().dataForEnqueue("inc-1"))
                 .containsEntry("deliveryStage", "SECOND_ALERT");
     }
@@ -434,7 +434,7 @@ class IncidentEscalationTest {
     }
 
     private void assertMessage(FcmSendDto message, String decisionId) {
-        assertThat(message.notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
+        assertThat(message.notificationPolicy()).isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true));
         assertThat(message.title()).isEqualTo("시니어 님의 심박 상태를 확인해주세요.");
         assertThat(message.content()).isEqualTo("평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요.");
         assertThat(message.eventId()).isEqualTo("inc-1");

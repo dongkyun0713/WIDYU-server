@@ -9,7 +9,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import com.widyu.fcm.DeliveryMode;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.global.entity.Status;
@@ -51,8 +51,8 @@ class WalkNotificationListenerTest {
 
         // then
         then(fcmService).should().sendMessageToUser(any(), captor.capture());
-        assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.WALK_GOAL_UNMET);
-        assertThat(captor.getValue().notificationType().deliveryMode()).isEqualTo(DeliveryMode.PUSH_ONLY);
+        assertThat(captor.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.walk("W01"));
+        assertThat(captor.getValue().notificationPolicy().deliveryMode()).isEqualTo(DeliveryMode.PUSH_ONLY);
         assertThat(captor.getValue().title()).isEqualTo("오늘 6500걸음 걸으셨어요.");
         assertThat(captor.getValue().content()).isEqualTo("가능하다면 조금 더 걸어보는 건 어떨까요?");
         assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
@@ -90,7 +90,7 @@ class WalkNotificationListenerTest {
 
         // then
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
-        assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.WALK_GOAL_UNMET);
+        assertThat(captor.getValue().notificationPolicy()).isEqualTo(NotificationPolicy.walk("W01"));
         assertThat(captor.getValue().title()).isEqualTo("오늘 0걸음 걸으셨어요.");
     }
 

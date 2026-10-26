@@ -13,7 +13,7 @@ import com.widyu.decision.repository.DecisionRecordRepository;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.MemberFcmToken;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.degraded.DegradedAlertMarker;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.repository.FcmOutboxRepository;
@@ -186,7 +186,7 @@ class FcmOutboxTransactionsTest {
         // given
         FcmOutbox row = row(null);
         ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
-        ReflectionTestUtils.setField(row, "notificationType", NotificationType.HEART_RATE_EMERGENCY);
+        ReflectionTestUtils.setField(row, "notificationPolicy", NotificationPolicy.safety("S01/S03/S04/S06", true));
         ReflectionTestUtils.setField(row, "dataPayload", "{\"eventId\":\"event-1\",\"type\":\"HEART_RATE_EMERGENCY\"}");
         given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
         given(eligibility.eligible(row)).willReturn(true);
@@ -195,7 +195,7 @@ class FcmOutboxTransactionsTest {
         FcmDelivery delivery = transactions().claim(ROW_ID);
 
         // then
-        assertThat(delivery.message().notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
+        assertThat(delivery.message().notificationPolicy()).isEqualTo(NotificationPolicy.safety("S01/S03/S04/S06", true));
         assertThat(delivery.message().data()).containsEntry("eventId", "event-1");
         assertThat(row.getState()).isEqualTo(FcmOutbox.State.CLAIMED);
     }
@@ -221,7 +221,7 @@ class FcmOutboxTransactionsTest {
     void 푸시_전용_본인확인_outbox는_센터_ID를_만들지_않는다() {
         // given
         FcmOutbox row = row(null);
-        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+        ReflectionTestUtils.setField(row, "notificationPolicy", NotificationPolicy.selfCheck());
 
         // when
         FcmDelivery delivery = FcmDelivery.from(row);
@@ -247,7 +247,7 @@ class FcmOutboxTransactionsTest {
         // given
         FcmOutbox row = row(null);
         ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
-        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+        ReflectionTestUtils.setField(row, "notificationPolicy", NotificationPolicy.selfCheck());
         ReflectionTestUtils.setField(row, "dataPayload", "{invalid");
         given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
         given(eligibility.eligible(row)).willReturn(true);
@@ -266,7 +266,7 @@ class FcmOutboxTransactionsTest {
     @DisplayName("저하 경로 표식이 있는 시니어의 심박 위급 행을 선점하면 취소하고 중복 차단 수를 센다")
     void 저하경로_표식이_있는_시니어의_심박위급_행을_선점하면_취소한다() {
         // given
-        FcmOutbox row = pendingEmergency(NotificationType.HEART_RATE_EMERGENCY);
+        FcmOutbox row = pendingEmergency(NotificationPolicy.safety("S01/S03/S04/S06", true));
         given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
         given(redis.hasKey("fcm:degraded:alerted:1023")).willReturn(true);
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -284,7 +284,7 @@ class FcmOutboxTransactionsTest {
     @DisplayName("저하 경로 표식을 읽지 못하면 심박 위급 행을 그대로 선점한다")
     void 저하경로_표식을_읽지_못하면_심박위급_행을_그대로_선점한다() {
         // given
-        FcmOutbox row = pendingEmergency(NotificationType.HEART_RATE_EMERGENCY);
+        FcmOutbox row = pendingEmergency(NotificationPolicy.safety("S01/S03/S04/S06", true));
         given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
         given(redis.hasKey("fcm:degraded:alerted:1023")).willThrow(new RedisConnectionFailureException("down"));
         given(eligibility.eligible(row)).willReturn(true);
@@ -301,9 +301,9 @@ class FcmOutboxTransactionsTest {
     @DisplayName("심박 위급이 아닌 알림은 저하 경로 표식과 무관하게 선점한다")
     void 심박위급이_아닌_알림은_저하경로_표식과_무관하게_선점한다() {
         // given
-        FcmOutbox general = pendingEmergency(NotificationType.ALBUM_CREATED);
+        FcmOutbox general = pendingEmergency(NotificationPolicy.album("A02-S/C"));
         ReflectionTestUtils.setField(general, "emergency", false);
-        FcmOutbox selfHelp = pendingEmergency(NotificationType.SELF_HELP_REQUESTED);
+        FcmOutbox selfHelp = pendingEmergency(NotificationPolicy.safety("K01", true));
         given(outbox.lockById(ROW_ID)).willReturn(Optional.of(general), Optional.of(selfHelp));
         given(eligibility.eligible(general)).willReturn(true);
         given(eligibility.eligible(selfHelp)).willReturn(true);
@@ -331,10 +331,10 @@ class FcmOutboxTransactionsTest {
     }
 
     /** 선점 전 대기 중인 심박 위급 행. 관련 회원(시니어)은 1023이다. */
-    private FcmOutbox pendingEmergency(NotificationType type) {
+    private FcmOutbox pendingEmergency(NotificationPolicy type) {
         FcmOutbox row = row(null);
         ReflectionTestUtils.setField(row, "state", FcmOutbox.State.PENDING);
-        ReflectionTestUtils.setField(row, "notificationType", type);
+        ReflectionTestUtils.setField(row, "notificationPolicy", type);
         return row;
     }
 

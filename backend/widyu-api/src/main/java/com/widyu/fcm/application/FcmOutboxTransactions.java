@@ -51,8 +51,8 @@ public class FcmOutboxTransactions {
             row.failed(false, Duration.ZERO, now, properties.maxRetries());
             logIfFinallyFailed(row, FcmOutbox.State.CLAIMED, "INVALID_PAYLOAD");
             String typeName = null;
-            if (row.getNotificationType() != null) {
-                typeName = row.getNotificationType().name();
+            if (row.getNotificationPolicy() != null) {
+                typeName = row.getNotificationPolicy().name();
             }
             log.warn("FCM outbox 복원 실패: id={}, type={}", row.getId(), typeName);
             return null;
@@ -125,8 +125,8 @@ public class FcmOutboxTransactions {
     }
 
     private static String typeName(FcmOutbox row) {
-        if (row.getNotificationType() != null) {
-            return row.getNotificationType().name();
+        if (row.getNotificationPolicy() != null) {
+            return row.getNotificationPolicy().name();
         }
         if (row.getDataType() != null) {
             return row.getDataType();

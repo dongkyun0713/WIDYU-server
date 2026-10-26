@@ -30,10 +30,10 @@ public record FcmDelivery(Long id, long fence, String token, FcmSendDto message,
         if (row.getNotificationId() != null) {
             return row.getNotificationId();
         }
-        if (row.getNotificationType() == null) {
+        if (row.getNotificationPolicy() == null) {
             return row.getId();
         }
-        DeliveryMode mode = row.getNotificationType().deliveryMode();
+        DeliveryMode mode = row.getNotificationPolicy().deliveryMode();
         if (mode == DeliveryMode.PUSH_AND_CENTER || mode == DeliveryMode.CENTER_ONLY) {
             return row.getId();
         }

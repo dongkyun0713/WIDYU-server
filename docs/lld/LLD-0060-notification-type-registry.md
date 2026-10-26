@@ -1,6 +1,6 @@
 # LLD-0060: 알림 타입 레지스트리·outbox type·긴급 표현
 
-> 2026-10-26 외부 계약 개정: [LLD-0097](LLD-0097-legacy-notification-categories.md)에 따라 내부 상세 타입은 FCM `notificationType`·일반 `type`으로 노출하지 않는다. 아래 레지스트리와 저장 정책은 내부 메타데이터로 유지하며, 앱 기능용 구 트리거만 보낸다.
+> 2026-10-26 개정: [LLD-0097](LLD-0097-legacy-notification-categories.md)이 상세 enum·저장 타입·필터 조회 설계를 대체한다. NotificationType을 삭제하고 기존 FcmCategory와 정책 값 JSON으로 발송·저장·보존을 처리한다. 센터 필터 스냅샷·DDL/backfill이 필요하며 앱에는 기존 카테고리·경로·기능 트리거만 전달한다. 아래 enum 레지스트리 관련 설명은 도입 당시 이력이다.
 
 > 안심구역 타입·문구·우선순위는 [LLD-0078](LLD-0078-safe-zone-notice-not-incident.md)이 개정한다. 아래 표와 인수조건은 W19 반영값이며, 안전 채널은 심박 위급과 시니어 본인확인에만 적용한다.
 

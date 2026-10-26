@@ -5,7 +5,7 @@ import com.widyu.album.repository.AlbumRepository;
 import com.widyu.album.repository.AlbumUnlockRepository;
 import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.GuardianDeepLinks;
@@ -60,12 +60,12 @@ public class AlbumNotificationListener {
         Member author = memberRepository.findById(event.authorId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_MEMBER_NOT_FOUND));
         String albumId = event.albumId().toString();
-        NotificationCopy uploadCopy = NotificationCopy.of(NotificationType.ALBUM_UPLOAD_COMPLETE, "A01", Map.of());
+        NotificationCopy uploadCopy = NotificationCopy.of(NotificationPolicy.album("A01"), "A01", Map.of());
         String uploadDeepLink = null;
         if (author.getType() == MemberType.GUARDIAN) {
             uploadDeepLink = GuardianDeepLinks.post(albumId);
         }
-        send(author.getId(), FcmSendDto.of(NotificationType.ALBUM_UPLOAD_COMPLETE, uploadCopy,
+        send(author.getId(), FcmSendDto.of(NotificationPolicy.album("A01"), uploadCopy,
                 albumId, uploadDeepLink, null, null, author.getProfileImage()));
 
         if (author.getType() == MemberType.SENIOR) {
@@ -75,9 +75,9 @@ public class AlbumNotificationListener {
             }
             for (FamilyMembership membership : familyMembershipRepository.findAllByFamilyIdWithGuardian(familyId.get())) {
                 Member guardian = membership.getGuardian();
-                NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_CREATED, "A02-C",
+                NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A02-S/C"), "A02-C",
                         Map.of("작성자 이름", author.getName()));
-                send(guardian.getId(), FcmSendDto.of(NotificationType.ALBUM_CREATED, copy, albumId,
+                send(guardian.getId(), FcmSendDto.of(NotificationPolicy.album("A02-S/C"), copy, albumId,
                         GuardianDeepLinks.post(albumId), author.getId(), author.getId(), author.getProfileImage()));
             }
             return;
@@ -89,9 +89,9 @@ public class AlbumNotificationListener {
         }
         List<SeniorProfile> seniors = seniorProfileRepository.findAllByFamilyIdWithMember(familyId.get());
         for (SeniorProfile senior : seniors) {
-            NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_CREATED, "A02-S",
+            NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A02-S/C"), "A02-S",
                     Map.of("작성자 이름", author.getName()));
-            send(senior.getMember().getId(), FcmSendDto.of(NotificationType.ALBUM_CREATED, copy,
+            send(senior.getMember().getId(), FcmSendDto.of(NotificationPolicy.album("A02-S/C"), copy,
                     albumId, null, author.getId(), null, author.getProfileImage()));
         }
     }
@@ -112,9 +112,9 @@ public class AlbumNotificationListener {
         if (total == 0 || viewed != total) {
             return;
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_ALL_VIEWED, "A07",
+        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A07"), "A07",
                 Map.of("시니어 이름", viewer.getName()));
-        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_ALL_VIEWED, copy, null,
+        send(writer.getId(), FcmSendDto.of(NotificationPolicy.album("A07"), copy, null,
                 null, viewer.getId(), viewer.getId(), viewer.getProfileImage()));
     }
 
@@ -159,10 +159,10 @@ public class AlbumNotificationListener {
         if (commenter.getId().equals(writer.getId())) {
             return;
         }
-        NotificationType type = NotificationType.ALBUM_COMMENTED;
+        NotificationPolicy type = NotificationPolicy.album("A03");
         String code = "A03";
         if (event.parentCommentId() != null) {
-            type = NotificationType.ALBUM_REPLIED;
+            type = NotificationPolicy.album("A04");
             code = "A04";
         }
         NotificationCopy copy = NotificationCopy.of(type, code, Map.of("작성자 이름", commenter.getName()));
@@ -192,14 +192,14 @@ public class AlbumNotificationListener {
         if (liker.getId().equals(writer.getId())) {
             return;
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_LIKED, "A05",
+        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A05"), "A05",
                 Map.of("누른 사람 이름", liker.getName()));
         String albumId = event.albumId().toString();
         String deepLink = null;
         if (writer.getType() == MemberType.GUARDIAN) {
             deepLink = GuardianDeepLinks.post(albumId);
         }
-        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_LIKED, copy, albumId,
+        send(writer.getId(), FcmSendDto.of(NotificationPolicy.album("A05"), copy, albumId,
                 deepLink, liker.getId(), null, liker.getProfileImage()));
     }
 
@@ -217,9 +217,9 @@ public class AlbumNotificationListener {
         if (remaining == 0) {
             code = "A06-Z";
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_UNLOCKED, code,
+        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.album("A06-L/Z"), code,
                 unlockCopyValues(senior.getName(), remaining));
-        send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_UNLOCKED, copy,
+        send(writer.getId(), FcmSendDto.of(NotificationPolicy.album("A06-L/Z"), copy,
                 album.getId().toString(), null,
                 senior.getId(), senior.getId(), senior.getProfileImage())
                 .withSeniorUnlockDetails(senior.getName(), remaining));

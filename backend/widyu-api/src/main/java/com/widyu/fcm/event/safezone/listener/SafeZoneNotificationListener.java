@@ -1,7 +1,7 @@
 package com.widyu.fcm.event.safezone.listener;
 
 import com.widyu.fcm.event.safezone.dto.SafeZoneExitEvent;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -32,15 +32,15 @@ public class SafeZoneNotificationListener {
 
     @EventListener
     public void handleSafeZoneExit(SafeZoneExitEvent event) {
-        enqueue(event.seniorMemberId(), NotificationType.SAFE_ZONE_EXITED, "Z01");
+        enqueue(event.seniorMemberId(), NotificationPolicy.safeZone("Z01"), "Z01");
     }
 
     @EventListener
     public void handleSafeZoneEnter(SafeZoneEnterEvent event) {
-        enqueue(event.seniorMemberId(), NotificationType.SAFE_ZONE_ENTERED, "Z02");
+        enqueue(event.seniorMemberId(), NotificationPolicy.safeZone("Z02"), "Z02");
     }
 
-    private void enqueue(Long seniorId, NotificationType type, String copyCode) {
+    private void enqueue(Long seniorId, NotificationPolicy type, String copyCode) {
         Member senior = members.findById(seniorId).orElse(null);
         Long familyId = seniors.findFamilyIdByMemberId(seniorId).orElse(null);
         if (senior == null || familyId == null || senior.getStatus() != Status.ACTIVE) {
@@ -49,7 +49,7 @@ public class SafeZoneNotificationListener {
         }
         NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
         FcmSendDto message = FcmSendDto.builder()
-                .title(copy.title()).content(copy.body()).notificationType(type)
+                .title(copy.title()).content(copy.body()).notificationPolicy(type)
                 .eventId(UUID.randomUUID().toString()).seniorId(seniorId)
                 .relatedMemberId(seniorId).image(senior.getProfileImage())
                 .emergency(false).build();

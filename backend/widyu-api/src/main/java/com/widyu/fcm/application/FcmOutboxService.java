@@ -4,7 +4,7 @@ import com.widyu.fcm.FcmOutbox;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.MemberFcmToken;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
@@ -56,7 +56,7 @@ public class FcmOutboxService {
         }
         Map<String, String> data = message.dataForEnqueue(eventId);
         String dataPayload = FcmDelivery.encodeData(data);
-        NotificationType type = message.notificationType();
+        NotificationPolicy type = message.notificationPolicy();
         DeliveryMode mode = DeliveryMode.PUSH_AND_CENTER;
         if (type != null) {
             mode = type.deliveryMode();
@@ -67,7 +67,7 @@ public class FcmOutboxService {
                     .orElse(null);
             if (center == null) {
                 center = notifications.save(FcmNotification.builder()
-                        .recipientMember(recipient).eventId(eventId).type(type)
+                        .recipientMember(recipient).eventId(eventId).policy(type)
                         .fcmCategory(category(message))
                         .title(message.centerTitleOrTitle()).body(message.centerBodyOrContent())
                         .image(message.image()).deepLink(data.get("deepLink"))
@@ -92,7 +92,7 @@ public class FcmOutboxService {
                     .title(message.title()).body(message.content()).image(message.image()).scheme(message.scheme())
                     .dataType(data.get("type"))
                     .dataRevision(parseRevision(data.get("revision")))
-                    .notificationType(type).dataPayload(dataPayload).notificationId(notificationId)
+                    .notificationPolicy(type).dataPayload(dataPayload).notificationId(notificationId)
                     .fcmCategory(category(message)).emergency(message.emergency())
                     .decisionId(message.decisionId()).state(FcmOutbox.State.PENDING)
                     .availableAt(now).expiresAt(now.plus(properties.ttl(message.emergency()))).build();
@@ -105,14 +105,14 @@ public class FcmOutboxService {
         }
     }
 
-    private LocalDateTime centerExpiresAt(LocalDateTime now, NotificationType type) {
+    private LocalDateTime centerExpiresAt(LocalDateTime now, NotificationPolicy type) {
         if (type == null) {
             return null;
         }
         return now.plus(type.retentionClass().duration());
     }
 
-    private String retentionVersion(NotificationType type) {
+    private String retentionVersion(NotificationPolicy type) {
         if (type == null) {
             return null;
         }
@@ -127,8 +127,8 @@ public class FcmOutboxService {
     }
 
     private com.widyu.fcm.FcmCategory category(FcmSendDto message) {
-        if (message.notificationType() != null) {
-            return message.notificationType().fcmCategory();
+        if (message.notificationPolicy() != null) {
+            return message.notificationPolicy().fcmCategory();
         }
         return message.fcmCategory();
     }

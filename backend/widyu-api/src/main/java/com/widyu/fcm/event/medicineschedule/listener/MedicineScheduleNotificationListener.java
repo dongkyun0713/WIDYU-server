@@ -1,7 +1,7 @@
 package com.widyu.fcm.event.medicineschedule.listener;
 
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
@@ -53,8 +53,8 @@ public class MedicineScheduleNotificationListener {
         if (sensorProperties.medication().onTimePush()) {
             sendOnTimeNotification(minute);
         }
-        sendNotificationForTime(minute.minusMinutes(10), NotificationType.MEDICATION_REMINDER_10);
-        sendNotificationForTime(minute.minusMinutes(20), NotificationType.MEDICATION_REMINDER_20);
+        sendNotificationForTime(minute.minusMinutes(10), NotificationPolicy.medication("M02"));
+        sendNotificationForTime(minute.minusMinutes(20), NotificationPolicy.medication("M03"));
         sendGuardianAlertOnly(minute.minusMinutes(30));
     }
 
@@ -99,7 +99,7 @@ public class MedicineScheduleNotificationListener {
                 schedule.getId(), seniorId, schedule.getAlarmTime());
     }
 
-    private void sendNotificationForTime(LocalDateTime dueAt, NotificationType type) {
+    private void sendNotificationForTime(LocalDateTime dueAt, NotificationPolicy type) {
         LocalDate date = dueAt.toLocalDate();
         List<MedicineSchedule> schedules = medicineScheduleRepository
                 .findByAlarmTimeAndStatusEffectiveOn(dueAt.toLocalTime(), Status.ACTIVE, date);
@@ -155,13 +155,13 @@ public class MedicineScheduleNotificationListener {
         }
     }
 
-    private void sendMedicineNotification(MedicineSchedule schedule, LocalDate date, NotificationType type) {
+    private void sendMedicineNotification(MedicineSchedule schedule, LocalDate date, NotificationPolicy type) {
         Long seniorId = schedule.getMember().getId();
         NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), Map.of());
         FcmSendDto dto = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE).image(schedule.getMember().getProfileImage())
-                .notificationType(type).entityId(schedule.getId().toString())
+                .notificationPolicy(type).entityId(schedule.getId().toString())
                 .eventId(timedEventId(type, schedule.getId(), seniorId, date))
                 .data(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision(), type))
                 .build();
@@ -191,7 +191,7 @@ public class MedicineScheduleNotificationListener {
             return;
         }
 
-        NotificationType type = NotificationType.MEDICATION_PROOF_MISSING;
+        NotificationPolicy type = NotificationPolicy.medication("M04");
         Map<String, String> values = Map.of();
         String seniorName = schedule.getMember().getName();
         if (seniorName != null && !seniorName.isBlank()) {
@@ -205,7 +205,7 @@ public class MedicineScheduleNotificationListener {
                     .title(copy.title()).content(copy.body())
                     .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
                     .image(schedule.getMember().getProfileImage())
-                    .notificationType(type).entityId(schedule.getId().toString())
+                    .notificationPolicy(type).entityId(schedule.getId().toString())
                     .seniorId(seniorMemberId).relatedMemberId(seniorMemberId)
                     .eventId(timedEventId(type, schedule.getId(), guardianId, date))
                     .data(MedicationAlarmPayload.of(membership.getGuardian().getMedicationAlarmRevision(), type))
@@ -219,7 +219,7 @@ public class MedicineScheduleNotificationListener {
         }
     }
 
-    private String timedEventId(NotificationType type, Long scheduleId, Long recipientId, LocalDate date) {
-        return MedicationAlarmPayload.eventId(type.name() + ":" + scheduleId + ":" + recipientId + ":" + date);
+    private String timedEventId(NotificationPolicy type, Long scheduleId, Long recipientId, LocalDate date) {
+        return MedicationAlarmPayload.eventId(type.copyCode() + ":" + scheduleId + ":" + recipientId + ":" + date);
     }
 }

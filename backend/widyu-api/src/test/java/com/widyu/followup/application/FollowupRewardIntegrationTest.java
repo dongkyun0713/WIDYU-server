@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.widyu.auth.repository.RefreshTokenRepository;
 import com.widyu.auth.repository.TemporaryMemberRepository;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmTransport;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.FcmOutboxRepository;
@@ -111,7 +111,7 @@ class FollowupRewardIntegrationTest {
             assertThat(history.getOperationKey()).isEqualTo("FOLLOWUP:" + card.getId());
         });
         assertThat(notifications.findAll()).singleElement().satisfies(notification -> {
-            assertThat(notification.getType()).isEqualTo(NotificationType.POINT_EARNED);
+            assertThat(notification.getPolicy()).isEqualTo(NotificationPolicy.point("P01"));
             assertThat(notification.getRecipientMember().getId()).isEqualTo(senior.getId());
             assertThat(notification.getBody()).isEqualTo("후속 질문 답변");
         });
@@ -150,7 +150,7 @@ class FollowupRewardIntegrationTest {
             assertThat(history.getOperationKey()).isEqualTo("FOLLOWUP:" + card.getId());
         });
         assertThat(notifications.findAll()).singleElement().satisfies(notification ->
-                assertThat(notification.getType()).isEqualTo(NotificationType.POINT_EARNED));
+                assertThat(notification.getPolicy()).isEqualTo(NotificationPolicy.point("P01")));
         assertThat(outbox.count()).isZero();
     }
 

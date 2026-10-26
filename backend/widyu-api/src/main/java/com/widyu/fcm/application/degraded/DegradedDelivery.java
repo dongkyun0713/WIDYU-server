@@ -1,7 +1,7 @@
 package com.widyu.fcm.application.degraded;
 
 import com.widyu.fcm.FcmCategory;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmDelivery;
 import com.widyu.fcm.dto.FcmSendDto;
 import java.time.Instant;
@@ -38,7 +38,7 @@ record DegradedDelivery(String streamId, Long seniorId, Long guardianId, Long to
         FcmSendDto message = FcmSendDto.builder()
                 .title(title).content(body).image(image)
                 .fcmCategory(FcmCategory.valueOf(category))
-                .notificationType(NotificationType.HEART_RATE_EMERGENCY)
+                .notificationPolicy(NotificationPolicy.safety("S01/S03/S04/S06", true))
                 .eventId(streamId).seniorId(seniorId).relatedMemberId(seniorId)
                 .emergency(true).build();
         message = message.withData(message.dataForEnqueue(streamId));

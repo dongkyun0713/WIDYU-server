@@ -8,7 +8,7 @@ import com.widyu.fcm.dto.response.ToastResDto;
 import com.widyu.fcm.FcmCategory;
 import com.widyu.fcm.FcmNotification;
 import com.widyu.fcm.MemberFcmToken;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.repository.FcmNotificationRepository;
 import com.widyu.fcm.repository.MemberFcmTokenRepository;
 import com.widyu.album.repository.AlbumViewRepository;
@@ -202,8 +202,8 @@ public class FcmService {
 
         // 알림 제목: "보내는사람님이 받는사람님에게 응원메시지를 보냈어요."
         String title = sender.getName() + "님이 " + receiver.getName() + "님에게 응원메시지를 보냈어요.";
-        NotificationType type = NotificationType.CHEER_MESSAGE_RECEIVED;
-        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "type", type.name());
+        NotificationPolicy type = NotificationPolicy.message("X02-OS/INAPP");
+        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate());
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)

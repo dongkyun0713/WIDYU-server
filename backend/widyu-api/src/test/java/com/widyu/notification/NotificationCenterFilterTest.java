@@ -15,7 +15,7 @@ class NotificationCenterFilterTest {
         // given / when / then
         for (NotificationCenterFilter filter : NotificationCenterFilter.values()) {
             if (filter.isCategory()) {
-                assertThat(filter.types()).as(filter.name()).isNotEmpty();
+                assertThat(filter.legacyCategories()).as(filter.name()).isNotEmpty();
             }
         }
     }

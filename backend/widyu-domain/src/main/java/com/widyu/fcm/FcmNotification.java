@@ -3,6 +3,9 @@ package com.widyu.fcm;
 import com.widyu.global.entity.BaseTimeEntity;
 import com.widyu.member.Member;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -19,8 +22,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Getter
@@ -49,10 +50,11 @@ public class FcmNotification extends BaseTimeEntity {
 
     @Column(name = "event_id", length = 40)
     private String eventId;
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
-    @Column(name = "type", length = 48)
-    private NotificationType type;
+    @Convert(converter = NotificationPolicyConverter.class)
+    @Column(name = "type", columnDefinition = "TEXT")
+    private NotificationPolicy policy;
+    @Column(name = "center_filter", length = 16)
+    private String centerFilter;
     @Column(name = "deep_link")
     private String deepLink;
     @Column(name = "entity_id")
@@ -86,6 +88,15 @@ public class FcmNotification extends BaseTimeEntity {
         this.isRead = true;
         if (readAt == null) {
             readAt = LocalDateTime.now();
+        }
+    }
+
+    @PrePersist
+    @PreUpdate
+    void snapshotFilter() {
+        centerFilter = null;
+        if (policy != null) {
+            centerFilter = policy.centerFilter();
         }
     }
 

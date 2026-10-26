@@ -3,7 +3,7 @@ package com.widyu.fcm.event.goal.walk.listener;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
 import com.widyu.fcm.dto.NotificationCopy;
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.goal.walk.repository.WalkRepository;
 import com.widyu.global.entity.Status;
 import com.widyu.member.Member;
@@ -78,9 +78,9 @@ public class WalkNotificationListener {
         if (member.getType() != MemberType.SENIOR || actualSteps == null) {
             return;
         }
-        NotificationCopy copy = NotificationCopy.of(NotificationType.WALK_GOAL_UNMET, "W01",
+        NotificationCopy copy = NotificationCopy.of(NotificationPolicy.walk("W01"), "W01",
                 Map.of("실제 걸음 수", actualSteps.toString()));
-        FcmSendDto dto = FcmSendDto.of(NotificationType.WALK_GOAL_UNMET, copy,
+        FcmSendDto dto = FcmSendDto.of(NotificationPolicy.walk("W01"), copy,
                 null, null, null, null, member.getProfileImage());
         fcmService.sendMessageToUser(member.getId(), dto);
     }

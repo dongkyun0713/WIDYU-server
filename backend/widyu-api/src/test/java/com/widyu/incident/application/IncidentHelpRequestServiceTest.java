@@ -9,7 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
-import com.widyu.fcm.NotificationType;
+import com.widyu.fcm.NotificationPolicy;
 import com.widyu.fcm.application.FcmOutboxService;
 import com.widyu.fcm.application.FcmService;
 import com.widyu.fcm.dto.FcmSendDto;
@@ -190,7 +190,7 @@ class IncidentHelpRequestServiceTest {
         then(outbox).should().enqueue(eq(21L), sent.capture());
         then(outbox).should().enqueue(eq(22L), sent.capture());
         assertThat(sent.getAllValues()).allSatisfy(message -> {
-            assertThat(message.notificationType()).isEqualTo(NotificationType.SELF_HELP_REQUEST_CANCELLED);
+            assertThat(message.notificationPolicy()).isEqualTo(NotificationPolicy.safety("K02", false));
             assertThat(message.eventId()).isEqualTo("inc-help:CX");
         });
     }
