@@ -13,16 +13,21 @@ public interface FcmTransport {
 
     default Result send(String token, FcmSendDto dto, BooleanSupplier beforeSend) {
         if (!beforeSend.getAsBoolean()) {
-            return Result.rejected(false);
+            return Result.rejected(false, Result.PREFLIGHT);
         }
         return send(token, dto);
     }
 
-    record Result(boolean success, boolean permanentToken, boolean retryable, Duration retryAfter) {
-        public static Result delivered() { return new Result(true, false, false, Duration.ZERO); }
-        public static Result retry(Duration delay) { return new Result(false, false, true, delay); }
-        public static Result rejected(boolean permanentToken) {
-            return new Result(false, permanentToken, false, Duration.ZERO);
+    /** detail은 실패 로그에 붙는 코드 값이다. 토큰·제목·본문·FCM 오류 메시지 원문은 넣지 않는다. */
+    record Result(boolean success, boolean permanentToken, boolean retryable, Duration retryAfter, String detail) {
+        public static final String PREFLIGHT = "PREFLIGHT";
+        public static final String EXPIRED_BEFORE_SEND = "EXPIRED_BEFORE_SEND";
+
+        public static Result delivered() { return new Result(true, false, false, Duration.ZERO, null); }
+        public static Result retry(Duration delay) { return new Result(false, false, true, delay, null); }
+        public static Result rejected(boolean permanentToken) { return rejected(permanentToken, null); }
+        public static Result rejected(boolean permanentToken, String detail) {
+            return new Result(false, permanentToken, false, Duration.ZERO, detail);
         }
     }
 }
