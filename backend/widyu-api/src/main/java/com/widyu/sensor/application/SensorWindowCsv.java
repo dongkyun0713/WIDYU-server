@@ -173,14 +173,26 @@ final class SensorWindowCsv {
         return line.append('\n').toString();
     }
 
+    /** 스프레드시트가 수식으로 읽는 문자로 시작하는 문자열은 앞에 작은따옴표를 붙인다. 숫자(음수 좌표 등)는 그대로 둔다. */
     private static String escape(Object value) {
         if (value == null) {
             return "";
         }
         String text = value.toString();
+        if (value instanceof CharSequence && startsLikeFormula(text)) {
+            text = "'" + text;
+        }
         if (text.indexOf(',') < 0 && text.indexOf('"') < 0 && text.indexOf('\n') < 0 && text.indexOf('\r') < 0) {
             return text;
         }
         return '"' + text.replace("\"", "\"\"") + '"';
+    }
+
+    private static boolean startsLikeFormula(String text) {
+        if (text.isEmpty()) {
+            return false;
+        }
+        char first = text.charAt(0);
+        return first == '=' || first == '+' || first == '-' || first == '@' || first == '\t' || first == '\r';
     }
 }

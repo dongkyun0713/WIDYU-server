@@ -102,6 +102,16 @@ class SensorWindowCsvTest {
     }
 
     @Test
+    @DisplayName("수식으로 읽힐 문자열은 작은따옴표를 붙이고 음수 숫자는 그대로 쓴다")
+    void 수식으로_읽힐_문자열만_막는다() {
+        // when
+        String line = SensorWindowCsv.line("=1+1", "@SUM(A1)", -37.5, -12);
+
+        // then
+        assertThat(line).isEqualTo("'=1+1,'@SUM(A1),-37.5,-12\n");
+    }
+
+    @Test
     @DisplayName("epoch ms를 한국 시간 문자열로 바꾼다")
     void epoch_ms를_한국_시간으로_바꾼다() {
         // when & then: 2026-10-30T00:10:00Z = 09:10 KST

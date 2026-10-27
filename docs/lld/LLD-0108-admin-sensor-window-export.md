@@ -36,7 +36,7 @@ Authorization: Bearer <관리자 토큰>
 
 200 OK
 Content-Type: application/zip
-Content-Disposition: attachment; filename="sensor_member28_20261030T0900-0938.zip"
+Content-Disposition: attachment; filename="sensor_member28_20261030T0900-20261030T0938.zip"
 ```
 
 | 파라미터 | 필수 | 설명 |

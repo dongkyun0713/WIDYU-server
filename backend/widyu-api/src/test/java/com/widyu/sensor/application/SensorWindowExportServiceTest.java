@@ -93,6 +93,29 @@ class SensorWindowExportServiceTest {
     }
 
     @Test
+    @DisplayName("S3 원문을 받지 못하면 빠진 자료를 감추지 않고 내보내기 전체가 실패한다")
+    void S3_다운로드가_실패하면_내보내기_전체가_실패한다() {
+        // given
+        long startMs = FROM_MS - 600_000;
+        long endMs = FROM_MS + 18 * 60_000 + 600_000;
+        given(memberRepository.existsById(28L)).willReturn(true);
+        given(locationFixRepository.findByMemberIdAndTsMsBetweenOrderByTsMsAscSeqAsc(28L, startMs, endMs))
+                .willReturn(List.of());
+        given(deviceHeartbeatRepository.findByMemberIdAndTsMsBetweenOrderByTsMsAsc(28L, startMs, endMs))
+                .willReturn(List.of());
+        SensorBatch heart = mock(SensorBatch.class);
+        given(heart.getStream()).willReturn("hr");
+        given(heart.getS3Key()).willReturn("sensor/h1.json");
+        given(heart.getMeasuredAtStartMs()).willReturn(FROM_MS);
+        given(sensorBatchRepository.findMemberWindowBatches(28L, startMs, endMs)).willReturn(List.of(heart));
+        BusinessException failure = new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
+        given(s3Service.downloadBytes("sensor/h1.json")).willThrow(failure);
+
+        // when & then
+        assertThatThrownBy(() -> service.export(28L, FROM, TO, 10)).isSameAs(failure);
+    }
+
+    @Test
     @DisplayName("시작 시각이 끝 시각보다 늦거나 같으면 시간대 오류가 발생한다")
     void 시작이_끝보다_늦으면_예외가_발생한다() {
         // when & then
