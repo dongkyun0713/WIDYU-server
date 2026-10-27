@@ -32,7 +32,7 @@ public class RedisConfig {
 
         LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder =
                 LettuceClientConfiguration.builder()
-                        .commandTimeout(Duration.ofSeconds(1))
+                        .commandTimeout(redisProperties.timeout())
                         .shutdownTimeout(Duration.ZERO);
         if (redisProperties.sslEnabled()) {
             clientConfigBuilder.useSsl();

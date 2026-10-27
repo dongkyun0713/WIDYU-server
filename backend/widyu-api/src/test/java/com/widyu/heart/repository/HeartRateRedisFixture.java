@@ -3,6 +3,7 @@ package com.widyu.heart.repository;
 import com.widyu.global.config.RedisConfig;
 import com.widyu.global.properties.RedisProperties;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +40,8 @@ public record HeartRateRedisFixture(
         if (port == DEV_REDIS_PORT) {
             throw new IllegalStateException("개발용 Redis(6379)에는 실측을 돌리지 않는다. 버리는 Redis 포트를 지정한다.");
         }
-        RedisConfig config = new RedisConfig(new RedisProperties("127.0.0.1", port, null, false));
+        RedisConfig config = new RedisConfig(
+                new RedisProperties("127.0.0.1", port, null, false, Duration.ofSeconds(3)));
         LettuceConnectionFactory connectionFactory = (LettuceConnectionFactory) config.redisConnectionFactory();
         connectionFactory.afterPropertiesSet();
         connectionFactory.start();
