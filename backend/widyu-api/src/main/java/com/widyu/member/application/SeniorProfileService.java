@@ -66,7 +66,7 @@ public class SeniorProfileService {
                 albumUnlockRepository.findUnlockedAlbumIdsByMember(currentMember));
         List<Long> familyMemberIds = familyAccessService.getFamilyMemberIds(currentMember);
         unlockedAlbumIds.addAll(albumUnlockRepository
-                .findActiveAlbumIdsByMemberIdsAndMemberType(familyMemberIds, MemberType.SENIOR));
+                .findActiveOrProcessingAlbumIdsByMemberIdsAndMemberType(familyMemberIds, MemberType.SENIOR));
 
         log.info("해금된 앨범 ID 조회: memberId={}, count={}",
                 currentMember.getId(), unlockedAlbumIds.size());
