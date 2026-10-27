@@ -35,9 +35,9 @@ SELECT m.id, m.name,
   (SELECT DATE_FORMAT(FROM_UNIXTIME(MAX(persisted_at_ms) / 1000), '%m-%d %H:%i:%s') FROM sensor_batch s WHERE s.member_id = m.id AND s.stream LIKE 'imu%') AS last_imu,
   (SELECT COALESCE(SUM(acc_n > 0), 0) FROM sensor_batch s WHERE s.member_id = m.id AND s.stream LIKE 'imu%' AND s.persisted_at_ms >= @since) AS acc_n,
   (SELECT COALESCE(SUM(gyro_n > 0), 0) FROM sensor_batch s WHERE s.member_id = m.id AND s.stream LIKE 'imu%' AND s.persisted_at_ms >= @since) AS gyro_n,
-  (SELECT s.watch_battery_pct FROM sensor_batch s WHERE s.member_id = m.id AND s.watch_battery_pct IS NOT NULL ORDER BY s.persisted_at_ms DESC LIMIT 1) AS watch_batt,
+  (SELECT s.watch_battery_pct FROM sensor_batch s WHERE s.member_id = m.id AND s.watch_battery_pct IS NOT NULL ORDER BY s.persisted_at_ms DESC, s.sensor_batch_id DESC LIMIT 1) AS watch_batt,
   (SELECT DATE_FORMAT(FROM_UNIXTIME(MAX(persisted_at_ms) / 1000), '%m-%d %H:%i:%s') FROM device_heartbeat h WHERE h.member_id = m.id) AS last_heartbeat,
   (SELECT CONCAT('conn=', IFNULL(h.watch_connected, '-'), ' body=', IFNULL(h.watch_on_body, '-'), ' batt=', IFNULL(h.watch_battery_pct, '-'))
-     FROM device_heartbeat h WHERE h.member_id = m.id ORDER BY h.ts_ms DESC LIMIT 1) AS heartbeat_watch
+     FROM device_heartbeat h WHERE h.member_id = m.id ORDER BY h.persisted_at_ms DESC, h.device_heartbeat_id DESC LIMIT 1) AS heartbeat_watch
 FROM member m WHERE m.id IN (${ids}) ORDER BY m.id;
 SQL
