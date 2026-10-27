@@ -11,4 +11,8 @@ public interface DeviceHeartbeatRepository extends JpaRepository<DeviceHeartbeat
 
     /** 내보내기: 회차의 하트비트 원문을 잰 시각 순으로(LLD-0050 5.3). */
     java.util.List<DeviceHeartbeat> findByRunIdOrderByTsMsAsc(String runId);
+
+    /** 시간대 내보내기: 한 회원의 구간 안 하트비트를 잰 시각 순으로(LLD-0108 4절). 양 끝 포함. */
+    java.util.List<DeviceHeartbeat> findByMemberIdAndTsMsBetweenOrderByTsMsAsc(
+            Long memberId, Long startMs, Long endMs);
 }

@@ -19,6 +19,19 @@ public interface SensorBatchRepository extends JpaRepository<SensorBatch, Long> 
 
     java.util.List<SensorBatch> findByRunIdOrderByMeasuredAtStartMsAsc(String runId);
 
+    /** 시간대 내보내기: 측정 구간이 내보내는 구간과 겹치는 한 회원의 모든 스트림 묶음(LLD-0108 4절). */
+    @Query("""
+            SELECT batch FROM SensorBatch batch
+             WHERE batch.member.id = :memberId
+               AND batch.measuredAtEndMs >= :startMs
+               AND batch.measuredAtStartMs <= :endMs
+             ORDER BY batch.measuredAtStartMs ASC, batch.seq ASC
+            """)
+    java.util.List<SensorBatch> findMemberWindowBatches(
+            @Param("memberId") Long memberId,
+            @Param("startMs") long startMs,
+            @Param("endMs") long endMs);
+
     @Query("""
             SELECT batch FROM SensorBatch batch
              WHERE batch.member.id = :memberId
