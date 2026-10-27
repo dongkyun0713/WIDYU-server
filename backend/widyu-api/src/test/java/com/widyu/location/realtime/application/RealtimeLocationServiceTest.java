@@ -10,9 +10,11 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import com.widyu.global.config.RedisConfig;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.location.SeniorLocation;
@@ -37,6 +39,7 @@ import com.widyu.member.repository.SeniorProfileRepository;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
@@ -47,9 +50,13 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -335,6 +342,101 @@ class RealtimeLocationServiceTest {
     }
 
     @Test
+    @DisplayName("운영 Redis 직렬화기를 거친 집 체류 정보에서 밖으로 나가면 이전 위치 타입을 HOME으로 넘긴다")
+    void 직렬화된_집_체류_정보에서_밖으로_나가면_이전_위치_타입을_HOME으로_넘긴다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.6, 127.0, null);
+        Member member = member(1L);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile(10L, member)));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1"))
+                .willReturn(throughRedisSerializer(StayInfo.of(37.5, 127.0, "HOME", "집")));
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        realtimeLocationService.updateAndBroadcast(request, 1L);
+
+        // then
+        then(safeZoneAlertService).should().handleSafeZoneTransition(1L, "HOME", null);
+    }
+
+    @Test
+    @DisplayName("운영 Redis 직렬화기를 거친 체류 정보로 마지막 위치를 조회하면 체류 시작 시각과 위치 타입을 돌려준다")
+    void 직렬화된_체류_정보로_마지막_위치를_조회하면_체류_정보를_돌려준다() {
+        // given
+        StayInfo stored = StayInfo.of(37.5, 127.0, "HOME", "집");
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:2")).willReturn(throughRedisSerializer(stored));
+        given(seniorLocationRepository.findBySeniorId(2L)).willReturn(Optional.empty());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.getLastLocation(2L, 1L);
+
+        // then
+        assertThat(response.stayStartTime()).isEqualTo(stored.startTime());
+        assertThat(response.locationType()).isEqualTo("HOME");
+        assertThat(response.locationName()).isEqualTo("집");
+        assertThat(response.latitude()).isEqualTo(37.5);
+    }
+
+    @Test
+    @DisplayName("Redis 시간 초과로 체류 정보를 읽지 못하면 키를 지우지 않고 외출 여부를 비워 둔다")
+    void Redis_시간_초과면_체류_정보_키를_지우지_않는다() {
+        // given
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willThrow(new QueryTimeoutException("Redis command timed out"));
+
+        // when
+        Boolean isOuting = realtimeLocationService.getOutingStatus(1L);
+
+        // then
+        assertThat(isOuting).isNull();
+        then(redisTemplate).should(never()).delete("location:stay:1");
+    }
+
+    @Test
+    @DisplayName("체류 정보 값을 읽을 수 없으면 키를 지우고 외출 여부를 비워 둔다")
+    void 체류_정보_값을_읽을_수_없으면_키를_지운다() {
+        // given
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willThrow(new SerializationException("Could not read JSON"));
+
+        // when
+        Boolean isOuting = realtimeLocationService.getOutingStatus(1L);
+
+        // then
+        assertThat(isOuting).isNull();
+        then(redisTemplate).should().delete("location:stay:1");
+    }
+
+    @Test
+    @DisplayName("좌표가 빠진 체류 정보가 저장돼 있으면 키를 지우고 이전 체류 없이 위치를 갱신한다")
+    void 좌표가_빠진_체류_정보면_키를_지우고_이전_체류_없이_갱신한다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile(10L, member)));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        LinkedHashMap<String, Object> incomplete = new LinkedHashMap<>();
+        incomplete.put("locationType", "HOME");
+        given(valueOperations.get("location:stay:1")).willReturn(incomplete);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(request, 1L);
+
+        // then
+        assertThat(response.locationType()).isNull();
+        then(redisTemplate).should().delete("location:stay:1");
+        then(safeZoneAlertService).should().handleSafeZoneTransition(1L, null, null);
+    }
+
+    @Test
     @DisplayName("연결되지 않은 보호자가 이동 경로 조회 시 FORBIDDEN 예외를 던진다")
     void 연결되지_않은_보호자_이동_경로_조회_시_예외가_발생한다() {
         // given
@@ -536,6 +638,17 @@ class RealtimeLocationServiceTest {
 
         // then
         then(locationAccessLogService).should().record(1L, 2L, LocationAccessPath.REST_FAMILY);
+    }
+
+    /** 운영 RedisConfig의 값 직렬화기로 저장·읽기를 한 번 거친 값. 실제 Redis가 돌려주는 모양과 같다. */
+    @SuppressWarnings("unchecked")
+    private Object throughRedisSerializer(Object value) {
+        RedisSerializer<Object> serializer = (RedisSerializer<Object>) new RedisConfig(null)
+                .redisTemplate(mock(RedisConnectionFactory.class)).getValueSerializer();
+        Object restored = serializer.deserialize(serializer.serialize(value));
+        // 타입 정보가 저장되지 않아 원래 타입이 아니라 Map으로 돌아온다(LLD-0097의 원인).
+        assertThat(restored).isInstanceOf(LinkedHashMap.class);
+        return restored;
     }
 
     private Member member(Long id) {
