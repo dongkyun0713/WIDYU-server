@@ -14,6 +14,25 @@ def run(**env):
 
 
 class NotifyDiscordDeployTest(unittest.TestCase):
+    def test_lifecycle_messages_describe_confirmed_app_state(self):
+        cases = {
+            "app_stopped": ("🟠 [DEV] 서버 배포로 인한 앱 중단", "기존 앱 컨테이너를 중지"),
+            "app_restarted": ("🟢 [DEV] 앱 재가동 완료", "HTTPS 헬스체크를 통과"),
+            "app_rollback": ("🟡 [DEV] 이전 버전 앱 재가동 완료", "이전 버전으로 복구"),
+        }
+        for result, (title, detail) in cases.items():
+            with self.subTest(result=result):
+                payload = json.loads(run(RESULT=result, ENV_TAG="DEV", NOTIFY_SUCCESS="false").stdout)
+                self.assertEqual(payload["embeds"][0]["title"], title)
+                self.assertIn(detail, payload["embeds"][0]["description"])
+                self.assertEqual(payload["allowed_mentions"], {"parse": []})
+
+    def test_success_can_be_suppressed_without_suppressing_failure(self):
+        self.assertEqual(run(RESULT="success", ENV_TAG="DEV", NOTIFY_SUCCESS="false").stdout.strip(),
+                         "Deploy notification skipped: success")
+        payload = json.loads(run(RESULT="failure", ENV_TAG="DEV", NOTIFY_SUCCESS="false").stdout)
+        self.assertIn("실패", payload["embeds"][0]["title"])
+
     def test_success_message_shows_commit_actor_and_run_link(self):
         payload = json.loads(run(RESULT="success", ENV_TAG="DEV", COMMIT_MESSAGE="fix: 제목 @everyone\n\n본문",
                                  RUN_URL="https://github.com/x/actions/runs/1").stdout)

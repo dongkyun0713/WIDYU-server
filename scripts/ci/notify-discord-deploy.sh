@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 배포 결과를 Discord로 알린다(LLD-0084). 알림 실패가 배포 결과를 바꾸지 않도록 항상 0으로 끝낸다.
 #
-# 입력(환경변수): RESULT(success|failure|cancelled|skipped), ENV_TAG(DEV|PROD), DEPLOY_LABEL(기본 "배포"),
+# 입력(환경변수): RESULT(success|failure|cancelled|skipped|app_stopped|app_restarted|app_rollback), ENV_TAG(DEV|PROD), DEPLOY_LABEL(기본 "배포"),
 #   FAILED_STEP, COMMIT_SHA, COMMIT_MESSAGE, ACTOR, RUN_URL, STARTED_AT(ISO8601, 없으면 GH_TOKEN으로 조회),
-#   DISCORD_DEPLOY_WEBHOOK_URL. DRY_RUN=1이면 보내지 않고 JSON만 출력한다.
+#   DISCORD_DEPLOY_WEBHOOK_URL. NOTIFY_SUCCESS=false이면 성공은 생략한다. DRY_RUN=1이면 JSON만 출력한다.
 set -uo pipefail
 
 result="${RESULT:-failure}"
@@ -13,9 +13,23 @@ if [ "$result" = "cancelled" ] || [ "$result" = "skipped" ]; then
   exit 0
 fi
 
+if [ "$result" = "success" ] && [ "${NOTIFY_SUCCESS:-true}" = "false" ]; then
+  echo "Deploy notification skipped: success"
+  exit 0
+fi
+
 label="${DEPLOY_LABEL:-배포}"
 env_tag="${ENV_TAG:-DEV}"
-if [ "$result" = "success" ]; then
+if [ "$result" = "app_stopped" ]; then
+  title="🟠 [$env_tag] 서버 배포로 인한 앱 중단"
+  color=16753920
+elif [ "$result" = "app_restarted" ]; then
+  title="🟢 [$env_tag] 앱 재가동 완료"
+  color=3066993
+elif [ "$result" = "app_rollback" ]; then
+  title="🟡 [$env_tag] 이전 버전 앱 재가동 완료"
+  color=16776960
+elif [ "$result" = "success" ]; then
   title="✅ [$env_tag] $label 완료"
   color=3066993
 else
@@ -24,6 +38,15 @@ else
   if [ -n "${FAILED_STEP:-}" ]; then
     title="$title · $FAILED_STEP"
   fi
+fi
+
+detail=""
+if [ "$result" = "app_stopped" ]; then
+  detail="새 버전 배포를 위해 기존 앱 컨테이너를 중지했습니다."
+elif [ "$result" = "app_restarted" ]; then
+  detail="새 버전 앱이 기동됐으며 HTTPS 헬스체크를 통과했습니다."
+elif [ "$result" = "app_rollback" ]; then
+  detail="새 버전 기동에 실패해 이전 버전으로 복구했습니다. HTTPS 헬스체크를 통과했습니다."
 fi
 
 commit_message="${COMMIT_MESSAGE:-}"
@@ -51,11 +74,12 @@ fi
 payload="$(jq -n \
   --arg title "$title" --argjson color "$color" \
   --arg commit "$commit_title" --arg meta "$meta" --arg run "${RUN_URL:-}" \
+  --arg detail "$detail" \
   '{
      embeds: [{
        title: $title,
        color: $color,
-       description: ([($commit | .[0:200]), $meta, (if $run == "" then empty else "🔗 [실행 기록 보기](\($run))" end)]
+       description: ([$detail, ($commit | .[0:200]), $meta, (if $run == "" then empty else "🔗 [실행 기록 보기](\($run))" end)]
                      | map(select(. != "")) | join("\n"))
      }],
      allowed_mentions: {parse: []}

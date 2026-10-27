@@ -1,5 +1,7 @@
 # LLD-0084: 개발 서버 에러·배포 Discord 알림과 AI 분석
 
+> 2026-10-27 변경: [LLD-0112](LLD-0112-development-deploy-lifecycle.md)에 따라 DEV 일반 성공 알림을 앱 중단·HTTPS 확인 후 재가동 알림으로 대체한다. 배포 실패·PROD 기본 결과와 Grafana 오류 알림은 유지한다.
+
 > 이 문서는 이슈 #752의 구현과 PR 검수 기준이다.
 
 | 항목 | 값 |
