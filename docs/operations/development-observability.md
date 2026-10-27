@@ -40,7 +40,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose
 
 볼륨 이름은 compose 프로젝트 이름(배포 폴더 이름)에 따라 달라지므로 `docker volume ls | grep alert_relay_data`로 확인한다.
 
-배포 결과(dev·prod)와 dev 인증서 갱신 실패는 GitHub Actions가 Discord로 보낸다.
+DEV 배포 중에는 GitHub Actions가 다음 두 단계의 알림을 보낸다(LLD-0112).
+
+- `🟠 [DEV] 서버 배포로 인한 앱 중단`: 이미지와 의존 서비스 준비 후, 실행 중이던 기존 앱 컨테이너를 중지하고 중지 상태가 확인됐을 때.
+- `🟢 [DEV] 앱 재가동 완료`: 새 앱이 기동하고 Nginx를 통한 HTTPS `/actuator/health`가 성공했을 때.
+
+새 버전 기동에 실패해 이전 버전이 정상 응답하면 `🟡 [DEV] 이전 버전 앱 재가동 완료`로 구분한다. 배포 자체는 실패로 남고 기존 실패 알림도 보낸다. 최초 배포·이미 중지된 앱에는 중단 알림을 보내지 않는다. 일반 DEV `배포 완료` 메시지는 생략한다. PROD 결과·DEV 인증서 갱신 실패는 유지한다.
+
+SSH 출력의 단계 신호를 runner에서 중계하므로 기존 `DISCORD_DEPLOY_WEBHOOK_URL` secret을 서버에 전달하거나 저장하지 않는다. webhook 미설정·전송 실패는 배포 결과를 바꾸지 않는다. 실제 채널 수신은 다음 배포에서 확인해야 한다. 이 기능은 배포 과정의 알림이며, 평상시 장애를 주기적으로 감시하지 않는다.
 
 로그인 뒤 **WIDYU Development / WIDYU Development Errors** 대시보드를 연다. Loki Explore에서는 다음 LogQL로 특정 오류를 찾는다.
 
