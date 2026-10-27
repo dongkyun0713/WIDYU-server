@@ -93,8 +93,8 @@ class DegradedEmergencyAlertConsumerTest {
         assertThat(delivery.message().relatedMemberId()).isEqualTo(31L);
         assertThat(delivery.message().notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
         assertThat(delivery.message().data())
-                .containsEntry("type", "HEART_RATE_EMERGENCY")
-                .doesNotContainKeys("notificationType", "priority", "foregroundPresentation")
+                .containsEntry("notificationType", "HEART_RATE_EMERGENCY")
+                .doesNotContainKeys("type", "priority", "foregroundPresentation")
                 .containsEntry("eventId", "1760000000000-0")
                 .containsEntry("deepLink", "/location?seniorId=31");
     }

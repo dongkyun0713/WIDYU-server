@@ -50,7 +50,7 @@
 
 모든 typed FCM의 `data.notificationType`은 논리 `NotificationType.name()`이다. `data.type`은 레지스트리의 nullable `legacyDataType`이 있으면 그 값이고, 없으면 논리 타입 이름이다. M08/M05/M09·SYNC만 `legacyDataType=MEDICATION_SCHEDULE_CHANGED`로 두어 구 앱의 `type`·`revision` 재조회 계약을 지킨다. M08/M05/M09에는 `revision`, `effectiveFromDate`, `actorDisplayName`을, SYNC에는 `revision`을 싣는다. 모든 FCM에 `eventId`가 있고 센터 미저장 이벤트에는 `notificationId`가 없다. 새 앱은 `notificationType`을 우선 파싱한다. 이 이중 키는 계획 §5의 호환 가정을 실현하는 LLD 제안이다.
 
-> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): FE는 `type`만 사용하기로 해 `data.notificationType`을 더 보내지 않는다. `type`·`revision`·`effectiveFromDate` 계약은 그대로다.
+> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): 사용자 결정으로 `data.type`과 `legacyDataType`을 없애고 `data.notificationType=<enum 이름>` 하나만 보낸다. M08/M05/M09/SYNC는 각각 `MEDICATION_SCHEDULE_CREATED`/`CHANGED`/`DELETED`/`SYNC`로 온다. 앱은 타입 대신 `revision` 비교로 alarm-sync를 호출한다. 아래 6·E13·§96의 `type` 서술은 변경 전 계약이다.
 
 ## 4. 데이터 모델
 
@@ -109,7 +109,7 @@
 
 위 가정대로 구현했다. 새 앱 구별용 `data.notificationType`은 이 LLD의 계약 제안이며 FE 회신에서 다른 키가 확정되면 payload 계약과 인수조건을 함께 갱신해야 한다.
 
-> 2026-10-27: FE 회신에 따라 `data.notificationType`을 뺐다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)).
+> 2026-10-27: 타입 키를 `data.notificationType` 하나로 확정했다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)).
 
 +10/+20 `PUSH_ONLY`는 매분 스케줄러 1회 실행이 전제다. 재시작 등으로 같은 분에 다시 호출하면 outbox에 동일 이벤트가 중복 enqueue될 수 있으며 현행과 동일한 한계다. M04 센터 행은 수신자·eventId 유니크 제약으로 중복 저장을 막는다.
 

@@ -38,7 +38,7 @@ LLD-0068은 정각 서버 푸시를 제거했지만 위듀 앱의 기기 예약 
 
 정시 FCM은 `upstream/develop`의 `MedicineScheduleNotificationListener` 1차 분기를 기준으로 복원한다. 제목은 **`약 복용 시간이에요!`**, 본문은 **`지금 약을 복용하고 인증해주세요.`**, 카테고리는 `MEDICINE_SCHEDULE`, 이미지는 `medicine.png`, `scheme`은 빈 문자열이다. data는 `MedicationAlarmPayload.of(revision)`의 `type=MEDICATION_SCHEDULE_CHANGED`, `revision=<수신 시니어의 revision>`을 그대로 쓴다. 이 메시지는 **`NotificationType`이 없는 레거시 메시지**다. `data.notificationType`을 만들거나 정시용 레지스트리 타입을 신설하지 않는다. `복약 알람 변경`은 정시 푸시 문구가 아니며 사용하지 않는다.
 
-> 2026-10-27 확인(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): 정시 data는 `type=MEDICATION_SCHEDULE_CHANGED`, `revision=<수신 시니어의 revision>` 그대로다. 앱이 이 값을 알람 재동기화 트리거로 쓰므로 바꾸지 않는다. `NotificationType`은 여전히 없다.
+> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): 정시 data는 `MedicationAlarmPayload.of(revision)`의 `notificationType=MEDICATION_ON_TIME`, `revision=<수신 시니어의 revision>`이다. `type` 키는 없다. 앱은 `revision` 비교로 알람을 재동기화한다. `MEDICATION_ON_TIME`은 data 문자열일 뿐 `NotificationType` 상수가 아니며 `FcmSendDto.notificationType`은 여전히 null이다. 아래 인수조건의 data `type`은 변경 전 계약이다.
 
 현재 `FcmOutboxService`는 타입이 없는 메시지를 `PUSH_AND_CENTER`로 처리하고, `eventId`가 없으면 UUID를 발급한다. 따라서 정시 발송 시 기존 전송 경로에서는 시니어 센터 행도 생성된다. 센터 행은 신규 제품 알림 타입으로 해석하지 않으며, 이 설계는 공통 전송 정책을 바꾸지 않는다. 센터 표시 정책 변경이 필요하면 별도 결정이 필요하다.
 

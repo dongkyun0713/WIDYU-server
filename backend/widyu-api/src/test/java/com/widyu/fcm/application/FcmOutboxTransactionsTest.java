@@ -239,7 +239,7 @@ class FcmOutboxTransactionsTest {
 
         // when / then
         assertThat(FcmDelivery.from(typeOnly).message().data())
-                .containsExactlyInAnyOrderEntriesOf(Map.of("type", "MEDICATION_SCHEDULE_CHANGED"));
+                .containsExactlyInAnyOrderEntriesOf(Map.of("notificationType", "MEDICATION_SCHEDULE_CHANGED"));
         assertThat(FcmDelivery.from(revisionOnly).message().data())
                 .containsExactlyInAnyOrderEntriesOf(Map.of("revision", "42"));
     }

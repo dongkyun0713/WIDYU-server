@@ -90,7 +90,7 @@ public class FcmOutboxService {
             FcmOutbox row = FcmOutbox.builder().recipientMember(recipient).memberFcmToken(token)
                     .relatedMemberId(message.relatedMemberId()).familyId(familyId)
                     .title(message.title()).body(message.content()).image(message.image()).scheme(message.scheme())
-                    .dataType(data.get("type"))
+                    .dataType(data.get("notificationType"))
                     .dataRevision(parseRevision(data.get("revision")))
                     .notificationType(type).dataPayload(dataPayload).notificationId(notificationId)
                     .fcmCategory(category(message)).emergency(message.emergency())

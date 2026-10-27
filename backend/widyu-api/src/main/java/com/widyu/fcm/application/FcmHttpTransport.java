@@ -130,6 +130,11 @@ public class FcmHttpTransport implements FcmTransport {
             message.notification(null);
         }
         HashMap<String, String> data = new HashMap<>(dto.data());
+        // 배포 전에 저장된 outbox 행의 옛 type 키를 notificationType으로 옮긴다(LLD-0109).
+        String legacyType = data.remove("type");
+        if (legacyType != null) {
+            data.putIfAbsent("notificationType", legacyType);
+        }
         if (notificationId != null) {
             data.put("notificationId", notificationId.toString());
         } else {
@@ -190,7 +195,7 @@ public class FcmHttpTransport implements FcmTransport {
         if (type == null) {
             return;
         }
-        data.put("type", type.dataTypeValue());
+        data.put("notificationType", type.name());
         data.putIfAbsent("deepLink", "");
     }
 

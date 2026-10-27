@@ -446,7 +446,8 @@ class IncidentEscalationTest {
                 .containsEntry("safetyEventId", "inc-1")
                 .containsEntry("eventId", "inc-1")
                 .containsEntry("entityId", "inc-1")
-                .doesNotContainKeys("incidentRef", "notificationType", "priority", "foregroundPresentation");
+                .containsEntry("notificationType", "HEART_RATE_EMERGENCY")
+                .doesNotContainKeys("incidentRef", "type", "priority", "foregroundPresentation");
         if (decisionId != null) {
             assertThat(message.dataForEnqueue("inc-1")).containsEntry("decisionId", decisionId);
         } else {

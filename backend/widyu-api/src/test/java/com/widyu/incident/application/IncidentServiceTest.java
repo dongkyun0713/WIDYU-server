@@ -137,7 +137,8 @@ class IncidentServiceTest {
         then(fcmService).should().sendMessageToUser(eq(SENIOR_ID), message.capture());
         assertThat(message.getValue().fcmCategory()).isEqualTo(FcmCategory.INCIDENT_SELF_CHECK);
         assertThat(message.getValue().dataForEnqueue(opened.getIncidentRef()))
-                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
+                .containsEntry("notificationType", "SAFETY_SELF_CHECK")
+                .doesNotContainKey("type")
                 .containsEntry("entityId", opened.getIncidentRef())
                 .containsEntry("deepLink", "");
         assertThat(message.getValue().emergency()).isTrue();

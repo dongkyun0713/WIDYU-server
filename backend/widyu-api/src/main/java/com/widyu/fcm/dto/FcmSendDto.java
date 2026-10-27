@@ -71,7 +71,7 @@ public record FcmSendDto(
         }
         HashMap<String, String> values = new HashMap<>(data);
         values.put("eventId", resolvedEventId);
-        values.put("type", notificationType.dataTypeValue());
+        values.put("notificationType", notificationType.name());
         values.put("deepLink", resolvedDeepLink());
         putIfPresent(values, "entityId", entityId);
         if (seniorId != null) {

@@ -45,7 +45,8 @@ class GuardianGoalChangedNotificationListenerTest {
                 .containsEntry("entityId", "100")
                 .containsEntry("actorDisplayName", "홍길동")
                 .containsEntry("deepLink", "/goal")
-                .containsEntry("type", "HEALTH_SCHEDULE_CREATED")
+                .containsEntry("notificationType", "HEALTH_SCHEDULE_CREATED")
+                .doesNotContainKey("type")
                 .containsEntry("eventId", "event-1");
     }
 
