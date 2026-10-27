@@ -48,6 +48,10 @@ public class HealthScheduleService {
     @Transactional
     public HealthScheduleResponse createHealthScheduleForMe(HealthScheduleCreateRequest request) {
         Member member = memberUtil.getCurrentMember();
+        // 보호자 본인 일정은 제품에 화면도 알림도 없다(LLD-0076 H01-C-SELF 제거). 보호자는 /guardians로 시니어 일정을 등록한다.
+        if (member.getType() != MemberType.SENIOR) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "시니어만 본인 건강 일정을 등록할 수 있습니다.");
+        }
 
         HealthSchedule healthSchedule = HealthSchedule.create(
                 member,

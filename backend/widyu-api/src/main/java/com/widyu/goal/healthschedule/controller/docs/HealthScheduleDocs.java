@@ -30,7 +30,7 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "시니어 본인 건강 일정 생성",
-            description = "시니어가 자신의 건강 일정을 생성합니다. 생성 시 rewardPoint는 100, isReward는 false로 자동 설정됩니다."
+            description = "시니어가 자신의 건강 일정을 생성합니다. 생성 시 rewardPoint는 100, isReward는 false로 자동 설정됩니다. 시니어만 호출할 수 있고, 보호자가 부르면 403입니다(보호자는 `/guardians`로 시니어 일정을 등록합니다)."
     )
     @RequestBody(
             description = "건강 일정 생성 정보",
@@ -67,6 +67,22 @@ public interface HealthScheduleDocs {
                                         "latitude": 37.5665,
                                         "longitude": 126.9780
                                       }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "403",
+            description = "시니어가 아닌 회원의 호출",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            value = """
+                                    {
+                                      "code": "AUTH_4030",
+                                      "message": "시니어만 본인 건강 일정을 등록할 수 있습니다.",
+                                      "data": null
                                     }
                                     """
                     )
