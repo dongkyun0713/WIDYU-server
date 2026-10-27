@@ -11,18 +11,18 @@ import java.util.UUID;
  */
 public final class MedicationAlarmPayload {
 
-    public static final String TYPE = "MEDICATION_SCHEDULE_CHANGED";
+    /** 레지스트리 타입이 없는 정시 복약 푸시의 data.type. 앱은 이 값으로 앱 사용 중 정시 알람을 따로 표시한다. → LLD-0109 */
+    public static final String ON_TIME_TYPE = "MEDICATION_ON_TIME";
 
     private MedicationAlarmPayload() {
     }
 
-    public static Map<String, String> of(long revision) {
-        return Map.of("type", TYPE, "revision", Long.toString(revision));
+    public static Map<String, String> onTime(long revision) {
+        return Map.of("type", ON_TIME_TYPE, "revision", Long.toString(revision));
     }
 
     public static Map<String, String> of(long revision, NotificationType notificationType) {
-        return Map.of("type", notificationType.dataTypeValue(), "revision", Long.toString(revision),
-                "notificationType", notificationType.name());
+        return Map.of("type", notificationType.dataTypeValue(), "revision", Long.toString(revision));
     }
 
     public static String eventId(String key) {

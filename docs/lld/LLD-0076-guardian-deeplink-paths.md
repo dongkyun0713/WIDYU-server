@@ -133,7 +133,7 @@
 ### 인수조건
 
 - [x] AC11. 시니어가 받는 위 타입의 FCM `data.deepLink`와 센터 행 `deep_link`가 표의 경로이고, `NotificationType`과 main 코드에 `widyu://`는 낙상 비타입 `scheme` 상수 하나만 남는다.
-- [x] AC12. 심박 본인확인 FCM의 `data.type`은 `EMERGENCY_CONFIRM_REQUEST`, `data.notificationType`은 `SAFETY_SELF_CHECK`, `data.deepLink`는 빈 문자열이다. 낙상 본인확인 data의 `type`도 `EMERGENCY_CONFIRM_REQUEST`다. 안심구역 본인확인은 LLD-0078에 따라 발송하지 않는다.
+- [x] AC12. 심박 본인확인 FCM의 `data.type`은 `EMERGENCY_CONFIRM_REQUEST`, `data.notificationType`은 없음(2026-10-27 [LLD-0109](LLD-0109-fcm-data-contract-slim.md) 이전에는 `SAFETY_SELF_CHECK`), `data.deepLink`는 빈 문자열이다. 낙상 본인확인 data의 `type`도 `EMERGENCY_CONFIRM_REQUEST`다. 안심구역 본인확인은 LLD-0078에 따라 발송하지 않는다.
 - [x] AC13. 하트·응원 메시지는 수신자 역할과 관계없이 `data.deepLink=/notification`이고 `data.type`이 각 타입 이름이다.
 - [x] AC14. 보호자 수신 경로(§3)와 M08/M05/M09의 `data.type=MEDICATION_SCHEDULE_CHANGED`는 바뀌지 않는다.
 - [x] AC15. `bash scripts/harness/verify.sh`가 통과한다.

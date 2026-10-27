@@ -168,7 +168,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
                 .containsEntry("deliveryStage", "INITIAL_ALERT")
                 .containsEntry("safetyEventId", opened.getIncidentRef())
                 .containsEntry("eventId", opened.getIncidentRef())
-                .containsEntry("foregroundPresentation", "MODAL");
+                .doesNotContainKeys("notificationType", "priority", "foregroundPresentation");
         FcmDelivery restoredAgain = transactions.execute(status ->
                 FcmDelivery.from(outbox.findById(alerts.getFirst().getId()).orElseThrow()));
         assertThat(restoredAgain.message().data()).isEqualTo(restored.message().data());

@@ -162,13 +162,11 @@ class FcmOutboxIntegrationTest {
         assertThat(center.getEventId()).isEqualTo(first.get("eventId"));
         assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
         assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_CREATED")
                 .containsEntry("revision", "42")
                 .containsEntry("effectiveFromDate", "2026-10-02")
                 .containsEntry("actorDisplayName", "보호자")
-                .containsEntry("priority", "interaction")
                 .containsEntry("deepLink", "/goal")
-                .containsEntry("foregroundPresentation", "BANNER");
+                .doesNotContainKeys("notificationType", "priority", "foregroundPresentation");
     }
 
     @Test
@@ -193,7 +191,7 @@ class FcmOutboxIntegrationTest {
         assertThat(row.getNotificationId()).isNull();
         assertThat(transactions.claim(row.getId()).message().data())
                 .containsEntry("type", "MEDICATION_REMINDER_10")
-                .containsEntry("notificationType", "MEDICATION_REMINDER_10");
+                .doesNotContainKey("notificationType");
     }
 
     @Test
@@ -335,7 +333,7 @@ class FcmOutboxIntegrationTest {
         assertThat(syncDelivery.notificationId()).isNull();
         assertThat(syncDelivery.message().data()).containsEntry("revision", "7")
                 .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_SYNC");
+                .doesNotContainKey("notificationType");
     }
 
     @Test

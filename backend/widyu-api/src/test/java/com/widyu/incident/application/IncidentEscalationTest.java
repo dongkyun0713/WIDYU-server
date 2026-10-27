@@ -150,9 +150,9 @@ class IncidentEscalationTest {
             assertThat(message.dataForEnqueue("inc-1"))
                     .containsEntry("deliveryStage", "SECOND_ALERT")
                     .containsEntry("safetyEventId", "inc-1")
-                    .containsEntry("incidentRef", "inc-1")
                     .containsEntry("decisionId", "dec-1")
-                    .containsEntry("deepLink", "/location?seniorId=1");
+                    .containsEntry("deepLink", "/location?seniorId=1")
+                    .doesNotContainKey("incidentRef");
         });
     }
 
@@ -445,7 +445,8 @@ class IncidentEscalationTest {
                 .containsEntry("deliveryStage", "INITIAL_ALERT")
                 .containsEntry("safetyEventId", "inc-1")
                 .containsEntry("eventId", "inc-1")
-                .containsEntry("foregroundPresentation", "MODAL");
+                .containsEntry("entityId", "inc-1")
+                .doesNotContainKeys("incidentRef", "notificationType", "priority", "foregroundPresentation");
         if (decisionId != null) {
             assertThat(message.dataForEnqueue("inc-1")).containsEntry("decisionId", decisionId);
         } else {

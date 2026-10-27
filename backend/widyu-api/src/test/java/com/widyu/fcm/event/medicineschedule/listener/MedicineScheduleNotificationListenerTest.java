@@ -185,7 +185,7 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(onTime.fcmCategory()).isEqualTo(com.widyu.fcm.FcmCategory.MEDICINE_SCHEDULE);
         assertThat(onTime.image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(onTime.scheme()).isEmpty();
-        assertThat(onTime.data()).isEqualTo(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"));
+        assertThat(onTime.data()).isEqualTo(Map.of("type", "MEDICATION_ON_TIME", "revision", "42"));
         assertThat(seniorMessages.subList(1, 3)).extracting(FcmSendDto::title)
                 .containsExactly("약 복용 인증이 아직 안 됐어요.", "약 복용 인증 시간이 10분 남았어요.");
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.data())

@@ -38,6 +38,8 @@
 
 ②도 S04 제목 `{시니어 이름} 님의 심박 상태를 확인해주세요.`, 본문 `평소와 다른 심박이 감지됐어요. 현재 상태와 위치를 확인해주세요.`를 쓴다. `eventId=incident_ref`, `entityId=incident_ref`, `relatedMemberId=seniorId`, `seniorId`, `deepLink=/location?seniorId={seniorId}`를 보낸다. data에는 `deliveryStage=SECOND_ALERT`, `safetyEventId=incident_ref`, `incidentRef=incident_ref`를 싣고 판정 ID가 있으면 기존 `decisionId`도 유지한다. ① data는 유지한다.
 
+> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): `incidentRef`는 `safetyEventId`와 같은 값이라 더 싣지 않는다. 아래 예시와 AC3의 `incidentRef`는 변경 전 계약이다.
+
 ```json
 {"data":{"eventId":"inc-0123456789abcdef0123456789abcdef","safetyEventId":"inc-0123456789abcdef0123456789abcdef","incidentRef":"inc-0123456789abcdef0123456789abcdef","deliveryStage":"SECOND_ALERT","type":"HEART_RATE_EMERGENCY","deepLink":"/location?seniorId=17","seniorId":"17"}}
 ```
