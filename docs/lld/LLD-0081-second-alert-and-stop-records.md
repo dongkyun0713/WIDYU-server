@@ -41,7 +41,7 @@
 > 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): `incidentRef`는 `safetyEventId`와 같은 값이라 더 싣지 않는다. 아래 예시와 AC3의 `incidentRef`는 변경 전 계약이다.
 
 ```json
-{"data":{"eventId":"inc-0123456789abcdef0123456789abcdef","safetyEventId":"inc-0123456789abcdef0123456789abcdef","incidentRef":"inc-0123456789abcdef0123456789abcdef","deliveryStage":"SECOND_ALERT","type":"HEART_RATE_EMERGENCY","deepLink":"/location?seniorId=17","seniorId":"17"}}
+{"data":{"eventId":"inc-0123456789abcdef0123456789abcdef","safetyEventId":"inc-0123456789abcdef0123456789abcdef","deliveryStage":"SECOND_ALERT","notificationType":"HEART_RATE_EMERGENCY","deepLink":"/location?seniorId=17","seniorId":"17"}}
 ```
 
 현재 `FcmOutboxService.enqueue`는 `findByRecipientMemberIdAndEventId`로 센터 행을 찾은 뒤 없을 때만 insert한다. `fcm_notification`에는 UK `(recipient_member_id,event_id)`가 있다. 따라서 방장의 ②는 같은 `eventId=incident_ref`로 ① 센터 행을 재사용하고, 비방장은 새 센터 행을 얻는다. 방장에게는 ②용 별도 outbox 행이 생긴다. 센터 행의 기존 읽음·본문·제목을 덮지 않는다. 사건당 ② 게이트가 동일 단계 outbox 중복을 막지만 provider 수준 exactly-once는 보장하지 않는다.

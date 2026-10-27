@@ -67,7 +67,7 @@ LLD-0068은 정각 서버 푸시를 제거했지만 위듀 앱의 기기 예약 
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] ON: 미인증이고 당일 유효한 정시 일정 1건에 대해 정각 레거시 시니어 알림을 논리적으로 1건 enqueue한다(기기별 outbox 행 수는 토큰 수에 따른다). 제목·본문·카테고리·data `type`·`revision`이 §3과 같고, `notificationType`은 null이다. 이미 인증했거나 유효하지 않으면 0건이다.
+- [x] ON: 미인증이고 당일 유효한 정시 일정 1건에 대해 정각 레거시 시니어 알림을 논리적으로 1건 enqueue한다(기기별 outbox 행 수는 토큰 수에 따른다). 제목·본문·카테고리가 §3과 같고, data는 `notificationType=MEDICATION_ON_TIME`·`revision`이며 `type` 키는 없다(#900, LLD-0109). 메시지 자체의 `NotificationType`은 여전히 없다. 이미 인증했거나 유효하지 않으면 0건이다.
 - [x] ON: 같은 조건에서 정각 1건과 +10 M02, +20 M03, +30 M04가 각 시점에 기존 대상에게 간다. 후속 3건의 문구·타입·센터/푸시 정책은 #718 그대로다.
 - [x] OFF: 정각 조회·발송은 0건이며 +10/+20/+30은 ON과 동일하게 처리된다. 자정 경계에서도 각 `dueAt`의 날짜에 유효한 일정만 대상으로 한다.
 - [x] 실제 `application-sensor.yml` 바인딩 테스트에서 환경변수 미지정 시 `onTimePush=true`, `SENSOR_MEDICATION_ON_TIME_PUSH=false` 지정 시 false를 확인한다.

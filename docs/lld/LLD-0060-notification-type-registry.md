@@ -46,7 +46,7 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
       "eventId": "inc-0123456789abcdef0123456789abcdef",
       "safetyEventId": "inc-0123456789abcdef0123456789abcdef",
       "deliveryStage": "INITIAL_ALERT",
-      "type": "HEART_RATE_EMERGENCY",
+      "notificationType": "HEART_RATE_EMERGENCY",
       "notificationId": "4072", "deepLink": "/location?seniorId=17",
       "seniorId": "17"
     },
@@ -65,20 +65,20 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
     "notification": {"title": "김보호 님이 약 알람을 변경했어요.", "body": "바뀐 약 알람은 내일부터 적용돼요."},
     "data": {
       "eventId": "940c15b9-79dc-4fa7-ab5d-27fca2cfa6cf",
-      "type": "MEDICATION_SCHEDULE_CHANGED",
+      "notificationType": "MEDICATION_SCHEDULE_CHANGED",
       "notificationId": "4073", "deepLink": "/goal",
       "revision": "42",
       "effectiveFromDate": "2026-10-02", "actorDisplayName": "김보호"
     },
-    "android": {"ttl": "86400s", "priority": "normal", "notification": {"channel_id": "widyu_general"}},
-    "apns": {"headers": {"apns-expiration": "1790892800", "apns-priority": "10", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "active"}}}
+    "android": {"ttl": "86400s", "priority": "NORMAL", "notification": {"channel_id": "widyu_general"}},
+    "apns": {"headers": {"apns-expiration": "1790892800", "apns-priority": "5", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "active"}}}
   }
 }
 ```
 
 FCM data 최소 키는 `eventId`, `notificationType`, `notificationId`, `deepLink`이다(2026-10-27 사용자 결정으로 `type` 키를 없애고 `notificationType=<enum 이름>` 하나로 정리). 정책서(FE-HANDOFF-v0.4)는 `priority`·`foregroundPresentation`도 최소 키로 적었지만 FE 합의로 2026-10-27부터 보내지 않는다. 앱은 `notificationType`으로 앱 사용 중 표시를 정하고, 우선순위는 Android·APNs 전달 설정에만 반영된다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)). `revision`, `effectiveFromDate`, `actorDisplayName`은 해당 이벤트에만 추가하며, 목적지에 따라 `entityId`·`seniorId`도 실을 수 있다. `deepLink`가 없으면 빈 문자열을 보내고 FE router가 폴백한다. **W2의 `notificationId`는 아직 outbox 행 ID**다. W3가 센터 저장 타입은 센터 행 ID로 교체하고 센터 미저장 타입은 키를 생략한다. W2에서 한 enqueue 호출의 여러 기기는 같은 `eventId`를 공유하며, 호출자가 명시한 eventId가 있으면 우선한다. `DATA_ONLY`는 top-level `notification` 없이 보내고 APNs는 `apns-priority=5`, `apns-push-type=background`, `aps.content-available=1`을 쓴다.
 
-W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=INITIAL_ALERT`를 추가한다. `HEART_RATE_EMERGENCY`의 앱 사용 중 표시는 `MODAL`이며, M02·M03·H01은 `interaction`, M04만 `timeSensitive`라는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)의 구현 가정을 적용한다.
+W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=INITIAL_ALERT`를 추가한다. `HEART_RATE_EMERGENCY`의 앱 사용 중 표시는 `MODAL`(v2 목록 응답에만)이며, H01은 `interaction`, M04와 M02·M03(#900에서 상향)은 `timeSensitive`라는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)의 구현 가정을 적용한다.
 
 ## 4. 데이터 모델
 

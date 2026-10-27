@@ -34,7 +34,7 @@
 
 HTTP 요청·응답과 `POST /api/v1/incidents/{incidentId}/response`의 `HELP` 계약은 유지한다. 변경되는 wire 계약은 S04 `HEART_RATE_EMERGENCY` 최초 알림의 FCM `data`다. 기존 `eventId`, `type`, `priority`, `notificationId`, `deepLink`, `foregroundPresentation`, `seniorId`, 배치 사건의 `decisionId`는 보존한다.
 
-> 2026-10-27 갱신([LLD-0109](LLD-0109-fcm-data-contract-slim.md)): FCM data의 `priority`·`foregroundPresentation`은 더 보내지 않는다. `MODAL` 값은 알림 목록 v2 응답의 `foregroundPresentation`에만 남고, 앱은 `type`으로 위급 모달을 띄운다.
+> 2026-10-27 갱신([LLD-0109](LLD-0109-fcm-data-contract-slim.md)): FCM data의 `priority`·`foregroundPresentation`은 더 보내지 않는다. `MODAL` 값은 알림 목록 v2 응답의 `foregroundPresentation`에만 남고, 앱은 `notificationType`으로 위급 모달을 띄운다. `type` 키도 없앴다(아래 예시는 현재 계약).
 
 ```json
 {
@@ -42,11 +42,9 @@ HTTP 요청·응답과 `POST /api/v1/incidents/{incidentId}/response`의 `HELP` 
     "eventId": "inc-0123456789abcdef0123456789abcdef",
     "safetyEventId": "inc-0123456789abcdef0123456789abcdef",
     "deliveryStage": "INITIAL_ALERT",
-    "type": "HEART_RATE_EMERGENCY",
-    "priority": "critical",
+    "notificationType": "HEART_RATE_EMERGENCY",
     "notificationId": "4072",
     "deepLink": "/location?seniorId=17",
-    "foregroundPresentation": "MODAL",
     "seniorId": "17"
   }
 }

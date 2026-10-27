@@ -34,7 +34,7 @@
 
 | 알림 | 타입 | 생성 위치 | 보호자 deepLink |
 |---|---|---|---|
-| 심박 위급 최초 S04 | `HEART_RATE_EMERGENCY` | `IncidentEscalation`(enum 템플릿) | `/location?seniorId={seniorId}` (`type=HEART_RATE_EMERGENCY` 유지, FE 확인 요청) |
+| 심박 위급 최초 S04 | `HEART_RATE_EMERGENCY` | `IncidentEscalation`(enum 템플릿) | `/location?seniorId={seniorId}` (`notificationType=HEART_RATE_EMERGENCY`, #900) |
 | 안심구역 이탈 최초 S05 | `SAFE_ZONE_EXITED` | 〃 | `/location?seniorId={seniorId}` |
 | 괜찮다 안내 S08/S09 | `SAFETY_SENIOR_OK_NOTICE_*` | `IncidentService.enqueueOkNotice` | `/location?seniorId={seniorId}` |
 | 업로드 완료 A01(보호자 업로더) | `ALBUM_UPLOAD_COMPLETE` | `AlbumNotificationListener` | `/post?postId={albumId}` |
@@ -134,8 +134,8 @@
 
 - [x] AC11. 시니어가 받는 위 타입의 FCM `data.deepLink`와 센터 행 `deep_link`가 표의 경로이고, `NotificationType`과 main 코드에 `widyu://`는 낙상 비타입 `scheme` 상수 하나만 남는다.
 - [x] AC12. 심박 본인확인 FCM의 `data.notificationType`은 `SAFETY_SELF_CHECK`이고 `data.type`은 없다(2026-10-27 [LLD-0109](LLD-0109-fcm-data-contract-slim.md) 이전에는 `data.type=EMERGENCY_CONFIRM_REQUEST`). `data.deepLink`는 빈 문자열이다. 낙상 본인확인 data도 `notificationType=SAFETY_SELF_CHECK`다. 안심구역 본인확인은 LLD-0078에 따라 발송하지 않는다.
-- [x] AC13. 하트·응원 메시지는 수신자 역할과 관계없이 `data.deepLink=/notification`이고 `data.type`이 각 타입 이름이다.
-- [x] AC14. 보호자 수신 경로(§3)와 M08/M05/M09의 `data.type=MEDICATION_SCHEDULE_CHANGED`는 바뀌지 않는다.
+- [x] AC13. 하트·응원 메시지는 수신자 역할과 관계없이 `data.deepLink=/notification`이고 `data.notificationType`이 각 타입 이름이다(#900 이전 키는 `data.type`).
+- [x] AC14. 보호자 수신 경로(§3)는 바뀌지 않는다. M08/M05/M09의 타입 값은 #900에서 `data.notificationType`=`MEDICATION_SCHEDULE_CREATED`/`CHANGED`/`DELETED`로 바뀌었다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)).
 
 > 2026-10-27 갱신([LLD-0109](LLD-0109-fcm-data-contract-slim.md)): §4 표와 AC13·AC14의 `data.type`은 `data.notificationType`(enum 이름)으로 바뀌었다. 하트·응원은 같은 값, M08/M05/M09는 각 enum 이름이다.
 - [x] AC15. `bash scripts/harness/verify.sh`가 통과한다.

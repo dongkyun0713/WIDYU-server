@@ -65,7 +65,7 @@
 3. 동일 시니어·스케줄·날짜·시점 이벤트는 같은 `eventId`를 사용한다. 현행 `VARCHAR(40)` 제한을 지키는 결정적 UUID 문자열로 만든다. +30에는 보호자 ID도 키 재료에 포함한다. M04 센터 행은 `UK(recipient_member_id,event_id)`로 중복을 막는다. +10/+20 `PUSH_ONLY`는 매분 스케줄러 1회 실행을 전제하며 재시작으로 같은 분 재호출 시 중복 enqueue 가능성은 현행과 동일하다. 새 테이블·UK·Redis 키는 만들지 않는다.
 4. LLD-0061의 방장 전용 쓰기 트랜잭션은 일정 저장 후 잠근 대상 `Member`의 `incrementMedicationAlarmRevision()`을 명령당 **한 번** 호출한다. 등록/변경(시간·약 조합)/삭제에 M08/M05/M09를 선택해 방장 이름·같은 revision·`effectiveFromDate`를 전달한다. 일정·revision·센터·outbox enqueue는 같은 트랜잭션이다. 거부·롤백된 명령은 알림·SYNC가 없다.
 5. 매 쓰기 성공마다 시니어에게 같은 revision의 `MEDICATION_SCHEDULE_SYNC`를 **항상 하나 더** enqueue한다. `DATA_ONLY`는 표시용 notification·센터 행·설정 그룹 판정이 없다. 시니어가 `GENERAL`을 꺼도 M08/M05/M09 센터 행과 SYNC는 남고 보이는 푸시만 제외된다. 앱은 더 높은 revision 수신 또는 앱 열기 때 `alarm-sync`를 재조회하고 당일 알람은 유지한다.
-6. `NotificationType`의 nullable `legacyDataType`과 공통 `dataTypeValue()`를 사용한다. `FcmSendDto.dataForEnqueue()`와 `FcmHttpTransport.addTypeData()`는 모든 typed 이벤트에 `data.notificationType=name()`을 넣고 `data.type=dataTypeValue()`를 적용한다. 복약 전용 분기는 공통 조립 코드에 두지 않는다. outbox `notification_type`에는 논리 타입, `data_payload`에는 실제 data를 저장한다. `FcmDelivery.from(row)`의 재시도 복원까지 확인한다.
+6. `FcmSendDto.dataForEnqueue()`와 `FcmHttpTransport.addTypeData()`는 모든 typed 이벤트에 `data.notificationType=name()`만 넣는다(`data.type`·`legacyDataType`·`dataTypeValue()`는 #900에서 제거, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)). 복약 전용 분기는 공통 조립 코드에 두지 않는다. outbox `notification_type`에는 논리 타입, `data_payload`에는 실제 data를 저장한다. `FcmDelivery.from(row)`의 재시도 복원까지 확인한다.
 
 ## 6. 예외 / 에러 처리
 
@@ -85,7 +85,7 @@
 - [x] E12: 방장의 등록/변경(시간·약 조합)/삭제는 대상 시니어 **한 명**에게 각각 M08/M05/M09 `PUSH_AND_CENTER`·`GOAL` 알림을 1건씩 만든다. 방장·다른 보호자에게 결과 알림은 없다.
 - [x] E12: 제목에 방장 이름(`actorDisplayName`, 없으면 `가족`)을 넣고 문구표 §3의 정확한 제목·본문을 쓴다. 약 이름·복용량은 잠금화면에 없고 `revision`은 쓰기 응답·`Member` 값과 같으며 `effectiveFromDate`는 다음 날이다.
 - [x] E13: 매 쓰기에 같은 revision의 `MEDICATION_SCHEDULE_SYNC` `DATA_ONLY`를 1건 동반한다. 시니어가 `GENERAL`을 꺼도 M08/M05/M09 센터와 SYNC는 남고 보이는 푸시만 제외된다. SYNC는 화면 알림·센터 행이 없다.
-- [x] E13: 실제 FCM HTTP payload와 outbox 재시도 data에서 `type=MEDICATION_SCHEDULE_CHANGED`, `notificationType=<논리 타입>`, `revision`, M08/M05/M09의 `effectiveFromDate`를 유지한다. 다른 typed 이벤트 `type`은 바뀌지 않는다.
+- [x] E13: 실제 FCM HTTP payload와 outbox 재시도 data에 `notificationType=<논리 타입>`(M08 `MEDICATION_SCHEDULE_CREATED`, M05 `MEDICATION_SCHEDULE_CHANGED`, M09 `MEDICATION_SCHEDULE_DELETED`, SYNC `MEDICATION_SCHEDULE_SYNC`), `revision`, M08/M05/M09의 `effectiveFromDate`가 있고 `type` 키는 없다(#900).
 - [x] 거부·롤백된 쓰기는 revision 증가·센터 행·SYNC가 0건이다. 당일 버전과 다음 날 적용일은 LLD-0061을 따른다.
 - [x] JUnit 5 + Mockito(`given(...).willReturn(...)`)와 필요한 outbox/전송 통합 테스트가 위 상태·부수효과·payload를 검증한다. 한글 언더스코어 메서드명, `@DisplayName("<행위>하면 <결과>한다")`, 상태 검증 우선 규칙을 따른다.
 - [x] `bash scripts/harness/verify.sh`가 통과한다.
