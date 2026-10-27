@@ -43,23 +43,24 @@ class SocialUnlinkServiceTest {
     @InjectMocks private SocialUnlinkService socialUnlinkService;
 
     @Test
-    @DisplayName("탈퇴 회원의 연동 해제를 예약하면 카카오는 oauthId로, 애플은 토큰과 함께 작업을 저장한다")
+    @DisplayName("탈퇴 회원의 연동 해제를 예약하면 카카오는 oauthId로, 애플·네이버는 토큰과 함께 작업을 저장한다")
     void 연동_해제를_예약하면_제공자별_작업을_저장한다() {
         // given
         Member member = memberWith(
                 account -> SocialAccount.createSocialAccount("k@k.com", "kakao", "kakao-id", "kakao-token", account),
-                account -> SocialAccount.createSocialAccount("a@a.com", "apple", "apple-id", "apple-token", account));
+                account -> SocialAccount.createSocialAccount("a@a.com", "APPLE", "apple-id", "apple-token", account),
+                account -> SocialAccount.createSocialAccount("n@n.com", "naver", "naver-id", "naver-token", account));
 
         // when
         socialUnlinkService.schedule(member);
 
         // then
         ArgumentCaptor<SocialUnlinkTask> captor = ArgumentCaptor.forClass(SocialUnlinkTask.class);
-        verify(repository, times(2)).save(captor.capture());
+        verify(repository, times(3)).save(captor.capture());
         List<SocialUnlinkTask> tasks = captor.getAllValues();
-        assertThat(tasks).extracting(SocialUnlinkTask::getProvider).containsExactly("kakao", "apple");
-        assertThat(tasks).extracting(SocialUnlinkTask::getOauthId).containsExactly("kakao-id", "apple-id");
-        assertThat(tasks).extracting(SocialUnlinkTask::getRefreshToken).containsExactly(null, "apple-token");
+        assertThat(tasks).extracting(SocialUnlinkTask::getProvider).containsExactly("kakao", "APPLE", "naver");
+        assertThat(tasks).extracting(SocialUnlinkTask::getOauthId).containsExactly("kakao-id", "apple-id", "naver-id");
+        assertThat(tasks).extracting(SocialUnlinkTask::getRefreshToken).containsExactly(null, "apple-token", "naver-token");
         assertThat(tasks).allMatch(task -> task.getMemberId().equals(1L) && task.isPending());
     }
 
@@ -68,7 +69,7 @@ class SocialUnlinkServiceTest {
     void 리프레시_토큰이_없는_애플_계정은_작업을_만들지_않는다() {
         // given
         Member member = memberWith(
-                account -> SocialAccount.createSocialAccount("a@a.com", "apple", "apple-id", null, account));
+                account -> SocialAccount.createSocialAccount("a@a.com", "APPLE", "apple-id", null, account));
 
         // when
         socialUnlinkService.schedule(member);
@@ -81,9 +82,9 @@ class SocialUnlinkServiceTest {
     @DisplayName("연동 해제 작업을 처리해 성공하면 완료로 바꾸고 oauthId와 토큰을 지운다")
     void 작업을_처리해_성공하면_완료로_바꾸고_oauthId와_토큰을_지운다() {
         // given
-        SocialUnlinkTask task = SocialUnlinkTask.pending(1L, "apple", "apple-id", "apple-token", LocalDateTime.now());
+        SocialUnlinkTask task = SocialUnlinkTask.pending(1L, "APPLE", "apple-id", "apple-token", LocalDateTime.now());
         given(repository.findById(10L)).willReturn(Optional.of(task));
-        given(strategyFactory.getStrategy("apple")).willReturn(strategy);
+        given(strategyFactory.getStrategy("APPLE")).willReturn(strategy);
 
         // when
         socialUnlinkService.process(10L);

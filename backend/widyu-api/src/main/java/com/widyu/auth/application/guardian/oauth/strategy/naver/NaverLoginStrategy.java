@@ -12,11 +12,15 @@ import com.widyu.auth.dto.response.NaverAuthResponse;
 import com.widyu.auth.dto.response.SocialClientResponse;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
+import com.widyu.global.properties.NaverProperties;
 import com.widyu.global.util.PhoneNumberUtil;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 @Slf4j
@@ -25,6 +29,7 @@ import org.springframework.web.client.RestClient;
 public class NaverLoginStrategy implements SocialLoginStrategy {
 
     private final RestClient restClient;
+    private final NaverProperties naverProperties;
 
     @Override
     public OAuthProvider getSupportedProvider() {
@@ -109,12 +114,18 @@ public class NaverLoginStrategy implements SocialLoginStrategy {
                 throw new BusinessException(ErrorCode.NAVER_WITHDRAW_ERROR);
             }
             
-            restClient.delete()
-                    .uri(uriBuilder -> uriBuilder
-                            .path(NAVER_WITHDRAW_URL)
-                            .queryParam("grant_type", "delete")
-                            .queryParam("refresh_token", refreshToken)
-                            .build())
+            // 네이버 토큰 폐기 API: POST form(client_id, client_secret, token, token_type_hint). 결과는 HTTP 상태로만 판단한다.
+            // https://developers.naver.com/docs/login/api/api.md (3.3 토큰 폐기 요청, 4.4)
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("client_id", naverProperties.clientId());
+            form.add("client_secret", naverProperties.clientSecret());
+            form.add("token", refreshToken);
+            form.add("token_type_hint", "refresh_token");
+
+            restClient.post()
+                    .uri(NAVER_WITHDRAW_URL)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
                     .exchange((req, res) -> {
                         if (!res.getStatusCode().is2xxSuccessful()) {
                             log.error("네이버 계정 탈퇴 실패, 상태 코드: {}", res.getStatusCode());
