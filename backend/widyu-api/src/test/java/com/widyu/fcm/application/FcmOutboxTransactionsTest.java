@@ -102,6 +102,34 @@ class FcmOutboxTransactionsTest {
     }
 
     @Test
+    @DisplayName("FCM이 거부한 전송이면 최종 실패 로그의 사유에 HTTP 상태와 오류 코드를 붙인다")
+    void FCM이_거부한_전송이면_실패_사유에_상세_코드를_붙인다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row.getRecipientMember(), "id", 12L);
+        given(outbox.lockById(ROW_ID)).willReturn(Optional.of(row));
+        Logger logger = (Logger) LoggerFactory.getLogger(FcmOutboxTransactions.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            transactions().finish(delivery(),
+                    FcmTransport.Result.rejected(false, "HTTP_401 UNAUTHENTICATED THIRD_PARTY_AUTH_ERROR"));
+
+            // then
+            assertThat(row.getState()).isEqualTo(FcmOutbox.State.EXHAUSTED);
+            assertThat(appender.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
+                    "[FCM_FAILED] Type=HEART_MESSAGE Emergency=true Related=1023 Recipient=12 Attempts=1 "
+                            + "Reason=REJECTED(HTTP_401 UNAUTHENTICATED THIRD_PARTY_AUTH_ERROR)");
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     @DisplayName("재시도할 수 없는 전송 실패면 받는 사람과 관련 회원을 담아 최종 실패 로그를 남긴다")
     void 재시도할_수_없는_전송_실패면_받는_사람과_관련_회원을_담아_최종_실패_로그를_남긴다() {
         // given
@@ -214,6 +242,20 @@ class FcmOutboxTransactionsTest {
                 .containsExactlyInAnyOrderEntriesOf(Map.of("type", "MEDICATION_SCHEDULE_CHANGED"));
         assertThat(FcmDelivery.from(revisionOnly).message().data())
                 .containsExactlyInAnyOrderEntriesOf(Map.of("revision", "42"));
+    }
+
+    @Test
+    @DisplayName("푸시 전용 본인확인 outbox를 복원하면 센터 ID를 만들지 않는다")
+    void 푸시_전용_본인확인_outbox는_센터_ID를_만들지_않는다() {
+        // given
+        FcmOutbox row = row(null);
+        ReflectionTestUtils.setField(row, "notificationType", NotificationType.SAFETY_SELF_CHECK);
+
+        // when
+        FcmDelivery delivery = FcmDelivery.from(row);
+
+        // then
+        assertThat(delivery.notificationId()).isNull();
     }
 
     @Test

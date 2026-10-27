@@ -16,10 +16,11 @@ public interface AlbumUnlockRepository extends JpaRepository<AlbumUnlock, Long> 
     @Query("SELECT au.album.id FROM AlbumUnlock au WHERE au.member = :member ORDER BY au.unlockedAt DESC")
     List<Long> findUnlockedAlbumIdsByMember(@Param("member") Member member);
 
-    @Query("SELECT a.id FROM Album a WHERE a.status = 'ACTIVE' "
+    // 동영상 처리 중(PROCESSING)인 앨범도 포함한다. 업로드 직후 목록에서 빠지면 앱이 잠긴 것으로 표시한다(#908)
+    @Query("SELECT a.id FROM Album a WHERE a.status IN ('ACTIVE', 'PROCESSING') "
             + "AND a.member.id IN :memberIds AND a.member.type = :memberType "
             + "ORDER BY a.createdAt DESC, a.id DESC")
-    List<Long> findActiveAlbumIdsByMemberIdsAndMemberType(
+    List<Long> findActiveOrProcessingAlbumIdsByMemberIdsAndMemberType(
             @Param("memberIds") List<Long> memberIds,
             @Param("memberType") MemberType memberType
     );

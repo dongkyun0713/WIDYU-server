@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
 import ch.qos.logback.classic.Logger;
@@ -42,6 +43,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -493,6 +495,32 @@ class HeartRateServiceTest {
     }
 
     @Test
+    @DisplayName("단건 저장 트랜잭션이 끝나면 저장한 측정으로 최신값을 갱신한다")
+    void 단건_저장_트랜잭션이_끝나면_저장한_측정으로_최신값을_갱신한다() {
+        // given
+        Long memberId = 1L;
+        LocalDateTime measuredAt = LocalDateTime.of(2026, 10, 22, 3, 0, 0);
+        HeartRateSingleRequest request = HeartRateSingleRequest.of(185, measuredAt, "서울시", "UNKNOWN");
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01012345678");
+        given(memberRepository.findById(memberId)).willReturn(Optional.of(member));
+        given(heartRateEventRepository.existsByMemberIdAndMeasuredAt(memberId, measuredAt)).willReturn(false);
+        given(heartRateAnomalyDetector.detect(eq(memberId), any(), eq("UNKNOWN")))
+                .willReturn(new DetectionResult(HeartRateStatus.EMERGENCY, true, "EMERGENCY", null));
+        given(heartRatePersistenceService.saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true))
+                .willReturn(HeartRateResult.of(memberId, HeartRateStatus.EMERGENCY, 185, measuredAt));
+
+        // when
+        heartRateService.processHeartRate(memberId, request);
+
+        // then
+        // 저장 트랜잭션(saveMeasurement)이 커밋된 뒤에 Redis를 쓴다. Redis 실패가 심박·위급 알림을 롤백시키지 않는다(LLD-0102).
+        InOrder inOrder = inOrder(heartRatePersistenceService);
+        inOrder.verify(heartRatePersistenceService).saveMeasurement(memberId, request, HeartRateStatus.EMERGENCY, true);
+        inOrder.verify(heartRatePersistenceService)
+                .updateLatestResult(memberId, HeartRateStatus.EMERGENCY, 185, measuredAt);
+    }
+
+    @Test
     @DisplayName("같은 측정 시각을 재전송하면 저장 없이 기존 상태를 반환한다")
     void 같은_측정시각을_재전송하면_저장없이_기존상태를_반환한다() {
         // given
@@ -595,6 +623,8 @@ class HeartRateServiceTest {
         assertThat(response).isEqualTo(
                 HeartRateStatusResponse.of(memberId, HeartRateStatus.EMERGENCY, 187, measuredAt));
         then(degradedEmergencyAlertService).should().alertWithoutDatabase(memberId, measuredAt);
+        // 저장하지 못한 측정은 최신값에도 올리지 않는다.
+        then(heartRatePersistenceService).should(never()).updateLatestResult(anyLong(), any(), any(), any());
     }
 
     @Test

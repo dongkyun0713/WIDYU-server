@@ -22,6 +22,7 @@ public class FcmCategoryResponse {
     private static String getCategoryName(FcmCategory category) {
         return switch (category) {
             case ALL -> "전체";
+            case UNREAD -> "안 읽음";
             case ALBUM -> "앨범";
             case TARGET -> "목표";
             case HEALTH_SCHEDULE -> "방문 일정";

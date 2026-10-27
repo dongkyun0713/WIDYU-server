@@ -20,7 +20,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "알림 목록 조회",
-            description = "현재 로그인한 유저의 알림 목록을 카테고리별 및 커서 기반으로 조회합니다."
+            description = "현재 로그인한 유저의 알림 목록을 카테고리별 및 커서 기반으로 조회합니다. `category=UNREAD`이면 카테고리와 관계없이 안 읽은 알림만 반환합니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -36,12 +36,13 @@ public interface FcmDocs {
                                         "notifications": [
                                           {
                                             "notificationId": 1,
-                                            "image": "~",
+                                            "image": "https://cdn.widyu.store/profile/123.png",
                                             "category": "ALBUM",
                                             "title": "부모님이 올려두신 게시물을 모두 읽었어요!",
                                             "content": "새로운 게시물을 업로드해주세요",
                                             "createdAt": "2025-08-26T14:00:00",
-                                            "scheme": ""
+                                            "isRead": false,
+                                            "path": "/album"
                                           }
                                         ],
                                         "hasNext": true,
@@ -56,7 +57,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "개별 알림 읽음 처리",
-            description = "알림 ID를 기준으로 특정 알림을 읽음 상태로 변경합니다."
+            description = "현재 수신자의 알림센터 ID를 읽음 처리합니다. 목록에 저장되는 알림의 FCM data.notificationId는 목록 notificationId와 같은 값인 문자열입니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -93,7 +94,7 @@ public interface FcmDocs {
 
     @Operation(
             summary = "알림 카테고리 조회",
-            description = "알림 카테고리별 개수를 조회합니다."
+            description = "알림 카테고리별 안 읽은 알림 개수를 조회합니다. `전체` 바로 뒤에 전체 안 읽은 수를 담은 `UNREAD`(안 읽음) 항목이 옵니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -109,6 +110,11 @@ public interface FcmDocs {
                                         {
                                           "label": "ALL",
                                           "name": "전체",
+                                          "count": 5
+                                        },
+                                        {
+                                          "label": "UNREAD",
+                                          "name": "안 읽음",
                                           "count": 5
                                         },
                                         {

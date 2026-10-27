@@ -209,9 +209,8 @@ schemes.apple
 6. AppleTokenResponse 파싱
 7. id_token을 JWT 세 부분으로 split하고 payload만 Base64Url decode
 8. AppleIdTokenPayload.sub → SocialClientResponse.oauthId
-9. email 결정
-   - request.profile.email이 있으면 우선 사용
-   - 없으면 id_token payload email 사용
+9. email 결정 (LLD-0094에서 정정)
+   - id_token payload email만 사용한다. request.profile.email은 무시한다
 10. name 결정
    - request.profile.name이 있으면 사용
    - 없으면 "익명의 사용자"
@@ -257,6 +256,7 @@ Apple 로그인 응답에는 전화번호가 없으므로 `phoneNumber`는 일�
 3. Authorization 헤더에서 temporary token 추출
 4. TemporaryMemberUtil로 임시 회원 정보 검증
 5. temporaryMember.phoneNumber를 Member.phoneNumber에 반영
+   (LLD-0094에서 정정: 임시 토큰을 먼저 검증하고, 회원 번호가 비어 있을 때만 반영하며, 반영 뒤 임시 회원을 삭제한다)
 ```
 
 ### 5-6. Apple 계정 탈퇴 revoke
@@ -290,7 +290,7 @@ Apple 로그인 응답에는 전화번호가 없으므로 `phoneNumber`는 일�
 - [x] `authorizationCode`가 없으면 Apple token endpoint를 호출하지 않고 실패한다
 - [x] `platform=ios`는 iOS client id로, `platform=android`는 Android client id로 client secret을 생성한다
 - [x] Apple token 교환 성공 시 `id_token.sub`를 `SocialAccount.oauthId`로 저장한다
-- [x] 클라이언트가 전달한 `profile.email`은 id_token email보다 우선한다
+- [x] ~~클라이언트가 전달한 `profile.email`은 id_token email보다 우선한다~~ → LLD-0094: id_token email만 사용한다
 - [x] 이름이 없으면 "익명의 사용자"로 회원명을 만든다
 - [x] 기존 Apple 계정 로그인은 JWT pair와 profile을 반환한다
 - [x] 같은 이메일의 다른 계정이 있으면 `socialTemporaryToken`을 반환한다

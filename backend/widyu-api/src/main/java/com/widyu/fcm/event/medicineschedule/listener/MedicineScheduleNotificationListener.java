@@ -31,8 +31,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MedicineScheduleNotificationListener {
 
-    private static final String MEDICINE_DEFAULT_IMAGE = "medicine.png";
-
     private final FcmService fcmService;
     private final MedicineScheduleRepository medicineScheduleRepository;
     private final MedicationProofRepository medicationProofRepository;
@@ -91,7 +89,7 @@ public class MedicineScheduleNotificationListener {
                 .title("약 복용 시간이에요!")
                 .content("지금 약을 복용하고 인증해주세요.")
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
-                .scheme("").image(MEDICINE_DEFAULT_IMAGE)
+                .scheme("").image(schedule.getMember().getProfileImage())
                 .data(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision()))
                 .build();
 
@@ -162,7 +160,7 @@ public class MedicineScheduleNotificationListener {
         NotificationCopy copy = NotificationCopy.of(type, type.copyCode(), Map.of());
         FcmSendDto dto = FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
-                .fcmCategory(FcmCategory.MEDICINE_SCHEDULE).image(MEDICINE_DEFAULT_IMAGE)
+                .fcmCategory(FcmCategory.MEDICINE_SCHEDULE).image(schedule.getMember().getProfileImage())
                 .notificationType(type).entityId(schedule.getId().toString())
                 .eventId(timedEventId(type, schedule.getId(), seniorId, date))
                 .data(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision(), type))

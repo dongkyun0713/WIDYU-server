@@ -1,5 +1,6 @@
 package com.widyu.auth.application.guardian.unlink;
 
+import com.widyu.auth.OAuthProvider;
 import com.widyu.auth.SocialUnlinkTask;
 import com.widyu.auth.SocialUnlinkTaskStatus;
 import com.widyu.auth.application.guardian.oauth.strategy.SocialLoginStrategyFactory;
@@ -24,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SocialUnlinkService {
 
-    private static final Set<String> REFRESH_TOKEN_PROVIDERS = Set.of("apple", "naver");
+    // SocialAccount.provider에는 OAuthProvider 값이 저장된다(APPLE은 "APPLE")
+    private static final Set<String> REFRESH_TOKEN_PROVIDERS =
+            Set.of(OAuthProvider.APPLE.getValue(), OAuthProvider.NAVER.getValue());
     private static final int DUE_BATCH_SIZE = 100;
 
     private final SocialUnlinkTaskRepository repository;

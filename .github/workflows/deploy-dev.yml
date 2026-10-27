@@ -125,7 +125,14 @@ jobs:
       - name: Deploy with Docker Compose
         env:
           ORACLE_SSH_KNOWN_HOSTS: ${{ secrets.ORACLE_SSH_KNOWN_HOSTS }}
+          DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
+          ENV_TAG: DEV
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          set -euo pipefail
           DEPLOY_KNOWN_HOSTS_FILE="$PWD/.ssh-deploy/known_hosts"
           mkdir -p "$(dirname "$DEPLOY_KNOWN_HOSTS_FILE")"
           printf "%s" "$ORACLE_PRIVATE_KEY" > private_key.pem
@@ -134,7 +141,7 @@ jobs:
           trap 'rm -f private_key.pem "$DEPLOY_KNOWN_HOSTS_FILE"' EXIT
 
           ssh -i private_key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS_FILE" \
-            "$ORACLE_SSH_USER@$ORACLE_HOST" 'bash -se' <<'REMOTE_SCRIPT'
+            "$ORACLE_SSH_USER@$ORACLE_HOST" 'bash -se' <<'REMOTE_SCRIPT' | bash scripts/ci/forward-deploy-events.sh
             set -e
 
             cd ${{ env.ORACLE_DEPLOY_PATH }}
@@ -165,9 +172,30 @@ jobs:
             echo "🔧 Ensuring MySQL, Redis, and AI are running..."
             docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps mysql redis widyu-ai
 
+            wait_for_app_https() {
+              for attempt in 1 2 3 4 5; do
+                if curl --fail --silent --show-error --max-time 10 \
+                  --resolve dev.widyu.store:443:127.0.0.1 \
+                  https://dev.widyu.store/actuator/health >/dev/null; then
+                  return 0
+                fi
+                sleep 2
+              done
+              return 1
+            }
+
             PREVIOUS_IMAGE=""
             if docker inspect widyu-api-dev >/dev/null 2>&1; then
               PREVIOUS_IMAGE=$(docker inspect -f '{{.Config.Image}}' widyu-api-dev)
+              PREVIOUS_RUNNING=$(docker inspect -f '{{.State.Running}}' widyu-api-dev)
+              if [ "$PREVIOUS_RUNNING" = "true" ]; then
+                docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml stop widyu-api
+                if [ "$(docker inspect -f '{{.State.Running}}' widyu-api-dev)" != "false" ]; then
+                  echo "App stop could not be confirmed." >&2
+                  exit 1
+                fi
+                echo "WIDYU_DEPLOY_EVENT=app_stopped"
+              fi
             fi
 
             echo "🚀 Deploying and checking widyu-api..."
@@ -179,6 +207,11 @@ jobs:
                   sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$PREVIOUS_TAG/" .env
                   docker pull "$PREVIOUS_IMAGE"
                   docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.dev-server.yml up -d --wait --no-build --no-deps --force-recreate widyu-api
+                  docker exec widyu-nginx-dev nginx -t
+                  docker exec widyu-nginx-dev nginx -s reload
+                  if wait_for_app_https; then
+                    echo "WIDYU_DEPLOY_EVENT=app_rollback"
+                  fi
                 fi
               fi
               exit 1
@@ -209,21 +242,11 @@ jobs:
             fi
 
             echo "🩺 Checking the API through nginx..."
-            for attempt in 1 2 3 4 5; do
-              if curl --fail --silent --show-error --max-time 10 \
-                --resolve dev.widyu.store:443:127.0.0.1 \
-                https://dev.widyu.store/actuator/health >/dev/null; then
-                echo "✅ API health check through nginx passed."
-                break
-              fi
-
-              if [ "$attempt" -eq 5 ]; then
-                echo "❌ API health check through nginx failed after HTTPS setup." >&2
-                exit 1
-              fi
-
-              sleep 2
-            done
+            if ! wait_for_app_https; then
+              echo "❌ API health check through nginx failed after HTTPS setup." >&2
+              exit 1
+            fi
+            echo "WIDYU_DEPLOY_EVENT=app_restarted"
           REMOTE_SCRIPT
 
   notify-deploy:
@@ -246,6 +269,7 @@ jobs:
         env:
           DISCORD_DEPLOY_WEBHOOK_URL: ${{ secrets.DISCORD_DEPLOY_WEBHOOK_URL }}
           ENV_TAG: DEV
+          NOTIFY_SUCCESS: "false"
           RESULT: ${{ contains(needs.*.result, 'cancelled') && 'cancelled' || (needs.build-and-push-docker.result == 'success' && needs.deploy-to-dev-server.result == 'success') && 'success' || 'failure' }}
           FAILED_STEP: ${{ needs.build-and-push-docker.result == 'failure' && '이미지 빌드 단계' || needs.deploy-to-dev-server.result == 'failure' && '서버 배포 단계' || '' }}
           COMMIT_SHA: ${{ github.sha }}

@@ -71,7 +71,7 @@ class SeniorProfileServiceTest {
         given(albumUnlockRepository.findUnlockedAlbumIdsByMember(currentMember))
                 .willReturn(List.of(10L));
         given(familyAccessService.getFamilyMemberIds(currentMember)).willReturn(List.of(1L, 2L, 3L));
-        given(albumUnlockRepository.findActiveAlbumIdsByMemberIdsAndMemberType(
+        given(albumUnlockRepository.findActiveOrProcessingAlbumIdsByMemberIdsAndMemberType(
                 List.of(1L, 2L, 3L), MemberType.SENIOR))
                 .willReturn(List.of(20L, 10L));
 

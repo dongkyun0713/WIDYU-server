@@ -30,7 +30,7 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "시니어 본인 건강 일정 생성",
-            description = "시니어가 자신의 건강 일정을 생성합니다. 생성 시 rewardPoint는 100, isReward는 false로 자동 설정됩니다."
+            description = "시니어가 자신의 건강 일정을 생성합니다. 생성 시 rewardPoint는 100, isReward는 false로 자동 설정됩니다. 시니어만 호출할 수 있고, 보호자가 부르면 403입니다(보호자는 `/guardians`로 시니어 일정을 등록합니다)."
     )
     @RequestBody(
             description = "건강 일정 생성 정보",
@@ -67,6 +67,22 @@ public interface HealthScheduleDocs {
                                         "latitude": 37.5665,
                                         "longitude": 126.9780
                                       }
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponse(
+            responseCode = "403",
+            description = "시니어가 아닌 회원의 호출",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(
+                            value = """
+                                    {
+                                      "code": "AUTH_4030",
+                                      "message": "시니어만 본인 건강 일정을 등록할 수 있습니다.",
+                                      "data": null
                                     }
                                     """
                     )
@@ -311,7 +327,8 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "시니어 본인 특정 날짜 건강 일정 상세 조회",
-            description = "시니어가 특정 날짜의 건강 일정 상세 정보를 조회합니다. rewardPoint와 isReward 정보가 포함됩니다."
+            description = "시니어가 특정 날짜의 건강 일정 상세 정보를 조회합니다. rewardPoint와 isReward 정보가 포함됩니다. "
+                    + "해당 날짜(00:00~24:00)의 일정 전체를 반환하므로 오늘 날짜를 조회하면 예정 시각이 지난 일정과 완료된 일정도 progressStatus와 함께 포함됩니다."
     )
     @Parameter(name = "date", description = "조회 날짜 (yyyy-MM-dd)", required = true, example = "2025-11-15")
     @ApiResponse(
@@ -346,7 +363,8 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "보호자가 시니어 특정 날짜 건강 일정 상세 조회",
-            description = "보호자가 연결된 시니어의 특정 날짜 건강 일정 상세 정보를 조회합니다. 보상 정보는 포함되지 않습니다."
+            description = "보호자가 연결된 시니어의 특정 날짜 건강 일정 상세 정보를 조회합니다. 보상 정보는 포함되지 않습니다. "
+                    + "해당 날짜(00:00~24:00)의 일정 전체를 반환하므로 오늘 날짜를 조회하면 예정 시각이 지난 일정과 완료된 일정도 progressStatus와 함께 포함됩니다."
     )
     @Parameter(name = "memberId", description = "시니어 회원 ID", required = true, example = "123")
     @Parameter(name = "date", description = "조회 날짜 (yyyy-MM-dd)", required = true, example = "2025-11-15")
@@ -383,7 +401,8 @@ public interface HealthScheduleDocs {
 
     @Operation(
             summary = "일주일치 건강 일정 조회 (로그인 시)",
-            description = "시니어가 로그인 시 오늘부터 7일간의 건강 일정을 조회합니다. 병원 위치 정보가 포함됩니다."
+            description = "시니어가 로그인 시 오늘부터 7일간의 건강 일정을 조회합니다. 병원 위치 정보가 포함됩니다. "
+                    + "조회 시작은 오늘 00:00이므로 오늘 예정 시각이 지난 일정도 포함됩니다."
     )
     @ApiResponse(
             responseCode = "200",

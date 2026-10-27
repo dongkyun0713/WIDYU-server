@@ -62,7 +62,7 @@ public class HeartRateService {
     /**
      * 측정값 1건을 수신 즉시 판정·저장한다(LLD-0023). DB 접근이 실패하면 AI 판정만으로 응답하고 위급이면
      * DB 없이 보호자에게 알린다(LLD-0086 5.2). 이 메서드에 @Transactional을 붙이지 않는다. 붙이면 catch 지점이
-     * 롤백 전용 트랜잭션 안이 되어 응답 뒤 커밋에서 다시 실패한다.
+     * 롤백 전용 트랜잭션 안이 되어 응답 뒤 커밋에서 다시 실패하고, 최신값 쓰기도 커밋 앞으로 돌아간다(LLD-0102).
      */
     public HeartRateStatusResponse processHeartRate(Long memberId, HeartRateSingleRequest request) {
         try {
@@ -96,6 +96,9 @@ public class HeartRateService {
             return respondWithoutDatabase(memberId, request, detection, exception);
         }
 
+        // 저장 트랜잭션이 커밋된 뒤라 Redis가 실패해도 심박·위급 알림은 남고, 이 호출은 예외를 내지 않는다(LLD-0102).
+        heartRatePersistenceService.updateLatestResult(
+                memberId, result.getStatus(), result.getHeartRate(), result.getMeasuredAt());
         return HeartRateStatusResponse.from(result);
     }
 

@@ -38,7 +38,8 @@ public interface WalkDocs {
                     - 기록이 없는 과거 날짜 중 회원의 첫 기록보다 앞선 날은 목표가 없던 날이므로 goal은 null
                     - 첫 기록 이후 기록이 없는 과거 날짜는 그날 다음에 오는 첫 기록의 목표(없으면 현재 기본 목표)를 반환
                     - 기록이 없는 오늘·미래 날짜는 기본 목표를 적용하며, 미설정이면 goal은 null
-                    - summary의 achieved/total은 저장된 기록 기준이며 0걸음으로 채운 날짜는 포함하지 않음
+                    - summary의 achieved는 목표를 달성한 기록 수, total은 걷기 목표가 있던 날 수(오늘까지)
+                    - 걸음 기록이 없어도 첫 기록 이후이고 기본 목표가 있으면 total에 포함하며 미달성으로 계산
 
                     **Summary의 previous 계산:**
                     - 요청받은 year, month에서 -1개월

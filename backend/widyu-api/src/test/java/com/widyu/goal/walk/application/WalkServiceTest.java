@@ -219,8 +219,9 @@ class WalkServiceTest {
             assertThat(daily.actual()).isZero();
             assertThat(daily.goal()).isEqualTo(9000);
         });
+        // 첫 기록(10/1) 이후 미수신 28일도 목표가 있던 날이라 분모에 들어간다
         assertThat(response.summary().current()).isEqualTo(
-                WalkMonthlyResponse.WalkSummary.MonthStats.of(1, 3));
+                WalkMonthlyResponse.WalkSummary.MonthStats.of(1, 31));
         assertThat(response.summary().previous()).isEqualTo(
                 WalkMonthlyResponse.WalkSummary.MonthStats.of(2, 4));
     }
@@ -281,6 +282,31 @@ class WalkServiceTest {
             assertThat(daily.actual()).isZero();
             assertThat(daily.goal()).isEqualTo(8000);
         });
+    }
+
+    @Test
+    @DisplayName("이번 달 summary의 전체 일수는 걸음 기록이 없어도 오늘까지 목표가 있던 날을 센다")
+    void 이번_달_summary는_오늘까지_목표가_있던_날을_센다() {
+        // given: 첫 기록은 지난달 이전, 이번 달 기록은 없음
+        Member senior = member(2L, MemberType.SENIOR);
+        seniorProfile(senior).updateDefaultWalkGoal(8000);
+        YearMonth month = YearMonth.now();
+        LocalDate today = LocalDate.now();
+        given(memberRepository.findById(2L)).willReturn(Optional.of(senior));
+        given(walkRepository.findByMemberAndWalkDateBetweenOrderByWalkDateAsc(
+                senior, month.atDay(1), month.atEndOfMonth())).willReturn(List.of());
+        given(walkRepository.findFirstByMemberOrderByWalkDateAsc(senior))
+                .willReturn(Optional.of(Walk.createWithGoal(senior, month.minusMonths(2).atDay(1), 8000)));
+
+        // when
+        WalkMonthlyResponse response = walkService.getMonthlyStats(
+                month.getYear(), month.getMonthValue(), 2L);
+
+        // then: 미래 날짜는 빼고 1일~오늘만 센다
+        assertThat(response.summary().current()).isEqualTo(
+                WalkMonthlyResponse.WalkSummary.MonthStats.of(0, today.getDayOfMonth()));
+        assertThat(response.summary().previous()).isEqualTo(
+                WalkMonthlyResponse.WalkSummary.MonthStats.of(0, month.minusMonths(1).lengthOfMonth()));
     }
 
     @ParameterizedTest

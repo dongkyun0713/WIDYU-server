@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -23,6 +24,12 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT m FROM Member m WHERE m.id = :memberId")
     Optional<Member> findByIdForUpdate(@Param("memberId") Long memberId);
+
+    // 빈 번호일 때만 채운다. 확인과 갱신을 한 문장으로 해 동시 요청이 먼저 채운 번호를 덮어쓰지 않는다 (LLD-0094)
+    @Modifying
+    @Query("UPDATE Member m SET m.phoneNumber = :phoneNumber "
+            + "WHERE m.id = :memberId AND (m.phoneNumber IS NULL OR TRIM(m.phoneNumber) = '')")
+    int fillPhoneNumberIfEmpty(@Param("memberId") Long memberId, @Param("phoneNumber") String phoneNumber);
 
     Optional<Member> findByPhoneNumber(String phoneNumber);
     Optional<Member> findByPhoneNumberAndName(String phoneNumber, String name);

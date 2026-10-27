@@ -139,12 +139,19 @@ public class FcmOutboxTransactions {
             return "EXPIRED";
         }
         if (result.permanentToken()) {
-            return "INVALID_TOKEN";
+            return withDetail("INVALID_TOKEN", result);
         }
         if (!result.retryable()) {
-            return "REJECTED";
+            return withDetail("REJECTED", result);
         }
         return "RETRY_EXHAUSTED";
+    }
+
+    private static String withDetail(String reason, FcmTransport.Result result) {
+        if (result.detail() == null) {
+            return reason;
+        }
+        return reason + "(" + result.detail() + ")";
     }
 
     /**

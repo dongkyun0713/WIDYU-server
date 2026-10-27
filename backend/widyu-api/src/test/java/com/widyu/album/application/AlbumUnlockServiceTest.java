@@ -128,6 +128,44 @@ class AlbumUnlockServiceTest {
     }
 
     @Test
+    @DisplayName("캡션 없는 앨범을 해금하면 포인트가 차감되고 응답의 앨범 제목은 null이다")
+    void 캡션_없는_앨범을_해금하면_포인트가_차감되고_앨범_제목은_null이다() {
+        // given
+        Member senior = Member.createMember(MemberType.SENIOR, "시니어", "01011112222");
+        ReflectionTestUtils.setField(senior, "id", 1L);
+        ReflectionTestUtils.setField(senior, "type", MemberType.SENIOR);
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+
+        Member albumOwner = mock(Member.class);
+        given(albumOwner.getId()).willReturn(2L);
+
+        Album album = mock(Album.class);
+        given(album.getMember()).willReturn(albumOwner);
+        given(album.getContent()).willReturn(null);
+        given(albumRepository.findByIdAndStatus(10L, Status.ACTIVE)).willReturn(Optional.of(album));
+        given(album.requiresUnlock()).willReturn(true);
+
+        SeniorProfile seniorProfile = SeniorProfile.createSeniorProfile(
+                senior, null, "서울시 강남구", "ABCDEFG", LocalDate.of(1950, 1, 1));
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+
+        given(albumUnlockRepository.existsByAlbumAndMember(album, senior)).willReturn(false);
+        given(albumUnlockRepository.save(any(AlbumUnlock.class)))
+                .willReturn(AlbumUnlock.createUnlock(album, senior));
+        willAnswer(invocation -> {
+            seniorProfile.deductPoints(Album.UNLOCK_PRICE);
+            return null;
+        }).given(seniorProfileService).deductPointsFromMember(1L, Album.UNLOCK_PRICE, "앨범 해금");
+
+        // when
+        AlbumUnlockResponse response = albumUnlockService.unlockAlbum(10L);
+
+        // then
+        assertThat(response.albumTitle()).isNull();
+        assertThat(response.remainingPoints()).isEqualTo(100L - Album.UNLOCK_PRICE);
+    }
+
+    @Test
     @DisplayName("본인 앨범 해금 시도 시 BusinessException을 던진다")
     void 본인_앨범_해금_시도_시_예외가_발생한다() {
         // given

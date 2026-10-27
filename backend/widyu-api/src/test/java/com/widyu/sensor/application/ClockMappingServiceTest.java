@@ -148,7 +148,7 @@ class ClockMappingServiceTest {
         given(clockMappingRepository.findByClockMappingId(MAPPING_ID)).willReturn(Optional.empty());
         org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("uk_clock_mapping_id"))
                 .given(clockMappingInsertService).insert(any(ClockMapping.class));
-        // 상대가 커밋한 행은 호출 트랜잭션의 스냅샷에 보이지 않아 새 트랜잭션에서 읽는다(LLD-0044 5.1, LLD-0103).
+        // 재조회는 호출 트랜잭션의 스냅샷이 아니라 새 트랜잭션에서 읽어야 승자 행이 보인다.
         given(clockMappingInsertService.findCommitted(MAPPING_ID)).willReturn(Optional.of(registeredMapping()));
 
         // when & then

@@ -56,11 +56,8 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
             AppleTokenResponse tokenResponse = exchangeCodeForTokens(request.authorizationCode(), clientSecret, request.platform());
             AppleIdTokenPayload idTokenPayload = parseIdToken(tokenResponse.idToken());
 
-            // 클라이언트에서 email 보내주면 사용, 없으면 ID Token에서 조회
+            // 회원 매칭·저장에는 서버가 Apple에서 직접 받은 id_token의 이메일만 쓴다. profile.email은 쓰지 않는다 (LLD-0094)
             String email = idTokenPayload.email();
-            if (request.profile() != null && request.profile().email() != null) {
-                email = request.profile().email();
-            }
 
             // 클라이언트에서 name 보내주면 사용
             String name = null;
@@ -89,7 +86,6 @@ public class AppleLoginStrategy implements SocialLoginStrategy {
 
         if (request.profile() != null) {
             name = getValueOrDefault(name, request.profile().name());
-            email = getValueOrDefault(email, request.profile().email());
         }
 
         // name이 null이거나 빈 값이면 "익명의 사용자"로 설정

@@ -20,6 +20,7 @@ import com.widyu.goal.walk.dto.response.WalkMonthlyResponse;
 import com.widyu.goal.walk.repository.WalkRepository;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -227,9 +228,42 @@ public class WalkService {
         LocalDate endDate = month.atEndOfMonth();
 
         long achieved = walkRepository.countAchievedGoals(member.getId(), startDate, endDate);
-        long total = walkRepository.countTotalRecords(member.getId(), startDate, endDate);
+        long total = walkRepository.countTotalRecords(member.getId(), startDate, endDate)
+                + countMissingGoalDays(member, startDate, endDate);
 
         return WalkMonthlyResponse.WalkSummary.MonthStats.of(achieved, total);
+    }
+
+    /**
+     * 걸음 기록은 없지만 걷기 목표가 있던 날(첫 기록 이후이고 기본 목표가 있음, 오늘까지)의 수.
+     * 목표를 처음 설정하는 날에는 그날 기록이 생기므로 첫 기록 날짜가 목표가 생긴 날이다(일별 데이터와 같은 기준).
+     */
+    private long countMissingGoalDays(Member member, LocalDate startDate, LocalDate endDate) {
+        if (member.getSeniorProfile() == null || !member.getSeniorProfile().hasDefaultWalkGoal()) {
+            return 0;
+        }
+        LocalDate firstWalkDate = walkRepository.findFirstByMemberOrderByWalkDateAsc(member)
+                .map(Walk::getWalkDate)
+                .orElse(null);
+        if (firstWalkDate == null) {
+            return 0;
+        }
+
+        LocalDate from = startDate;
+        if (firstWalkDate.isAfter(from)) {
+            from = firstWalkDate;
+        }
+        LocalDate to = endDate;
+        LocalDate today = LocalDate.now();
+        if (today.isBefore(to)) {
+            to = today;
+        }
+        if (from.isAfter(to)) {
+            return 0;
+        }
+
+        long goalDays = ChronoUnit.DAYS.between(from, to) + 1;
+        return goalDays - walkRepository.countTotalRecords(member.getId(), from, to);
     }
 
     private List<WalkMonthlyResponse.WalkDaily> getDailyDataForMonth(

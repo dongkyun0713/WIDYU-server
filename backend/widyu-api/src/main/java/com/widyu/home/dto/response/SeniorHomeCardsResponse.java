@@ -2,6 +2,7 @@ package com.widyu.home.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.widyu.album.Album;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.healthschedule.HealthSchedule;
 import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
@@ -27,8 +28,11 @@ public record SeniorHomeCardsResponse(
         @Schema(description = "추억 앨범 카드 (최대 3장, 점수 기반 추천)")
         List<AlbumInfo> albums,
 
-        @Schema(description = "건강달력 카드 (가장 가까운 일정)")
+        @Schema(description = "건강달력 카드의 다음 일정 (현재 시각 이후 1개월 이내 가장 가까운 일정). null이면 일정 추가 요청 컴포넌트를 표시합니다.")
         HealthScheduleInfo healthSchedule,
+
+        @Schema(description = "건강달력 카드의 오늘 일정 전체 (예정 시각이 지난 일정과 완료된 일정 포함, 일시 오름차순). 없으면 빈 배열")
+        List<TodayHealthScheduleItem> todaySchedules,
 
         @Schema(description = "걷기 카드")
         WalkInfo walk
@@ -39,8 +43,8 @@ public record SeniorHomeCardsResponse(
 
     public static SeniorHomeCardsResponse of(HeartRateInfo heartRate, MedicineInfo medicine,
                                              List<AlbumInfo> albums, HealthScheduleInfo healthSchedule,
-                                             WalkInfo walk) {
-        return new SeniorHomeCardsResponse(heartRate, medicine, albums, healthSchedule, walk);
+                                             List<TodayHealthScheduleItem> todaySchedules, WalkInfo walk) {
+        return new SeniorHomeCardsResponse(heartRate, medicine, albums, healthSchedule, todaySchedules, walk);
     }
 
     public record HeartRateInfo(

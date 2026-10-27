@@ -2,6 +2,8 @@ package com.widyu.fcm;
 
 public enum FcmCategory {
     ALL,
+    /** 안 읽은 알림 전체를 보는 조회 전용 값. 알림 행에 저장하지 않는다. */
+    UNREAD,
     ALBUM,
     TARGET,
     HEALTH_SCHEDULE,
