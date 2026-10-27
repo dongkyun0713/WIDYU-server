@@ -643,6 +643,9 @@ public interface AlbumDocs {
                     **권한:**
                     - 보호자: 모든 앨범 조회 가능
                     - 부모(시니어): 본인 앨범 또는 해금한 앨범 조회 가능 (해금 비용: 50포인트)
+                    - 해금하지 않은 앨범도 200으로 응답하고 `isUnlocked: false`와 해금 가격 `price`를 담습니다. 앱은 `isUnlocked`로 해금 화면을 띄웁니다.
+                    - 해금하지 않은 상태의 조회는 조회 기록(조회수·조회자)에 남지 않습니다.
+                    - 가족 외 앨범은 403 `AUTH_4030`입니다.
 
                     **포함 정보:**
                     - 게시물 기본 정보 (내용, 미디어, 통계)
@@ -753,14 +756,14 @@ public interface AlbumDocs {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "접근 권한 없음 (해금되지 않은 앨범)",
+                    description = "접근 권한 없음 (가족 외 앨범)",
                     content = @Content(
                             examples = @ExampleObject(
-                                    name = "해금 필요",
+                                    name = "가족 외 앨범",
                                     value = """
                                             {
-                                              "code": "ALBUM_4031",
-                                              "message": "앨범을 보려면 해금이 필요합니다.",
+                                              "code": "AUTH_4030",
+                                              "message": "접근 권한이 없습니다.",
                                               "data": null
                                             }
                                             """

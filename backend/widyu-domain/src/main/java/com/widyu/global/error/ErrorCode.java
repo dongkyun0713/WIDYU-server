@@ -110,7 +110,6 @@ public enum ErrorCode {
     ALBUM_COMMENT_PARENT_NOT_ACTIVE(HttpStatus.BAD_REQUEST, "ALBUM_COMMENT_4003", "삭제되거나 비활성화된 댓글에는 대댓글을 작성할 수 없습니다."),
     
     // 앨범 해금 관련
-    ALBUM_UNLOCK_REQUIRED(HttpStatus.FORBIDDEN, "ALBUM_4031", "앨범을 보려면 해금이 필요합니다."),
     ALBUM_ALREADY_UNLOCKED(HttpStatus.BAD_REQUEST, "ALBUM_UNLOCK_4001", "이미 해금된 앨범입니다."),
     ALBUM_UNLOCK_SELF_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "ALBUM_UNLOCK_4002", "본인의 앨범은 해금할 수 없습니다."),
     ALBUM_UNLOCK_SENIOR_ONLY(HttpStatus.FORBIDDEN, "ALBUM_UNLOCK_4030", "시니어 회원만 앨범을 해금할 수 있습니다."),
