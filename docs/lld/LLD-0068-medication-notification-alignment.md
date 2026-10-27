@@ -38,6 +38,8 @@
 | 정시 `MEDICATION_DUE` | 시니어 기기 | 서버 푸시 0·센터 0 | 기기 M01 | 복약 인증 |
 | +10 `MEDICATION_REMINDER_10` | 미인증 시니어 | `PUSH_ONLY`·센터 0, `GENERAL` | M02 | `widyu://medication/proof/{entityId}` |
 | +20 `MEDICATION_REMINDER_20` | 미인증 시니어 | `PUSH_ONLY`·센터 0, `GENERAL` | M03 | 위와 같음 |
+
+> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): M02·M03 우선순위를 `TIME_SENSITIVE`로 올렸다(Android `HIGH`, iOS `apns-priority 10`·`time-sensitive`).
 | +30 `MEDICATION_PROOF_MISSING` | 현재 가족 보호자 각각 | `PUSH_AND_CENTER`·보호자별 센터 1, 푸시는 `MEDICATION_CHECK` | M04 | `/goal/medicine?seniorId={seniorId}` ([LLD-0076](LLD-0076-guardian-deeplink-paths.md)) |
 | 등록 `MEDICATION_SCHEDULE_CREATED` | 대상 시니어 1명 | `PUSH_AND_CENTER`·`GOAL`·`GENERAL` | M08 | `widyu://medication/schedules` |
 | 변경 `MEDICATION_SCHEDULE_CHANGED` | 대상 시니어 1명 | 위와 같음 | M05 | 위와 같음 |

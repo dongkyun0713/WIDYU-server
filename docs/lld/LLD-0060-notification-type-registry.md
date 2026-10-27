@@ -50,7 +50,7 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
       "notificationId": "4072", "deepLink": "/location?seniorId=17",
       "seniorId": "17"
     },
-    "android": {"ttl": "300s", "priority": "high", "notification": {"channel_id": "widyu_safety"}},
+    "android": {"ttl": "300s", "priority": "HIGH", "notification": {"channel_id": "widyu_safety"}},
     "apns": {"headers": {"apns-expiration": "1790806700", "apns-priority": "10", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "time-sensitive"}}}
   }
 }

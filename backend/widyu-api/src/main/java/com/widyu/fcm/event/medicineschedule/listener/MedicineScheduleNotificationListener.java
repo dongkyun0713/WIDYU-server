@@ -90,7 +90,7 @@ public class MedicineScheduleNotificationListener {
                 .content("지금 약을 복용하고 인증해주세요.")
                 .fcmCategory(FcmCategory.MEDICINE_SCHEDULE)
                 .scheme("").image(schedule.getMember().getProfileImage())
-                .data(MedicationAlarmPayload.onTime(schedule.getMember().getMedicationAlarmRevision()))
+                .data(MedicationAlarmPayload.of(schedule.getMember().getMedicationAlarmRevision()))
                 .build();
 
         fcmService.sendMessageToUser(seniorId, dto);

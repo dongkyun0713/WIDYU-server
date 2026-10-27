@@ -42,7 +42,7 @@ public interface MedicineScheduleDocs {
 
                     `revision`은 복약 스케줄 또는 오늘 복용 인증이 바뀔 때 증가합니다.
                     FCM의 `MEDICATION_SCHEDULE_CHANGED`를 받거나 앱이 포그라운드가 될 때 이 API를 호출하세요.
-                    정시 복약 푸시는 `data.type=MEDICATION_ON_TIME`이고 `revision`을 함께 싣습니다. 앱이 가진 revision과 다르면 이 API를 호출하세요.
+                    정시 복약 푸시는 `data.type=MEDICATION_SCHEDULE_CHANGED`이고 `revision`을 함께 싣습니다. 앱이 가진 revision과 다르면 이 API를 호출하세요.
                     `completed`의 `scheduleId:yyyy-MM-dd` 항목은 해당 일자의 로컬 알람을 건너뜁니다.
                     """
     )

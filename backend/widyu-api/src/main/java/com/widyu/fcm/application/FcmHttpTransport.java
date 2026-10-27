@@ -198,13 +198,14 @@ public class FcmHttpTransport implements FcmTransport {
         if (type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             return new FcmMessageDto.Android(ttl);
         }
+        // FCM HTTP v1 AndroidMessagePriority 표기(HIGH/NORMAL)를 그대로 쓴다. 급한 알림만 HIGH로 즉시 깨운다.
         if (type.priority().isSafety()) {
-            return new FcmMessageDto.Android(ttl, "high", new FcmMessageDto.AndroidNotification("widyu_safety"));
+            return new FcmMessageDto.Android(ttl, "HIGH", new FcmMessageDto.AndroidNotification("widyu_safety"));
         }
         if (type.priority().isTimeSensitive()) {
-            return new FcmMessageDto.Android(ttl, "high", new FcmMessageDto.AndroidNotification("widyu_general"));
+            return new FcmMessageDto.Android(ttl, "HIGH", new FcmMessageDto.AndroidNotification("widyu_general"));
         }
-        return new FcmMessageDto.Android(ttl, "normal", new FcmMessageDto.AndroidNotification("widyu_general"));
+        return new FcmMessageDto.Android(ttl, "NORMAL", new FcmMessageDto.AndroidNotification("widyu_general"));
     }
 
     private FcmMessageDto.Apns apns(Instant expiresAt, NotificationType type) {
@@ -218,7 +219,12 @@ public class FcmHttpTransport implements FcmTransport {
             return new FcmMessageDto.Apns(headers,
                     new FcmMessageDto.ApnsPayload(new FcmMessageDto.Aps(null, 1)));
         }
-        headers.put("apns-priority", "10");
+        // Android HIGH와 같은 급한 알림만 즉시(10), 나머지는 전력 상황을 고려해 보내도 되는 5로 보낸다.
+        String apnsPriority = "5";
+        if (type.priority().isTimeSensitive()) {
+            apnsPriority = "10";
+        }
+        headers.put("apns-priority", apnsPriority);
         headers.put("apns-push-type", "alert");
         return new FcmMessageDto.Apns(headers,
                 new FcmMessageDto.ApnsPayload(new FcmMessageDto.Aps(type.priority().interruptionLevel())));
