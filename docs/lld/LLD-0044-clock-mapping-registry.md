@@ -67,7 +67,7 @@
 ### 5.1 `ClockMappingService.register(clock, deviceId, observedMinElapsedNs, observedMaxElapsedNs)` — `@Transactional`
 
 1. `findByClockMappingId(clock.clockMappingId())` 조회.
-2. **없으면** 별도 `REQUIRES_NEW` 트랜잭션에서 INSERT: 다섯 값·`device_id`·관측 범위·`first/last_seen_at_ms = now`. `saveAndFlush`의 UK 경합(`DataIntegrityViolationException`)은 해당 삽입 트랜잭션만 롤백한다. 호출 트랜잭션은 새 persistence context로 다시 조회해 3단계로 간다(동시에 처음 보는 같은 매핑 → 한 행만 남고 둘 다 통과).
+2. **없으면** 별도 `REQUIRES_NEW` 트랜잭션에서 INSERT: 다섯 값·`device_id`·관측 범위·`first/last_seen_at_ms = now`. `saveAndFlush`의 UK 경합(`DataIntegrityViolationException`)은 해당 삽입 트랜잭션만 롤백한다. 경합 뒤 재조회도 별도 `REQUIRES_NEW` 읽기 전용 트랜잭션(`ClockMappingInsertService.findCommitted`)에서 하고 3단계로 간다(동시에 처음 보는 같은 매핑 → 한 행만 남고 둘 다 통과). 호출 트랜잭션에서 다시 읽으면 MySQL REPEATABLE READ가 1단계 조회 때 고정한 스냅샷을 그대로 써서 승자 행이 보이지 않는다. 격리 수준만 READ COMMITTED로 낮추는 방법은 마커 등록처럼 바깥 트랜잭션에 합류하는 호출에서 지정이 무시되므로 쓰지 않는다(#905).
 3. **있으면** 대조: `device_id`·`boot_id`·`anchor_elapsed_ns`·`anchor_epoch_ms`·`uncertainty_ms`가 전부 같아야 한다. 하나라도 다르면 `SENSOR_CLOCK_MAPPING_CONFLICT`. 부동소수 `uncertainty_ms`는 `Double.compare == 0`.
 4. 관측 범위 갱신: `observed_min = min(observed_min, 배치 min)`, `observed_max = max(observed_max, 배치 max)`, `last_seen_at_ms = now`. 동시 갱신에 안전하도록 **JPQL bulk update** 한 문장으로: `UPDATE ClockMapping m SET m.observedMinElapsedNs = CASE WHEN m.observedMinElapsedNs < :min THEN m.observedMinElapsedNs ELSE :min END, m.observedMaxElapsedNs = CASE WHEN m.observedMaxElapsedNs > :max THEN m.observedMaxElapsedNs ELSE :max END, m.lastSeenAtMs = :now WHERE m.clockMappingId = :id`.
 
@@ -103,7 +103,7 @@
 - [x] 같은 매핑으로 두 번째 배치를 보내면 행이 늘지 않고 `observed_min/max`가 두 배치를 덮게 넓어지며 `last_seen_at_ms`가 갱신된다.
 - [x] 같은 `clock_mapping_id`로 `anchor_elapsed_ns`가 다른 배치는 `SENSOR_CLOCK_MAPPING_CONFLICT`이고 S3 업로드·배치 저장이 호출되지 않는다. `anchor_epoch_ms`·`boot_id`·`uncertainty_ms` 각각도 같다.
 - [x] 같은 `clock_mapping_id`를 다른 `device_id`가 보내면 `SENSOR_CLOCK_MAPPING_CONFLICT`다.
-- [x] 처음 보는 같은 매핑의 INSERT가 UK 경합으로 실패하면 재조회해 대조하고, 같으면 통과한다.
+- [x] 처음 보는 같은 매핑의 INSERT가 UK 경합으로 실패하면 재조회해 대조하고, 같으면 통과한다. 실제 MySQL에서 바깥 트랜잭션이 있을 때와 없을 때 모두 같다(`ClockMappingConcurrentRegisterMySqlTest`, #905).
 - [x] `sensor_batch.clock_mapping_id`가 그 매핑의 `clock_mapping_id`와 같다.
 - [x] 로그에 앵커 시각·불확실성 값이 없다.
 - [x] `./gradlew compileJava`로 `QClockMapping`이 생성되고 `bash scripts/harness/run-module-tests.sh`가 통과한다.
