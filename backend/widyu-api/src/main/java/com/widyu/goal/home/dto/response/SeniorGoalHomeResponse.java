@@ -1,12 +1,14 @@
 package com.widyu.goal.home.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
 import com.widyu.healthschedule.HealthSchedule;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 public record SeniorGoalHomeResponse(
         @Schema(description = "약 스케줄 정보")
@@ -15,16 +17,20 @@ public record SeniorGoalHomeResponse(
         @Schema(description = "걸음 수 정보")
         StepsInfo steps,
 
-        @Schema(description = "병원 일정 정보")
-        HospitalInfo hospital
+        @Schema(description = "다음 병원 일정 (현재 시각 이후 1개월 이내 가장 가까운 일정). null이면 일정 추가 요청 컴포넌트를 표시합니다.")
+        HospitalInfo hospital,
+
+        @Schema(description = "오늘 건강 일정 전체 (예정 시각이 지난 일정과 완료된 일정 포함, 일시 오름차순). 없으면 빈 배열")
+        List<TodayHealthScheduleItem> todaySchedules
 ) {
 
     public static SeniorGoalHomeResponse of(
             MedicineInfo medicine,
             StepsInfo steps,
-            HospitalInfo hospital
+            HospitalInfo hospital,
+            List<TodayHealthScheduleItem> todaySchedules
     ) {
-        return new SeniorGoalHomeResponse(medicine, steps, hospital);
+        return new SeniorGoalHomeResponse(medicine, steps, hospital, todaySchedules);
     }
 
     @Schema(description = "약 스케줄 정보")

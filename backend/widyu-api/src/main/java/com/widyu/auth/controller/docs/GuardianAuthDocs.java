@@ -186,6 +186,7 @@ public interface GuardianAuthDocs {
                     • Apple: authorizationCode 및 profile 필드 사용
                       - profile은 최초 로그인 시에만 Apple에서 제공 (이메일, 이름 포함)
                       - 재로그인 시에는 profile 없이 authorizationCode만 전달
+                      - 이메일은 서버가 Apple에서 받은 id_token 값만 사용하며, profile.email은 무시합니다. profile.name만 반영합니다
                     """
     )
     @ApiResponse(
@@ -435,8 +436,10 @@ public interface GuardianAuthDocs {
     @Operation(
             summary = "애플 로그인 회원 전화번호 업데이트",
             description = """
-                    애플 로그인 사용자가 회원가입 후 전화번호를 업데이트합니다.
-                    JWT 토큰이 필요하며, 현재 로그인된 사용자의 전화번호를 업데이트합니다.
+                    애플 로그인으로 가입한 회원에게 SMS 인증한 전화번호를 보강합니다.
+                    SMS 인증 후 발급받은 임시 토큰을 Authorization 헤더(스킴: `Bearer`)로 전달해야 합니다.
+                    전화번호가 비어 있는 애플 회원만 보강하며, 이미 전화번호가 있으면 403을 반환합니다.
+                    보강에 성공하면 사용한 임시 토큰은 다시 쓸 수 없습니다.
                     """
     )
     @ApiResponse(
@@ -465,14 +468,20 @@ public interface GuardianAuthDocs {
                             name = "토큰 오류",
                             value = """
                                     {
-                                      "code": "AUTH_4018",
-                                      "message": "유효하지 않은 액세스 토큰입니다.",
+                                      "code": "AUTH_4014",
+                                      "message": "임시 토큰이 만료되었습니다.",
                                       "data": null
                                     }
                                     """
                     )
             )
     )
+    @ApiResponse(
+            responseCode = "403",
+            description = "AUTH_4030: 이미 전화번호가 있는 애플 회원",
+            content = @Content(schema = @Schema(implementation = ApiResponseTemplate.class))
+    )
+    @ApiResponse(responseCode = "404", description = "MEMBER_4041: 해당 이메일의 애플 회원 없음")
     ApiResponseTemplate<Void> updatePhoneNumberIfAppleSignUp(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(

@@ -4,6 +4,7 @@ import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.goal.home.dto.response.FamilyListResponse;
 import com.widyu.goal.home.dto.response.FamilyMemberResponse;
@@ -89,8 +90,12 @@ public class GoalHomeService {
      * 시니어 목표 홈 - 목표 조회
      */
     public SeniorGoalHomeResponse getSeniorGoalHome() {
+        return getSeniorGoalHome(LocalDateTime.now());
+    }
+
+    SeniorGoalHomeResponse getSeniorGoalHome(LocalDateTime now) {
         Member currentMember = memberUtil.getCurrentMember();
-        LocalDate today = LocalDate.now();
+        LocalDate today = now.toLocalDate();
 
         // Medicine 정보
         SeniorGoalHomeResponse.MedicineInfo medicineInfo = getSeniorMedicineInfo(currentMember, today);
@@ -98,10 +103,12 @@ public class GoalHomeService {
         // Steps 정보
         SeniorGoalHomeResponse.StepsInfo stepsInfo = getStepsInfo(currentMember, today);
 
-        // Hospital 정보
-        SeniorGoalHomeResponse.HospitalInfo hospitalInfo = getUpcomingHospitalInfo(currentMember);
+        // Hospital 정보: 다음 일정과 오늘 일정 목록을 같은 조회 결과·같은 now로 만든다
+        List<HealthSchedule> healthSchedules = findHealthSchedulesFromToday(currentMember, now);
+        SeniorGoalHomeResponse.HospitalInfo hospitalInfo = getUpcomingHospitalInfo(healthSchedules, now);
 
-        return SeniorGoalHomeResponse.of(medicineInfo, stepsInfo, hospitalInfo);
+        return SeniorGoalHomeResponse.of(
+                medicineInfo, stepsInfo, hospitalInfo, TodayHealthScheduleItem.listFrom(healthSchedules, now));
     }
 
     /**
@@ -156,8 +163,12 @@ public class GoalHomeService {
      * 보호자 목표 홈 - 목표 조회
      */
     public GuardianGoalHomeResponse getGuardianGoalHome(Long memberId) {
+        return getGuardianGoalHome(memberId, LocalDateTime.now());
+    }
+
+    GuardianGoalHomeResponse getGuardianGoalHome(Long memberId, LocalDateTime now) {
         Member targetMember = getMember(memberId);
-        LocalDate today = LocalDate.now();
+        LocalDate today = now.toLocalDate();
 
         // Medicine 정보
         GuardianGoalHomeResponse.MedicineInfo medicineInfo = getGuardianMedicineInfo(targetMember, today);
@@ -165,10 +176,12 @@ public class GoalHomeService {
         // Steps 정보
         GuardianGoalHomeResponse.StepsInfo stepsInfo = getGuardianStepsInfo(targetMember, today);
 
-        // Hospital 정보
-        GuardianGoalHomeResponse.HospitalInfo hospitalInfo = getGuardianHospitalInfo(targetMember);
+        // Hospital 정보: 다음 일정과 오늘 일정 목록을 같은 조회 결과·같은 now로 만든다
+        List<HealthSchedule> healthSchedules = findHealthSchedulesFromToday(targetMember, now);
+        GuardianGoalHomeResponse.HospitalInfo hospitalInfo = getGuardianHospitalInfo(healthSchedules, now);
 
-        return GuardianGoalHomeResponse.of(medicineInfo, stepsInfo, hospitalInfo);
+        return GuardianGoalHomeResponse.of(
+                medicineInfo, stepsInfo, hospitalInfo, TodayHealthScheduleItem.listFrom(healthSchedules, now));
     }
 
     // ===== Private Helper Methods =====
@@ -236,19 +249,15 @@ public class GoalHomeService {
         return null;
     }
 
-    private SeniorGoalHomeResponse.HospitalInfo getUpcomingHospitalInfo(Member member) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime futureLimit = now.plusMonths(1); // 1개월 이내
+    // 오늘 00:00부터 1개월 이내 일정을 한 번에 조회한다. 오늘 지난 일정은 오늘 목록에만 쓰인다(LLD-0107).
+    private List<HealthSchedule> findHealthSchedulesFromToday(Member member, LocalDateTime now) {
+        return healthScheduleRepository
+                .findByMemberIdAndWeek(member.getId(), now.toLocalDate().atStartOfDay(), now.plusMonths(1));
+    }
 
-        List<HealthSchedule> upcomingSchedules = healthScheduleRepository
-                .findByMemberIdAndWeek(member.getId(), now, futureLimit);
-
-        if (upcomingSchedules.isEmpty()) {
-            return null;
-        }
-
+    private SeniorGoalHomeResponse.HospitalInfo getUpcomingHospitalInfo(List<HealthSchedule> schedules, LocalDateTime now) {
         // 가장 가까운 일정
-        HealthSchedule nearest = upcomingSchedules.stream()
+        HealthSchedule nearest = schedules.stream()
                 .filter(s -> s.getScheduledAt().isAfter(now))
                 .min(Comparator.comparing(HealthSchedule::getScheduledAt))
                 .orElse(null);
@@ -456,18 +465,8 @@ public class GoalHomeService {
         return null;
     }
 
-    private GuardianGoalHomeResponse.HospitalInfo getGuardianHospitalInfo(Member member) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime futureLimit = now.plusMonths(1);
-
-        List<HealthSchedule> upcomingSchedules = healthScheduleRepository
-                .findByMemberIdAndWeek(member.getId(), now, futureLimit);
-
-        if (upcomingSchedules.isEmpty()) {
-            return null;
-        }
-
-        HealthSchedule nearest = upcomingSchedules.stream()
+    private GuardianGoalHomeResponse.HospitalInfo getGuardianHospitalInfo(List<HealthSchedule> schedules, LocalDateTime now) {
+        HealthSchedule nearest = schedules.stream()
                 .filter(s -> s.getScheduledAt().isAfter(now))
                 .min(Comparator.comparing(HealthSchedule::getScheduledAt))
                 .orElse(null);

@@ -263,6 +263,7 @@ class AlbumNotificationListenerTest {
     void 시니어가_보호자_새_게시물을_모두_읽으면_A07을_전달한다() {
         // given
         Member senior = member(1L, MemberType.SENIOR, "시니어");
+        senior.updateProfileImage("https://cdn.widyu.store/profile/senior.png");
         Member writer = member(2L, MemberType.GUARDIAN, "보호자");
         Album album = mock(Album.class);
         given(album.getMember()).willReturn(writer);
@@ -280,11 +281,31 @@ class AlbumNotificationListenerTest {
         then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
         assertThat(captor.getValue().notificationType()).isEqualTo(NotificationType.ALBUM_ALL_VIEWED);
         assertThat(captor.getValue().title()).isEqualTo("시니어 님이 새 게시물을 모두 확인했어요!");
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(captor.getValue().deepLink()).isNull();
         assertThat(captor.getValue().dataForEnqueue("event-view"))
                 .containsEntry("deepLink", GuardianDeepLinks.album());
         assertThat(captor.getValue().seniorId()).isEqualTo(1L);
         then(fcmService).shouldHaveNoMoreInteractions();
+    }
+
+    @Test
+    @DisplayName("보호자의 게시물 소식이 뜸하면 보호자 본인에게 프로필과 앨범 경로를 보낸다")
+    void 보호자_소식이_뜸하면_프로필과_앨범_경로를_보낸다() {
+        // given
+        given(albumRepository.findGuardianLastActivityBetween(any(), any())).willReturn(List.of(
+                new GuardianLastActivityRow(1L, "보호자", "https://cdn.widyu.store/profile/guardian.png",
+                        LocalDateTime.of(2026, 10, 23, 10, 0))));
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.sendInactivityReminders(LocalDate.of(2026, 10, 26));
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(1L), captor.capture());
+        assertThat(captor.getValue().image()).isEqualTo("https://cdn.widyu.store/profile/guardian.png");
+        assertThat(captor.getValue().dataForEnqueue("event-inactive"))
+                .containsEntry("deepLink", "/album");
     }
 
     @Test
@@ -341,79 +362,69 @@ class AlbumNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("마지막 업로드가 정확히 3·5·7일 전인 보호자만 가족 시니어에게 한 번씩 알린다")
-    void 마지막_업로드가_정확히_3_5_7일_전인_보호자만_알린다() {
+    @DisplayName("마지막 업로드가 정확히 3·5·7일 전인 보호자 본인에게만 한 번씩 알린다")
+    void 마지막_업로드가_정확히_3_5_7일_전인_보호자_본인에게만_알린다() {
         // given
         LocalDate today = LocalDate.of(2026, 10, 22);
         given(albumRepository.findGuardianLastActivityBetween(
                 LocalDateTime.of(2026, 10, 15, 0, 0), LocalDateTime.of(2026, 10, 20, 0, 0)))
                 .willReturn(List.of(
-                        new GuardianLastActivityRow(3L, "삼일", 9L, LocalDateTime.of(2026, 10, 19, 23, 50)),
-                        new GuardianLastActivityRow(4L, "사일", 9L, LocalDateTime.of(2026, 10, 18, 9, 0)),
-                        new GuardianLastActivityRow(5L, "오일", 9L, LocalDateTime.of(2026, 10, 17, 10, 0)),
-                        new GuardianLastActivityRow(7L, "칠일", 9L, LocalDateTime.of(2026, 10, 15, 0, 0)),
-                        new GuardianLastActivityRow(8L, "팔일", 9L, LocalDateTime.of(2026, 10, 14, 23, 59))));
-        SeniorProfile profile = mock(SeniorProfile.class);
-        given(profile.getMember()).willReturn(member(900L, MemberType.SENIOR, "시니어"));
-        given(seniorProfileRepository.findAllByFamilyIdWithMember(9L)).willReturn(List.of(profile));
+                        new GuardianLastActivityRow(3L, "삼일", null, LocalDateTime.of(2026, 10, 19, 23, 50)),
+                        new GuardianLastActivityRow(4L, "사일", null, LocalDateTime.of(2026, 10, 18, 9, 0)),
+                        new GuardianLastActivityRow(5L, "오일", null, LocalDateTime.of(2026, 10, 17, 10, 0)),
+                        new GuardianLastActivityRow(7L, "칠일", null, LocalDateTime.of(2026, 10, 15, 0, 0)),
+                        new GuardianLastActivityRow(8L, "팔일", null, LocalDateTime.of(2026, 10, 14, 23, 59))));
+        ArgumentCaptor<Long> recipients = ArgumentCaptor.forClass(Long.class);
         ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
 
         // when
         listener.sendInactivityReminders(today);
 
         // then
-        then(fcmService).should(times(3)).sendMessageToUser(eq(900L), captor.capture());
+        then(fcmService).should(times(3)).sendMessageToUser(recipients.capture(), captor.capture());
+        assertThat(recipients.getAllValues()).containsExactly(3L, 5L, 7L);
         assertThat(captor.getAllValues()).extracting(FcmSendDto::eventId).containsExactly(
                 "inactive:3:3:2026-10-22", "inactive:5:5:2026-10-22", "inactive:7:7:2026-10-22");
         assertThat(captor.getAllValues()).extracting(FcmSendDto::title).containsExactly(
                 "삼일님, 3일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?",
                 "오일님, 5일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?",
                 "칠일님, 7일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?");
-        assertThat(captor.getAllValues()).extracting(FcmSendDto::relatedMemberId).containsExactly(3L, 5L, 7L);
     }
 
     @Test
-    @DisplayName("미업로드 알림 한 건 저장이 실패해도 같은 가족의 다음 시니어에게 알린다")
-    void 미업로드_알림_한_건이_실패해도_다음_시니어에게_알린다() {
+    @DisplayName("미업로드 알림 한 건 저장이 실패해도 다음 보호자에게 알린다")
+    void 미업로드_알림_한_건이_실패해도_다음_보호자에게_알린다() {
         // given
         LocalDate today = LocalDate.of(2026, 10, 22);
         given(albumRepository.findGuardianLastActivityBetween(any(), any())).willReturn(List.of(
-                new GuardianLastActivityRow(3L, "보호자", 9L, LocalDateTime.of(2026, 10, 19, 10, 0))));
-        SeniorProfile first = mock(SeniorProfile.class);
-        given(first.getMember()).willReturn(member(300L, MemberType.SENIOR, "첫째"));
-        SeniorProfile second = mock(SeniorProfile.class);
-        given(second.getMember()).willReturn(member(301L, MemberType.SENIOR, "둘째"));
-        given(seniorProfileRepository.findAllByFamilyIdWithMember(9L)).willReturn(List.of(first, second));
-        willThrow(new IllegalStateException("저장 실패")).given(fcmService).sendMessageToUser(eq(300L), any());
+                new GuardianLastActivityRow(3L, "첫째", null, LocalDateTime.of(2026, 10, 19, 10, 0)),
+                new GuardianLastActivityRow(5L, "둘째", null, LocalDateTime.of(2026, 10, 17, 10, 0))));
+        willThrow(new IllegalStateException("저장 실패")).given(fcmService).sendMessageToUser(eq(3L), any());
 
         // when
         listener.sendInactivityReminders(today);
 
         // then
-        then(fcmService).should().sendMessageToUser(eq(301L), any(FcmSendDto.class));
+        then(fcmService).should().sendMessageToUser(eq(5L), any(FcmSendDto.class));
     }
 
     @Test
-    @DisplayName("같은 날 미업로드 알림을 이미 저장한 시니어에게는 다시 보내지 않는다")
+    @DisplayName("같은 날 미업로드 알림을 이미 저장한 보호자에게는 다시 보내지 않는다")
     void 같은_날_이미_저장한_미업로드_알림은_다시_보내지_않는다() {
         // given
         LocalDate today = LocalDate.of(2026, 10, 22);
         given(albumRepository.findGuardianLastActivityBetween(any(), any())).willReturn(List.of(
-                new GuardianLastActivityRow(3L, "보호자", 9L, LocalDateTime.of(2026, 10, 19, 10, 0))));
-        SeniorProfile notified = mock(SeniorProfile.class);
-        given(notified.getMember()).willReturn(member(300L, MemberType.SENIOR, "받음"));
-        SeniorProfile pending = mock(SeniorProfile.class);
-        given(pending.getMember()).willReturn(member(301L, MemberType.SENIOR, "안받음"));
-        given(seniorProfileRepository.findAllByFamilyIdWithMember(9L)).willReturn(List.of(notified, pending));
-        given(fcmNotificationRepository.findByRecipientMemberIdAndEventId(300L, "inactive:3:3:2026-10-22"))
+                new GuardianLastActivityRow(3L, "받음", null, LocalDateTime.of(2026, 10, 19, 10, 0)),
+                new GuardianLastActivityRow(5L, "안받음", null, LocalDateTime.of(2026, 10, 17, 10, 0))));
+        given(fcmNotificationRepository.findByRecipientMemberIdAndEventId(3L, "inactive:3:3:2026-10-22"))
                 .willReturn(Optional.of(mock(FcmNotification.class)));
 
         // when
         listener.sendInactivityReminders(today);
 
         // then
-        then(fcmService).should(never()).sendMessageToUser(eq(300L), any());
-        then(fcmService).should().sendMessageToUser(eq(301L), any(FcmSendDto.class));
+        then(fcmService).should(never()).sendMessageToUser(eq(3L), any());
+        then(fcmService).should().sendMessageToUser(eq(5L), any(FcmSendDto.class));
     }
 
     private Member member(Long id, MemberType type, String name) {

@@ -59,8 +59,8 @@ class NotificationSettingServiceTest {
     }
 
     @Test
-    @DisplayName("시니어가 설정을 조회하면 일반 알림 하나를 반환한다")
-    void 시니어가_설정을_조회하면_일반_알림을_반환한다() {
+    @DisplayName("시니어가 설정을 조회하면 화면의 네 푸시 항목을 반환한다")
+    void 시니어가_설정을_조회하면_네_항목을_반환한다() {
         // given
         Member member = member(MemberType.SENIOR);
         given(memberUtil.getCurrentMember()).willReturn(member);
@@ -70,7 +70,48 @@ class NotificationSettingServiceTest {
         List<NotificationSettingResponse> result = service.getNotificationSettings();
 
         // then
-        assertThat(result).extracting(NotificationSettingResponse::group).containsExactly("GENERAL");
+        assertThat(result).extracting(NotificationSettingResponse::group)
+                .containsExactly("ALBUM", "GOAL", "HOME", "ETC");
+        assertThat(result).allSatisfy(row -> assertThat(row.enabled()).isTrue());
+    }
+
+    @Test
+    @DisplayName("시니어가 서로 다른 항목을 조회하면 저장된 켜짐 상태를 각각 반환한다")
+    void 시니어가_서로_다른_항목을_조회하면_각각의_상태를_반환한다() {
+        // given
+        Member member = member(MemberType.SENIOR);
+        MemberNotificationSetting album = MemberNotificationSetting.create(member, PushSettingGroup.ALBUM, false);
+        MemberNotificationSetting home = MemberNotificationSetting.create(member, PushSettingGroup.HOME, false);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(settings.findAllByMemberId(1L)).willReturn(List.of(album, home));
+
+        // when
+        List<NotificationSettingResponse> result = service.getNotificationSettings();
+
+        // then
+        assertThat(result).extracting(NotificationSettingResponse::enabled)
+                .containsExactly(false, true, false, true);
+    }
+
+    @Test
+    @DisplayName("시니어가 앨범 푸시를 끄면 앨범만 꺼지고 revision이 증가한다")
+    void 시니어가_앨범_푸시를_끄면_앨범만_꺼진다() {
+        // given
+        Member member = member(MemberType.SENIOR);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+        given(settings.findByMemberIdAndCategory(1L, PushSettingGroup.ALBUM))
+                .willReturn(Optional.empty());
+
+        // when
+        NotificationSettingResponse result = service.updateNotificationSetting(
+                new UpdateNotificationSettingRequest("ALBUM", false, 0L));
+
+        // then
+        assertThat(result.group()).isEqualTo("ALBUM");
+        assertThat(result.enabled()).isFalse();
+        assertThat(result.policyRevision()).isEqualTo(1L);
+        assertThat(member.getNotificationPolicyRevision()).isEqualTo(1L);
     }
 
     @Test
@@ -218,6 +259,36 @@ class NotificationSettingServiceTest {
         // when / then
         assertThatThrownBy(() -> service.updateNotificationSetting(
                 new UpdateNotificationSettingRequest("SAFETY", false, 0L)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_FCM_CATEGORY);
+    }
+
+    @Test
+    @DisplayName("시니어가 이전 일반 그룹을 저장하면 카테고리 예외가 발생한다")
+    void 시니어가_GENERAL을_저장하면_예외가_발생한다() {
+        // given
+        Member member = member(MemberType.SENIOR);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+
+        // when / then
+        assertThatThrownBy(() -> service.updateNotificationSetting(
+                new UpdateNotificationSettingRequest("GENERAL", false, 0L)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_FCM_CATEGORY);
+    }
+
+    @Test
+    @DisplayName("보호자가 시니어 앨범 그룹을 저장하면 카테고리 예외가 발생한다")
+    void 보호자가_시니어_그룹을_저장하면_예외가_발생한다() {
+        // given
+        Member member = member(MemberType.GUARDIAN);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(members.findByIdForUpdate(1L)).willReturn(Optional.of(member));
+
+        // when / then
+        assertThatThrownBy(() -> service.updateNotificationSetting(
+                new UpdateNotificationSettingRequest("ALBUM", false, 0L)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_FCM_CATEGORY);
     }

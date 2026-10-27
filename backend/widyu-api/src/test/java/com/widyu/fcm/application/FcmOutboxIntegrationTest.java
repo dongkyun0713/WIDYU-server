@@ -305,13 +305,13 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("시니어가 일반 푸시를 끄면 일정 센터 행과 data-only 동기화를 유지한다")
-    void 시니어가_일반_푸시를_꺼도_일정_센터_행과_data_only_동기화를_유지한다() {
+    @DisplayName("시니어가 목표 푸시를 끄면 일정 센터 행과 data-only 동기화를 유지한다")
+    void 시니어가_목표_푸시를_꺼도_일정_센터_행과_data_only_동기화를_유지한다() {
         // given
         Long seniorId = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(seniorId).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.GOAL, false)));
         NotificationType visibleType = NotificationType.MEDICATION_SCHEDULE_CREATED;
         NotificationType syncType = NotificationType.MEDICATION_SCHEDULE_SYNC;
 
@@ -577,7 +577,7 @@ class FcmOutboxIntegrationTest {
         Long member = memberWithToken();
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.ALBUM, false)));
 
         // when
         service.enqueue(member, FcmSendDto.builder().title("앨범").content("본문")
@@ -628,7 +628,7 @@ class FcmOutboxIntegrationTest {
         FcmDelivery delivery = transactions.claim(id);
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 settings.save(MemberNotificationSetting.create(members.findById(member).orElseThrow(),
-                        PushSettingGroup.GENERAL, false)));
+                        PushSettingGroup.ALBUM, false)));
 
         // when
         boolean allowed = transactions.preflight(delivery);
@@ -652,7 +652,7 @@ class FcmOutboxIntegrationTest {
                 start.await();
                 try {
                     return settingService.updateNotificationSetting(
-                            new UpdateNotificationSettingRequest("GENERAL", false, 0L)).policyRevision();
+                            new UpdateNotificationSettingRequest("ALBUM", false, 0L)).policyRevision();
                 } catch (BusinessException exception) {
                     if (exception.getErrorCode() == ErrorCode.NOTIFICATION_POLICY_REVISION_CONFLICT) {
                         return -1L;
@@ -670,7 +670,7 @@ class FcmOutboxIntegrationTest {
             // then
             assertThat(results).containsExactlyInAnyOrder(1L, -1L);
             assertThat(members.findById(member).orElseThrow().getNotificationPolicyRevision()).isEqualTo(1L);
-            assertThat(settings.findByMemberIdAndCategory(member, PushSettingGroup.GENERAL))
+            assertThat(settings.findByMemberIdAndCategory(member, PushSettingGroup.ALBUM))
                     .hasValueSatisfying(row -> assertThat(row.isEnabled()).isFalse());
         } finally {
             executor.shutdownNow();
@@ -787,10 +787,11 @@ class FcmOutboxIntegrationTest {
         assertThat(heart.getRetentionPolicyVersion()).isEqualTo("v1");
         assertThat(zone.getRetentionPolicyVersion()).isEqualTo("v1");
         assertThat(notifications.findNotificationsWithCursor(member, null, PageRequest.of(0, 10))).hasSize(3);
-        assertThat(FcmNotificationResponse.from(legacy).scheme()).isEmpty();
-        assertThat(FcmNotificationResponse.from(heart).scheme())
+        assertThat(FcmNotificationResponse.from(legacy).path()).isEmpty();
+        assertThat(FcmNotificationResponse.from(legacy).isRead()).isFalse();
+        assertThat(FcmNotificationResponse.from(heart).path())
                 .isEqualTo("/location?seniorId=" + member);
-        assertThat(FcmNotificationResponse.from(zone).scheme())
+        assertThat(FcmNotificationResponse.from(zone).path())
                 .isEqualTo("/location?seniorId=" + member);
     }
 
@@ -840,6 +841,67 @@ class FcmOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("앨범 알림을 여러 기기에 넣고 재전송하면 같은 목록 ID를 전달한다")
+    void 앨범_알림을_여러_기기에_넣으면_같은_목록_ID를_전달한다() {
+        // given
+        Long member = memberWithToken();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                tokens.save(MemberFcmToken.builder().member(members.findById(member).orElseThrow())
+                        .token("second-token").active(true).build()));
+        FcmSendDto message = FcmSendDto.builder().title("새 앨범").content("새 게시물이 있어요.")
+                .notificationType(NotificationType.ALBUM_CREATED).eventId("album-created-91")
+                .entityId("91").build();
+
+        // when
+        service.enqueue(member, message);
+        service.enqueue(member, message);
+
+        // then
+        FcmOutbox row = outbox.findAll().getFirst();
+        FcmNotification center = notifications.findByRecipientMemberIdAndEventId(member, "album-created-91")
+                .orElseThrow();
+        assertThat(notifications.count()).isEqualTo(1);
+        assertThat(outbox.findAll()).hasSize(4)
+                .allSatisfy(deliveryRow -> assertThat(deliveryRow.getNotificationId()).isEqualTo(center.getId()));
+        assertThat(row.getNotificationType()).isEqualTo(NotificationType.ALBUM_CREATED);
+        assertThat(center.getType()).isEqualTo(NotificationType.ALBUM_CREATED);
+        assertThat(center.isRead()).isFalse();
+        assertThat(row.getNotificationId()).isEqualTo(center.getId());
+        FcmDelivery delivery = transactions.claim(row.getId());
+        assertThat(delivery.notificationId()).isEqualTo(center.getId());
+        assertThat(delivery.message().data())
+                .containsEntry("eventId", "album-created-91")
+                .containsEntry("type", "ALBUM_CREATED")
+                .containsEntry("deepLink", "/album/post?postId=91");
+        Integer ignored = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.markAsReadIfUnread(center.getId(), member + 1, LocalDateTime.now()));
+        Integer read = new TransactionTemplate(transactionManager).execute(status ->
+                notifications.markAsReadIfUnread(center.getId(), member, LocalDateTime.now()));
+        assertThat(ignored).isZero();
+        assertThat(read).isEqualTo(1);
+        assertThat(notifications.findById(center.getId()).orElseThrow().isRead()).isTrue();
+    }
+
+    @Test
+    @DisplayName("시니어 기기 토큰이 없으면 본인확인은 목록 행을 만들지 않는다")
+    void 시니어_토큰이_없어도_본인확인은_목록_행을_만들지_않는다() {
+        // given
+        Long member = new TransactionTemplate(transactionManager).execute(status ->
+                members.save(Member.createMember(MemberType.SENIOR, "시니어", "01012345678")).getId());
+        FcmSendDto message = FcmSendDto.builder().title("안전 확인").content("괜찮으세요?")
+                .notificationType(NotificationType.SAFETY_SELF_CHECK).eventId("inc-no-token")
+                .entityId("inc-no-token").build();
+
+        // when
+        service.enqueue(member, message);
+
+        // then
+        assertThat(notifications.findByRecipientMemberIdAndEventId(member, "inc-no-token"))
+                .isEmpty();
+        assertThat(outbox.count()).isZero();
+    }
+
+    @Test
     @DisplayName("본인확인 알림에 사건 참조를 주면 UUID가 아니어도 그대로 저장한다")
     void 본인확인_알림에_사건_참조를_주면_그대로_저장한다() {
         // given
@@ -854,6 +916,8 @@ class FcmOutboxIntegrationTest {
         // then
         FcmOutbox row = outbox.findAll().getFirst();
         assertThat(row.getNotificationType()).isEqualTo(NotificationType.SAFETY_SELF_CHECK);
+        assertThat(row.getNotificationId()).isNull();
+        assertThat(notifications.count()).isZero();
         assertThat(transactions.claim(row.getId()).message().data())
                 .containsEntry("eventId", "inc-20261001-1")
                 .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")

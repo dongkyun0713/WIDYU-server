@@ -14,12 +14,12 @@ import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactor
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /** Every test owns a loopback-only, nonpersistent Redis process. Never uses application Redis settings. */
-final class AuthRedisFixture implements AutoCloseable {
+public final class AuthRedisFixture implements AutoCloseable {
     private final Process process;
     private final LettuceConnectionFactory factory;
     final StringRedisTemplate redis;
 
-    AuthRedisFixture() throws Exception {
+    public AuthRedisFixture() throws Exception {
         String password = UUID.randomUUID().toString();
         RunningRedis running = startRedis(password);
         process = running.process();
@@ -78,6 +78,11 @@ final class AuthRedisFixture implements AutoCloseable {
             candidate.waitFor(3, TimeUnit.SECONDS);
         }
         throw new IOException("Isolated test Redis could not bind an IPv4 loopback port");
+    }
+
+    /** Lets other domains build their own templates (e.g. RedisConfig's) on the isolated process. */
+    public LettuceConnectionFactory connectionFactory() {
+        return factory;
     }
 
     void stopRedis() throws Exception {

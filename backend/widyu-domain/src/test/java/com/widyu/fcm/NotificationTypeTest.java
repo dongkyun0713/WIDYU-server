@@ -55,6 +55,8 @@ class NotificationTypeTest {
         assertThat(zoneExit.priority()).isEqualTo(NotificationPriority.INTERACTION);
         assertThat(zoneEnter.priority()).isEqualTo(NotificationPriority.INTERACTION);
         assertThat(NotificationType.SAFETY_SELF_CHECK.centerFilter()).isNull();
+        assertThat(NotificationType.SAFETY_SELF_CHECK.deliveryMode())
+                .isEqualTo(DeliveryMode.PUSH_ONLY);
         assertThat(NotificationType.SAFETY_SELF_CHECK.settingGroup()).isEqualTo(PushSettingGroup.NONE);
         assertThat(NotificationType.FAMILY_LEADER_CHANGED.centerFilter()).isNull();
     }

@@ -52,11 +52,11 @@ public interface AlbumRepository extends JpaRepository<Album, Long> {
      */
     @Query("""
             SELECT new com.widyu.album.repository.GuardianLastActivityRow(
-                g.id, g.name, fm.family.id, COALESCE(MAX(a.createdAt), g.createdAt))
+                g.id, g.name, g.profileImage, COALESCE(MAX(a.createdAt), g.createdAt))
             FROM FamilyMembership fm JOIN fm.guardian g
             LEFT JOIN Album a ON a.member = g AND a.status = com.widyu.global.entity.Status.ACTIVE
             WHERE g.status = com.widyu.global.entity.Status.ACTIVE
-            GROUP BY g.id, g.name, g.createdAt, fm.family.id
+            GROUP BY g.id, g.name, g.profileImage, g.createdAt
             HAVING COALESCE(MAX(a.createdAt), g.createdAt) >= :from
                AND COALESCE(MAX(a.createdAt), g.createdAt) < :to
             """)

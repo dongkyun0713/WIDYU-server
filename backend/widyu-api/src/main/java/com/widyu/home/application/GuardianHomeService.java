@@ -5,6 +5,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.MemberType;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
@@ -58,13 +59,17 @@ public class GuardianHomeService {
     private final LocationAccessLogService locationAccessLogService;
 
     public GuardianHomeCardsResponse getHomeCards(Long memberId) {
+        return getHomeCards(memberId, LocalDateTime.now());
+    }
+
+    GuardianHomeCardsResponse getHomeCards(Long memberId, LocalDateTime now) {
         Member guardian = memberUtil.getCurrentMember();
         if (guardian.getType() != MemberType.GUARDIAN) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "보호자만 접근 가능합니다.");
         }
 
         Member senior = resolveSenior(memberId, guardian);
-        LocalDate today = LocalDate.now();
+        LocalDate today = now.toLocalDate();
 
         // 외출 여부는 좌표가 아니지만 위치에서 파생되므로 열람으로 센다(ADR-0036 결과).
         recordAccessQuietly(guardian.getId(), senior.getId());
@@ -74,7 +79,8 @@ public class GuardianHomeService {
                 getHeartRateInfo(senior),
                 getMedicineInfo(senior, today),
                 getScoredAlbums(senior, today),
-                getHealthScheduleInfo(senior),
+                getHealthScheduleInfo(senior, now),
+                getTodayHealthSchedules(senior, now),
                 getWalkInfo(senior, today)
         );
     }
@@ -181,11 +187,19 @@ public class GuardianHomeService {
                 .toList();
     }
 
-    private GuardianHomeCardsResponse.HealthScheduleInfo getHealthScheduleInfo(Member senior) {
+    private GuardianHomeCardsResponse.HealthScheduleInfo getHealthScheduleInfo(Member senior, LocalDateTime now) {
         return healthScheduleRepository
-                .findFirstByMemberIdAndScheduledAtAfterOrderByScheduledAtAsc(senior.getId(), LocalDateTime.now())
+                .findFirstByMemberIdAndScheduledAtAfterOrderByScheduledAtAsc(senior.getId(), now)
                 .map(GuardianHomeCardsResponse.HealthScheduleInfo::from)
                 .orElse(null);
+    }
+
+    // 다음 일정 조회는 기간 제한이 없어 오늘 목록은 [오늘 00:00, 내일 00:00) 조회를 하나 더 쓴다(LLD-0107).
+    private List<TodayHealthScheduleItem> getTodayHealthSchedules(Member senior, LocalDateTime now) {
+        LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
+        return TodayHealthScheduleItem.listFrom(
+                healthScheduleRepository.findByMemberIdAndDate(senior.getId(), todayStart, todayStart.plusDays(1)),
+                now);
     }
 
     private GuardianHomeCardsResponse.WalkInfo getWalkInfo(Member senior, LocalDate today) {

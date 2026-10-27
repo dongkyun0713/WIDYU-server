@@ -50,11 +50,10 @@ class AlbumGuardianLastActivityQueryTest {
                 LocalDateTime.of(2026, 10, 15, 0, 0), LocalDateTime.of(2026, 10, 20, 0, 0));
 
         // then
-        assertThat(rows).extracting(GuardianLastActivityRow::guardianId, GuardianLastActivityRow::familyId,
-                        GuardianLastActivityRow::lastActivityAt)
+        assertThat(rows).extracting(GuardianLastActivityRow::guardianId, GuardianLastActivityRow::lastActivityAt)
                 .containsExactlyInAnyOrder(
-                        tuple(uploader.getId(), family.getId(), LocalDateTime.of(2026, 10, 19, 10, 0)),
-                        tuple(neverUploaded.getId(), family.getId(), LocalDateTime.of(2026, 10, 17, 12, 0)));
+                        tuple(uploader.getId(), LocalDateTime.of(2026, 10, 19, 10, 0)),
+                        tuple(neverUploaded.getId(), LocalDateTime.of(2026, 10, 17, 12, 0)));
     }
 
     private Member guardian(Family family, String name, String phone) {

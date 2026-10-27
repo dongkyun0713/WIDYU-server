@@ -4,6 +4,7 @@ import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.MemberUtil;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
@@ -44,19 +45,28 @@ public class SeniorHomeService {
     private final HomeAlbumRecommendationService albumRecommendationService;
 
     public SeniorHomeCardsResponse getHomeCards() {
+        return getHomeCards(LocalDateTime.now());
+    }
+
+    SeniorHomeCardsResponse getHomeCards(LocalDateTime now) {
         Member member = memberUtil.getCurrentMember();
 
         if (member.getType() != MemberType.SENIOR) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "시니어만 접근 가능합니다.");
         }
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = now.toLocalDate();
+
+        // 오늘 00:00부터 1개월 이내 일정을 한 번에 조회해 다음 일정과 오늘 목록을 같은 now로 만든다(LLD-0107).
+        List<HealthSchedule> healthSchedules = healthScheduleRepository
+                .findByMemberIdAndWeek(member.getId(), today.atStartOfDay(), now.plusMonths(1));
 
         return SeniorHomeCardsResponse.of(
                 getHeartRateInfo(member),
                 getMedicineInfo(member, today),
                 getScoredAlbums(member, today),
-                getHealthScheduleInfo(member, today),
+                getHealthScheduleInfo(healthSchedules, now),
+                TodayHealthScheduleItem.listFrom(healthSchedules, now),
                 getWalkInfo(member, today)
         );
     }
@@ -124,12 +134,9 @@ public class SeniorHomeService {
                 .toList();
     }
 
-    private SeniorHomeCardsResponse.HealthScheduleInfo getHealthScheduleInfo(Member member, LocalDate today) {
-        LocalDateTime now = LocalDateTime.now();
-
-        Optional<HealthSchedule> nearest = healthScheduleRepository
-                .findByMemberIdAndWeek(member.getId(), now, now.plusMonths(1))
-                .stream()
+    private SeniorHomeCardsResponse.HealthScheduleInfo getHealthScheduleInfo(
+            List<HealthSchedule> schedules, LocalDateTime now) {
+        Optional<HealthSchedule> nearest = schedules.stream()
                 .filter(s -> s.getScheduledAt().isAfter(now))
                 .min(Comparator.comparing(HealthSchedule::getScheduledAt));
 
@@ -137,7 +144,7 @@ public class SeniorHomeService {
             return null;
         }
 
-        return SeniorHomeCardsResponse.HealthScheduleInfo.from(nearest.get(), today);
+        return SeniorHomeCardsResponse.HealthScheduleInfo.from(nearest.get(), now.toLocalDate());
     }
 
     private SeniorHomeCardsResponse.WalkInfo getWalkInfo(Member member, LocalDate today) {

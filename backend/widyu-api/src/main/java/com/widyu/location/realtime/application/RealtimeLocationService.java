@@ -2,6 +2,7 @@ package com.widyu.location.realtime.application;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.widyu.global.config.RedisConfig;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.global.util.GeoUtils;
@@ -42,7 +43,9 @@ import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +74,8 @@ public class RealtimeLocationService {
     // 설정을 공유하면 안 되기 때문이다(초기화 필드라 생성자 주입 대상에서 빠진다).
     private final ObjectMapper payloadMapper = new ObjectMapper()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    // Redis 값은 타입 정보 없이 저장돼 LinkedHashMap으로 읽힌다. 저장할 때와 같은 설정으로 되돌린다(LLD-0097).
+    private final ObjectMapper redisValueMapper = RedisConfig.redisObjectMapper();
 
     private static final String LOCATION_TRAIL_KEY_PREFIX = "location:trail:";
     private static final String LOCATION_STAY_KEY_PREFIX = "location:stay:";
@@ -225,15 +230,9 @@ public class RealtimeLocationService {
                         return TrackedSeniorResponse.of(senior, location.getLatitude(), location.getLongitude());
                     }
 
-                    String stayKey = LOCATION_STAY_KEY_PREFIX + memberId;
-                    try {
-                        Object stayObj = redisTemplate.opsForValue().get(stayKey);
-                        if (stayObj instanceof StayInfo stayInfo) {
-                            return TrackedSeniorResponse.of(senior, stayInfo.latitude(), stayInfo.longitude());
-                        }
-                    } catch (Exception e) {
-                        log.warn("StayInfo 역직렬화 실패 (stale data) - stayKey: {}, 삭제 후 재생성", stayKey, e);
-                        redisTemplate.delete(stayKey);
+                    StayInfo stayInfo = getStayInfo(memberId);
+                    if (stayInfo != null) {
+                        return TrackedSeniorResponse.of(senior, stayInfo.latitude(), stayInfo.longitude());
                     }
 
                     return TrackedSeniorResponse.of(senior, null, null);
@@ -309,16 +308,28 @@ public class RealtimeLocationService {
         );
     }
 
+    /**
+     * 체류 정보를 읽는 유일한 경로다(LLD-0097). 값이 깨졌을 때만 지운다. 연결·시간 초과에 지우면 정상 체류 정보를
+     * 잃어 다음 이탈을 놓친다. Jackson 예외 메시지에는 원문 좌표가 섞일 수 있어 예외 이름만 남긴다(LLD-0029).
+     */
     private StayInfo getStayInfo(Long memberId) {
         String stayKey = LOCATION_STAY_KEY_PREFIX + memberId;
         try {
-            Object stayObj = redisTemplate.opsForValue().get(stayKey);
-            if (stayObj instanceof StayInfo stayInfo) {
-                return stayInfo;
+            Object raw = redisTemplate.opsForValue().get(stayKey);
+            if (raw == null) {
+                return null;
             }
-        } catch (Exception e) {
-            log.warn("StayInfo 역직렬화 실패 (stale data) - stayKey: {}, 삭제 후 재생성", stayKey, e);
+            StayInfo stay = redisValueMapper.convertValue(raw, StayInfo.class);
+            // 좌표·시작 시각이 빠진 값은 이후 거리 계산·체류 시간에서 null로 터지므로 깨진 값과 같이 처리한다.
+            if (stay.latitude() == null || stay.longitude() == null || stay.startTime() == null) {
+                throw new IllegalArgumentException("체류 정보 필수 값 누락");
+            }
+            return stay;
+        } catch (SerializationException | IllegalArgumentException e) {
+            log.warn("체류 정보를 읽을 수 없어 삭제 - stayKey: {}, cause: {}", stayKey, e.getClass().getSimpleName());
             redisTemplate.delete(stayKey);
+        } catch (DataAccessException e) {
+            log.warn("체류 정보 조회 실패 - stayKey: {}, cause: {}", stayKey, e.getClass().getSimpleName());
         }
         return null;
     }
@@ -384,16 +395,10 @@ public class RealtimeLocationService {
      * - 안전구역 이탈 시 보호자에게 알림 전송
      */
     private StayInfo calculateStayInfo(String stayKey, Double newLat, Double newLng, Member member) {
-        Object stayObj = null;
-        try {
-            stayObj = redisTemplate.opsForValue().get(stayKey);
-        } catch (Exception e) {
-            log.warn("StayInfo 역직렬화 실패 (stale data) - stayKey: {}, 삭제 후 재생성", stayKey, e);
-            redisTemplate.delete(stayKey);
-        }
+        StayInfo previousStay = getStayInfo(member.getId());
         String previousLocationType = null;
 
-        if (stayObj instanceof StayInfo previousStay) {
+        if (previousStay != null) {
             previousLocationType = previousStay.locationType();
 
             boolean isSameLocation = GeoUtils.isWithinRadius(

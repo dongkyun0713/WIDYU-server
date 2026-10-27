@@ -18,7 +18,7 @@ public interface NotificationSettingDocs {
 
     @Operation(
             summary = "알림 설정 조회",
-            description = "본인의 제품 푸시 설정을 조회합니다. 보호자는 4그룹, 시니어는 GENERAL 1그룹입니다. 기기 상태 unknown은 OS 권한을 알 수 없다는 뜻입니다."
+            description = "본인의 제품 푸시 설정을 조회합니다. 보호자는 안전·안심구역·복약 확인·일반, 시니어는 앨범·목표·홈·기타 푸시 4그룹입니다. 기기 상태 unknown은 OS 권한을 알 수 없다는 뜻입니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -32,13 +32,24 @@ public interface NotificationSettingDocs {
                                       "message": "알림 설정 조회 성공",
                                       "data": [
                                         {
-                                          "group": "SAFETY",
-                                          "groupName": "안전 알림",
+                                          "group": "ALBUM",
+                                          "groupName": "앨범",
                                           "enabled": true,
                                           "recipientEnabled": true,
                                           "productPushEnabled": true,
-                                          "mandatoryProductPush": true,
-                                          "canEditProductPush": false,
+                                          "mandatoryProductPush": false,
+                                          "canEditProductPush": true,
+                                          "devicePushStatus": "unknown",
+                                          "policyRevision": 4
+                                        },
+                                        {
+                                          "group": "GOAL",
+                                          "groupName": "목표",
+                                          "enabled": false,
+                                          "recipientEnabled": true,
+                                          "productPushEnabled": false,
+                                          "mandatoryProductPush": false,
+                                          "canEditProductPush": true,
                                           "devicePushStatus": "unknown",
                                           "policyRevision": 4
                                         }
@@ -52,7 +63,7 @@ public interface NotificationSettingDocs {
 
     @Operation(
             summary = "알림 설정 변경",
-            description = "로그인한 본인의 제품 푸시만 변경합니다. policyRevision이 최신값과 다르거나 방장이 안전 푸시를 끄면 409입니다. 푸시를 꺼도 알림센터 행은 남습니다."
+            description = "로그인한 본인의 제품 푸시만 변경합니다. 시니어는 ALBUM·GOAL·HOME·ETC, 보호자는 SAFETY·SAFE_ZONE·MEDICATION_CHECK·GENERAL을 사용합니다. policyRevision이 최신값과 다르거나 방장이 안전 푸시를 끄면 409입니다. 푸시를 꺼도 센터 저장 대상 알림은 남습니다."
     )
     @ApiResponse(
             responseCode = "200",
@@ -65,8 +76,8 @@ public interface NotificationSettingDocs {
                                       "code": "FCM_2011",
                                       "message": "알림 설정 변경 성공",
                                       "data": {
-                                        "group": "GENERAL",
-                                        "groupName": "일반 알림",
+                                        "group": "ALBUM",
+                                        "groupName": "앨범",
                                         "enabled": false,
                                         "recipientEnabled": true,
                                         "productPushEnabled": false,
@@ -111,7 +122,7 @@ public interface NotificationSettingDocs {
                                             name = "그룹 알림 끄기",
                                             value = """
                                                     {
-                                                      "group": "GENERAL",
+                                                      "group": "ALBUM",
                                                       "enabled": false,
                                                       "policyRevision": 4
                                                     }
@@ -121,7 +132,7 @@ public interface NotificationSettingDocs {
                                             name = "그룹 알림 켜기",
                                             value = """
                                                     {
-                                                      "group": "GENERAL",
+                                                      "group": "ALBUM",
                                                       "enabled": true,
                                                       "policyRevision": 4
                                                     }

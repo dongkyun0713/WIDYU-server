@@ -45,7 +45,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AlbumNotificationListener {
 
-    private static final String ALBUM_DEFAULT_IMAGE = "album.png";
     private static final Set<Integer> INACTIVE_REMINDER_DAYS = Set.of(3, 5, 7);
 
     private final FcmService fcmService;
@@ -69,7 +68,7 @@ public class AlbumNotificationListener {
             uploadDeepLink = GuardianDeepLinks.post(albumId);
         }
         send(author.getId(), FcmSendDto.of(NotificationType.ALBUM_UPLOAD_COMPLETE, uploadCopy,
-                albumId, uploadDeepLink, null, null, ALBUM_DEFAULT_IMAGE));
+                albumId, uploadDeepLink, null, null, author.getProfileImage()));
 
         if (author.getType() == MemberType.SENIOR) {
             Optional<Long> familyId = seniorProfileRepository.findFamilyIdByMemberId(author.getId());
@@ -118,11 +117,11 @@ public class AlbumNotificationListener {
         NotificationCopy copy = NotificationCopy.of(NotificationType.ALBUM_ALL_VIEWED, "A07",
                 Map.of("시니어 이름", viewer.getName()));
         send(writer.getId(), FcmSendDto.of(NotificationType.ALBUM_ALL_VIEWED, copy, null,
-                null, viewer.getId(), viewer.getId(), ALBUM_DEFAULT_IMAGE));
+                null, viewer.getId(), viewer.getId(), viewer.getProfileImage()));
     }
 
     /**
-     * 마지막 업로드(없으면 가입) 날짜가 정확히 3·5·7일 전인 보호자의 가족 시니어에게 한 번씩 알린다(LLD-0104).
+     * 가족에 속한 보호자 본인에게, 마지막 업로드(없으면 가입) 날짜가 정확히 3·5·7일 전일 때 한 번씩 알린다(LLD-0104).
      * 바깥 트랜잭션을 두지 않아 수신자마다 따로 커밋하고, 한 건의 실패가 다른 알림을 롤백하지 않는다.
      */
     @Scheduled(cron = "0 0 10 * * *")
@@ -136,32 +135,28 @@ public class AlbumNotificationListener {
         for (GuardianLastActivityRow guardian : candidates) {
             int days = (int) ChronoUnit.DAYS.between(guardian.lastActivityAt().toLocalDate(), today);
             if (INACTIVE_REMINDER_DAYS.contains(days)) {
-                sendInactivityNotificationToSeniors(guardian, days, today);
+                sendInactivityNotification(guardian, days, today);
             }
         }
     }
 
-    private void sendInactivityNotificationToSeniors(GuardianLastActivityRow guardian, int days, LocalDate today) {
+    private void sendInactivityNotification(GuardianLastActivityRow guardian, int days, LocalDate today) {
+        String eventId = "inactive:" + guardian.guardianId() + ":" + days + ":" + today;
+        // 같은 날 재실행이면 이미 보낸 알림이다. enqueue는 같은 eventId여도 푸시를 다시 만들므로 여기서 거른다.
+        // 동시 실행은 센터 행 UK(recipient, event_id)가 한쪽 트랜잭션을 outbox째 롤백시킨다.
+        if (fcmNotificationRepository.findByRecipientMemberIdAndEventId(guardian.guardianId(), eventId).isPresent()) {
+            return;
+        }
         String message = guardian.guardianName() + "님, " + days + "일 간 소식이 뜸했어요. 새로운 근황을 전하는 건 어떨까요?";
         FcmSendDto dto = FcmSendDto.builder()
                 .title(message).content("새로운 소식을 공유해보세요.")
-                .fcmCategory(FcmCategory.ALBUM).scheme("").image(ALBUM_DEFAULT_IMAGE)
-                .relatedMemberId(guardian.guardianId())
-                .eventId("inactive:" + guardian.guardianId() + ":" + days + ":" + today)
+                .fcmCategory(FcmCategory.ALBUM).scheme("").image(guardian.profileImage())
+                .eventId(eventId).data(Map.of("deepLink", "/album"))
                 .build();
-        for (SeniorProfile senior : seniorProfileRepository.findAllByFamilyIdWithMember(guardian.familyId())) {
-            Long seniorId = senior.getMember().getId();
-            // 같은 날 재실행이면 이미 보낸 알림이다. enqueue는 같은 eventId여도 푸시를 다시 만들므로 여기서 거른다.
-            // 동시 실행은 센터 행 UK(recipient, event_id)가 한쪽 트랜잭션을 outbox째 롤백시킨다.
-            if (fcmNotificationRepository.findByRecipientMemberIdAndEventId(seniorId, dto.eventId()).isPresent()) {
-                continue;
-            }
-            try {
-                fcmService.sendMessageToUser(seniorId, dto);
-            } catch (RuntimeException e) {
-                log.error("앨범 미업로드 알림 저장 실패 - guardianId: {}, seniorId: {}",
-                        guardian.guardianId(), seniorId, e);
-            }
+        try {
+            fcmService.sendMessageToUser(guardian.guardianId(), dto);
+        } catch (RuntimeException e) {
+            log.error("앨범 미업로드 알림 저장 실패 - guardianId: {}", guardian.guardianId(), e);
         }
     }
 

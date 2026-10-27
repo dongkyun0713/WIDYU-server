@@ -1,8 +1,10 @@
 package com.widyu.goal.home.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -10,14 +12,19 @@ import static org.mockito.Mockito.verify;
 import com.widyu.global.entity.Status;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.DailyGoalStatus;
+import com.widyu.goal.healthschedule.HealthScheduleFixture;
+import com.widyu.goal.healthschedule.dto.response.TodayHealthScheduleItem;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
+import com.widyu.goal.home.dto.response.GuardianGoalHomeResponse;
 import com.widyu.goal.home.dto.response.GuardianGoalStatsResponse;
 import com.widyu.goal.home.dto.response.SeniorGoalHomeResponse;
 import com.widyu.goal.home.dto.response.SeniorWeeklyGoalStatusResponse;
 import com.widyu.goal.medicineschedule.repository.MedicationProofRepository;
 import com.widyu.goal.medicineschedule.repository.MedicineScheduleRepository;
 import com.widyu.goal.walk.repository.WalkRepository;
+import com.widyu.healthschedule.ProgressStatus;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
@@ -57,6 +64,8 @@ class GoalHomeServiceTest {
     @Mock private MemberUtil memberUtil;
 
     @InjectMocks private GoalHomeService goalHomeService;
+
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 23, 10, 0);
 
     @Test
     @DisplayName("시니어 주간 상태는 기간 데이터를 한 번씩 조회하고 기존 날짜별 상태를 유지한다")
@@ -453,6 +462,150 @@ class GoalHomeServiceTest {
         assertThat(response.medicine().takenCount()).isZero();
         assertThat(response.medicine().totalCount()).isEqualTo(1);
         assertThat(response.medicine().proofImageUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("오늘 지난 일정·완료 일정·남은 일정과 내일 일정이 있으면 시니어 목표 홈은 오늘 일정만 오름차순으로 담고 다음 일정은 오늘 남은 일정을 반환한다")
+    void 시니어_목표_홈은_오늘_일정만_담고_다음_일정은_오늘_남은_일정이다() {
+        // given
+        Member senior = member(11L, MemberType.SENIOR);
+        LocalDateTime todayStart = NOW.toLocalDate().atStartOfDay();
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findByMemberIdAndWeek(11L, todayStart, NOW.plusMonths(1)))
+                .willReturn(List.of(
+                        HealthScheduleFixture.schedule(senior, 4L, NOW.plusDays(1).withHour(9), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 3L, NOW.withHour(11), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 2L, NOW.withHour(9).withMinute(30), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 1L, NOW.withHour(8), ProgressStatus.COMPLETED)));
+
+        // when
+        SeniorGoalHomeResponse response = goalHomeService.getSeniorGoalHome(NOW);
+
+        // then
+        assertThat(response.todaySchedules())
+                .extracting(TodayHealthScheduleItem::healthScheduleId, TodayHealthScheduleItem::progressStatus,
+                        TodayHealthScheduleItem::elapsed)
+                .containsExactly(
+                        tuple(1L, ProgressStatus.COMPLETED, true),
+                        tuple(2L, ProgressStatus.UPCOMING, true),
+                        tuple(3L, ProgressStatus.UPCOMING, false));
+        assertThat(response.hospital().hospitalScheduleId()).isEqualTo(3L);
+        then(healthScheduleRepository).should().findByMemberIdAndWeek(11L, todayStart, NOW.plusMonths(1));
+        then(healthScheduleRepository).shouldHaveNoMoreInteractions();
+    }
+
+    @Test
+    @DisplayName("현재 시각 이후 일정이 없으면 시니어 목표 홈의 다음 일정은 null이고 오늘 일정 목록은 유지한다")
+    void 시니어_목표_홈은_남은_일정이_없으면_다음_일정이_null이고_오늘_목록을_유지한다() {
+        // given
+        Member senior = member(11L, MemberType.SENIOR);
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(healthScheduleRepository.findByMemberIdAndWeek(11L, NOW.toLocalDate().atStartOfDay(), NOW.plusMonths(1)))
+                .willReturn(List.of(
+                        HealthScheduleFixture.schedule(senior, 1L, NOW.withHour(7), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 2L, NOW.withHour(8), ProgressStatus.COMPLETED)));
+
+        // when
+        SeniorGoalHomeResponse response = goalHomeService.getSeniorGoalHome(NOW);
+
+        // then
+        assertThat(response.hospital()).isNull();
+        assertThat(response.todaySchedules())
+                .extracting(TodayHealthScheduleItem::healthScheduleId, TodayHealthScheduleItem::progressStatus,
+                        TodayHealthScheduleItem::elapsed)
+                .containsExactly(
+                        tuple(1L, ProgressStatus.INCOMPLETE, true),
+                        tuple(2L, ProgressStatus.COMPLETED, true));
+    }
+
+    @Test
+    @DisplayName("오늘 일정이 없으면 시니어 목표 홈의 오늘 일정 목록은 빈 배열을 반환한다")
+    void 시니어_목표_홈은_오늘_일정이_없으면_빈_배열을_반환한다() {
+        // given
+        Member senior = member(11L, MemberType.SENIOR);
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+
+        // when
+        SeniorGoalHomeResponse response = goalHomeService.getSeniorGoalHome(NOW);
+
+        // then
+        assertThat(response.todaySchedules()).isNotNull().isEmpty();
+        assertThat(response.hospital()).isNull();
+    }
+
+    @Test
+    @DisplayName("오늘 지난 일정·완료 일정·남은 일정과 내일 일정이 있으면 보호자 목표 홈은 오늘 일정만 오름차순으로 담고 다음 일정은 오늘 남은 일정을 반환한다")
+    void 보호자_목표_홈은_오늘_일정만_담고_다음_일정은_오늘_남은_일정이다() {
+        // given
+        Member senior = member(21L, MemberType.SENIOR);
+        LocalDateTime todayStart = NOW.toLocalDate().atStartOfDay();
+        given(memberRepository.findById(21L)).willReturn(Optional.of(senior));
+        given(healthScheduleRepository.findByMemberIdAndWeek(21L, todayStart, NOW.plusMonths(1)))
+                .willReturn(List.of(
+                        HealthScheduleFixture.schedule(senior, 4L, NOW.plusDays(1).withHour(9), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 3L, NOW.withHour(11), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 2L, NOW.withHour(9).withMinute(30), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 1L, NOW.withHour(8), ProgressStatus.COMPLETED)));
+
+        // when
+        GuardianGoalHomeResponse response = goalHomeService.getGuardianGoalHome(21L, NOW);
+
+        // then
+        assertThat(response.todaySchedules())
+                .extracting(TodayHealthScheduleItem::healthScheduleId, TodayHealthScheduleItem::progressStatus,
+                        TodayHealthScheduleItem::elapsed)
+                .containsExactly(
+                        tuple(1L, ProgressStatus.COMPLETED, true),
+                        tuple(2L, ProgressStatus.UPCOMING, true),
+                        tuple(3L, ProgressStatus.UPCOMING, false));
+        assertThat(response.hospital().hospitalScheduleId()).isEqualTo(3L);
+        then(healthScheduleRepository).should().findByMemberIdAndWeek(21L, todayStart, NOW.plusMonths(1));
+        then(healthScheduleRepository).shouldHaveNoMoreInteractions();
+    }
+
+    @Test
+    @DisplayName("현재 시각 이후 일정이 없으면 보호자 목표 홈의 다음 일정은 null이고 오늘 일정 목록은 유지한다")
+    void 보호자_목표_홈은_남은_일정이_없으면_다음_일정이_null이고_오늘_목록을_유지한다() {
+        // given
+        Member senior = member(21L, MemberType.SENIOR);
+        given(memberRepository.findById(21L)).willReturn(Optional.of(senior));
+        given(healthScheduleRepository.findByMemberIdAndWeek(21L, NOW.toLocalDate().atStartOfDay(), NOW.plusMonths(1)))
+                .willReturn(List.of(
+                        HealthScheduleFixture.schedule(senior, 1L, NOW.withHour(7), ProgressStatus.UPCOMING),
+                        HealthScheduleFixture.schedule(senior, 2L, NOW.withHour(8), ProgressStatus.COMPLETED)));
+
+        // when
+        GuardianGoalHomeResponse response = goalHomeService.getGuardianGoalHome(21L, NOW);
+
+        // then
+        assertThat(response.hospital()).isNull();
+        assertThat(response.todaySchedules())
+                .extracting(TodayHealthScheduleItem::healthScheduleId, TodayHealthScheduleItem::progressStatus,
+                        TodayHealthScheduleItem::elapsed)
+                .containsExactly(
+                        tuple(1L, ProgressStatus.INCOMPLETE, true),
+                        tuple(2L, ProgressStatus.COMPLETED, true));
+    }
+
+    @Test
+    @DisplayName("오늘 일정이 없으면 보호자 목표 홈의 오늘 일정 목록은 빈 배열을 반환한다")
+    void 보호자_목표_홈은_오늘_일정이_없으면_빈_배열을_반환한다() {
+        // given
+        Member senior = member(21L, MemberType.SENIOR);
+        given(memberRepository.findById(21L)).willReturn(Optional.of(senior));
+
+        // when
+        GuardianGoalHomeResponse response = goalHomeService.getGuardianGoalHome(21L, NOW);
+
+        // then
+        assertThat(response.todaySchedules()).isNotNull().isEmpty();
+        assertThat(response.hospital()).isNull();
+    }
+
+    private Member member(Long id, MemberType type) {
+        Member member = Member.createMember(type, "회원", "01011112222");
+        ReflectionTestUtils.setField(member, "id", id);
+        return member;
     }
 
     private MedicationProof proof(MedicineSchedule schedule, Member member, LocalDateTime verifiedAt, String imageUrl) {

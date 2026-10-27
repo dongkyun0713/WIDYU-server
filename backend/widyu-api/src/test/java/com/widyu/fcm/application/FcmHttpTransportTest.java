@@ -33,6 +33,43 @@ import static org.assertj.core.api.Assertions.*;
 
 class FcmHttpTransportTest {
     @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @DisplayName("목록 알림을 전송하면 만료 시각 유무와 관계없이 목록 ID를 FCM data에 넣는다")
+    void 목록_알림을_전송하면_목록_ID를_FCM_data에_넣는다(boolean hasExpiration) throws Exception {
+        // given
+        ObjectMapper mapper = new ObjectMapper();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
+                () -> "loopback-access-token", Duration.ofSeconds(2));
+        FcmSendDto message = FcmSendDto.builder().title("새 게시물").content("새 소식이 있어요.")
+                .notificationType(NotificationType.ALBUM_CREATED)
+                .data(Map.of("eventId", "album-91", "notificationId", "outdated-id",
+                        "deepLink", "/album/post?postId=91"))
+                .build();
+        Instant expiresAt = null;
+        if (hasExpiration) {
+            expiresAt = Instant.now().plusSeconds(300);
+        }
+        FcmDelivery delivery = new FcmDelivery(4072L, 1, "loopback-token", message, expiresAt, 8111L);
+        try {
+            // when
+            assertThat(transport.send(delivery, () -> true).success()).isTrue();
+
+            // then
+            JsonNode body = bodies.getFirst();
+            assertThat(body.at("/message/data/notificationId").isTextual()).isTrue();
+            assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
+            assertThat(body.at("/message/data/type").asText()).isEqualTo("ALBUM_CREATED");
+            assertThat(body.at("/message/data/eventId").asText()).isEqualTo("album-91");
+            assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("/album/post?postId=91");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @ParameterizedTest
     @EnumSource(value = NotificationType.class, names = {"SAFE_ZONE_EXITED", "SAFE_ZONE_ENTERED"})
     @DisplayName("안심구역 소식을 전송하면 일반 채널과 보통 우선순위를 사용한다")
     void 안심구역_소식을_전송하면_일반_채널을_사용한다(NotificationType type) throws Exception {
@@ -86,6 +123,7 @@ class FcmHttpTransportTest {
             assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("SAFETY_SELF_CHECK");
             assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
             assertThat(body.at("/message/data/deepLink").asText()).isEmpty();
+            assertThat(body.at("/message/data/notificationId").isMissingNode()).isTrue();
             assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
@@ -348,6 +386,7 @@ class FcmHttpTransportTest {
             assertThat(result.success()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("EXPIRED_BEFORE_SEND");
             assertThat(requests.get()).isZero();
         } finally {
             transport.close();
@@ -396,6 +435,7 @@ class FcmHttpTransportTest {
             assertThat(result.success()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("PREFLIGHT");
             assertThat(requests.get()).isZero();
         } finally {
             transport.close();
@@ -495,6 +535,7 @@ class FcmHttpTransportTest {
             // then
             assertThat(result.permanentToken()).isTrue();
             assertThat(result.retryable()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_400 " + code);
         } finally {
             transport.close();
             server.stop(0);
@@ -514,6 +555,51 @@ class FcmHttpTransportTest {
             assertThat(result.permanentToken()).isFalse();
             assertThat(result.retryable()).isFalse();
             assertThat(result.success()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_400 INVALID_ARGUMENT");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("FCM이 거부하면 HTTP 상태와 FCM·APNs 오류 코드만 상세로 남기고 오류 메시지 원문은 버린다")
+    void FCM_거부_상세에_상태와_오류_코드만_남긴다() throws Exception {
+        // given
+        String body = "{\"error\":{\"code\":401,\"message\":\"Auth error for token test-token\","
+                + "\"status\":\"UNAUTHENTICATED\",\"details\":["
+                + "{\"@type\":\"type.googleapis.com/google.firebase.fcm.v1.FcmError\",\"errorCode\":\"THIRD_PARTY_AUTH_ERROR\"},"
+                + "{\"@type\":\"type.googleapis.com/google.firebase.fcm.v1.ApnsError\",\"statusCode\":403,"
+                + "\"reason\":\"InvalidProviderToken\"}]}}";
+        HttpServer server = server(401, body, null, 0);
+        FcmHttpTransport transport = transport(server, Duration.ofSeconds(2));
+        try {
+            // when
+            FcmTransport.Result result = transport.send("test-token", message());
+            // then
+            assertThat(result.retryable()).isFalse();
+            assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail())
+                    .isEqualTo("HTTP_401 UNAUTHENTICATED THIRD_PARTY_AUTH_ERROR InvalidProviderToken")
+                    .doesNotContain("test-token", "Auth error");
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("FCM 거부 응답 본문이 JSON이 아니면 HTTP 상태만 상세로 남긴다")
+    void 깨진_거부_응답은_HTTP_상태만_남긴다() throws Exception {
+        // given
+        HttpServer server = server(403, "<html>forbidden test-token</html>", null, 0);
+        FcmHttpTransport transport = transport(server, Duration.ofSeconds(2));
+        try {
+            // when
+            FcmTransport.Result result = transport.send("test-token", message());
+            // then
+            assertThat(result.permanentToken()).isFalse();
+            assertThat(result.detail()).isEqualTo("HTTP_403");
         } finally {
             transport.close();
             server.stop(0);

@@ -72,6 +72,22 @@ class HealthScheduleServiceTest {
     }
 
     @Test
+    @DisplayName("보호자가 시니어 본인 일정 등록 API를 부르면 권한 예외가 발생하고 일정을 저장하지 않는다")
+    void 보호자가_본인_일정_등록을_부르면_예외가_발생한다() {
+        // given
+        Member guardian = member(1L, MemberType.GUARDIAN);
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        HealthScheduleCreateRequest request = new HealthScheduleCreateRequest(
+                "병원 방문", "서울시", 37.5, 127.0, LocalDateTime.now().plusDays(1));
+
+        // when & then
+        assertThatThrownBy(() -> healthScheduleService.createHealthScheduleForMe(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        then(healthScheduleRepository).should(never()).save(any(HealthSchedule.class));
+    }
+
+    @Test
     @DisplayName("보호자가 시니어 건강일정을 등록하면 H02 이벤트를 한 번 발행한다")
     void 보호자가_시니어_건강일정을_등록하면_H02_이벤트를_발행한다() {
         // given

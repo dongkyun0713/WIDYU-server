@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class HealthScheduleNotificationListener {
 
-    private static final String HEALTH_SCHEDULE_DEFAULT_IMAGE = "health_schedule.png";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("a h:mm", Locale.KOREAN);
 
     private final FcmService fcmService;
@@ -86,7 +85,7 @@ public class HealthScheduleNotificationListener {
                         "오전/오후 시각", schedule.getScheduledAt().format(TIME_FORMATTER),
                         "일정명", schedule.getScheduleName()));
         FcmSendDto dto = FcmSendDto.of(NotificationType.HEALTH_SCHEDULE_UPCOMING, osCopy,
-                schedule.getId().toString(), null, null, null, HEALTH_SCHEDULE_DEFAULT_IMAGE)
+                schedule.getId().toString(), null, null, null, recipient.getProfileImage())
                 .withCenterCopy(inAppCopy);
         fcmService.sendMessageToUser(recipient.getId(), dto);
     }
