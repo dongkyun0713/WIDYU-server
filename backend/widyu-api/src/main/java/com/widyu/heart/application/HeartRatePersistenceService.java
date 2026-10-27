@@ -13,6 +13,7 @@ import com.widyu.heart.HeartRateResult;
 import com.widyu.heart.HeartRateStatus;
 import com.widyu.heart.dto.request.HeartRateSingleRequest;
 import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.widyu.heart.repository.HeartRateEmergencyRepository;
 import com.widyu.heart.repository.HeartRateEventRepository;
 import com.widyu.heart.repository.HeartRateLatestResultWriter;
@@ -20,9 +21,11 @@ import com.widyu.member.Member;
 import com.widyu.member.repository.MemberRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HeartRatePersistenceService {
@@ -33,8 +36,12 @@ public class HeartRatePersistenceService {
     private final MemberRepository memberRepository;
     private final DecisionRecordRepository decisionRecordRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MeterRegistry meterRegistry;
 
-    /** 측정값 1건의 최신 결과와 이벤트를 저장한다(LLD-0023). 락 충돌이면 새 트랜잭션으로 다시 시도한다(LLD-0076). */
+    /**
+     * 측정값 1건의 이벤트를 저장하고 최신값으로 쓸 결과를 돌려준다(LLD-0023). 락 충돌이면 새 트랜잭션으로 다시 시도한다(LLD-0076).
+     * Redis 최신값은 여기서 쓰지 않는다. 호출자가 커밋 뒤 {@link #updateLatestResult}로 쓴다(LLD-0102).
+     */
     @RetryOnTransientLockFailure
     @Transactional
     @Timed(value = "heart.persistence", extraTags = {"path", "single"})
@@ -47,11 +54,6 @@ public class HeartRatePersistenceService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
-        HeartRateResult result = HeartRateResult.of(
-                memberId, status, request.heartRate(), request.measuredAt());
-        // 늦게 끝난 과거 측정이 최신값을 되돌리지 않게 더 늦은 측정일 때만 덮어쓴다(LLD-0090).
-        latestResultWriter.saveIfNewer(result);
-
         heartRateEventRepository.save(
                 // 단건 경로에는 정확도도 배치 원문도 없다.
                 HeartRateEvent.of(member, request.heartRate(), request.measuredAt(), status, null, null));
@@ -63,7 +65,7 @@ public class HeartRatePersistenceService {
             eventPublisher.publishEvent(new HeartRateEmergencyEvent(memberId, null));
         }
 
-        return result;
+        return HeartRateResult.of(memberId, status, request.heartRate(), request.measuredAt());
     }
 
     /**
@@ -107,10 +109,21 @@ public class HeartRatePersistenceService {
         }
     }
 
-    /** 배치의 마지막 샘플로 최신값(Redis)을 갱신한다. 저장된 값보다 늦은 측정일 때만 덮어쓴다(LLD-0090). */
-    @Transactional
+    /**
+     * 저장이 커밋된 측정으로 최신값(Redis)을 갱신한다. 저장된 값보다 늦은 측정일 때만 덮어쓴다(LLD-0090).
+     *
+     * <p>단건·배치 모두 심박 저장 트랜잭션이 끝난 뒤 트랜잭션 없이 부른다. 최신값은 이력에서 다시 만들 수 있는
+     * 조회용 사본이라 Redis가 실패해도 WARN과 메트릭만 남기고 예외를 내지 않는다(LLD-0102). 던지면 단건은 DB 장애로
+     * 오인돼 저하 경로로 가고, 배치는 인덱스 행을 못 만들어 재전송이 반복된다. 심박 값·측정 시각은 로그에 남기지 않는다(#639).
+     */
     public void updateLatestResult(
             Long memberId, HeartRateStatus status, Integer heartRate, LocalDateTime measuredAt) {
-        latestResultWriter.saveIfNewer(HeartRateResult.of(memberId, status, heartRate, measuredAt));
+        try {
+            latestResultWriter.saveIfNewer(HeartRateResult.of(memberId, status, heartRate, measuredAt));
+        } catch (RuntimeException e) {
+            meterRegistry.counter("heart.latest.write.failed").increment();
+            log.warn("최신 심박 갱신 실패, 저장·알림은 유지: memberId={}, type={}",
+                    memberId, e.getClass().getSimpleName());
+        }
     }
 }

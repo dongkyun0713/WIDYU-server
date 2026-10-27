@@ -1,6 +1,7 @@
 package com.widyu.heart.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -22,6 +23,8 @@ import com.widyu.heart.repository.HeartRateLatestResultWriter;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +34,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,13 +49,14 @@ class HeartRatePersistenceServiceTest {
     @Mock private MemberRepository memberRepository;
     @Mock private DecisionRecordRepository decisionRecordRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Spy private MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @InjectMocks
     private HeartRatePersistenceService heartRatePersistenceService;
 
     @Test
-    @DisplayName("정상 단건 판정을 저장하면 Result와 Event만 저장한다")
-    void 정상_단건_판정을_저장하면_Result와_Event만_저장한다() {
+    @DisplayName("정상 단건 판정을 저장하면 Event만 저장하고 최신값은 저장 트랜잭션 안에서 쓰지 않는다")
+    void 정상_단건_판정을_저장하면_Event만_저장하고_최신값은_쓰지_않는다() {
         // given
         Long memberId = 1L;
         LocalDateTime measuredAt = LocalDateTime.of(2026, 9, 8, 10, 0);
@@ -71,7 +77,8 @@ class HeartRatePersistenceServiceTest {
         assertThat(result.getStatus()).isEqualTo(HeartRateStatus.NORMAL);
         assertThat(result.getHeartRate()).isEqualTo(78);
         assertThat(result.getMeasuredAt()).isEqualTo(measuredAt);
-        then(latestResultWriter).should().saveIfNewer(any(HeartRateResult.class));
+        // Redis 실패가 이 트랜잭션을 롤백시키지 않게 최신값은 호출자가 커밋 뒤에 쓴다(LLD-0102).
+        then(latestResultWriter).shouldHaveNoInteractions();
         then(heartRateEventRepository).should().save(any(HeartRateEvent.class));
         then(heartRateEmergencyRepository).should(never()).save(any());
         then(eventPublisher).should(never()).publishEvent(any(HeartRateEmergencyEvent.class));
@@ -169,6 +176,21 @@ class HeartRatePersistenceServiceTest {
         assertThat(saved.getStatus()).isEqualTo(HeartRateStatus.NORMAL);
         assertThat(saved.getHeartRate()).isEqualTo(72);
         assertThat(saved.getMeasuredAt()).isEqualTo(measuredAt);
+    }
+
+    @Test
+    @DisplayName("최신값 Redis 쓰기가 실패하면 예외를 내지 않고 실패 건수만 센다")
+    void 최신값_Redis_쓰기가_실패하면_예외를_내지_않고_실패_건수만_센다() {
+        // given
+        given(latestResultWriter.saveIfNewer(any(HeartRateResult.class)))
+                .willThrow(new RedisConnectionFailureException("redis down"));
+
+        // when & then
+        // 던지면 배치는 인덱스 행을 못 만들어 재전송이 반복되고, 단건은 DB 장애로 오인돼 저하 경로로 간다.
+        assertThatCode(() -> heartRatePersistenceService.updateLatestResult(
+                1L, HeartRateStatus.EMERGENCY, 185, LocalDateTime.of(2026, 9, 8, 10, 0)))
+                .doesNotThrowAnyException();
+        assertThat(meterRegistry.counter("heart.latest.write.failed").count()).isEqualTo(1.0);
     }
 
     private DecisionRecord alert() {
