@@ -22,6 +22,7 @@ import com.widyu.location.access.LocationAccessPath;
 import com.widyu.location.access.application.LocationAccessLogService;
 import com.widyu.location.raw.application.LocationFixService;
 import com.widyu.location.realtime.dto.LocationPoint;
+import com.widyu.location.realtime.dto.LocationTrailResponse;
 import com.widyu.location.realtime.dto.LocationUpdateRequest;
 import com.widyu.location.realtime.dto.LocationUpdateResponse;
 import com.widyu.location.realtime.dto.StayInfo;
@@ -610,13 +611,52 @@ class RealtimeLocationServiceTest {
         given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
         given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
         given(redisTemplate.opsForList()).willReturn(listOperations);
-        given(listOperations.range("location:trail:2", 0, -1)).willReturn(java.util.List.of());
+        given(listOperations.range("location:trail:2", 0, 899)).willReturn(java.util.List.of());
 
         // when
         realtimeLocationService.getLocationTrail(2L, 1L);
 
         // then
         then(locationAccessLogService).should().record(1L, 2L, LocationAccessPath.REST_TRAIL);
+    }
+
+    @Test
+    @DisplayName("위치를 업데이트하면 이동 경로를 최근 900점으로 자르고 TTL을 다시 건다")
+    void 위치를_업데이트하면_이동_경로를_최근_900점으로_자른다() {
+        // given
+        LocationUpdateRequest request = LocationUpdateRequest.of(1L, 37.5, 127.0, null);
+        Member member = member(1L);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile(10L, member)));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(901L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        realtimeLocationService.updateAndBroadcast(request, 1L);
+
+        // then
+        then(listOperations).should().trim("location:trail:1", 0, 899);
+        then(redisTemplate).should().expire("location:trail:1", 900L, TimeUnit.SECONDS);
+    }
+
+    @Test
+    @DisplayName("이동 경로를 조회하면 최근 900점까지만 읽어 오래된 순으로 돌려준다")
+    void 이동_경로를_조회하면_최근_900점까지만_읽어_오래된_순으로_돌려준다() {
+        // given
+        SeniorProfile seniorProfile = seniorProfile(10L, member(2L));
+        LocationPoint newer = LocationPoint.of(37.51, 127.0);
+        LocationPoint older = LocationPoint.of(37.50, 127.0);
+        given(seniorProfileRepository.findByMemberId(2L)).willReturn(Optional.of(seniorProfile));
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 10L)).willReturn(true);
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.range("location:trail:2", 0, 899)).willReturn(java.util.List.of(newer, older));
+
+        // when
+        LocationTrailResponse response = realtimeLocationService.getLocationTrail(2L, 1L);
+
+        // then
+        assertThat(response.trail()).containsExactly(older, newer);
     }
 
     @Test

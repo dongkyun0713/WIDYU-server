@@ -80,6 +80,9 @@ public class RealtimeLocationService {
     private static final String LOCATION_TRAIL_KEY_PREFIX = "location:trail:";
     private static final String LOCATION_STAY_KEY_PREFIX = "location:stay:";
     private static final long TRAIL_TTL_SECONDS = 900; // 15분
+    // 이동 경로 점 상한. 초당 1건으로 보내도 15분을 담는다. 위치마다 TTL을 다시 걸어 키가 만료되지 않으므로
+    // 자르지 않으면 리스트가 끝없이 커진다(LLD-0098).
+    private static final long TRAIL_MAX_POINTS = 900;
     private static final long STAY_TTL_SECONDS = 86400; // 24시간
     private static final double STAY_RADIUS_METERS = 30.0; // 30m 이내면 같은 위치
     private static final double SAFE_ZONE_RADIUS_METERS = 75.0; // 안전구역 반경 75m (지름 150m)
@@ -166,6 +169,7 @@ public class RealtimeLocationService {
         LocationPoint point = LocationPoint.of(request.resolvedLatitude(), request.resolvedLongitude());
 
         Long listSize = redisTemplate.opsForList().leftPush(trailKey, point);
+        redisTemplate.opsForList().trim(trailKey, 0, TRAIL_MAX_POINTS - 1);
         redisTemplate.expire(trailKey, TRAIL_TTL_SECONDS, TimeUnit.SECONDS);
 
         log.info("이동 경로 저장: memberId={}, pointCount={}", memberId, listSize);
@@ -355,7 +359,7 @@ public class RealtimeLocationService {
 
         // Redis에서 이동 경로 조회 (memberId 기준)
         String trailKey = LOCATION_TRAIL_KEY_PREFIX + memberId;
-        List<Object> rawTrail = redisTemplate.opsForList().range(trailKey, 0, -1);
+        List<Object> rawTrail = redisTemplate.opsForList().range(trailKey, 0, TRAIL_MAX_POINTS - 1);
 
         // LocationPoint로 변환 (LinkedHashMap으로 역직렬화된 경우 처리)
         List<LocationPoint> trail = new ArrayList<>();
