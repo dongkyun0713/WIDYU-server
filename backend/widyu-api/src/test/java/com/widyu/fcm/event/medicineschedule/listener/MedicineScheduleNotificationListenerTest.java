@@ -247,7 +247,7 @@ class MedicineScheduleNotificationListenerTest {
         ReflectionTestUtils.setField(schedule, "id", 15L);
         given(medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(any(), eq(Status.ACTIVE), any()))
                 .willReturn(List.of(detachedSchedule, schedule));
-        given(medicationProofRepository.findVerifiedScheduleIds(any(), any(), any())).willReturn(List.of());
+        given(medicationProofRepository.findVerifiedScheduleIds(any(), any())).willReturn(List.of());
         given(familyMembershipRepository.findAllByFamilyIdWithGuardian(100L))
                 .willReturn(List.of(FamilyMembership.createMembership(family, guardian)));
 

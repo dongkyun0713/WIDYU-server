@@ -1,6 +1,7 @@
 package com.widyu.album.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -46,6 +47,8 @@ class AlbumViewCountPersistenceTest {
         Member viewer = memberRepository.save(Member.createMember(MemberType.SENIOR, "시니어", "01033334444"));
         Album album = albumRepository.save(activeAlbum(writer));
         given(memberUtil.getCurrentMember()).willReturn(viewer);
+        // 잠긴 앨범 조회는 조회 기록을 남기지 않으므로(#912) 해금한 회원의 조회로 둔다.
+        given(albumPermissionService.isUnlockedFor(any(), any())).willReturn(true);
 
         try {
             // when
@@ -67,6 +70,8 @@ class AlbumViewCountPersistenceTest {
         Member viewer = memberRepository.save(Member.createMember(MemberType.SENIOR, "시니어", "01033334444"));
         Album album = albumRepository.save(activeAlbum(writer));
         given(memberUtil.getCurrentMember()).willReturn(viewer);
+        // 잠긴 앨범 조회는 조회 기록을 남기지 않으므로(#912) 해금한 회원의 조회로 둔다.
+        given(albumPermissionService.isUnlockedFor(any(), any())).willReturn(true);
         albumService.getAlbumDetail(album.getId());
 
         try {

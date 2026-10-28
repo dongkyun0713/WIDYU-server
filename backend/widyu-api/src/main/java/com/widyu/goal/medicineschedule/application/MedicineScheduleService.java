@@ -250,8 +250,7 @@ public class MedicineScheduleService {
         if (isProofWindowClosed(schedule.getAlarmTime(), now)) {
             return true;
         }
-        return medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(
-                schedule, today.atStartOfDay(), today.atTime(LocalTime.MAX));
+        return medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, today);
     }
 
     private boolean isProofWindowClosed(LocalTime alarmTime, LocalDateTime now) {
