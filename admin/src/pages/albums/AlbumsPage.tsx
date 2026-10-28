@@ -35,7 +35,7 @@ export default function AlbumsPage() {
   const [page, setPage] = useState(0)
   const SIZE = 20
 
-  const { data, isLoading } = useQuery<PageResponse<AlbumItem>>({
+  const { data, isLoading, isError } = useQuery<PageResponse<AlbumItem>>({
     queryKey: ['admin-albums', page],
     queryFn: async () => {
       const { data } = await client.get('/admin/albums', { params: { page, size: SIZE } })
@@ -47,7 +47,7 @@ export default function AlbumsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">앨범 관리</h1>
-        {data && (
+        {data && !isError && (
           <span className="text-sm text-gray-400">총 {data.totalElements.toLocaleString()}건</span>
         )}
       </div>
@@ -71,6 +71,10 @@ export default function AlbumsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={9} className="text-center py-12 text-gray-400">불러오는 중...</td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={9} className="text-center py-12 text-red-400">데이터를 불러오지 못했습니다.</td>
               </tr>
             ) : data?.content.length === 0 ? (
               <tr>

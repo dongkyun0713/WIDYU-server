@@ -49,7 +49,7 @@ export default function PaymentsPage() {
   const [page, setPage] = useState(0)
   const SIZE = 20
 
-  const { data, isLoading } = useQuery<PageResponse<PaymentItem>>({
+  const { data, isLoading, isError } = useQuery<PageResponse<PaymentItem>>({
     queryKey: ['admin-payments', page],
     queryFn: async () => {
       const { data } = await client.get('/admin/payments', { params: { page, size: SIZE } })
@@ -65,12 +65,12 @@ export default function PaymentsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">결제 관리</h1>
-        {data && (
+        {data && !isError && (
           <span className="text-sm text-gray-400">총 {data.totalElements.toLocaleString()}건</span>
         )}
       </div>
 
-      {data && data.content.length > 0 && (
+      {data && !isError && data.content.length > 0 && (
         <div className="mb-4 px-4 py-3 bg-indigo-50 rounded-lg text-sm text-indigo-700">
           현재 페이지 승인 합계: <span className="font-semibold">{toKRW(totalDone)}</span>
         </div>
@@ -93,6 +93,10 @@ export default function PaymentsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-gray-400">불러오는 중...</td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={7} className="text-center py-12 text-red-400">데이터를 불러오지 못했습니다.</td>
               </tr>
             ) : data?.content.length === 0 ? (
               <tr>

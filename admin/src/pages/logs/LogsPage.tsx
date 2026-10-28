@@ -42,7 +42,7 @@ export default function LogsPage() {
   const [page, setPage] = useState(0)
   const SIZE = 30
 
-  const { data, isLoading } = useQuery<PageResponse<AuditLog>>({
+  const { data, isLoading, isError } = useQuery<PageResponse<AuditLog>>({
     queryKey: ['admin-audit-logs', action, page],
     queryFn: async () => {
       const { data } = await client.get('/admin/audit-logs', {
@@ -56,7 +56,7 @@ export default function LogsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">운영 로그</h1>
-        {data && (
+        {data && !isError && (
           <span className="text-sm text-gray-400">총 {data.totalElements.toLocaleString()}건</span>
         )}
       </div>
@@ -93,6 +93,10 @@ export default function LogsPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-gray-400">불러오는 중...</td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={5} className="text-center py-12 text-red-400">데이터를 불러오지 못했습니다.</td>
               </tr>
             ) : data?.content.length === 0 ? (
               <tr>

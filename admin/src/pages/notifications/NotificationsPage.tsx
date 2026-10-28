@@ -41,7 +41,7 @@ function KpiCard({ label, value, sub, color }: {
 }
 
 export default function NotificationsPage() {
-  const { data, isLoading } = useQuery<FcmStats>({
+  const { data, isLoading, isError } = useQuery<FcmStats>({
     queryKey: ['admin-fcm-stats'],
     queryFn: async () => {
       const { data } = await client.get('/admin/fcm/stats')
@@ -56,7 +56,9 @@ export default function NotificationsPage() {
     )
   }
 
-  if (!data) return null
+  if (isError || !data) {
+    return <div className="flex items-center justify-center h-64 text-red-400">데이터를 불러오지 못했습니다.</div>
+  }
 
   const totalTokens = data.activeTokenCount + data.inactiveTokenCount
   const activeRate = totalTokens > 0
