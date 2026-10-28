@@ -10,6 +10,7 @@ import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -17,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
@@ -25,31 +25,33 @@ import org.springframework.transaction.annotation.Transactional;
 public class HealthScheduleNotificationListener {
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("a h:mm", Locale.KOREAN);
+    private static final int WINDOW_MINUTES = 10;
 
     private final FcmService fcmService;
     private final HealthScheduleRepository healthScheduleRepository;
 
     /**
-     * 매 시간 정각에 실행되어 1시간 후 시작하는 건강 일정에 대해 알림 발송
-     * 예: 14:00에 실행 -> 15:00~15:10 사이에 시작하는 일정에 알림
+     * 10분마다 실행해, 실행 시각을 10분 단위로 내린 시각의 1시간 뒤부터 10분 동안 시작하는 일정에 알린다(LLD-0105).
+     * 예: 14:20:00.04 실행 → 15:20:00 이상 15:30:00 미만. 회차 창이 겹치지도 비지도 않아 모든 일정이 한 번씩 든다.
+     * 바깥 트랜잭션을 두지 않아 일정마다 따로 커밋하고, 한 건의 실패가 회차 전체를 롤백하지 않는다.
      */
-    @Scheduled(cron = "0 0 * * * *")
-    @Transactional
+    @Scheduled(cron = "0 */10 * * * *")
     public void sendHealthScheduleReminder() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime oneHourLater = now.plusHours(1);
-        LocalDateTime notificationEndTime = oneHourLater.plusMinutes(10);
+        sendHealthScheduleReminderAt(LocalDateTime.now());
+    }
 
-        log.info("건강 일정 알림 스케줄러 실행 - 대상 시간: {} ~ {}",
-                oneHourLater.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                notificationEndTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+    public void sendHealthScheduleReminderAt(LocalDateTime runAt) {
+        LocalDateTime minute = runAt.truncatedTo(ChronoUnit.MINUTES);
+        LocalDateTime windowStart = minute.minusMinutes(minute.getMinute() % WINDOW_MINUTES).plusHours(1);
+        LocalDateTime windowEnd = windowStart.plusMinutes(WINDOW_MINUTES);
 
-        // 1시간 후부터 1시간 10분 후 사이에 시작하는 예정된 일정 조회
+        log.debug("건강 일정 알림 스케줄러 실행 - 대상 시간: {} ~ {}", windowStart, windowEnd);
+
         List<HealthSchedule> upcomingSchedules = healthScheduleRepository
-                .findUpcomingSchedulesInTimeRange(oneHourLater, notificationEndTime);
+                .findUpcomingSchedulesInTimeRange(windowStart, windowEnd);
 
         if (upcomingSchedules.isEmpty()) {
-            log.info("알림을 보낼 건강 일정이 없습니다.");
+            log.debug("알림을 보낼 건강 일정이 없습니다.");
             return;
         }
 

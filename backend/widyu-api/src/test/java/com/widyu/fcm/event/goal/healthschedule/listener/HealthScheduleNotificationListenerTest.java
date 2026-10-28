@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import com.widyu.fcm.DeliveryMode;
 import com.widyu.fcm.NotificationType;
@@ -71,6 +72,47 @@ class HealthScheduleNotificationListenerTest {
 
         // then
         then(fcmService).should(never()).sendMessageToUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("10분마다 실행하면 15시대 일정이 시작 시각과 무관하게 각각 정확히 한 번 알림된다")
+    void 십분마다_실행하면_15시대_일정이_각각_정확히_한_번_알림된다() {
+        // given: 15:00·15:20·15:30과 경계(15:09:59, 15:10, 16:00) 일정. 16:00은 15시 실행 회차 몫이다.
+        List<HealthSchedule> schedules = List.of(
+                scheduleAt(101L, LocalDateTime.of(2026, 10, 22, 15, 0)),
+                scheduleAt(102L, LocalDateTime.of(2026, 10, 22, 15, 9, 59)),
+                scheduleAt(103L, LocalDateTime.of(2026, 10, 22, 15, 10)),
+                scheduleAt(104L, LocalDateTime.of(2026, 10, 22, 15, 20)),
+                scheduleAt(105L, LocalDateTime.of(2026, 10, 22, 15, 30)),
+                scheduleAt(106L, LocalDateTime.of(2026, 10, 22, 16, 0)));
+        given(healthScheduleRepository.findUpcomingSchedulesInTimeRange(any(), any())).willAnswer(invocation -> {
+            LocalDateTime start = invocation.getArgument(0);
+            LocalDateTime end = invocation.getArgument(1);
+            return schedules.stream()
+                    .filter(s -> !s.getScheduledAt().isBefore(start) && s.getScheduledAt().isBefore(end))
+                    .toList();
+        });
+        ArgumentCaptor<Long> recipients = ArgumentCaptor.forClass(Long.class);
+
+        // when: 스케줄러 지연으로 실행 시각에 밀리초가 붙어도 같은 창이어야 한다.
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 0, 0, 37_000_000));
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 10, 0, 2_000_000));
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 20, 0, 500_000_000));
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 30, 0, 1_000_000));
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 40, 0, 200_000_000));
+        listener.sendHealthScheduleReminderAt(LocalDateTime.of(2026, 10, 22, 14, 50, 0, 999_000_000));
+
+        // then
+        then(fcmService).should(times(5)).sendMessageToUser(recipients.capture(), any());
+        assertThat(recipients.getAllValues()).containsExactly(101L, 102L, 103L, 104L, 105L);
+    }
+
+    private HealthSchedule scheduleAt(Long memberId, LocalDateTime scheduledAt) {
+        Member member = Member.createMember(MemberType.SENIOR, "시니어", "01011112222");
+        ReflectionTestUtils.setField(member, "id", memberId);
+        HealthSchedule schedule = HealthSchedule.create(member, "병원 진료", null, null, null, scheduledAt);
+        ReflectionTestUtils.setField(schedule, "id", memberId);
+        return schedule;
     }
 
     private HealthSchedule schedule(MemberType type, Long memberId) {

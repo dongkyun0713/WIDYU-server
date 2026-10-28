@@ -225,6 +225,43 @@ class MedicineScheduleNotificationListenerTest {
     }
 
     @Test
+    @DisplayName("가족이 해제된 시니어가 앞에 있어도 다음 시니어의 보호자에게 미인증 알림을 보낸다")
+    void 가족이_해제된_시니어가_있어도_다음_시니어의_보호자에게_알린다() {
+        // given
+        given(sensorProperties.medication()).willReturn(new SensorProperties.Medication(false));
+        Member detached = Member.createMember(MemberType.SENIOR, "가족없음", "01011110000");
+        ReflectionTestUtils.setField(detached, "id", 1L);
+        ReflectionTestUtils.setField(detached, "seniorProfile",
+                SeniorProfile.createSeniorProfile(detached, null, "서울", "INVITE0", LocalDate.of(1950, 1, 1)));
+        Member senior = Member.createMember(MemberType.SENIOR, "김할머니", "01011112222");
+        ReflectionTestUtils.setField(senior, "id", 3L);
+        Family family = Family.createFamily("ABCDEF");
+        ReflectionTestUtils.setField(family, "id", 100L);
+        ReflectionTestUtils.setField(senior, "seniorProfile",
+                SeniorProfile.createSeniorProfile(senior, family, "서울", "INVITE1", LocalDate.of(1950, 1, 1)));
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "김보호", "01033334444");
+        ReflectionTestUtils.setField(guardian, "id", 2L);
+        MedicineSchedule detachedSchedule = MedicineSchedule.create(detached, LocalTime.of(8, 0));
+        ReflectionTestUtils.setField(detachedSchedule, "id", 14L);
+        MedicineSchedule schedule = MedicineSchedule.create(senior, LocalTime.of(8, 0));
+        ReflectionTestUtils.setField(schedule, "id", 15L);
+        given(medicineScheduleRepository.findByAlarmTimeAndStatusEffectiveOn(any(), eq(Status.ACTIVE), any()))
+                .willReturn(List.of(detachedSchedule, schedule));
+        given(medicationProofRepository.findVerifiedScheduleIds(any(), any(), any())).willReturn(List.of());
+        given(familyMembershipRepository.findAllByFamilyIdWithGuardian(100L))
+                .willReturn(List.of(FamilyMembership.createMembership(family, guardian)));
+
+        // when
+        listener.checkMedicineSchedulesAt(LocalDateTime.of(2026, 10, 2, 8, 30));
+
+        // then
+        ArgumentCaptor<FcmSendDto> guardianCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());
+        assertThat(guardianCaptor.getValue().notificationType()).isEqualTo(NotificationType.MEDICATION_PROOF_MISSING);
+        assertThat(guardianCaptor.getValue().seniorId()).isEqualTo(3L);
+    }
+
+    @Test
     @DisplayName("자정 직후 후속 알림을 확인하면 전날 날짜로 세 시점을 조회한다")
     void 자정_직후_후속_알림을_확인하면_전날_날짜로_세_시점을_조회한다() {
         // given

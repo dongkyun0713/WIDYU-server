@@ -57,7 +57,8 @@ public interface HealthScheduleRepository extends JpaRepository<HealthSchedule, 
             @Param("endDate") LocalDateTime endDate
     );
 
-    @Query("SELECT h FROM HealthSchedule h WHERE h.progressStatus = 'UPCOMING' AND h.scheduledAt >= :startDate AND h.scheduledAt < :endDate")
+    /** 건강 일정 알림 스케줄러가 트랜잭션 없이 수신자를 읽도록 회원을 함께 가져온다(LLD-0105). */
+    @Query("SELECT h FROM HealthSchedule h JOIN FETCH h.member WHERE h.progressStatus = 'UPCOMING' AND h.scheduledAt >= :startDate AND h.scheduledAt < :endDate")
     List<HealthSchedule> findUpcomingSchedulesInTimeRange(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
