@@ -7,6 +7,9 @@ import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record CurrentMemberResponse(
+        @Schema(description = "회원 ID", example = "1")
+        Long memberId,
+
         @Schema(description = "회원 이름", example = "ghdrlfehd")
         String name,
         
@@ -22,7 +25,7 @@ public record CurrentMemberResponse(
         @Schema(description = "부모 계정 보유 여부", example = "true")
         boolean hasParents
 ) {
-    public static CurrentMemberResponse of(String name, String phoneNumber, String email, List<String> providers, boolean hasParents) {
-        return new CurrentMemberResponse(name, phoneNumber, email, providers, hasParents);
+    public static CurrentMemberResponse of(Long memberId, String name, String phoneNumber, String email, List<String> providers, boolean hasParents) {
+        return new CurrentMemberResponse(memberId, name, phoneNumber, email, providers, hasParents);
     }
 }

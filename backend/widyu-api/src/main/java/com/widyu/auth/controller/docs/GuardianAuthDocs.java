@@ -658,6 +658,7 @@ public interface GuardianAuthDocs {
                                       "code": "AUTH_2011",
                                       "message": "현재 회원 정보 조회 성공",
                                       "data": {
+                                        "memberId": 1,
                                         "name": "ghdrlfehd",
                                         "phoneNumber": "01012341234",
                                         "email": "abc@abc.com",

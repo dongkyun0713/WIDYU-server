@@ -132,6 +132,7 @@ public class GuardianAuthService {
         boolean hasParents = hasParentProfiles(currentMember);
 
         return CurrentMemberResponse.of(
+                currentMember.getId(),
                 currentMember.getName(),
                 currentMember.getPhoneNumber(),
                 email,
