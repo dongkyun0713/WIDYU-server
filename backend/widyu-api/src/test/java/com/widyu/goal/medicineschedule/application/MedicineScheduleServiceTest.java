@@ -185,8 +185,7 @@ class MedicineScheduleServiceTest {
     }
 
     private void givenProvedToday(MedicineSchedule schedule, boolean proved) {
-        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(
-                schedule, today().atStartOfDay(), today().atTime(LocalTime.MAX)))
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, today()))
                 .willReturn(proved);
     }
 
