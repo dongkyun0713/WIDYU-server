@@ -52,7 +52,7 @@ class MedicationAlarmSyncServiceTest {
         given(member.getMedicationAlarmRevision()).willReturn(42L);
         given(medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(any(), any(), any()))
                 .willReturn(List.of(schedule));
-        given(medicationProofRepository.findVerifiedScheduleIdsByMemberAndDate(any(), any(), any()))
+        given(medicationProofRepository.findVerifiedScheduleIdsByMemberAndDate(any(), any()))
                 .willReturn(List.of(15L));
 
         // when

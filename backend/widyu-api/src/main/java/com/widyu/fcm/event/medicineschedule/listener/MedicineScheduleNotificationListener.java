@@ -71,8 +71,7 @@ public class MedicineScheduleNotificationListener {
                 .map(MedicineSchedule::getId)
                 .toList();
         Set<Long> verifiedScheduleIds = new HashSet<>(
-                medicationProofRepository.findVerifiedScheduleIds(
-                        scheduleIds, date.atStartOfDay(), date.atTime(LocalTime.MAX))
+                medicationProofRepository.findVerifiedScheduleIds(scheduleIds, date)
         );
 
         for (MedicineSchedule schedule : schedules) {
@@ -112,11 +111,8 @@ public class MedicineScheduleNotificationListener {
                 .map(MedicineSchedule::getId)
                 .toList();
 
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
-
         Set<Long> verifiedScheduleIds = new HashSet<>(
-                medicationProofRepository.findVerifiedScheduleIds(scheduleIds, startOfDay, endOfDay)
+                medicationProofRepository.findVerifiedScheduleIds(scheduleIds, date)
         );
 
         // 인증되지 않은 스케줄만 알림 발송
@@ -140,11 +136,8 @@ public class MedicineScheduleNotificationListener {
                 .map(MedicineSchedule::getId)
                 .toList();
 
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
-
         Set<Long> verifiedScheduleIds = new HashSet<>(
-                medicationProofRepository.findVerifiedScheduleIds(scheduleIds, startOfDay, endOfDay)
+                medicationProofRepository.findVerifiedScheduleIds(scheduleIds, date)
         );
 
         // 인증되지 않은 스케줄만 보호자에게 알림 발송

@@ -85,10 +85,7 @@ public class MedicineScheduleService {
     }
 
     private Map<Long, MedicationProof> findProofsByScheduleId(Member member, LocalDate date) {
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
-
-        return medicationProofRepository.findByMemberIdAndDateRange(member.getId(), startOfDay, endOfDay)
+        return medicationProofRepository.findByMemberIdAndDateRange(member.getId(), date, date)
                 .stream()
                 .collect(Collectors.toMap(
                         proof -> proof.getMedicineSchedule().getId(),
@@ -420,15 +417,13 @@ public class MedicineScheduleService {
         }
 
         // 한 달치 MedicationProof를 한 번에 조회
-        LocalDateTime start = monthStart.atStartOfDay();
-        LocalDateTime end = monthEnd.atTime(LocalTime.MAX);
         List<MedicationProof> proofs = medicationProofRepository
-                .findByMemberIdAndDateRange(member.getId(), start, end);
+                .findByMemberIdAndDateRange(member.getId(), monthStart, monthEnd);
 
         // 날짜별로 "어떤 스케줄들이 인증됐는지" 집계
         Map<LocalDate, Set<Long>> scheduleIdsByDate = proofs.stream()
                 .collect(Collectors.groupingBy(
-                        proof -> proof.getVerifiedAt().toLocalDate(),
+                        MedicationProof::getVerifiedDate,
                         Collectors.mapping(p -> p.getMedicineSchedule().getId(), Collectors.toSet())
                 ));
 

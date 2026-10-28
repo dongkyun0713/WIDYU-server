@@ -30,8 +30,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(
         name = "medication_proof",
-        indexes = @Index(name = "idx_medication_proof_member_verified",
-                columnList = "member_id, verified_at"),
+        // 회원별 날짜 조회(일자별·월별 현황, 홈)는 복용 기준일(verified_date)로 거른다.
+        indexes = @Index(name = "idx_medication_proof_member_verified_date",
+                columnList = "member_id, verified_date"),
         // 같은 날 동일 스케줄 중복 인증 차단 (애플리케이션 검사만으로는 동시 요청을 막지 못한다)
         uniqueConstraints = @UniqueConstraint(name = "uk_medication_proof_schedule_date",
                 columnNames = {"medicine_schedule_id", "verified_date"})

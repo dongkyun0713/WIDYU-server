@@ -15,7 +15,6 @@ import com.widyu.member.repository.MemberRepository;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -75,8 +74,7 @@ public class MedicationProofTransactionService {
         saveProof(proof, scheduleId);
         currentMember.incrementMedicationAlarmRevision();
 
-        long proofCount = medicationProofRepository.countByMemberAndVerifiedAtBetween(
-                currentMember, now.toLocalDate().atStartOfDay(), now.toLocalDate().atTime(LocalTime.MAX));
+        long proofCount = medicationProofRepository.countByMemberAndVerifiedDate(currentMember, now.toLocalDate());
         long totalSchedules = medicineScheduleRepository.countEffectiveByMemberAndDate(
                 currentMember, Status.ACTIVE, now.toLocalDate());
         long earnedPoints = MedicationPointPolicy.calculateEarnedPoints(proofCount, totalSchedules);
@@ -106,8 +104,7 @@ public class MedicationProofTransactionService {
     }
 
     private void validateNotVerifiedToday(MedicineSchedule schedule, LocalDateTime now) {
-        if (medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(
-                schedule, now.toLocalDate().atStartOfDay(), now.toLocalDate().atTime(LocalTime.MAX))) {
+        if (medicationProofRepository.existsByMedicineScheduleAndVerifiedDate(schedule, now.toLocalDate())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "오늘은 이미 해당 약 복용을 인증했습니다.");
         }
     }
