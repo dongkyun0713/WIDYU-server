@@ -238,12 +238,12 @@ public class GoalHomeService {
         Walk walk = walkRepository.findByMemberAndWalkDate(member, today).orElse(null);
 
         if (walk != null) {
-            return new SeniorGoalHomeResponse.StepsInfo(walk.getActualSteps(), walk.getGoalSteps());
+            return SeniorGoalHomeResponse.StepsInfo.of(walk.getActualSteps(), walk.getGoalSteps());
         }
 
         // 기본 목표가 있으면 반환
         if (member.getSeniorProfile() != null && member.getSeniorProfile().hasDefaultWalkGoal()) {
-            return new SeniorGoalHomeResponse.StepsInfo(0, member.getSeniorProfile().getDefaultWalkGoal());
+            return SeniorGoalHomeResponse.StepsInfo.of(0, member.getSeniorProfile().getDefaultWalkGoal());
         }
 
         return null;
@@ -427,7 +427,7 @@ public class GoalHomeService {
 
             List<GuardianGoalHomeResponse.MedicineItem> medicineItems = schedule.getCategories().stream()
                     .flatMap(category -> category.getMedicines().stream())
-                    .map(detail -> new GuardianGoalHomeResponse.MedicineItem(
+                    .map(detail -> GuardianGoalHomeResponse.MedicineItem.of(
                             detail.getMedicine().getName(),
                             detail.getDose()
                     ))
@@ -438,7 +438,7 @@ public class GoalHomeService {
                 proofImageUrl = proof.getProofImageUrls().get(0);
             }
 
-            scheduleItems.add(new GuardianGoalHomeResponse.ScheduleItem(
+            scheduleItems.add(GuardianGoalHomeResponse.ScheduleItem.of(
                     schedule.getId(),
                     schedule.getAlarmTime().format(TIME_FORMATTER),
                     status,
@@ -447,19 +447,19 @@ public class GoalHomeService {
             ));
         }
 
-        return new GuardianGoalHomeResponse.MedicineInfo(totalCount, takenCount, scheduleItems);
+        return GuardianGoalHomeResponse.MedicineInfo.of(totalCount, takenCount, scheduleItems);
     }
 
     private GuardianGoalHomeResponse.StepsInfo getGuardianStepsInfo(Member member, LocalDate today) {
         Walk walk = walkRepository.findByMemberAndWalkDate(member, today).orElse(null);
 
         if (walk != null) {
-            return new GuardianGoalHomeResponse.StepsInfo(walk.getActualSteps(), walk.getGoalSteps());
+            return GuardianGoalHomeResponse.StepsInfo.of(walk.getActualSteps(), walk.getGoalSteps());
         }
 
         // 기본 목표가 있으면 반환
         if (member.getSeniorProfile() != null && member.getSeniorProfile().hasDefaultWalkGoal()) {
-            return new GuardianGoalHomeResponse.StepsInfo(0, member.getSeniorProfile().getDefaultWalkGoal());
+            return GuardianGoalHomeResponse.StepsInfo.of(0, member.getSeniorProfile().getDefaultWalkGoal());
         }
 
         return null;

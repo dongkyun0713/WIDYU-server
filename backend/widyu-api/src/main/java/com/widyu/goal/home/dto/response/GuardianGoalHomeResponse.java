@@ -41,6 +41,9 @@ public record GuardianGoalHomeResponse(
             @Schema(description = "약 스케줄 목록")
             List<ScheduleItem> medicineSchedules
     ) {
+        public static MedicineInfo of(Integer totalCount, Integer takenCount, List<ScheduleItem> medicineSchedules) {
+            return new MedicineInfo(totalCount, takenCount, medicineSchedules);
+        }
     }
 
     @Schema(description = "약 스케줄 항목")
@@ -60,6 +63,15 @@ public record GuardianGoalHomeResponse(
             @Schema(description = "약 목록")
             List<MedicineItem> medicines
     ) {
+        public static ScheduleItem of(
+                Long medicineScheduleId,
+                String alarmTime,
+                MedicationStatus status,
+                String proofImageUrl,
+                List<MedicineItem> medicines
+        ) {
+            return new ScheduleItem(medicineScheduleId, alarmTime, status, proofImageUrl, medicines);
+        }
     }
 
     @Schema(description = "약 정보")
@@ -70,6 +82,9 @@ public record GuardianGoalHomeResponse(
             @Schema(description = "복용 개수", example = "5")
             Integer count
     ) {
+        public static MedicineItem of(String name, Integer count) {
+            return new MedicineItem(name, count);
+        }
     }
 
     @Schema(description = "걸음 수 정보")
@@ -80,6 +95,9 @@ public record GuardianGoalHomeResponse(
             @Schema(description = "목표 걸음 수", example = "10000")
             Integer goal
     ) {
+        public static StepsInfo of(Integer steps, Integer goal) {
+            return new StepsInfo(steps, goal);
+        }
     }
 
     @Schema(description = "병원 일정 정보")
