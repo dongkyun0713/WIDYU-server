@@ -90,32 +90,6 @@ class NotificationTypeTest {
     }
 
     @Test
-    @DisplayName("레지스트리의 wire 타입을 조회하면 네 일정 이벤트와 본인확인 요청만 앱 약속 값을 반환한다")
-    void 레지스트리의_wire_타입을_조회하면_네_일정_이벤트와_본인확인_요청만_앱_약속_값을_반환한다() {
-        // given / when
-        NotificationType[] legacyTypes = {
-                NotificationType.MEDICATION_SCHEDULE_CREATED,
-                NotificationType.MEDICATION_SCHEDULE_CHANGED,
-                NotificationType.MEDICATION_SCHEDULE_DELETED,
-                NotificationType.MEDICATION_SCHEDULE_SYNC
-        };
-
-        // then
-        assertThat(legacyTypes).allSatisfy(type -> {
-            assertThat(type.legacyDataType()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
-            assertThat(type.dataTypeValue()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
-        });
-        assertThat(NotificationType.SAFETY_SELF_CHECK.dataTypeValue()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
-        assertThat(Arrays.stream(NotificationType.values())
-                .filter(type -> type != NotificationType.SAFETY_SELF_CHECK)
-                .filter(type -> !Arrays.asList(legacyTypes).contains(type)))
-                .allSatisfy(type -> {
-                    assertThat(type.legacyDataType()).isNull();
-                    assertThat(type.dataTypeValue()).isEqualTo(type.name());
-                });
-    }
-
-    @Test
     @DisplayName("우선순위를 조회하면 iOS 표시 수준을 구분한다")
     void 우선순위를_조회하면_iOS_표시_수준을_구분한다() {
         // given / when / then
@@ -136,8 +110,9 @@ class NotificationTypeTest {
         assertThat(emergency.priority()).isEqualTo(NotificationPriority.CRITICAL);
         assertThat(emergency.deliveryMode()).isEqualTo(DeliveryMode.PUSH_AND_CENTER);
         assertThat(emergency.deepLinkTemplate()).isEqualTo("/location?seniorId={seniorId}");
-        assertThat(NotificationType.MEDICATION_REMINDER_10.priority()).isEqualTo(NotificationPriority.INTERACTION);
-        assertThat(NotificationType.MEDICATION_REMINDER_20.priority()).isEqualTo(NotificationPriority.INTERACTION);
+        // 복약 리마인더는 Android HIGH·iOS time-sensitive로 보낸다(LLD-0109, 2026-10-27 사용자 결정).
+        assertThat(NotificationType.MEDICATION_REMINDER_10.priority()).isEqualTo(NotificationPriority.TIME_SENSITIVE);
+        assertThat(NotificationType.MEDICATION_REMINDER_20.priority()).isEqualTo(NotificationPriority.TIME_SENSITIVE);
         assertThat(NotificationType.HEALTH_SCHEDULE_UPCOMING.priority())
                 .isEqualTo(NotificationPriority.INTERACTION);
         assertThat(NotificationType.MEDICATION_PROOF_MISSING.priority())

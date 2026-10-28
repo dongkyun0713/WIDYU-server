@@ -62,7 +62,7 @@ public record FcmDelivery(Long id, long fence, String token, FcmSendDto message,
         }
         HashMap<String, String> restored = new HashMap<>();
         if (row.getDataType() != null) {
-            restored.put("type", row.getDataType());
+            restored.put("notificationType", row.getDataType());
         }
         if (row.getDataRevision() != null) {
             restored.put("revision", row.getDataRevision().toString());

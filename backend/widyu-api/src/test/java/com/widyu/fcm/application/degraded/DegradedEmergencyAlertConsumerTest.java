@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.widyu.fcm.NotificationType;
 import com.widyu.fcm.application.FcmDelivery;
 import com.widyu.fcm.application.FcmDeliveryProperties;
 import com.widyu.fcm.application.FcmTransport;
@@ -90,8 +91,10 @@ class DegradedEmergencyAlertConsumerTest {
         assertThat(delivery.notificationId()).isNull();
         assertThat(delivery.message().emergency()).isTrue();
         assertThat(delivery.message().relatedMemberId()).isEqualTo(31L);
+        assertThat(delivery.message().notificationType()).isEqualTo(NotificationType.HEART_RATE_EMERGENCY);
         assertThat(delivery.message().data())
                 .containsEntry("notificationType", "HEART_RATE_EMERGENCY")
+                .doesNotContainKeys("type", "priority", "foregroundPresentation")
                 .containsEntry("eventId", "1760000000000-0")
                 .containsEntry("deepLink", "/location?seniorId=31");
     }

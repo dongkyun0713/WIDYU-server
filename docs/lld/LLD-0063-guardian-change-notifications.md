@@ -50,6 +50,8 @@
 
 네 type 모두 W2 레지스트리의 `PUSH_AND_CENTER`·센터 필터 `GOAL`·`INTERACTION`·`GENERAL`·`BANNER`·`ROUTINE_90D`를 쓴다. `FcmCategory`는 각각 기존 `HEALTH_SCHEDULE`·`WALK`이고 값을 추가하지 않는다. FCM data는 typed 계약의 `eventId`, `type`, `priority`, `notificationId`, `deepLink`, `foregroundPresentation`와 `actorDisplayName`, 일정의 `entityId`를 담는다. 정확한 딥링크 문자열은 FE 합의 전 제안값이다(9절).
 
+> 2026-10-27 갱신([LLD-0109](LLD-0109-fcm-data-contract-slim.md)): FCM data의 `priority`·`foregroundPresentation`은 더 보내지 않는다.
+
 ## 4. 데이터 모델
 
 새 테이블·컬럼·엔티티는 없다. 기존 `HealthSchedule.id`와 대상 `Member.id`, `SeniorProfile.defaultWalkGoal`을 사용한다. `NotificationType`과 outbox/센터 스키마는 W2·W3가 제공한다. W3에서 센터 행은 토큰 수나 푸시 설정과 관계없이 수신자×이벤트 한 건이며, 본 기능은 수신자 ID 하나에 typed enqueue 한 번만 요청한다. `FcmCategory` enum이나 MySQL native ENUM DDL은 바꾸지 않는다.
@@ -102,7 +104,7 @@
 | BE 발송본 6 「판단 단위 저장」 | 이미 저장됨(`heart_rate_event.status` 샘플별) | — | — |
 | ADR-0035 결정 3 「알림=FCM 성공」 | INITIAL_ALERT 기준으로 좁힘, 60초 안 OK는 `alert_delivered=false`가 정상 | S-D10 | — |
 | W02 적용 시작일 | 현행 「다음 날」 유지, 문구에 넣지 않음 | 그대로 | — |
-| 복약 동기화 신호 형식 | 항상 DATA_ONLY `MEDICATION_SCHEDULE_SYNC`(revision) 동반 + 구 앱 호환 `type=MEDICATION_SCHEDULE_CHANGED` 유지 | 그대로 | — |
+| 복약 동기화 신호 형식 | 항상 DATA_ONLY `MEDICATION_SCHEDULE_SYNC`(revision) 동반. 타입 키는 #900부터 `notificationType`(SYNC=`MEDICATION_SCHEDULE_SYNC`)이고 구 앱 호환 `type`은 없앴다 | 그대로 | — |
 | 시니어 푸시 설정 항목 | `GENERAL` 하나 | 그대로 | — |
 | priority·channel·deepLink 문자열(문서에 없음) | LLD-W2에 제안표 수록 | 제안값 | — |
 | G02 동시 달성 묶음 | 단일 트리거가 목표 2개를 동시에 적립하는 경로가 없어 G01만 발생 | G01만 | — |

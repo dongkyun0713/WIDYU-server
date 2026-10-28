@@ -100,7 +100,7 @@ class MedicineScheduleNotificationListenerTest {
         ArgumentCaptor<FcmSendDto> seniorCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(eq(1L), seniorCaptor.capture());
         assertThat(seniorCaptor.getAllValues()).allSatisfy(dto -> assertThat(dto.data())
-                .containsEntry("type", dto.notificationType().name())
+                .containsEntry("notificationType", dto.notificationType().name())
                 .containsEntry("revision", "42"));
         assertThat(seniorCaptor.getAllValues()).extracting(FcmSendDto::notificationType)
                 .containsExactly(NotificationType.MEDICATION_REMINDER_10, NotificationType.MEDICATION_REMINDER_20);
@@ -110,7 +110,7 @@ class MedicineScheduleNotificationListenerTest {
         ArgumentCaptor<FcmSendDto> guardianCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should().sendMessageToUser(eq(2L), guardianCaptor.capture());
         assertThat(guardianCaptor.getValue().data())
-                .containsEntry("type", "MEDICATION_PROOF_MISSING")
+                .containsEntry("notificationType", "MEDICATION_PROOF_MISSING")
                 .containsEntry("revision", "7");
         assertThat(guardianCaptor.getValue().relatedMemberId()).isEqualTo(1L);
         assertThat(guardianCaptor.getValue().seniorId()).isEqualTo(1L);
@@ -185,11 +185,11 @@ class MedicineScheduleNotificationListenerTest {
         assertThat(onTime.fcmCategory()).isEqualTo(com.widyu.fcm.FcmCategory.MEDICINE_SCHEDULE);
         assertThat(onTime.image()).isEqualTo("https://cdn.widyu.store/profile/senior.png");
         assertThat(onTime.scheme()).isEmpty();
-        assertThat(onTime.data()).isEqualTo(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"));
+        assertThat(onTime.data()).isEqualTo(Map.of("notificationType", "MEDICATION_ON_TIME", "revision", "42"));
         assertThat(seniorMessages.subList(1, 3)).extracting(FcmSendDto::title)
                 .containsExactly("약 복용 인증이 아직 안 됐어요.", "약 복용 인증 시간이 10분 남았어요.");
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.data())
-                .containsEntry("type", dto.notificationType().name())
+                .containsEntry("notificationType", dto.notificationType().name())
                 .containsEntry("revision", "42"));
         assertThat(seniorMessages.subList(1, 3)).allSatisfy(dto -> assertThat(dto.image())
                 .isEqualTo("https://cdn.widyu.store/profile/senior.png"));

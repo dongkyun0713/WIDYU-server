@@ -538,7 +538,7 @@ public class IncidentService {
                     .content("지금 상태를 알려주세요. 답이 없으면 가족에게 알립니다.")
                     .fcmCategory(FcmCategory.INCIDENT_SELF_CHECK)
                     .scheme(SELF_CHECK_SCHEME_PREFIX + incident.getIncidentRef())
-                    .data(Map.of("type", NotificationType.SAFETY_SELF_CHECK.dataTypeValue()))
+                    .data(Map.of("notificationType", NotificationType.SAFETY_SELF_CHECK.name()))
                     .emergency(true)
                     .build();
         }

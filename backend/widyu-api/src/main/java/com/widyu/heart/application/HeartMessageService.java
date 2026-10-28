@@ -38,7 +38,7 @@ public class HeartMessageService {
 
         String title = sender.getName() + "님이 메시지를 보냈어요.";
         NotificationType type = NotificationType.HEART_MESSAGE_RECEIVED;
-        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "type", type.name());
+        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "notificationType", type.name());
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)

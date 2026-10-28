@@ -168,7 +168,8 @@ class HeartRateEmergencyAfterCommitOutboxTest {
                 .containsEntry("deliveryStage", "INITIAL_ALERT")
                 .containsEntry("safetyEventId", opened.getIncidentRef())
                 .containsEntry("eventId", opened.getIncidentRef())
-                .containsEntry("foregroundPresentation", "MODAL");
+                .containsEntry("notificationType", "HEART_RATE_EMERGENCY")
+                .doesNotContainKeys("type", "priority", "foregroundPresentation");
         FcmDelivery restoredAgain = transactions.execute(status ->
                 FcmDelivery.from(outbox.findById(alerts.getFirst().getId()).orElseThrow()));
         assertThat(restoredAgain.message().data()).isEqualTo(restored.message().data());
@@ -279,7 +280,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
                 .findFirst().orElseThrow().getDecisionId()).isNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
     }
 
     @Test
@@ -341,7 +342,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(incident.getInitialAlertSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 2);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(ids[0]))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
         assertThat(notifications.count()).isEqualTo(previousNotifications + 1);
         var center = notifications.findByRecipientMemberIdAndEventId(ids[1], incident.getIncidentRef())
                 .orElseThrow();
@@ -389,7 +390,7 @@ class HeartRateEmergencyAfterCommitOutboxTest {
         assertThat(incident.getInitialAlertSentAtMs()).isNotNull();
         assertThat(outbox.count()).isEqualTo(previousOutbox + 1);
         assertThat(outbox.findAll().stream().filter(row -> row.getRecipientMember().getId().equals(memberId))
-                .findFirst().orElseThrow().getDataType()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
+                .findFirst().orElseThrow().getDataType()).isEqualTo("SAFETY_SELF_CHECK");
         assertThat(notifications.count()).isEqualTo(previousNotifications);
     }
 }

@@ -69,7 +69,7 @@ class HeartMessageServiceTest {
         assertThat(captor.getValue().relatedMemberId()).isEqualTo(1L);
         assertThat(captor.getValue().emergency()).isFalse();
         assertThat(captor.getValue().dataForEnqueue("heart-senior"))
-                .isEqualTo(Map.of("deepLink", "/notification", "type", "HEART_MESSAGE_RECEIVED"));
+                .isEqualTo(Map.of("deepLink", "/notification", "notificationType", "HEART_MESSAGE_RECEIVED"));
     }
 
     @Test

@@ -237,7 +237,8 @@ class MedicineScheduleServiceTest {
         then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
         assertThat(messageCaptor.getAllValues().getFirst().data())
-                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
+                .containsEntry("notificationType", "MEDICATION_SCHEDULE_CHANGED")
+                .doesNotContainKey("type")
                 .containsKey("revision");
         assertThat(messageCaptor.getAllValues().getFirst().notificationType())
                 .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CHANGED);

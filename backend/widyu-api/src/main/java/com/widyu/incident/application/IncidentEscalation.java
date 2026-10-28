@@ -169,10 +169,6 @@ public class IncidentEscalation {
         NotificationCopy copy = NotificationCopy.of(type, copyCode, Map.of("시니어 이름", senior.getName()));
         Map<String, String> data = Map.of("deliveryStage", stage,
                 "safetyEventId", incident.getIncidentRef());
-        if ("SECOND_ALERT".equals(stage)) {
-            data = Map.of("deliveryStage", stage, "safetyEventId", incident.getIncidentRef(),
-                    "incidentRef", incident.getIncidentRef());
-        }
         if (incident.getDecisionId() != null) {
             HashMap<String, String> values = new HashMap<>(data);
             values.put("decisionId", incident.getDecisionId());

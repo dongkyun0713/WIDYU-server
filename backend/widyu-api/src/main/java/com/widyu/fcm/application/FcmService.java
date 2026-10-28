@@ -203,7 +203,7 @@ public class FcmService {
         // 알림 제목: "보내는사람님이 받는사람님에게 응원메시지를 보냈어요."
         String title = sender.getName() + "님이 " + receiver.getName() + "님에게 응원메시지를 보냈어요.";
         NotificationType type = NotificationType.CHEER_MESSAGE_RECEIVED;
-        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "type", type.name());
+        Map<String, String> data = Map.of("deepLink", type.deepLinkTemplate(), "notificationType", type.name());
 
         FcmSendDto fcmSendDto = FcmSendDto.builder()
                 .title(title)

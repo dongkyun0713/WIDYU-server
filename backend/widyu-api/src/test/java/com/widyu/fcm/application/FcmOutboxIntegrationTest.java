@@ -161,14 +161,12 @@ class FcmOutboxIntegrationTest {
         assertThat(first).isEqualTo(second);
         assertThat(center.getEventId()).isEqualTo(first.get("eventId"));
         assertThat(UUID.fromString(first.get("eventId"))).isNotNull();
-        assertThat(first).containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_CREATED")
+        assertThat(first).containsEntry("notificationType", "MEDICATION_SCHEDULE_CREATED")
                 .containsEntry("revision", "42")
                 .containsEntry("effectiveFromDate", "2026-10-02")
                 .containsEntry("actorDisplayName", "보호자")
-                .containsEntry("priority", "interaction")
                 .containsEntry("deepLink", "/goal")
-                .containsEntry("foregroundPresentation", "BANNER");
+                .doesNotContainKeys("type", "priority", "foregroundPresentation");
     }
 
     @Test
@@ -192,8 +190,8 @@ class FcmOutboxIntegrationTest {
         FcmOutbox row = outbox.findAll().getFirst();
         assertThat(row.getNotificationId()).isNull();
         assertThat(transactions.claim(row.getId()).message().data())
-                .containsEntry("type", "MEDICATION_REMINDER_10")
-                .containsEntry("notificationType", "MEDICATION_REMINDER_10");
+                .containsEntry("notificationType", "MEDICATION_REMINDER_10")
+                .doesNotContainKey("type");
     }
 
     @Test
@@ -334,8 +332,8 @@ class FcmOutboxIntegrationTest {
         assertThat(syncDelivery).isNotNull();
         assertThat(syncDelivery.notificationId()).isNull();
         assertThat(syncDelivery.message().data()).containsEntry("revision", "7")
-                .containsEntry("type", "MEDICATION_SCHEDULE_CHANGED")
-                .containsEntry("notificationType", "MEDICATION_SCHEDULE_SYNC");
+                .containsEntry("notificationType", "MEDICATION_SCHEDULE_SYNC")
+                .doesNotContainKey("type");
     }
 
     @Test
@@ -871,7 +869,7 @@ class FcmOutboxIntegrationTest {
         assertThat(delivery.notificationId()).isEqualTo(center.getId());
         assertThat(delivery.message().data())
                 .containsEntry("eventId", "album-created-91")
-                .containsEntry("type", "ALBUM_CREATED")
+                .containsEntry("notificationType", "ALBUM_CREATED")
                 .containsEntry("deepLink", "/album/post?postId=91");
         Integer ignored = new TransactionTemplate(transactionManager).execute(status ->
                 notifications.markAsReadIfUnread(center.getId(), member + 1, LocalDateTime.now()));
@@ -920,7 +918,7 @@ class FcmOutboxIntegrationTest {
         assertThat(notifications.count()).isZero();
         assertThat(transactions.claim(row.getId()).message().data())
                 .containsEntry("eventId", "inc-20261001-1")
-                .containsEntry("type", "EMERGENCY_CONFIRM_REQUEST")
+                .containsEntry("notificationType", "SAFETY_SELF_CHECK")
                 .containsEntry("deepLink", "");
     }
 

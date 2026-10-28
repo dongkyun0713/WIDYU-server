@@ -40,7 +40,8 @@ class FamilyLeaderChangedNotificationListenerTest {
         assertThat(sent.content()).isEqualTo("가족 관리와 중요한 알림을 확인해주세요.");
         assertThat(sent.scheme()).isEqualTo("/family-manage");
         assertThat(sent.dataForEnqueue("event-1"))
-                .containsEntry("type", "FAMILY_LEADER_CHANGED")
+                .containsEntry("notificationType", "FAMILY_LEADER_CHANGED")
+                .doesNotContainKey("type")
                 .containsEntry("deepLink", "/family-manage");
     }
 }

@@ -46,11 +46,11 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
       "eventId": "inc-0123456789abcdef0123456789abcdef",
       "safetyEventId": "inc-0123456789abcdef0123456789abcdef",
       "deliveryStage": "INITIAL_ALERT",
-      "type": "HEART_RATE_EMERGENCY", "priority": "critical",
+      "notificationType": "HEART_RATE_EMERGENCY",
       "notificationId": "4072", "deepLink": "/location?seniorId=17",
-      "foregroundPresentation": "MODAL", "seniorId": "17"
+      "seniorId": "17"
     },
-    "android": {"ttl": "300s", "priority": "high", "notification": {"channel_id": "widyu_safety"}},
+    "android": {"ttl": "300s", "priority": "HIGH", "notification": {"channel_id": "widyu_safety"}},
     "apns": {"headers": {"apns-expiration": "1790806700", "apns-priority": "10", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "time-sensitive"}}}
   }
 }
@@ -65,20 +65,20 @@ HTTP endpoint와 `ApiResponse`는 바뀌지 않는다. 변경 계약은 FCM HTTP
     "notification": {"title": "김보호 님이 약 알람을 변경했어요.", "body": "바뀐 약 알람은 내일부터 적용돼요."},
     "data": {
       "eventId": "940c15b9-79dc-4fa7-ab5d-27fca2cfa6cf",
-      "type": "MEDICATION_SCHEDULE_CHANGED", "priority": "interaction",
+      "notificationType": "MEDICATION_SCHEDULE_CHANGED",
       "notificationId": "4073", "deepLink": "/goal",
-      "foregroundPresentation": "BANNER", "revision": "42",
+      "revision": "42",
       "effectiveFromDate": "2026-10-02", "actorDisplayName": "김보호"
     },
-    "android": {"ttl": "86400s", "priority": "normal", "notification": {"channel_id": "widyu_general"}},
-    "apns": {"headers": {"apns-expiration": "1790892800", "apns-priority": "10", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "active"}}}
+    "android": {"ttl": "86400s", "priority": "NORMAL", "notification": {"channel_id": "widyu_general"}},
+    "apns": {"headers": {"apns-expiration": "1790892800", "apns-priority": "5", "apns-push-type": "alert"}, "payload": {"aps": {"interruption-level": "active"}}}
   }
 }
 ```
 
-FCM data 최소 키는 `eventId`, `type`, `priority`, `notificationId`, `deepLink`, `foregroundPresentation`이다. `revision`, `effectiveFromDate`, `actorDisplayName`은 해당 이벤트에만 추가하며, 목적지에 따라 `entityId`·`seniorId`도 실을 수 있다. `deepLink`가 없으면 빈 문자열을 보내고 FE router가 폴백한다. **W2의 `notificationId`는 아직 outbox 행 ID**다. W3가 센터 저장 타입은 센터 행 ID로 교체하고 센터 미저장 타입은 키를 생략한다. W2에서 한 enqueue 호출의 여러 기기는 같은 `eventId`를 공유하며, 호출자가 명시한 eventId가 있으면 우선한다. `DATA_ONLY`는 top-level `notification` 없이 보내고 APNs는 `apns-priority=5`, `apns-push-type=background`, `aps.content-available=1`을 쓴다.
+FCM data 최소 키는 `eventId`, `notificationType`, `notificationId`, `deepLink`이다(2026-10-27 사용자 결정으로 `type` 키를 없애고 `notificationType=<enum 이름>` 하나로 정리). 정책서(FE-HANDOFF-v0.4)는 `priority`·`foregroundPresentation`도 최소 키로 적었지만 FE 합의로 2026-10-27부터 보내지 않는다. 앱은 `notificationType`으로 앱 사용 중 표시를 정하고, 우선순위는 Android·APNs 전달 설정에만 반영된다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)). `revision`, `effectiveFromDate`, `actorDisplayName`은 해당 이벤트에만 추가하며, 목적지에 따라 `entityId`·`seniorId`도 실을 수 있다. `deepLink`가 없으면 빈 문자열을 보내고 FE router가 폴백한다. **W2의 `notificationId`는 아직 outbox 행 ID**다. W3가 센터 저장 타입은 센터 행 ID로 교체하고 센터 미저장 타입은 키를 생략한다. W2에서 한 enqueue 호출의 여러 기기는 같은 `eventId`를 공유하며, 호출자가 명시한 eventId가 있으면 우선한다. `DATA_ONLY`는 top-level `notification` 없이 보내고 APNs는 `apns-priority=5`, `apns-push-type=background`, `aps.content-available=1`을 쓴다.
 
-W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=INITIAL_ALERT`를 추가한다. `HEART_RATE_EMERGENCY`의 앱 사용 중 표시는 `MODAL`이며, M02·M03·H01은 `interaction`, M04만 `timeSensitive`라는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)의 구현 가정을 적용한다.
+W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=INITIAL_ALERT`를 추가한다. `HEART_RATE_EMERGENCY`의 앱 사용 중 표시는 `MODAL`(v2 목록 응답에만)이며, H01은 `interaction`, M04와 M02·M03(#900에서 상향)은 `timeSensitive`라는 [LLD-0077](LLD-0077-initial-alert-leader-only.md)의 구현 가정을 적용한다.
 
 ## 4. 데이터 모델
 
@@ -90,7 +90,7 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 
 괄호 안 센터 필터는 푸시 전용 타입의 목적지 분류이며 실제 센터 행이 없음을 뜻한다. `GENERAL` 등 설정 그룹은 W5부터 판정에 쓴다. 위듀케어 전용 템플릿은 [LLD-0076](LLD-0076-guardian-deeplink-paths.md)에 따라 2026-10-03 FE 문서의 앱 내부 경로로 확정했다. 역할별 보호자 링크는 `GuardianDeepLinks`가 명시하고, 위듀 경로는 FE 확정 대기다. 표의 전달 방식은 최종 정책이며 W2에서 기존 발행자의 센터 생성 흐름을 바꾸지 않는다.
 
-`legacyDataType`은 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`가 `MEDICATION_SCHEDULE_CHANGED`, `SAFETY_SELF_CHECK`가 위듀 FE의 화면 트리거 값 `EMERGENCY_CONFIRM_REQUEST`이며 나머지는 null이다(2026-10-11, #746). 모든 typed FCM의 `data.notificationType`은 논리 타입 이름이고 `data.type`은 `legacyDataType`이 있으면 그 값, 없으면 논리 타입 이름이다.
+2026-10-27부터 모든 FCM data의 타입 키는 `notificationType` 하나이고 값은 enum 이름이다. `type` 키와 `legacyDataType`·`dataTypeValue()`는 지웠다([LLD-0109](LLD-0109-fcm-data-contract-slim.md)). 그 전에는 M08/M05/M09와 `MEDICATION_SCHEDULE_SYNC`의 `data.type`이 `MEDICATION_SCHEDULE_CHANGED`, `SAFETY_SELF_CHECK`가 `EMERGENCY_CONFIRM_REQUEST`(2026-10-11, #746)였다. 아래 표와 N3·FE 합의 항목의 `data.type=EMERGENCY_CONFIRM_REQUEST`는 변경 전 계약이며 지금은 `notificationType=SAFETY_SELF_CHECK`다. 표의 priority·foreground 열은 전달 설정과 알림 목록 응답에만 쓴다.
 
 | # | `NotificationType` | `FcmCategory` | 센터 필터 | `DeliveryMode` | priority 제안 | `RetentionClass` | settingGroup | foreground | 딥링크 템플릿 | 문구 코드 |
 | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -152,7 +152,7 @@ LLD-0083의 K01/K02는 워치 직접 도움 요청과 취소 안내다. K01은 �
 
 - [x] N3: 32개 서버 `NotificationType` 상수의 카테고리·필터·딥링크가 4절 표와 일치한다. `SAFETY_SELF_CHECK`는 `INCIDENT_SELF_CHECK`·센터 필터 null·`PUSH_ONLY`·`CRITICAL`·`NONE`·`BANNER`·딥링크 없음·`data.type=EMERGENCY_CONFIRM_REQUEST`·S01을 사용한다(2026-10-11 #746 개정). `FAMILY_LEADER_CHANGED`의 센터 필터는 null이다. M01·S10은 서버 FCM 타입으로 발송하지 않고 `FcmCategory` 상수는 늘지 않는다.
 - [x] N7: 네 `DeliveryMode`를 타입별로 조회할 수 있으며 4절 전달 정책과 일치한다. W2 구현은 기존 호출자의 센터 저장 단위를 바꾸지 않는다.
-- [x] N8: type 있는 enqueue는 eventId가 비어 있을 때 수신자별 UUID를 생성한다. 명시값이 있으면 UUID 형식과 무관하게 40자 이하의 공백 아닌 값(예: `inc-…`)을 보존하며, 40자 초과는 행을 저장하지 않는다. 같은 수신자의 여러 토큰 행에 동일한 값을 기록한다. FCM data의 `eventId/type/priority/notificationId/deepLink/foregroundPresentation`과 해당 이벤트의 `revision/effectiveFromDate/actorDisplayName`이 문자열로 보존된다. W2 notificationId는 outbox ID다.
+- [x] N8: type 있는 enqueue는 eventId가 비어 있을 때 수신자별 UUID를 생성한다. 명시값이 있으면 UUID 형식과 무관하게 40자 이하의 공백 아닌 값(예: `inc-…`)을 보존하며, 40자 초과는 행을 저장하지 않는다. 같은 수신자의 여러 토큰 행에 동일한 값을 기록한다. FCM data의 `eventId/type/notificationId/deepLink`(2026-10-27 LLD-0109 이전에는 `priority/foregroundPresentation` 포함)와 해당 이벤트의 `revision/effectiveFromDate/actorDisplayName`이 문자열로 보존된다. W2 notificationId는 outbox ID다.
 - [x] N8: `FcmDelivery.from`은 `data_payload` 전체를 복원한다. 같은 행의 재시도 2회 뒤에도 key/value가 같고, 이전 행은 `dataType`·`dataRevision` 중 존재하는 키를 각각 복원한다.
 - [x] 복원 시 `IllegalArgumentException`이 발생하면 claim 행은 EXHAUSTED가 되고 전송하지 않는다. WARN에는 outbox ID·type 문자열만 남긴다.
 - [x] N9: 심박 위급과 본인확인은 Android high·안전 채널과 APNs priority 10·time-sensitive를 포함한다. S08·Z01·Z02는 일반 우선순위·일반 채널이다.

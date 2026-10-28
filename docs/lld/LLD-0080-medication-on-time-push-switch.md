@@ -38,6 +38,8 @@ LLD-0068은 정각 서버 푸시를 제거했지만 위듀 앱의 기기 예약 
 
 정시 FCM은 `upstream/develop`의 `MedicineScheduleNotificationListener` 1차 분기를 기준으로 복원한다. 제목은 **`약 복용 시간이에요!`**, 본문은 **`지금 약을 복용하고 인증해주세요.`**, 카테고리는 `MEDICINE_SCHEDULE`, 이미지는 `medicine.png`, `scheme`은 빈 문자열이다. data는 `MedicationAlarmPayload.of(revision)`의 `type=MEDICATION_SCHEDULE_CHANGED`, `revision=<수신 시니어의 revision>`을 그대로 쓴다. 이 메시지는 **`NotificationType`이 없는 레거시 메시지**다. `data.notificationType`을 만들거나 정시용 레지스트리 타입을 신설하지 않는다. `복약 알람 변경`은 정시 푸시 문구가 아니며 사용하지 않는다.
 
+> 2026-10-27 갱신(#900, [LLD-0109](LLD-0109-fcm-data-contract-slim.md)): 정시 data는 `MedicationAlarmPayload.of(revision)`의 `notificationType=MEDICATION_ON_TIME`, `revision=<수신 시니어의 revision>`이다. `type` 키는 없다. 앱은 `revision` 비교로 알람을 재동기화한다. `MEDICATION_ON_TIME`은 data 문자열일 뿐 `NotificationType` 상수가 아니며 `FcmSendDto.notificationType`은 여전히 null이다. 아래 인수조건의 data `type`은 변경 전 계약이다.
+
 현재 `FcmOutboxService`는 타입이 없는 메시지를 `PUSH_AND_CENTER`로 처리하고, `eventId`가 없으면 UUID를 발급한다. 따라서 정시 발송 시 기존 전송 경로에서는 시니어 센터 행도 생성된다. 센터 행은 신규 제품 알림 타입으로 해석하지 않으며, 이 설계는 공통 전송 정책을 바꾸지 않는다. 센터 표시 정책 변경이 필요하면 별도 결정이 필요하다.
 
 ## 4. 데이터 모델
@@ -65,7 +67,7 @@ LLD-0068은 정각 서버 푸시를 제거했지만 위듀 앱의 기기 예약 
 
 ## 7. 인수조건 (Acceptance Criteria)
 
-- [x] ON: 미인증이고 당일 유효한 정시 일정 1건에 대해 정각 레거시 시니어 알림을 논리적으로 1건 enqueue한다(기기별 outbox 행 수는 토큰 수에 따른다). 제목·본문·카테고리·data `type`·`revision`이 §3과 같고, `notificationType`은 null이다. 이미 인증했거나 유효하지 않으면 0건이다.
+- [x] ON: 미인증이고 당일 유효한 정시 일정 1건에 대해 정각 레거시 시니어 알림을 논리적으로 1건 enqueue한다(기기별 outbox 행 수는 토큰 수에 따른다). 제목·본문·카테고리가 §3과 같고, data는 `notificationType=MEDICATION_ON_TIME`·`revision`이며 `type` 키는 없다(#900, LLD-0109). 메시지 자체의 `NotificationType`은 여전히 없다. 이미 인증했거나 유효하지 않으면 0건이다.
 - [x] ON: 같은 조건에서 정각 1건과 +10 M02, +20 M03, +30 M04가 각 시점에 기존 대상에게 간다. 후속 3건의 문구·타입·센터/푸시 정책은 #718 그대로다.
 - [x] OFF: 정각 조회·발송은 0건이며 +10/+20/+30은 ON과 동일하게 처리된다. 자정 경계에서도 각 `dueAt`의 날짜에 유효한 일정만 대상으로 한다.
 - [x] 실제 `application-sensor.yml` 바인딩 테스트에서 환경변수 미지정 시 `onTimePush=true`, `SENSOR_MEDICATION_ON_TIME_PUSH=false` 지정 시 false를 확인한다.

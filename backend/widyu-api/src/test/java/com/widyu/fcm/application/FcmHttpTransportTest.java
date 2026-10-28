@@ -60,7 +60,8 @@ class FcmHttpTransportTest {
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/data/notificationId").isTextual()).isTrue();
             assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("ALBUM_CREATED");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("ALBUM_CREATED");
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/eventId").asText()).isEqualTo("album-91");
             assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("/album/post?postId=91");
         } finally {
@@ -87,13 +88,15 @@ class FcmHttpTransportTest {
 
             // then
             JsonNode body = bodies.getFirst();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo(type.name());
-            assertThat(body.at("/message/data/priority").asText()).isEqualTo("interaction");
-            assertThat(body.at("/message/android/priority").asText()).isEqualTo("normal");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo(type.name());
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
+            assertThat(body.at("/message/data/priority").isMissingNode()).isTrue();
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("NORMAL");
             assertThat(body.at("/message/android/notification/channel_id").asText())
                     .isEqualTo("widyu_general");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
                     .isEqualTo("active");
+            assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("5");
         } finally {
             transport.close();
             server.stop(0);
@@ -119,12 +122,12 @@ class FcmHttpTransportTest {
 
             // then
             JsonNode body = bodies.getFirst();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("EMERGENCY_CONFIRM_REQUEST");
             assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("SAFETY_SELF_CHECK");
-            assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
+            assertThat(body.at("/message/data/priority").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/deepLink").asText()).isEmpty();
             assertThat(body.at("/message/data/notificationId").isMissingNode()).isTrue();
-            assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("HIGH");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
                     .isEqualTo("time-sensitive");
@@ -156,12 +159,13 @@ class FcmHttpTransportTest {
             // then
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/data/eventId").asText()).isEqualTo("event-1");
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("HEART_RATE_EMERGENCY");
-            assertThat(body.at("/message/data/priority").asText()).isEqualTo("critical");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("HEART_RATE_EMERGENCY");
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
+            assertThat(body.at("/message/data/priority").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("8111");
             assertThat(body.at("/message/data/deepLink").asText()).isEqualTo("/location?seniorId=17");
-            assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("MODAL");
-            assertThat(body.at("/message/android/priority").asText()).isEqualTo("high");
+            assertThat(body.at("/message/data/foregroundPresentation").isMissingNode()).isTrue();
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("HIGH");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
             assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("10");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText())
@@ -196,14 +200,13 @@ class FcmHttpTransportTest {
 
             // then
             JsonNode body = bodies.getFirst();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
-            assertThat(body.at("/message/data/notificationType").asText())
-                    .isEqualTo("MEDICATION_SCHEDULE_CREATED");
-            assertThat(body.at("/message/data/priority").asText()).isEqualTo("interaction");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("MEDICATION_SCHEDULE_CREATED");
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
+            assertThat(body.at("/message/data/priority").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/revision").asText()).isEqualTo("42");
             assertThat(body.at("/message/data/effectiveFromDate").asText()).isEqualTo("2026-10-02");
             assertThat(body.at("/message/data/actorDisplayName").asText()).isEqualTo("보호자");
-            assertThat(body.at("/message/android/priority").asText()).isEqualTo("normal");
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("NORMAL");
             assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_general");
             assertThat(body.at("/message/apns/payload/aps/interruption-level").asText()).isEqualTo("active");
         } finally {
@@ -232,12 +235,11 @@ class FcmHttpTransportTest {
             // then
             JsonNode body = bodies.getFirst();
             assertThat(body.at("/message/notification").isMissingNode()).isTrue();
-            assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
-            assertThat(body.at("/message/data/notificationType").asText())
-                    .isEqualTo("MEDICATION_SCHEDULE_SYNC");
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("MEDICATION_SCHEDULE_SYNC");
+            assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
             assertThat(body.at("/message/data/revision").asText()).isEqualTo("43");
             assertThat(body.at("/message/data/notificationId").isMissingNode()).isTrue();
-            assertThat(body.at("/message/data/foregroundPresentation").asText()).isEqualTo("NONE");
+            assertThat(body.at("/message/data/foregroundPresentation").isMissingNode()).isTrue();
             assertThat(body.at("/message/android/notification").isMissingNode()).isTrue();
             assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("5");
             assertThat(body.at("/message/apns/headers/apns-push-type").asText()).isEqualTo("background");
@@ -249,7 +251,7 @@ class FcmHttpTransportTest {
     }
 
     @Test
-    @DisplayName("복약 미인증과 후속 안내와 수동 타입을 전송하면 각 우선순위를 포함한다")
+    @DisplayName("복약 미인증·복약 리마인더는 HIGH·즉시로, 걷기 미달은 NORMAL·전력 고려로 전송한다")
     void 복약_미인증과_후속_안내와_수동_타입을_전송하면_우선순위를_구분한다() throws Exception {
         // given
         ObjectMapper mapper = new ObjectMapper();
@@ -270,15 +272,18 @@ class FcmHttpTransportTest {
             assertThat(transport.send("loopback-token", walk).success()).isTrue();
 
             // then
-            assertThat(bodies.get(0).at("/message/android/priority").asText()).isEqualTo("high");
+            assertThat(bodies.get(0).at("/message/android/priority").asText()).isEqualTo("HIGH");
             assertThat(bodies.get(0).at("/message/apns/payload/aps/interruption-level").asText())
                     .isEqualTo("time-sensitive");
-            assertThat(bodies.get(1).at("/message/android/priority").asText()).isEqualTo("normal");
+            assertThat(bodies.get(0).at("/message/apns/headers/apns-priority").asText()).isEqualTo("10");
+            assertThat(bodies.get(1).at("/message/android/priority").asText()).isEqualTo("HIGH");
             assertThat(bodies.get(1).at("/message/apns/payload/aps/interruption-level").asText())
-                    .isEqualTo("active");
-            assertThat(bodies.get(2).at("/message/android/priority").asText()).isEqualTo("normal");
+                    .isEqualTo("time-sensitive");
+            assertThat(bodies.get(1).at("/message/apns/headers/apns-priority").asText()).isEqualTo("10");
+            assertThat(bodies.get(2).at("/message/android/priority").asText()).isEqualTo("NORMAL");
             assertThat(bodies.get(2).at("/message/apns/payload/aps/interruption-level").asText())
                     .isEqualTo("passive");
+            assertThat(bodies.get(2).at("/message/apns/headers/apns-priority").asText()).isEqualTo("5");
         } finally {
             transport.close();
             server.stop(0);
@@ -286,8 +291,8 @@ class FcmHttpTransportTest {
     }
 
     @Test
-    @DisplayName("알람 설정 변경 data payload를 플랫폼 FCM payload에 전달한다")
-    void 알람_설정_변경_data_payload를_전달한다() throws Exception {
+    @DisplayName("배포 전 outbox의 type 키가 담긴 data를 전송하면 notificationType으로 옮겨 전달한다")
+    void 배포_전_type_키가_담긴_data를_전송하면_notificationType으로_옮겨_전달한다() throws Exception {
         // given
         ObjectMapper mapper = new ObjectMapper();
         List<JsonNode> bodies = new CopyOnWriteArrayList<>();
@@ -306,8 +311,9 @@ class FcmHttpTransportTest {
             // then
             assertThat(result.success()).isTrue();
             assertThat(bodies).hasSize(1);
-            assertThat(bodies.get(0).at("/message/data/type").asText())
+            assertThat(bodies.get(0).at("/message/data/notificationType").asText())
                     .isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+            assertThat(bodies.get(0).at("/message/data/type").isMissingNode()).isTrue();
             assertThat(bodies.get(0).at("/message/data/revision").asText()).isEqualTo("42");
         } finally {
             transport.close();
@@ -347,7 +353,8 @@ class FcmHttpTransportTest {
                         .isEqualTo(Long.toString(first.expiresAt().getEpochSecond()));
                 assertThat(body.at("/message/data/notificationId").isTextual()).isTrue();
                 assertThat(body.at("/message/data/notificationId").asText()).isEqualTo("608");
-                assertThat(body.at("/message/data/type").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+                assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("MEDICATION_SCHEDULE_CHANGED");
+                assertThat(body.at("/message/data/type").isMissingNode()).isTrue();
                 assertThat(body.at("/message/data/revision").asText()).isEqualTo("42");
                 assertThat(body.at("/message/notification/title").asText()).isEqualTo("알림");
                 assertThat(body.at("/message/token").asText()).isEqualTo("loopback-token");
@@ -680,7 +687,7 @@ class FcmHttpTransportTest {
 
     private static FcmSendDto alarmChangedMessage() {
         return FcmSendDto.builder().title("알림").content("본문")
-                .data(Map.of("type", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"))
+                .data(Map.of("notificationType", "MEDICATION_SCHEDULE_CHANGED", "revision", "42"))
                 .build();
     }
 
