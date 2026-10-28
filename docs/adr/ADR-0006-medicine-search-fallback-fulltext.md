@@ -19,7 +19,7 @@
 - `medicine.item_seq`를 유니크 키로 두고, 공공 API 데이터를 자체 DB에 누적 저장한다.
 - 검색 요청은 먼저 `medicine` 테이블을 조회한다.
 - 키워드 길이가 2글자 이상이면 `MATCH(item_name) AGAINST(:keyword IN BOOLEAN MODE)`를 사용한다.
-- 키워드 길이가 2글자 미만이면 FULLTEXT 토큰 매칭 한계를 피하기 위해 prefix `LIKE :prefix`를 사용한다.
+- 키워드 길이가 2글자 미만이면 검색하지 않고 빈 목록을 반환한다. (2026-10-28 변경, #921: 기획상 2글자 이상부터 지원하므로 처음에 두었던 1글자 prefix `LIKE :prefix` 조회를 제거했다.)
 - 자체 DB 결과가 없을 때만 공공 API `getDrbEasyDrugList`를 호출한다.
 - 외부 API 응답은 `itemSeq` 기준으로 신규 데이터만 저장한다.
 - 공공 API 응답 내부 중복과 동시 저장 경쟁은 `seenSeqs`, 기존 `itemSeq` 조회, `DataIntegrityViolationException` 후 DB 재조회로 흡수한다.

@@ -38,13 +38,13 @@ public class ExternalMedicineService {
     public MedicineSearchResponse searchAndSaveMedicines(String keyword) {
         log.info("약품 검색 시작");
 
-        // 1. 자체 DB 검색 (2글자 미만은 prefix LIKE, 이상은 FULLTEXT)
-        List<Medicine> dbResults;
-        if (keyword.length() < 2) {
-            dbResults = medicineRepository.searchByNamePrefix(keyword + "%");
-        } else {
-            dbResults = medicineRepository.searchByNameFullText(keyword);
+        // 기획상 2글자 이상부터 검색한다. 입력 중 자동 검색에도 오류 없이 빈 목록을 준다.
+        if (keyword.strip().length() < 2) {
+            return MedicineSearchResponse.empty();
         }
+
+        // 1. 자체 DB 검색 (FULLTEXT)
+        List<Medicine> dbResults = medicineRepository.searchByNameFullText(keyword);
         if (!dbResults.isEmpty()) {
             log.info("자체 DB 검색 성공: resultCount={}", dbResults.size());
             return toSearchResponse(dbResults);

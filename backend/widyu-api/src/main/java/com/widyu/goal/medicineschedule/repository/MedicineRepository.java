@@ -14,9 +14,6 @@ public interface MedicineRepository extends JpaRepository<Medicine, Long> {
     @Query(value = "SELECT * FROM medicine WHERE MATCH(item_name) AGAINST(:keyword IN BOOLEAN MODE) LIMIT 10", nativeQuery = true)
     List<Medicine> searchByNameFullText(@Param("keyword") String keyword);
 
-    @Query(value = "SELECT * FROM medicine WHERE item_name LIKE :prefix LIMIT 10", nativeQuery = true)
-    List<Medicine> searchByNamePrefix(@Param("prefix") String prefix);
-
     @Query("SELECT m.itemSeq FROM Medicine m WHERE m.itemSeq IN :seqs")
     Set<String> findItemSeqsByItemSeqIn(@Param("seqs") List<String> seqs);
 
