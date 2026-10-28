@@ -34,14 +34,16 @@ import com.widyu.medicine.MedicineSchedule;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import com.widyu.member.repository.MemberRepository;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -158,16 +160,21 @@ class MedicineScheduleServiceTest {
     }
 
     private LocalDate today() {
-        return LocalDate.now();
+        return TODAY;
     }
 
-    // 인증 가능 시간(알람 ±30분)이 오늘 안에 끝나지 않는 시각이라 실행 시각과 무관하게 "아직 안 끝난 알람"이다.
+    // 서비스 시각을 정오로 고정해 실행 시각과 무관하게 알람이 끝났는지 판정한다.
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 28);
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    // 정오 기준으로 인증 가능 시간(알람 ±30분)이 남은 "아직 안 끝난 알람"이다.
     private static final LocalTime OPEN_ALARM = LocalTime.of(23, 59);
-    // 00:30 이후에는 인증 가능 시간이 끝난 시각이다.
+    // 정오 기준으로 인증 가능 시간이 끝난 알람이다.
     private static final LocalTime CLOSED_ALARM = LocalTime.of(0, 0);
 
-    private void assumeClosedAlarmWindowEnded() {
-        Assumptions.assumeTrue(LocalTime.now().isAfter(LocalTime.of(0, 31)));
+    @BeforeEach
+    void fixClock() {
+        ReflectionTestUtils.setField(medicineScheduleService, "clock",
+                Clock.fixed(TODAY.atTime(12, 0).atZone(SEOUL).toInstant(), SEOUL));
     }
 
     private void givenSavedScheduleId(Long id) {
@@ -257,13 +264,17 @@ class MedicineScheduleServiceTest {
         assertThat(scheduleCaptor.getValue().getAlarmTime()).isEqualTo(LocalTime.of(12, 0));
         assertThat(response.medicineScheduleId()).isEqualTo(101L);
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+        ArgumentCaptor<FcmSendDto> messageCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should(times(2)).sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
+        assertThat(messageCaptor.getAllValues().getFirst().content())
+                .isEqualTo("바뀐 약 알람은 내일부터 적용돼요.");
     }
 
     @Test
     @DisplayName("인증 가능 시간이 지난 미인증 알람을 수정하면 오늘은 미인증으로 두고 내일부터 새 버전을 적용한다")
     void 인증_가능_시간이_지난_미인증_알람을_수정하면_내일부터_새_버전을_적용한다() {
         // given
-        assumeClosedAlarmWindowEnded();
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = seniorWithId(memberId);
@@ -393,7 +404,6 @@ class MedicineScheduleServiceTest {
     @DisplayName("인증 가능 시간이 지난 미인증 알람을 삭제하면 오늘은 미인증으로 두고 내일부터 중단한다")
     void 인증_가능_시간이_지난_미인증_알람을_삭제하면_내일부터_중단한다() {
         // given
-        assumeClosedAlarmWindowEnded();
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = seniorWithId(memberId);
@@ -452,7 +462,6 @@ class MedicineScheduleServiceTest {
     @DisplayName("인증 가능 시간이 이미 지난 시각으로 스케줄을 생성하면 내일부터 적용한다")
     void 인증_가능_시간이_지난_시각으로_스케줄을_생성하면_내일부터_적용한다() {
         // given
-        assumeClosedAlarmWindowEnded();
         Long memberId = 1L;
         Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
@@ -553,8 +562,8 @@ class MedicineScheduleServiceTest {
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule closed = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), LocalDate.now().minusDays(10));
-        ReflectionTestUtils.setField(closed, "effectiveTo", LocalDate.now().minusDays(5));
+                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(10));
+        ReflectionTestUtils.setField(closed, "effectiveTo", today().minusDays(5));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
                 .willReturn(Optional.of(closed));
 
@@ -575,8 +584,8 @@ class MedicineScheduleServiceTest {
         given(targetMember.getId()).willReturn(memberId);
 
         MedicineSchedule closed = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), LocalDate.now().minusDays(10));
-        ReflectionTestUtils.setField(closed, "effectiveTo", LocalDate.now().minusDays(5));
+                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(10));
+        ReflectionTestUtils.setField(closed, "effectiveTo", today().minusDays(5));
         given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(closed));
 
         // when & then

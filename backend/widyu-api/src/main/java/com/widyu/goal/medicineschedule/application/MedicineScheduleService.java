@@ -29,6 +29,7 @@ import com.widyu.medicine.Medicine;
 import com.widyu.medicine.MedicineCategory;
 import com.widyu.medicine.MedicineSchedule;
 import com.widyu.medicine.MedicineScheduleDetail;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -54,6 +55,8 @@ public class MedicineScheduleService {
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
     private final FcmService fcmService;
+    // 알람이 오늘 끝났는지 판정하는 기준 시각. 테스트가 시각을 고정할 수 있게 필드로 둔다.
+    private Clock clock = Clock.systemDefaultZone();
 
     public MedicineScheduleDailyResponse getDailySchedules(Long memberId, LocalDate date) {
         Member targetMember = getMember(memberId);
@@ -66,7 +69,7 @@ public class MedicineScheduleService {
         }
 
         Map<Long, MedicationProof> proofsByScheduleId = findProofsByScheduleId(targetMember, date);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<MedicineScheduleDailyResponse.ScheduleItem> scheduleItems = schedules.stream()
                 .map(schedule -> {
@@ -124,7 +127,7 @@ public class MedicineScheduleService {
 
         List<MedicineSchedule> schedules = medicineScheduleRepository
                 .findEffectiveByMemberAndDateWithDetails(targetMember, Status.ACTIVE,
-                        LocalDate.now());
+                        LocalDate.now(clock));
 
         List<MedicineHomeResponse.ScheduleItem> scheduleItems = schedules.stream()
                 .map(MedicineHomeResponse.ScheduleItem::from)
@@ -152,7 +155,7 @@ public class MedicineScheduleService {
     @Transactional
     public MedicineScheduleIdResponse createSchedule(CreateMedicineScheduleRequest request, Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
         // 오늘 인증 가능 시간이 이미 끝난 시각이면 오늘은 건너뛰고 내일부터 울린다.
@@ -207,7 +210,7 @@ public class MedicineScheduleService {
         }
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
 
         // 오늘 끝난 알람(인증 완료 또는 인증 가능 시간 종료)은 오늘 기록을 그대로 두고 내일부터 바꾼다.
@@ -299,7 +302,7 @@ public class MedicineScheduleService {
         }
 
         // 오늘 끝난 알람은 오늘 기록(완료·미인증)을 남기고 내일부터, 아직 안 끝난 알람은 오늘부터 중단한다.
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         LocalDate stopDate = today;
         if (schedule.isEffectiveOn(today) && isFinishedToday(schedule, now)) {
@@ -360,7 +363,12 @@ public class MedicineScheduleService {
         if (actorName == null || actorName.isBlank()) {
             actorName = "가족";
         }
-        NotificationCopy copy = NotificationCopy.of(type, type.copyCode(),
+        String copyCode = type.copyCode();
+        // 끝난 알람의 변경처럼 내일부터 적용되면 "내일부터" 문구를 쓴다(LLD-0113)
+        if (effectiveFromDate.isAfter(LocalDate.now(clock))) {
+            copyCode = copyCode + "-NEXT";
+        }
+        NotificationCopy copy = NotificationCopy.of(type, copyCode,
                 Map.of("보호자 이름", actorName));
         fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
