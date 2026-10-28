@@ -19,6 +19,15 @@ public interface MemberFcmTokenRepository extends JpaRepository<MemberFcmToken, 
     @Query("select (count(t) > 0) from MemberFcmToken t where t.id = :id and t.member.id = :recipientId and t.active = true and t.member.status = com.widyu.global.entity.Status.ACTIVE")
     boolean isDeliverable(Long id, Long recipientId);
 
+    // 없으면 현재 회원의 활성 토큰으로 넣고, 있으면 현재 회원에게 옮겨 다시 활성화한다(MySQL 전용)
+    @Modifying
+    @Query(value = """
+            INSERT INTO member_fcm_token (token, member_id, active, registered_at)
+            VALUES (:token, :memberId, true, :now)
+            ON DUPLICATE KEY UPDATE member_id = :memberId, active = true, expired_at = NULL, last_used_at = :now
+            """, nativeQuery = true)
+    void upsertActive(String token, Long memberId, LocalDateTime now);
+
     Optional<MemberFcmToken> findByToken(String fcmToken);
 
     List<MemberFcmToken> findAllByMemberIdAndActiveTrue(Long id);
