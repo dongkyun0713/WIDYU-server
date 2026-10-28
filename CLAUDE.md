@@ -81,7 +81,7 @@ Java 파일 수정 시 `on-file-edit.sh` 훅이 `scripts/harness/validate-java-r
 훅이 차단하는 규칙 — `validate-java-rules.sh`의 규칙 1~6과 일대일 대응합니다.
 
 1. **삼항 연산자 금지** — 조건 분기는 `if/else` 또는 early return으로 작성한다
-2. **DTO 팩토리 메서드** — 서비스에서 `new DTO(...)` 직접 생성 금지. DTO의 `from()`/`of()` 정적 팩토리를 호출한다
+2. **DTO 팩토리 메서드** — 서비스에서 `new DTO(...)` 직접 생성 금지. DTO의 `from()`/`of()` 정적 팩토리를 호출한다. 중첩 타입 생성(`new XResponse.Item(...)`)도 대상이다
 3. **Controller → Repository 직접 접근 금지** — Service를 경유한다
 4. **`@Entity`는 widyu-domain에만** 둔다
 5. **Repository는 widyu-api에만** 둔다
