@@ -29,6 +29,7 @@ import com.widyu.medicine.Medicine;
 import com.widyu.medicine.MedicineCategory;
 import com.widyu.medicine.MedicineSchedule;
 import com.widyu.medicine.MedicineScheduleDetail;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -54,6 +55,8 @@ public class MedicineScheduleService {
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
     private final FcmService fcmService;
+    // 알람이 오늘 끝났는지 판정하는 기준 시각. 테스트가 시각을 고정할 수 있게 필드로 둔다.
+    private Clock clock = Clock.systemDefaultZone();
 
     public MedicineScheduleDailyResponse getDailySchedules(Long memberId, LocalDate date) {
         Member targetMember = getMember(memberId);
@@ -66,7 +69,7 @@ public class MedicineScheduleService {
         }
 
         Map<Long, MedicationProof> proofsByScheduleId = findProofsByScheduleId(targetMember, date);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<MedicineScheduleDailyResponse.ScheduleItem> scheduleItems = schedules.stream()
                 .map(schedule -> {
@@ -124,7 +127,7 @@ public class MedicineScheduleService {
 
         List<MedicineSchedule> schedules = medicineScheduleRepository
                 .findEffectiveByMemberAndDateWithDetails(targetMember, Status.ACTIVE,
-                        LocalDate.now());
+                        LocalDate.now(clock));
 
         List<MedicineHomeResponse.ScheduleItem> scheduleItems = schedules.stream()
                 .map(MedicineHomeResponse.ScheduleItem::from)
@@ -152,9 +155,14 @@ public class MedicineScheduleService {
     @Transactional
     public MedicineScheduleIdResponse createSchedule(CreateMedicineScheduleRequest request, Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
-        LocalDate effectiveFromDate = LocalDate.now().plusDays(1);
+        LocalDateTime now = LocalDateTime.now(clock);
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
+        // 오늘 인증 가능 시간이 이미 끝난 시각이면 오늘은 건너뛰고 내일부터 울린다.
+        LocalDate effectiveFromDate = now.toLocalDate();
+        if (isProofWindowClosed(alarmTime, now)) {
+            effectiveFromDate = effectiveFromDate.plusDays(1);
+        }
         MedicineSchedule schedule = MedicineSchedule.create(targetMember, alarmTime, effectiveFromDate);
 
         for (CreateMedicineScheduleRequest.CategoryItem categoryItem : request.categories()) {
@@ -202,22 +210,32 @@ public class MedicineScheduleService {
         }
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
-        LocalDate today = LocalDate.now();
-        LocalDate effectiveFromDate = today.plusDays(1);
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
 
-        if (schedule.startedOn(effectiveFromDate)) {
-            // 아직 시작하지 않은 내일 버전은 오늘 알람에 영향을 주지 않으므로 그대로 수정한다.
+        // 오늘 끝난 알람(인증 완료 또는 인증 가능 시간 종료)은 오늘 기록을 그대로 두고 내일부터 바꾼다.
+        // 아직 시작 전인 버전은 원래 시작일을 유지한다.
+        LocalDate effectiveFromDate = today;
+        if (!schedule.isEffectiveOn(today)) {
+            effectiveFromDate = schedule.getEffectiveFrom();
+        } else if (isFinishedToday(schedule, now)) {
+            effectiveFromDate = today.plusDays(1);
+        }
+        LocalDate lastDateOfPrevious = effectiveFromDate.minusDays(1);
+
+        if (!schedule.isEffectiveOn(lastDateOfPrevious)) {
+            // 적용일 전날에 유효하지 않았던 버전은 지켜야 할 날짜가 없으므로 그대로 수정한다.
             schedule.updateAlarmTime(alarmTime);
             schedule.clearCategories();
             addCategories(schedule, request.categories());
             long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_CHANGED,
                     scheduleId, effectiveFromDate);
-            log.info("약 복용 스케줄 시작 전 수정: scheduleId={}, memberId={}", scheduleId, targetMember.getId());
+            log.info("약 복용 스케줄 수정(같은 버전): scheduleId={}, memberId={}, effectiveFrom={}",
+                    scheduleId, targetMember.getId(), effectiveFromDate);
             return MedicineScheduleIdResponse.of(scheduleId, revision, effectiveFromDate);
         }
 
-        // 오늘 알람과 인증은 기존 버전에 남기고 내일부터 새 버전을 적용한다.
-        schedule.closeAsOf(today);
+        schedule.closeAsOf(lastDateOfPrevious);
 
         MedicineSchedule newSchedule = MedicineSchedule.create(targetMember, alarmTime, effectiveFromDate);
         addCategories(newSchedule, request.categories());
@@ -225,9 +243,24 @@ public class MedicineScheduleService {
         long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_CHANGED,
                 savedSchedule.getId(), effectiveFromDate);
 
-        log.info("약 복용 스케줄 수정(새 버전 생성): oldScheduleId={}, newScheduleId={}, memberId={}",
-                scheduleId, savedSchedule.getId(), targetMember.getId());
+        log.info("약 복용 스케줄 수정(새 버전 생성): oldScheduleId={}, newScheduleId={}, memberId={}, effectiveFrom={}",
+                scheduleId, savedSchedule.getId(), targetMember.getId(), effectiveFromDate);
         return MedicineScheduleIdResponse.of(savedSchedule.getId(), revision, effectiveFromDate);
+    }
+
+    private boolean isFinishedToday(MedicineSchedule schedule, LocalDateTime now) {
+        LocalDate today = now.toLocalDate();
+        if (isProofWindowClosed(schedule.getAlarmTime(), now)) {
+            return true;
+        }
+        return medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(
+                schedule, today.atStartOfDay(), today.atTime(LocalTime.MAX));
+    }
+
+    private boolean isProofWindowClosed(LocalTime alarmTime, LocalDateTime now) {
+        LocalDateTime windowEnd = now.toLocalDate().atTime(alarmTime)
+                .plusMinutes(MedicationStatus.ALLOWED_WINDOW_MINUTES);
+        return now.isAfter(windowEnd);
     }
 
     private void addCategories(
@@ -268,13 +301,19 @@ public class MedicineScheduleService {
                     "이미 종료된 과거 스케줄은 삭제할 수 없습니다.");
         }
 
-        // 오늘 알람은 유지하고 내일부터 중단한다. 내일 시작 버전은 빈 유효기간이 된다.
-        LocalDate today = LocalDate.now();
-        schedule.closeAsOf(today);
+        // 오늘 끝난 알람은 오늘 기록(완료·미인증)을 남기고 내일부터, 아직 안 끝난 알람은 오늘부터 중단한다.
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
+        LocalDate stopDate = today;
+        if (schedule.isEffectiveOn(today) && isFinishedToday(schedule, now)) {
+            stopDate = today.plusDays(1);
+        }
+        schedule.closeAsOf(stopDate.minusDays(1));
         long revision = sendAlarmChanged(targetMember, NotificationType.MEDICATION_SCHEDULE_DELETED,
-                scheduleId, today.plusDays(1));
-        log.info("약 복용 스케줄 삭제(내일부터 중단): scheduleId={}, memberId={}", scheduleId, targetMember.getId());
-        return MedicineScheduleChangeResponse.of(revision, today.plusDays(1));
+                scheduleId, stopDate);
+        log.info("약 복용 스케줄 삭제: scheduleId={}, memberId={}, stopDate={}",
+                scheduleId, targetMember.getId(), stopDate);
+        return MedicineScheduleChangeResponse.of(revision, stopDate);
     }
 
     private LocalTime parseAlarmTime(String alarmTimeStr) {
@@ -324,7 +363,12 @@ public class MedicineScheduleService {
         if (actorName == null || actorName.isBlank()) {
             actorName = "가족";
         }
-        NotificationCopy copy = NotificationCopy.of(type, type.copyCode(),
+        String copyCode = type.copyCode();
+        // 끝난 알람의 변경처럼 내일부터 적용되면 "내일부터" 문구를 쓴다(LLD-0113)
+        if (effectiveFromDate.isAfter(LocalDate.now(clock))) {
+            copyCode = copyCode + "-NEXT";
+        }
+        NotificationCopy copy = NotificationCopy.of(type, copyCode,
                 Map.of("보호자 이름", actorName));
         fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
                 .title(copy.title()).content(copy.body())
