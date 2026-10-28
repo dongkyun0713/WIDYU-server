@@ -15,7 +15,7 @@ class NotificationTypeTest {
         NotificationType[] types = NotificationType.values();
 
         // then
-        assertThat(types).hasSize(34);
+        assertThat(types).hasSize(35);
         assertThat(Arrays.stream(types).map(NotificationType::deliveryMode).distinct())
                 .containsExactlyInAnyOrder(DeliveryMode.values());
         assertThat(Arrays.stream(types).map(NotificationType::name))

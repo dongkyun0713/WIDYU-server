@@ -200,6 +200,10 @@ public class FcmHttpTransport implements FcmTransport {
     }
 
     private FcmMessageDto.Android android(String ttl, NotificationType type) {
+        // 앱을 바로 깨워야 하는 데이터 전용 신호(W03)는 표시 알림 없이 안전 채널·HIGH로 보낸다.
+        if (type.deliveryMode() == DeliveryMode.DATA_ONLY && type.priority().isSafety()) {
+            return new FcmMessageDto.Android(ttl, "HIGH", new FcmMessageDto.AndroidNotification("widyu_safety"));
+        }
         if (type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             return new FcmMessageDto.Android(ttl);
         }
@@ -217,6 +221,12 @@ public class FcmHttpTransport implements FcmTransport {
         HashMap<String, String> headers = new HashMap<>();
         if (expiresAt != null) {
             headers.put("apns-expiration", Long.toString(expiresAt.getEpochSecond()));
+        }
+        if (type.deliveryMode() == DeliveryMode.DATA_ONLY && type.priority().isSafety()) {
+            headers.put("apns-priority", "10");
+            headers.put("apns-push-type", "alert");
+            return new FcmMessageDto.Apns(headers,
+                    new FcmMessageDto.ApnsPayload(new FcmMessageDto.Aps("active", null, "default")));
         }
         if (type.deliveryMode() == DeliveryMode.DATA_ONLY) {
             headers.put("apns-priority", "5");
