@@ -216,6 +216,41 @@ class FcmHttpTransportTest {
     }
 
     @Test
+    @DisplayName("걸음 수 동기화 신호를 전송하면 표시 알림 없이 HIGH·안전 채널과 APNs 즉시 alert로 보낸다")
+    void 걸음_수_동기화_신호를_전송하면_즉시_전달_형식으로_보낸다() throws Exception {
+        // given
+        ObjectMapper mapper = new ObjectMapper();
+        List<JsonNode> bodies = new CopyOnWriteArrayList<>();
+        HttpServer server = payloadServer(mapper, bodies);
+        FcmHttpTransport transport = new FcmHttpTransport(endpoint(server), mapper,
+                () -> "loopback-access-token", Duration.ofSeconds(2));
+        FcmSendDto message = FcmSendDto.builder().notificationType(NotificationType.WALK_DATA_SYNC)
+                .data(Map.of("eventId", "WALK_DATA_SYNC:2:2026-10-28")).build();
+        FcmDelivery delivery = new FcmDelivery(4075L, 1, "loopback-token", message,
+                Instant.now().plusSeconds(300), null);
+        try {
+            // when
+            assertThat(transport.send(delivery, () -> true).success()).isTrue();
+
+            // then
+            JsonNode body = bodies.getFirst();
+            assertThat(body.at("/message/notification").isMissingNode()).isTrue();
+            assertThat(body.at("/message/data/notificationType").asText()).isEqualTo("WALK_DATA_SYNC");
+            assertThat(body.at("/message/data/deepLink").asText()).isEmpty();
+            assertThat(body.at("/message/android/priority").asText()).isEqualTo("HIGH");
+            assertThat(body.at("/message/android/notification/channel_id").asText()).isEqualTo("widyu_safety");
+            assertThat(body.at("/message/apns/headers/apns-priority").asText()).isEqualTo("10");
+            assertThat(body.at("/message/apns/headers/apns-push-type").asText()).isEqualTo("alert");
+            assertThat(body.at("/message/apns/payload/aps/interruption-level").asText()).isEqualTo("active");
+            assertThat(body.at("/message/apns/payload/aps/sound").asText()).isEqualTo("default");
+            assertThat(body.at("/message/apns/payload/aps/content-available").isMissingNode()).isTrue();
+        } finally {
+            transport.close();
+            server.stop(0);
+        }
+    }
+
+    @Test
     @DisplayName("동기화 타입을 전송하면 표시 알림 없이 data만 포함한다")
     void 동기화_타입을_전송하면_표시_알림_없이_data만_포함한다() throws Exception {
         // given

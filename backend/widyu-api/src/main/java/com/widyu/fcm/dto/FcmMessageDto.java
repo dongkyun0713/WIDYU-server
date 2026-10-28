@@ -42,10 +42,15 @@ public record FcmMessageDto(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Aps(
             @JsonProperty("interruption-level") String interruptionLevel,
-            @JsonProperty("content-available") Integer contentAvailable
+            @JsonProperty("content-available") Integer contentAvailable,
+            String sound
     ) {
         public Aps(String interruptionLevel) {
-            this(interruptionLevel, null);
+            this(interruptionLevel, null, null);
+        }
+
+        public Aps(String interruptionLevel, Integer contentAvailable) {
+            this(interruptionLevel, contentAvailable, null);
         }
     }
 

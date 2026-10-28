@@ -29,6 +29,29 @@ public class WalkNotificationListener {
     private final SeniorProfileRepository seniorProfileRepository;
 
     /**
+     * 19시 미달성 판정 전에 앱을 깨워 오늘 걸음 수를 올리게 하는 데이터 전용 신호(W03).
+     */
+    @Scheduled(cron = "0 55 18 * * *")
+    @Transactional
+    public void sendWalkDataSync() {
+        LocalDate today = LocalDate.now();
+        List<Member> members = seniorProfileRepository.findMembersWithWalkGoal(Status.ACTIVE);
+        log.info("걸음 수 동기화 신호 발송 - 대상 날짜: {}, 대상: {}명", today, members.size());
+
+        NotificationType type = NotificationType.WALK_DATA_SYNC;
+        for (Member member : members) {
+            try {
+                fcmService.sendMessageToUser(member.getId(), FcmSendDto.builder()
+                        .fcmCategory(type.fcmCategory()).notificationType(type)
+                        .eventId(type.name() + ":" + member.getId() + ":" + today)
+                        .build());
+            } catch (Exception e) {
+                log.error("걸음 수 동기화 신호 발송 실패 - memberId: {}", member.getId(), e);
+            }
+        }
+    }
+
+    /**
      * 매일 저녁 7시에 실행되어 오늘 만보계 목표 미달성자에게 알림 발송
      */
     @Scheduled(cron = "0 0 19 * * *")

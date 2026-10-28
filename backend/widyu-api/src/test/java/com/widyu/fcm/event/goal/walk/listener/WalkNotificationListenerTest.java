@@ -38,6 +38,28 @@ class WalkNotificationListenerTest {
     @InjectMocks private WalkNotificationListener listener;
 
     @Test
+    @DisplayName("걷기 목표가 있는 시니어마다 걸음 수 동기화 데이터 푸시를 한 건씩 만든다")
+    void 걷기_목표가_있는_시니어마다_동기화_푸시를_만든다() {
+        // given
+        given(seniorProfileRepository.findMembersWithWalkGoal(Status.ACTIVE))
+                .willReturn(List.of(member(2L, MemberType.SENIOR), member(3L, MemberType.SENIOR)));
+        ArgumentCaptor<FcmSendDto> captor = ArgumentCaptor.forClass(FcmSendDto.class);
+
+        // when
+        listener.sendWalkDataSync();
+
+        // then
+        then(fcmService).should().sendMessageToUser(eq(2L), captor.capture());
+        then(fcmService).should().sendMessageToUser(eq(3L), any());
+        FcmSendDto dto = captor.getValue();
+        assertThat(dto.notificationType()).isEqualTo(NotificationType.WALK_DATA_SYNC);
+        assertThat(dto.notificationType().deliveryMode()).isEqualTo(DeliveryMode.DATA_ONLY);
+        assertThat(dto.title()).isNull();
+        assertThat(dto.eventId()).isEqualTo("WALK_DATA_SYNC:2:" + LocalDate.now());
+        assertThat(dto.dataForEnqueue(dto.eventId())).containsEntry("notificationType", "WALK_DATA_SYNC");
+    }
+
+    @Test
     @DisplayName("양수 걸음으로 걷기 목표에 미달하면 W01 푸시를 한 건 만든다")
     void 양수_걸음으로_목표에_미달하면_W01_푸시를_만든다() {
         // given

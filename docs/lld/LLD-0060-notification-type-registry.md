@@ -128,8 +128,11 @@ W17 이후 심박 S04는 `safetyEventId=eventId=incident_ref`, `deliveryStage=IN
 | 26 | `HEALTH_SCHEDULE_UPDATED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H03 |
 | 27 | `HEALTH_SCHEDULE_DELETED` | HEALTH_SCHEDULE | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | H04 |
 | 28 | `WALK_GOAL_CHANGED` | WALK | GOAL | PUSH_AND_CENTER | interaction | ROUTINE_90D | GENERAL | BANNER | `/goal` | W02 |
+| 29 | `WALK_DATA_SYNC` | WALK | — | DATA_ONLY | critical | ROUTINE_90D | NONE | NONE | — | W03(문구 없음) |
 
 LLD-0083의 K01/K02는 워치 직접 도움 요청과 취소 안내다. K01은 ①·②에서 같은 `eventId=incident_ref`를 쓰고, K02는 `event_id VARCHAR(40)`에 맞춘 `incident_ref:CX`를 쓴다.
+
+`WALK_DATA_SYNC`(#918)는 18시 55분에 걷기 목표가 있는 활성 시니어에게 보내는 걸음 수 동기화 신호다. 19시 W01 판정 전에 앱이 오늘 걸음 수를 올리게 한다. 데이터 전용이지만 앱을 바로 깨우도록 Android `HIGH`·`widyu_safety` 채널, APNs `apns-priority: 10`·`apns-push-type: alert`·`interruption-level: active`·`sound: default`로 보낸다(`MEDICATION_SCHEDULE_SYNC`의 5·background 형식과 다르다).
 
 매트릭스 7번 `MEDICATION_DUE`(M01)는 시니어 기기 자체 알람이라 서버에 등록하지 않는다. S10은 취소 뒤 시니어 화면 상태 문구이며 서버 알림이 아니다. S03도 보호자 발송 개시 뒤 화면 문구다. `SAFETY_SELF_CHECK`의 `ROUTINE_90D`는 센터 행을 만들지 않는 PUSH_ONLY 타입의 필수 메타데이터 기본값이며 센터 보존 정책에는 쓰지 않는다. S08은 심박 OK 안내다. 안심구역은 사건이 아니며 S02·S05·S07·S09 대신 제목만 있는 Z01·Z02를 쓴다. 심박 안전 타입의 `FcmCategory.HEART_MESSAGE`는 운영 컬럼을 바꾸지 않기 위한 값이고 센터 필터는 LOCATION이다.
 

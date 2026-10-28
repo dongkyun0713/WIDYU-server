@@ -33,6 +33,11 @@ public interface SeniorProfileRepository extends JpaRepository<SeniorProfile, Lo
     Optional<SeniorProfile> findByInviteCodeAndMemberPhoneNumber(@Param("inviteCode") String inviteCode,
                                                                    @Param("phoneNumber") String phoneNumber);
 
+    /** 걷기 기본 목표가 있는 회원. 18시 55분 걸음 수 동기화(W03) 대상이다. */
+    @Query("SELECT sp.member FROM SeniorProfile sp "
+            + "WHERE sp.defaultWalkGoal IS NOT NULL AND sp.member.status = :status")
+    List<Member> findMembersWithWalkGoal(@Param("status") Status status);
+
     /** 걷기 기본 목표가 있는데 그날 걸음 기록이 없는 회원. 19시 걷기 목표 미달 알림(W01)의 0걸음 대상이다. */
     @Query("SELECT sp.member FROM SeniorProfile sp "
             + "WHERE sp.defaultWalkGoal IS NOT NULL AND sp.member.status = :status "

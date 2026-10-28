@@ -35,7 +35,8 @@ public enum NotificationType {
     HEALTH_SCHEDULE_CREATED(FcmCategory.HEALTH_SCHEDULE, "GOAL", DeliveryMode.PUSH_AND_CENTER, NotificationPriority.INTERACTION, RetentionClass.ROUTINE_90D, PushSettingGroup.GENERAL, "BANNER", "/goal", "H02"),
     HEALTH_SCHEDULE_UPDATED(FcmCategory.HEALTH_SCHEDULE, "GOAL", DeliveryMode.PUSH_AND_CENTER, NotificationPriority.INTERACTION, RetentionClass.ROUTINE_90D, PushSettingGroup.GENERAL, "BANNER", "/goal", "H03"),
     HEALTH_SCHEDULE_DELETED(FcmCategory.HEALTH_SCHEDULE, "GOAL", DeliveryMode.PUSH_AND_CENTER, NotificationPriority.INTERACTION, RetentionClass.ROUTINE_90D, PushSettingGroup.GENERAL, "BANNER", "/goal", "H04"),
-    WALK_GOAL_CHANGED(FcmCategory.WALK, "GOAL", DeliveryMode.PUSH_AND_CENTER, NotificationPriority.INTERACTION, RetentionClass.ROUTINE_90D, PushSettingGroup.GENERAL, "BANNER", "/goal", "W02");
+    WALK_GOAL_CHANGED(FcmCategory.WALK, "GOAL", DeliveryMode.PUSH_AND_CENTER, NotificationPriority.INTERACTION, RetentionClass.ROUTINE_90D, PushSettingGroup.GENERAL, "BANNER", "/goal", "W02"),
+    WALK_DATA_SYNC(FcmCategory.WALK, null, DeliveryMode.DATA_ONLY, NotificationPriority.CRITICAL, RetentionClass.ROUTINE_90D, PushSettingGroup.NONE, "NONE", null, null);
 
     private final FcmCategory fcmCategory;
     private final String centerFilter;
