@@ -11,7 +11,9 @@ import com.widyu.auth.application.guardian.GuardianAuthService;
 import com.widyu.admin.application.AdminAccessLogService;
 import com.widyu.admin.validator.AdminAccessValidator;
 import com.widyu.auth.dto.request.LocalGuardianSignupRequest;
+import com.widyu.auth.dto.request.SmsVerificationRequest;
 import com.widyu.auth.dto.response.LocalSignupResponse;
+import com.widyu.auth.dto.response.MemberInfoResponse;
 import com.widyu.auth.dto.response.SignUpUserInfo;
 import com.widyu.auth.dto.response.TokenPairResponse;
 import com.widyu.global.config.SecurityConfig;
@@ -89,6 +91,36 @@ class GuardianAuthTemporaryTokenSecurityTest {
         then(guardianAuthService).should().localGuardianSignup(
                 any(HttpServletRequest.class),
                 any(LocalGuardianSignupRequest.class)
+        );
+    }
+
+    @Test
+    @DisplayName("임시 토큰으로 이메일 찾기를 요청하면 액세스 토큰 검증 없이 서비스까지 요청을 전달한다")
+    void 임시_토큰으로_이메일_찾기를_요청하면_서비스까지_요청을_전달한다() throws Exception {
+        // given
+        given(jwtTokenProvider.retrieveAccessToken(TEMPORARY_TOKEN))
+                .willThrow(new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN));
+        given(guardianAuthService.findMemberByPhoneNumberAndName(
+                any(SmsVerificationRequest.class),
+                any(HttpServletRequest.class)
+        )).willReturn(MemberInfoResponse.builder().email("guardian@example.com").build());
+
+        // when & then
+        mockMvc.perform(post("/api/v1/auth/guardians/email")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + TEMPORARY_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "홍길동",
+                                  "phoneNumber": "01012345678"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_2006"));
+
+        then(guardianAuthService).should().findMemberByPhoneNumberAndName(
+                any(SmsVerificationRequest.class),
+                any(HttpServletRequest.class)
         );
     }
 

@@ -114,9 +114,20 @@ public class LocalLoginService {
         return jwtTokenProvider.generateTokenPair(member.getId(), member.getRole(), "local");
     }
 
-    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request) {
-        Member member = memberRepository.findByPhoneNumberAndName(request.phoneNumber(), request.name())
+    // SMS로 본인 확인한 이름·전화번호의 회원만 조회한다. 요청 본문만으로는 다른 회원의 이메일을 볼 수 없다
+    public MemberInfoResponse findMemberByPhoneNumberAndName(SmsVerificationRequest request,
+                                                             HttpServletRequest httpServletRequest) {
+        TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
+        if (!request.phoneNumber().equals(temporaryMember.getPhoneNumber())
+                || !request.name().equals(temporaryMember.getName())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        Member member = memberRepository.findByPhoneNumberAndName(temporaryMember.getPhoneNumber(), temporaryMember.getName())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        if (member.getLocalAccount() == null) {
+            throw new BusinessException(ErrorCode.MEMBER_NOT_FOUND);
+        }
 
         return MemberInfoResponse.from(member);
     }

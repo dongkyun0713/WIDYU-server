@@ -327,7 +327,10 @@ public interface GuardianAuthDocs {
     @Operation(
             summary = "전화번호로 회원 정보 조회",
             description = """
-                    이름과 휴대폰 번호를 검증 후, 해당 회원 정보를 반환합니다.
+                    SMS 인증 후 발급받은 임시 토큰으로 본인 확인한 회원의 로그인 이메일을 반환합니다(이메일 찾기).
+                    Authorization 헤더(스킴: `Bearer`)로 임시 토큰을 전달해야 합니다.
+                    요청의 이름·전화번호는 SMS 인증에 쓴 값과 같아야 하며, 다르면 403을 반환합니다.
+                    로컬(이메일) 계정이 없는 회원이면 404를 반환합니다.
                     """
     )
     @ApiResponse(
@@ -352,11 +355,14 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "401", description = "AUTH_4010·AUTH_4014: 임시 토큰 없음·만료·유효하지 않음")
+    @ApiResponse(responseCode = "403", description = "AUTH_4030: 요청의 이름·전화번호가 SMS 인증 정보와 다름")
+    @ApiResponse(responseCode = "404", description = "MEMBER_4041: 일치하는 회원 없음 또는 로컬 계정 없음")
     ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "이름/전화번호/인증코드(정책에 따라 포함)",
+                    description = "SMS 인증에 쓴 이름/전화번호",
                     content = @Content(
                             schema = @Schema(implementation = SmsVerificationRequest.class),
                             examples = @ExampleObject(
@@ -369,7 +375,8 @@ public interface GuardianAuthDocs {
                                             """
                             )
                     )
-            ) final SmsVerificationRequest request
+            ) final SmsVerificationRequest request,
+            HttpServletRequest httpServletRequest
     );
 
     @Operation(
