@@ -293,12 +293,15 @@ public class IncidentService {
     @Transactional
     public PromptDisplayedResult markPromptDisplayed(Long memberId, String incidentRef,
                                                      PromptDisplayedRequest request) {
-        findOwned(memberId, incidentRef);
+        Incident owned = findOwned(memberId, incidentRef);
         long displayedAtMs = System.currentTimeMillis();
         long newRespondByMs = displayedAtMs + sensorProperties.incident().selfCheckSec() * MILLIS_PER_SECOND;
         int updated = incidentRepository.markPromptDisplayed(incidentRef, memberId, request.via(),
                 displayedAtMs, newRespondByMs);
-        Incident current = findOwned(memberId, incidentRef);
+        // 갱신 0건이면 다른 트랜잭션이 먼저 응답·상태를 바꿨다. 선행 일반 SELECT의 REPEATABLE READ 스냅샷이 아니라
+        // 잠금 읽기로 지금 값을 돌려준다(LLD-0103). 갱신 1건이면 이미 이 행을 잠그고 있어 추가 대기가 없다.
+        Incident current = incidentRepository.findByIdForUpdate(owned.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INCIDENT_NOT_FOUND));
         log.info("확인 화면 수신: memberId={}, incidentRef={}, extended={}", memberId, incidentRef, updated == 1);
         return PromptDisplayedResult.of(current, updated == 1);
     }

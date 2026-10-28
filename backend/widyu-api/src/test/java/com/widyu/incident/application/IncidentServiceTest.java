@@ -247,9 +247,12 @@ class IncidentServiceTest {
     @DisplayName("본인이 확인 화면 수신을 보내면 수신 시각 + 60초 마감으로 저장을 요청하고 연장 여부를 돌려준다")
     void 본인이_확인_화면_수신을_보내면_수신_시각_기준_마감으로_저장을_요청한다() {
         // given
-        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(openIncident()));
+        Incident incident = openIncident();
+        ReflectionTestUtils.setField(incident, "id", 10L);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(incident));
         given(incidentRepository.markPromptDisplayed(eq(INCIDENT_REF), eq(SENIOR_ID), eq(ResponseVia.WATCH),
                 anyLong(), anyLong())).willReturn(1);
+        given(incidentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(incident));
         ArgumentCaptor<Long> displayedAt = ArgumentCaptor.forClass(Long.class);
         ArgumentCaptor<Long> newRespondBy = ArgumentCaptor.forClass(Long.class);
 
@@ -263,6 +266,30 @@ class IncidentServiceTest {
         assertThat(newRespondBy.getValue() - displayedAt.getValue()).isEqualTo(SELF_CHECK_MS);
         assertThat(result.deadlineExtended()).isTrue();
         assertThat(result.incidentId()).isEqualTo(INCIDENT_REF);
+    }
+
+    @Test
+    @DisplayName("다른 트랜잭션이 먼저 답해 확인 화면 수신 기록이 0건이면 잠금 읽기로 지금 상태를 돌려준다")
+    void 다른_트랜잭션이_먼저_답해_확인_화면_수신_기록이_0건이면_잠금_읽기로_지금_상태를_돌려준다() {
+        // given
+        Incident checking = openIncident();
+        ReflectionTestUtils.setField(checking, "id", 10L);
+        Incident answered = openIncident();
+        ReflectionTestUtils.setField(answered, "id", 10L);
+        ReflectionTestUtils.setField(answered, "state", IncidentState.OK_CLOSED);
+        given(incidentRepository.findByIncidentRef(INCIDENT_REF)).willReturn(Optional.of(checking));
+        given(incidentRepository.markPromptDisplayed(eq(INCIDENT_REF), eq(SENIOR_ID), eq(ResponseVia.WATCH),
+                anyLong(), anyLong())).willReturn(0);
+        given(incidentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(answered));
+
+        // when
+        PromptDisplayedResult result = service().markPromptDisplayed(SENIOR_ID, INCIDENT_REF,
+                PromptDisplayedRequest.of(ResponseVia.WATCH));
+
+        // then
+        // 일반 SELECT 재조회는 MySQL에서 갱신 전 스냅샷(CHECKING)을 돌려준다. 잠금 읽기는 먼저 커밋된 응답을 본다(LLD-0103).
+        assertThat(result.state()).isEqualTo(IncidentState.OK_CLOSED);
+        assertThat(result.deadlineExtended()).isFalse();
     }
 
     @Test
