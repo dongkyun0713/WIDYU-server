@@ -56,7 +56,7 @@ class NotificationCopyTest {
 
         // then
         assertThat(copy.title()).isEqualTo("가족 님이 약 알람을 변경했어요.");
-        assertThat(copy.body()).isEqualTo("바뀐 약 알람은 내일부터 적용돼요.");
+        assertThat(copy.body()).isEqualTo("바뀐 약 알람은 오늘부터 적용돼요.");
     }
 
     @Test

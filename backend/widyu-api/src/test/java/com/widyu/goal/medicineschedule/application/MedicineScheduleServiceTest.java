@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -160,79 +161,58 @@ class MedicineScheduleServiceTest {
         return LocalDate.now();
     }
 
-    @Test
-    @DisplayName("오늘 유효한 스케줄을 수정하면 오늘 버전과 인증을 보존하고 내일 버전을 만든다")
-    void 오늘_유효한_스케줄을_수정하면_오늘_버전과_인증을_보존하고_내일_버전을_만든다() {
-        // given
-        Long memberId = 1L;
-        Long scheduleId = 100L;
-        Member targetMember = seniorWithId(memberId);
-        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+    // 인증 가능 시간(알람 ±30분)이 오늘 안에 끝나지 않는 시각이라 실행 시각과 무관하게 "아직 안 끝난 알람"이다.
+    private static final LocalTime OPEN_ALARM = LocalTime.of(23, 59);
+    // 00:30 이후에는 인증 가능 시간이 끝난 시각이다.
+    private static final LocalTime CLOSED_ALARM = LocalTime.of(0, 0);
 
-        MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(5));
-        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
-                .willReturn(Optional.of(existing));
-        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
-        given(medicineScheduleRepository.save(any(MedicineSchedule.class)))
-                .willAnswer(invocation -> {
-                    MedicineSchedule newSchedule = invocation.getArgument(0);
-                    ReflectionTestUtils.setField(newSchedule, "id", 101L);
-                    return newSchedule;
-                });
-        MedicationProof proof = MedicationProof.create(existing, targetMember, List.of());
+    private void assumeClosedAlarmWindowEnded() {
+        Assumptions.assumeTrue(LocalTime.now().isAfter(LocalTime.of(0, 31)));
+    }
 
-        // when
-        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
-                scheduleId, updateRequest("09:00"), memberId);
+    private void givenSavedScheduleId(Long id) {
+        given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
+            MedicineSchedule schedule = invocation.getArgument(0);
+            ReflectionTestUtils.setField(schedule, "id", id);
+            return schedule;
+        });
+    }
 
-        // then
-        assertThat(existing.getEffectiveTo()).isEqualTo(today());
-        assertThat(existing.isEffectiveOn(today())).isTrue();
-        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(8, 0));
-        assertThat(proof.getMedicineSchedule()).isSameAs(existing);
-        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
-        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
-        assertThat(scheduleCaptor.getValue().getEffectiveFrom()).isEqualTo(today().plusDays(1));
-        assertThat(scheduleCaptor.getValue().getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
-        assertThat(response.medicineScheduleId()).isEqualTo(101L);
-        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
-        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
-        then(medicationProofRepository).should(never())
-                .findByMedicineScheduleAndVerifiedAtBetween(any(), any(), any());
-        then(fcmService).should(times(2)).sendMessageToUser(
-                org.mockito.ArgumentMatchers.eq(memberId), any(FcmSendDto.class));
+    private void givenProvedToday(MedicineSchedule schedule, boolean proved) {
+        given(medicationProofRepository.existsByMedicineScheduleAndVerifiedAtBetween(
+                schedule, today().atStartOfDay(), today().atTime(LocalTime.MAX)))
+                .willReturn(proved);
     }
 
     @Test
-    @DisplayName("오늘 시작한 스케줄을 수정하면 오늘 버전을 마감하고 내일 버전을 만든다")
-    void 오늘_시작한_스케줄을_수정하면_오늘_버전을_마감하고_내일_버전을_만든다() {
+    @DisplayName("아직 안 끝난 알람을 수정하면 어제까지 마감하고 오늘부터 새 버전을 적용한다")
+    void 아직_안_끝난_알람을_수정하면_어제까지_마감하고_오늘부터_새_버전을_적용한다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
-
-        MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), today());
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today().minusDays(5));
         given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
                 .willReturn(Optional.of(existing));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
-        given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
-            MedicineSchedule schedule = invocation.getArgument(0);
-            ReflectionTestUtils.setField(schedule, "id", 101L);
-            return schedule;
-        });
+        givenProvedToday(existing, false);
+        givenSavedScheduleId(101L);
 
         // when
         MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
                 scheduleId, updateRequest("09:00"), memberId);
 
         // then
-        assertThat(existing.getEffectiveTo()).isEqualTo(today());
-        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(8, 0));
+        assertThat(existing.getEffectiveTo()).isEqualTo(today().minusDays(1));
+        assertThat(existing.isEffectiveOn(today())).isFalse();
+        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
+        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
+        assertThat(scheduleCaptor.getValue().getEffectiveFrom()).isEqualTo(today());
+        assertThat(scheduleCaptor.getValue().getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
         assertThat(response.medicineScheduleId()).isEqualTo(101L);
-        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today());
         ArgumentCaptor<FcmSendDto> messageCaptor = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), messageCaptor.capture());
@@ -240,24 +220,164 @@ class MedicineScheduleServiceTest {
                 .containsEntry("notificationType", "MEDICATION_SCHEDULE_CHANGED")
                 .doesNotContainKey("type")
                 .containsKey("revision");
-        assertThat(messageCaptor.getAllValues().getFirst().notificationType())
-                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CHANGED);
+        assertThat(messageCaptor.getAllValues().getFirst().content())
+                .isEqualTo("바뀐 약 알람은 오늘부터 적용돼요.");
         assertThat(messageCaptor.getAllValues().get(1).notificationType())
                 .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
-    @DisplayName("오늘 유효한 스케줄을 삭제하면 오늘 알람을 유지하고 내일부터 중단한다")
-    void 오늘_유효한_스케줄을_삭제하면_오늘_알람을_유지하고_내일부터_중단한다() {
+    @DisplayName("오늘 인증한 알람을 수정하면 오늘 버전과 인증을 그대로 두고 내일부터 새 버전을 적용한다")
+    void 오늘_인증한_알람을_수정하면_오늘_버전과_인증을_두고_내일부터_새_버전을_적용한다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
         Member targetMember = seniorWithId(memberId);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today().minusDays(5));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(existing));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenProvedToday(existing, true);
+        givenSavedScheduleId(101L);
+        MedicationProof proof = MedicationProof.create(existing, targetMember, List.of());
 
-        MedicineSchedule existing = scheduleEffectiveFrom(
-                scheduleId, targetMember, LocalTime.of(8, 0), today().minusDays(3));
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("12:00"), memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.isEffectiveOn(today())).isTrue();
+        assertThat(existing.getAlarmTime()).isEqualTo(OPEN_ALARM);
+        assertThat(proof.getMedicineSchedule()).isSameAs(existing);
+        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
+        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
+        assertThat(scheduleCaptor.getValue().getEffectiveFrom()).isEqualTo(today().plusDays(1));
+        assertThat(scheduleCaptor.getValue().getAlarmTime()).isEqualTo(LocalTime.of(12, 0));
+        assertThat(response.medicineScheduleId()).isEqualTo(101L);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("인증 가능 시간이 지난 미인증 알람을 수정하면 오늘은 미인증으로 두고 내일부터 새 버전을 적용한다")
+    void 인증_가능_시간이_지난_미인증_알람을_수정하면_내일부터_새_버전을_적용한다() {
+        // given
+        assumeClosedAlarmWindowEnded();
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, CLOSED_ALARM, today().minusDays(5));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(existing));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenSavedScheduleId(101L);
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("23:00"), memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.isEffectiveOn(today())).isTrue();
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("오늘 시작한 아직 안 끝난 알람을 수정하면 새 버전 없이 같은 버전을 갱신한다")
+    void 오늘_시작한_아직_안_끝난_알람을_수정하면_같은_버전을_갱신한다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today());
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(existing));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenProvedToday(existing, false);
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("09:00"), memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isNull();
+        assertThat(existing.getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(response.medicineScheduleId()).isEqualTo(scheduleId);
+        assertThat(response.effectiveFromDate()).isEqualTo(today());
+        then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
+    }
+
+    @Test
+    @DisplayName("오늘 시작해 이미 인증한 알람을 수정하면 오늘 버전을 오늘까지 두고 내일 버전을 만든다")
+    void 오늘_시작해_이미_인증한_알람을_수정하면_내일_버전을_만든다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today());
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(scheduleId, Status.ACTIVE))
+                .willReturn(Optional.of(existing));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenProvedToday(existing, true);
+        givenSavedScheduleId(101L);
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.updateSchedule(
+                scheduleId, updateRequest("12:00"), memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(existing.getAlarmTime()).isEqualTo(OPEN_ALARM);
+        assertThat(response.medicineScheduleId()).isEqualTo(101L);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("아직 안 끝난 알람을 삭제하면 오늘부터 중단한다")
+    void 아직_안_끝난_알람을_삭제하면_오늘부터_중단한다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today().minusDays(3));
         given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
+        givenProvedToday(existing, false);
+
+        // when
+        MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isEqualTo(today().minusDays(1));
+        assertThat(existing.isEffectiveOn(today())).isFalse();
+        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today());
+        ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
+        then(fcmService).should(times(2)).sendMessageToUser(
+                org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
+        assertThat(messages.getAllValues().getFirst().notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_DELETED);
+        assertThat(messages.getAllValues().getFirst().content())
+                .isEqualTo("오늘부터 이 알람은 울리지 않아요.");
+        assertThat(messages.getAllValues().get(1).notificationType())
+                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
+    }
+
+    @Test
+    @DisplayName("오늘 인증한 알람을 삭제하면 오늘 기록을 두고 내일부터 중단한다")
+    void 오늘_인증한_알람을_삭제하면_오늘_기록을_두고_내일부터_중단한다() {
+        // given
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, OPEN_ALARM, today().minusDays(3));
+        given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
+        givenProvedToday(existing, true);
 
         // when
         MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
@@ -266,22 +386,32 @@ class MedicineScheduleServiceTest {
         assertThat(existing.getEffectiveTo()).isEqualTo(today());
         assertThat(existing.isEffectiveOn(today())).isTrue();
         assertThat(existing.isEffectiveOn(today().plusDays(1))).isFalse();
-        assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
         assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
-        ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
-        then(fcmService).should(times(2)).sendMessageToUser(
-                org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
-        assertThat(messages.getAllValues().getFirst().notificationType())
-                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_DELETED);
-        assertThat(messages.getAllValues().getFirst().content())
-                .isEqualTo("내일부터 이 알람은 울리지 않아요.");
-        assertThat(messages.getAllValues().get(1).notificationType())
-                .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
-    @DisplayName("스케줄을 생성하면 내일부터 적용하고 현재 revision을 반환한다")
-    void 스케줄을_생성하면_내일부터_적용하고_현재_revision을_반환한다() {
+    @DisplayName("인증 가능 시간이 지난 미인증 알람을 삭제하면 오늘은 미인증으로 두고 내일부터 중단한다")
+    void 인증_가능_시간이_지난_미인증_알람을_삭제하면_내일부터_중단한다() {
+        // given
+        assumeClosedAlarmWindowEnded();
+        Long memberId = 1L;
+        Long scheduleId = 100L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        MedicineSchedule existing = scheduleEffectiveFrom(scheduleId, targetMember, CLOSED_ALARM, today().minusDays(3));
+        given(medicineScheduleRepository.findById(scheduleId)).willReturn(Optional.of(existing));
+
+        // when
+        MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
+
+        // then
+        assertThat(existing.getEffectiveTo()).isEqualTo(today());
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("아직 인증 가능 시간이 남은 시각으로 스케줄을 생성하면 오늘부터 적용하고 현재 revision을 반환한다")
+    void 아직_인증_가능한_시각으로_스케줄을_생성하면_오늘부터_적용한다() {
         // given
         Long memberId = 1L;
         Member targetMember = seniorWithId(memberId);
@@ -289,24 +419,19 @@ class MedicineScheduleServiceTest {
         given(memberUtil.getCurrentMember()).willReturn(actor);
         given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
         given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
-        given(medicineScheduleRepository.save(any(MedicineSchedule.class))).willAnswer(invocation -> {
-            MedicineSchedule schedule = invocation.getArgument(0);
-            ReflectionTestUtils.setField(schedule, "id", 1L);
-            return schedule;
-        });
+        givenSavedScheduleId(1L);
 
         // when
         MedicineScheduleIdResponse response = medicineScheduleService.createSchedule(
-                createRequest("08:00"), memberId);
+                createRequest("23:59"), memberId);
 
         // then
         ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
         then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
-        assertThat(scheduleCaptor.getValue().isEffectiveOn(today())).isFalse();
-        assertThat(scheduleCaptor.getValue().isEffectiveOn(today().plusDays(1))).isTrue();
+        assertThat(scheduleCaptor.getValue().isEffectiveOn(today())).isTrue();
         assertThat(response.medicineScheduleId()).isEqualTo(1L);
         assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
-        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+        assertThat(response.effectiveFromDate()).isEqualTo(today());
         ArgumentCaptor<FcmSendDto> messages = ArgumentCaptor.forClass(FcmSendDto.class);
         then(fcmService).should(times(2)).sendMessageToUser(
                 org.mockito.ArgumentMatchers.eq(memberId), messages.capture());
@@ -314,16 +439,41 @@ class MedicineScheduleServiceTest {
                 .isEqualTo(NotificationType.MEDICATION_SCHEDULE_CREATED);
         assertThat(messages.getAllValues().getFirst().title())
                 .isEqualTo("방장 님이 새 약 알람을 등록했어요.");
+        assertThat(messages.getAllValues().getFirst().content())
+                .isEqualTo("오늘부터 알람이 울려요.");
         assertThat(messages.getAllValues().getFirst().actorDisplayName()).isEqualTo("방장");
         assertThat(messages.getAllValues().getFirst().effectiveFromDate())
-                .isEqualTo(today().plusDays(1).toString());
+                .isEqualTo(today().toString());
         assertThat(messages.getAllValues().get(1).notificationType())
                 .isEqualTo(NotificationType.MEDICATION_SCHEDULE_SYNC);
     }
 
     @Test
-    @DisplayName("내일 시작하는 스케줄을 다시 수정하면 같은 버전에만 반영한다")
-    void 내일_시작하는_스케줄을_다시_수정하면_같은_버전에만_반영한다() {
+    @DisplayName("인증 가능 시간이 이미 지난 시각으로 스케줄을 생성하면 내일부터 적용한다")
+    void 인증_가능_시간이_지난_시각으로_스케줄을_생성하면_내일부터_적용한다() {
+        // given
+        assumeClosedAlarmWindowEnded();
+        Long memberId = 1L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenSavedScheduleId(1L);
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.createSchedule(
+                createRequest("00:00"), memberId);
+
+        // then
+        ArgumentCaptor<MedicineSchedule> scheduleCaptor = ArgumentCaptor.forClass(MedicineSchedule.class);
+        then(medicineScheduleRepository).should().save(scheduleCaptor.capture());
+        assertThat(scheduleCaptor.getValue().isEffectiveOn(today())).isFalse();
+        assertThat(scheduleCaptor.getValue().isEffectiveOn(today().plusDays(1))).isTrue();
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("내일 시작하는 스케줄을 수정하면 같은 버전에만 반영하고 시작일을 유지한다")
+    void 내일_시작하는_스케줄을_수정하면_같은_버전에만_반영하고_시작일을_유지한다() {
         // given
         Long memberId = 1L;
         Long scheduleId = 100L;
@@ -345,6 +495,7 @@ class MedicineScheduleServiceTest {
         assertThat(pending.getAlarmTime()).isEqualTo(LocalTime.of(9, 0));
         assertThat(response.medicineScheduleId()).isEqualTo(scheduleId);
         assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
+        assertThat(response.effectiveFromDate()).isEqualTo(today().plusDays(1));
         then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
     }
 
@@ -364,8 +515,7 @@ class MedicineScheduleServiceTest {
         MedicineScheduleChangeResponse response = medicineScheduleService.deleteSchedule(scheduleId, memberId);
 
         // then
-        assertThat(pending.getEffectiveFrom()).isEqualTo(today().plusDays(1));
-        assertThat(pending.getEffectiveTo()).isEqualTo(today());
+        assertThat(pending.getEffectiveTo()).isEqualTo(today().minusDays(1));
         assertThat(pending.isEffectiveOn(today())).isFalse();
         assertThat(pending.isEffectiveOn(today().plusDays(1))).isFalse();
         assertThat(response.scheduleRevision()).isEqualTo(targetMember.getMedicationAlarmRevision()).isEqualTo(1);
