@@ -100,11 +100,12 @@ public class AlbumService {
         Album album = albumRepository.findByIdAndStatusWithCollections(albumId, Status.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ALBUM_NOT_FOUND));
 
-        // 권한 검사
-        albumPermissionService.checkViewPermission(album, currentMember);
+        albumPermissionService.checkFamilyAccess(album, currentMember);
+        // 잠긴 앨범도 해금 화면에 가격을 보여 주도록 응답하되, 해금 전에는 조회로 치지 않는다
+        boolean isUnlocked = albumPermissionService.isUnlockedFor(album, currentMember);
 
-        // 조회 기록 추가 (본인 앨범이 아닌 경우에만)
-        if (!album.getMember().getId().equals(currentMember.getId())) {
+        // 조회 기록 추가 (해금된 타인 앨범인 경우에만)
+        if (isUnlocked && !album.getMember().getId().equals(currentMember.getId())) {
             albumViewService.recordView(album, currentMember);
         }
 
@@ -115,7 +116,6 @@ public class AlbumService {
         List<Member> viewers = albumViewService.getRecentViewers(album, 3);
 
         log.info("앨범 상세 조회 완료: albumId={}, memberId={}", albumId, currentMember.getId());
-        boolean isUnlocked = albumPermissionService.isUnlockedFor(album, currentMember);
 
         return AlbumDetailResponse.from(album, currentMember.getId(), viewers, comments, isUnlocked);
     }

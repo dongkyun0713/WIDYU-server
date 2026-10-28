@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 
 import com.widyu.album.Album;
 import com.widyu.album.AlbumComment;
+import com.widyu.album.dto.response.AlbumDetailResponse;
 import com.widyu.album.repository.AlbumCommentRepository;
 import com.widyu.album.repository.AlbumRepository;
 import com.widyu.fcm.event.album.dto.AlbumCreatedEvent;
@@ -251,12 +252,48 @@ class AlbumServiceTest {
         given(albumRepository.findByIdAndStatusWithCollections(10L, Status.ACTIVE)).willReturn(Optional.of(album));
         given(albumCommentRepository.findTopLevelCommentsByAlbumAndStatus(album, Status.ACTIVE)).willReturn(List.of());
         given(albumViewService.getRecentViewers(album, 3)).willReturn(List.of());
+        given(albumPermissionService.isUnlockedFor(album, currentMember)).willReturn(true);
 
         // when
         albumService.getAlbumDetail(10L);
 
         // then
         verify(albumViewService).recordView(album, currentMember);
+    }
+
+    @Test
+    @DisplayName("해금하지 않은 앨범 상세를 조회하면 해금 가격과 잠김 상태를 응답하고 조회 기록은 남기지 않는다")
+    void 미해금_앨범_상세_조회_시_가격을_응답하고_조회기록을_남기지_않는다() {
+        // given
+        Member currentMember = mock(Member.class);
+        given(currentMember.getId()).willReturn(1L);
+        given(memberUtil.getCurrentMember()).willReturn(currentMember);
+
+        Member albumOwner = mock(Member.class);
+        given(albumOwner.getId()).willReturn(2L);
+        given(albumOwner.getName()).willReturn("보호자");
+
+        Album album = mock(Album.class);
+        given(album.getId()).willReturn(10L);
+        given(album.getMember()).willReturn(albumOwner);
+        given(album.getMediaUrls()).willReturn(List.of());
+        given(album.getLikeCount()).willReturn(0);
+        given(album.getCommentCount()).willReturn(0);
+        given(album.getViewCount()).willReturn(0);
+        given(album.getCreatedAt()).willReturn(LocalDateTime.now());
+
+        given(albumRepository.findByIdAndStatusWithCollections(10L, Status.ACTIVE)).willReturn(Optional.of(album));
+        given(albumCommentRepository.findTopLevelCommentsByAlbumAndStatus(album, Status.ACTIVE)).willReturn(List.of());
+        given(albumViewService.getRecentViewers(album, 3)).willReturn(List.of());
+        given(albumPermissionService.isUnlockedFor(album, currentMember)).willReturn(false);
+
+        // when
+        AlbumDetailResponse response = albumService.getAlbumDetail(10L);
+
+        // then
+        assertThat(response.isUnlocked()).isFalse();
+        assertThat(response.price()).isEqualTo(Album.UNLOCK_PRICE);
+        verify(albumViewService, never()).recordView(any(), any());
     }
 
     @Test
