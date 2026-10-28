@@ -4,6 +4,7 @@ import static org.springframework.transaction.annotation.Propagation.REQUIRES_NE
 
 import com.widyu.album.Album;
 import com.widyu.album.AlbumView;
+import com.widyu.album.repository.AlbumRepository;
 import com.widyu.album.repository.AlbumViewRepository;
 import com.widyu.fcm.event.album.dto.AlbumViewedEvent;
 import com.widyu.member.Member;
@@ -22,6 +23,7 @@ import java.util.Optional;
 public class AlbumViewService {
 
     private final AlbumViewRepository albumViewRepository;
+    private final AlbumRepository albumRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(propagation = REQUIRES_NEW)
@@ -31,9 +33,11 @@ public class AlbumViewService {
         if (existingView.isEmpty()) {
             AlbumView albumView = AlbumView.createView(album, member);
             albumViewRepository.save(albumView);
-            
-            album.incrementViewCount();
 
+            // album은 호출부(상세 조회)의 읽기 전용 트랜잭션 엔티티라 이 트랜잭션에서 변경 감지되지 않는다.
+            // DB는 원자 UPDATE로 올리고, 메모리 값은 같은 요청의 응답 viewCount에만 쓰인다.
+            albumRepository.incrementViewCount(album.getId());
+            album.incrementViewCount();
 
             // 앨범 조회 알림 이벤트 발행
             eventPublisher.publishEvent(new AlbumViewedEvent(

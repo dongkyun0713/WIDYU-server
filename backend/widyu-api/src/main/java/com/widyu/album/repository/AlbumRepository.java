@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,6 +24,11 @@ public interface AlbumRepository extends JpaRepository<Album, Long> {
 
     @Query("SELECT a FROM Album a JOIN FETCH a.member WHERE a.id = :id")
     Optional<Album> findByIdWithMember(@Param("id") Long id);
+
+    // 조회수는 DB에서 원자적으로 올린다. 읽은 값을 고쳐 저장하면 동시 조회 증가가 유실된다.
+    @Modifying
+    @Query("UPDATE Album a SET a.viewCount = a.viewCount + 1 WHERE a.id = :albumId")
+    void incrementViewCount(@Param("albumId") Long albumId);
 
     @Query("SELECT a.id FROM Album a WHERE a.status = 'ACTIVE' AND a.member.id IN :memberIds ORDER BY a.createdAt DESC, a.id DESC")
     org.springframework.data.domain.Slice<Long> findLatestAlbumIdsByMemberIds(@Param("memberIds") List<Long> memberIds,
