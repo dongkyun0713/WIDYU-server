@@ -119,6 +119,8 @@ GET {medicine.api.url}/getDrbEasyDrugList
 
 ## 5. 처리 흐름
 
+> 트랜잭션 경계, 외부 API 타임아웃, 중복 저장 복구 조회는 [LLD-0100](LLD-0100-medicine-api-timeout-transaction-isolation.md)이 대체한다. 검색 메서드는 트랜잭션 없이 실행하고 신규 저장만 `MedicineUpsertService` 트랜잭션에서 한다.
+
 ### 5-1. 검색 요청 (`ExternalMedicineService.searchAndSaveMedicines`)
 
 ```

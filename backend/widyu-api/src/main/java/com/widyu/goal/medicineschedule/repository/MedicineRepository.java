@@ -1,6 +1,7 @@
 package com.widyu.goal.medicineschedule.repository;
 
 import com.widyu.medicine.Medicine;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -18,6 +19,8 @@ public interface MedicineRepository extends JpaRepository<Medicine, Long> {
 
     @Query("SELECT m.itemSeq FROM Medicine m WHERE m.itemSeq IN :seqs")
     Set<String> findItemSeqsByItemSeqIn(@Param("seqs") List<String> seqs);
+
+    List<Medicine> findByItemSeqIn(Collection<String> itemSeqs);
 
     Optional<Medicine> findByItemName(String itemName);
 

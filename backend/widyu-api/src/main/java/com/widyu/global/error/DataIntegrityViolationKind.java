@@ -11,9 +11,9 @@ import org.springframework.dao.DuplicateKeyException;
  * DB 무결성 위반을 클라이언트 입력 문제(길이 초과·중복)와 서버 데이터 문제로 나눈다(LLD-0085).
  * MySQL(dev·prod)과 H2(테스트)의 SQLState·벤더 코드를 함께 본다.
  */
-record DataIntegrityViolationKind(Type type, String field) {
+public record DataIntegrityViolationKind(Type type, String field) {
 
-    enum Type { TOO_LONG, DUPLICATE, OTHER }
+    public enum Type { TOO_LONG, DUPLICATE, OTHER }
 
     private static final String SQL_STATE_TOO_LONG = "22001";
     private static final String SQL_STATE_UNIQUE_VIOLATION = "23505";
@@ -22,7 +22,7 @@ record DataIntegrityViolationKind(Type type, String field) {
     // MySQL: "Data too long for column 'schedule_name'", H2: "Value too long for column \"SCHEDULE_NAME ..."
     private static final Pattern COLUMN = Pattern.compile("column ['\"]([A-Za-z0-9_]+)");
 
-    static DataIntegrityViolationKind classify(final DataIntegrityViolationException exception) {
+    public static DataIntegrityViolationKind classify(final DataIntegrityViolationException exception) {
         if (exception instanceof DuplicateKeyException) {
             return new DataIntegrityViolationKind(Type.DUPLICATE, null);
         }
