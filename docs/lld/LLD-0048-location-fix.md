@@ -82,7 +82,7 @@ UK `uk_location_fix_seq (device_id, session_id, seq)`(멱등). 인덱스 `(membe
 
 `LOCATION_4000 LOCATION_FIX_INVALID`(400): `reason` 값 밖, `lat/lon` 범위 밖, `ts_ms` 없음. v2 검증 실패는 실시간 경로도 거부한다(잘못된 좌표를 브로드캐스트하지 않는다).
 
-`store`는 `REQUIRES_NEW` — 실시간 경로 트랜잭션과 분리해 저장 실패가 ACK를 막지 않게 한다.
+`store`는 `REQUIRES_NEW` — 실시간 경로 트랜잭션과 분리해 저장 실패가 ACK를 막지 않게 한다. 2026-10-29부터 실시간 경로 트랜잭션이 커밋된 **뒤에** 호출해, 위치 한 건이 커넥션을 동시에 둘 쓰지 않는다([LLD-0114](LLD-0114-location-burst-single-connection.md)).
 
 ## 7. 인수조건 (Acceptance Criteria)
 

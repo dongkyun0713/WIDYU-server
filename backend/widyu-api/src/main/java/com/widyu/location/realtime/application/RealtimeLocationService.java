@@ -30,6 +30,7 @@ import com.widyu.parentlocation.ParentLocation;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import org.springframework.scheduling.annotation.Scheduled;
 import java.util.ArrayList;
@@ -48,9 +49,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.SerializationException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
@@ -70,6 +74,7 @@ public class RealtimeLocationService {
     private final LocationAccessLogService locationAccessLogService;
     private final MemberRepository memberRepository;
     private final Validator validator;
+    private final PlatformTransactionManager transactionManager;
     // 미지정 필드를 무시하고 페이로드를 읽는 전용 매퍼. 주입받지 않는 이유는 Redis·응답 직렬화와
     // 설정을 공유하면 안 되기 때문이다(초기화 필드라 생성자 주입 대상에서 빠진다).
     private final ObjectMapper payloadMapper = new ObjectMapper()
@@ -86,12 +91,18 @@ public class RealtimeLocationService {
     private static final long STAY_TTL_SECONDS = 86400; // 24시간
     private static final double STAY_RADIUS_METERS = 30.0; // 30m 이내면 같은 위치
     private static final double SAFE_ZONE_RADIUS_METERS = 75.0; // 안전구역 반경 75m (지름 150m)
+    // 응급 이동 경로는 최근 15분만 보여 준다. 그보다 오래 전에 잰 위치는 실시간 경로에 반영하지 않는다(LLD-0114).
+    private static final long REALTIME_MAX_AGE_MS = Duration.ofMinutes(15).toMillis();
 
     /**
      * 원문 바이트를 받아 실시간 경로를 돌리고, v2 페이로드면 원본을 남긴다(LLD-0048 5절).
      * 검증은 브로드캐스트 앞에 둔다 — 잘못된 좌표를 보호자에게 흘리지 않기 위해서다.
+     *
+     * <p>실시간 경로와 원본 저장은 각자 트랜잭션에서 차례로 끝낸다. 실시간 트랜잭션이 커넥션을 쥔 채
+     * 원본 저장(REQUIRES_NEW)이 커넥션을 하나 더 요청하면, 재연결 직후 위치가 몰릴 때 풀 전체가
+     * 두 번째 커넥션을 기다리며 막힌다(LLD-0114). 그래서 이 메서드는 트랜잭션을 열지 않는다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public LocationUpdateResponse updateAndBroadcast(byte[] payload, Long authenticatedMemberId) {
         long serverReceivedAtMs = System.currentTimeMillis();
         LocationUpdateRequest request = parse(payload);
@@ -99,13 +110,64 @@ public class RealtimeLocationService {
         long acceptedAtMs = System.currentTimeMillis();
 
         if (!request.isRawFix()) {
-            return updateAndBroadcast(request, authenticatedMemberId);
+            return applyRealtime(request, authenticatedMemberId);
         }
 
         locationFixService.validate(request);
-        LocationUpdateResponse response = updateAndBroadcast(request, authenticatedMemberId);
+        LocationUpdateResponse response = applyRealtime(request, authenticatedMemberId);
         storeQuietly(request, payload, authenticatedMemberId, serverReceivedAtMs, acceptedAtMs);
         return response;
+    }
+
+    /** 실시간 반영 대상이면 자기 트랜잭션에서 반영하고, 아니면 받은 좌표만 ACK로 돌려준다. */
+    private LocationUpdateResponse applyRealtime(LocationUpdateRequest request, Long authenticatedMemberId) {
+        verifySelf(request.memberId(), authenticatedMemberId);
+        if (!isRealtimeCandidate(request)) {
+            log.info("위치 실시간 반영 생략: memberId={}, seq={}", request.memberId(), request.seq());
+            return LocationUpdateResponse.received(
+                    request.memberId(), request.resolvedLatitude(), request.resolvedLongitude());
+        }
+        return new TransactionTemplate(transactionManager)
+                .execute(status -> updateAndBroadcast(request, authenticatedMemberId));
+    }
+
+    /**
+     * 15분 안에 잰 위치이면서 지금 최신 위치보다 나중에 잰 것만 실시간에 반영한다. 재연결 직후 밀려 온
+     * 옛 위치가 현재 위치처럼 방송되거나 안전구역 판정을 다시 돌리지 않게 한다. 잰 시각(ts_ms)이 없는
+     * 옛 형식은 비교할 수 없어 그대로 반영한다(LLD-0114).
+     */
+    private boolean isRealtimeCandidate(LocationUpdateRequest request) {
+        Long measuredAtMs = request.tsMs();
+        if (measuredAtMs == null) {
+            return true;
+        }
+        if (System.currentTimeMillis() - measuredAtMs > REALTIME_MAX_AGE_MS) {
+            return false;
+        }
+        Long latestMeasuredAtMs = seniorLocationRepository.findById(request.memberId())
+                .map(SeniorLocation::getMeasuredAtMs)
+                .orElse(null);
+        if (latestMeasuredAtMs == null) {
+            return true;
+        }
+        return measuredAtMs > latestMeasuredAtMs;
+    }
+
+    /**
+     * 최신 위치의 비교 기준에는 미래 시각을 남기지 않는다. 기기 시계가 앞서 미래로 잰 위치가 기준이 되면
+     * 그 뒤 정상 시각의 위치가 모두 "최신보다 먼저 잰 위치"로 빠지고, TTL 갱신이 그 값을 계속 살려 둔다.
+     */
+    private static Long notAfterNow(Long measuredAtMs) {
+        if (measuredAtMs == null) {
+            return null;
+        }
+        return Math.min(measuredAtMs, System.currentTimeMillis());
+    }
+
+    private void verifySelf(Long memberId, Long authenticatedMemberId) {
+        if (!memberId.equals(authenticatedMemberId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "본인의 위치만 업데이트할 수 있습니다.");
+        }
     }
 
     private LocationUpdateRequest parse(byte[] payload) {
@@ -145,9 +207,7 @@ public class RealtimeLocationService {
         Long memberId = request.memberId();
 
         // 1. 권한 검증: 시니어 본인인지 확인
-        if (!memberId.equals(authenticatedMemberId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "본인의 위치만 업데이트할 수 있습니다.");
-        }
+        verifySelf(memberId, authenticatedMemberId);
 
         // 2. 시니어 프로필 조회 (memberId로)
         SeniorProfile seniorProfile = seniorProfileRepository.findByMemberId(memberId)
@@ -159,7 +219,8 @@ public class RealtimeLocationService {
         SeniorLocation location = SeniorLocation.of(
                 memberId,
                 request.resolvedLatitude(),
-                request.resolvedLongitude()
+                request.resolvedLongitude(),
+                notAfterNow(request.tsMs())
         );
         seniorLocationRepository.save(location);
         eventPublisher.publishEvent(new SeniorLocationUpdatedEvent(memberId, request.resolvedLatitude(), request.resolvedLongitude()));

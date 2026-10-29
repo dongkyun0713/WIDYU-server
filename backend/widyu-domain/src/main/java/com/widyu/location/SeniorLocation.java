@@ -23,12 +23,20 @@ public class SeniorLocation {
 
     private LocalDateTime updatedAt;
 
+    /** 앱이 이 위치를 잰 시각(epoch ms). 잰 시각을 보내지 않는 옛 형식이면 null이다. */
+    private Long measuredAtMs;
+
     public static SeniorLocation of(Long seniorId, Double latitude, Double longitude) {
+        return of(seniorId, latitude, longitude, null);
+    }
+
+    public static SeniorLocation of(Long seniorId, Double latitude, Double longitude, Long measuredAtMs) {
         return SeniorLocation.builder()
                 .seniorId(seniorId)
                 .latitude(latitude)
                 .longitude(longitude)
                 .updatedAt(LocalDateTime.now())
+                .measuredAtMs(measuredAtMs)
                 .build();
     }
 }
