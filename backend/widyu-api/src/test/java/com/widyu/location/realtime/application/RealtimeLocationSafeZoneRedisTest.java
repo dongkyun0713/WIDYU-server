@@ -36,6 +36,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -55,6 +56,7 @@ class RealtimeLocationSafeZoneRedisTest {
     private static final double AWAY_LAT = 37.5765; // 약 1.1km, 안심구역(75m) 밖
 
     @Mock private SeniorLocationRepository seniorLocationRepository;
+    @Mock private PlatformTransactionManager transactionManager;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
     @Mock private SeniorProfileRepository seniorProfileRepository;
     @Mock private ParentLocationRepository parentLocationRepository;
@@ -121,7 +123,7 @@ class RealtimeLocationSafeZoneRedisTest {
         return new RealtimeLocationService(seniorLocationRepository, familyMembershipRepository,
                 seniorProfileRepository, parentLocationRepository, messagingTemplate, redisTemplate,
                 locationEventPublisher, safeZoneAlertService, locationFixService, locationAccessLogService,
-                memberRepository, validator);
+                memberRepository, validator, transactionManager);
     }
 
     private void seniorWithHomeSafeZone() {

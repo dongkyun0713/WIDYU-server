@@ -11,6 +11,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -46,10 +47,12 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -80,6 +83,7 @@ class RealtimeLocationServiceTest {
     @Mock private LocationFixService locationFixService;
     @Mock private LocationAccessLogService locationAccessLogService;
     @Mock private MemberRepository memberRepository;
+    @Mock private PlatformTransactionManager transactionManager;
     // 실제 제약(memberId @NotNull)을 그대로 태운다. 목이면 검증이 통째로 비어 버린다.
     @Spy private Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
@@ -116,10 +120,13 @@ class RealtimeLocationServiceTest {
         then(redisTemplate).should().delete(java.util.List.of("location:trail:2", "location:stay:2"));
     }
 
-    private static final String RAW_FIX_PAYLOAD = """
+    // 실시간 반영 조건(LLD-0114)을 통과하도록 잰 시각을 지금으로 둔다.
+    private static String rawFixPayload(long tsMs) {
+        return """
             {"v":2,"memberId":1,"device_id":"ph-9c1","session_id":"s-2026","seq":5120,
              "lat":37.5551,"lon":126.9707,"accuracy_m":8.5,"speed_mps":0.9,"provider":"fused",
-             "is_mock":false,"ts_ms":1760000000123,"reason":"move"}""";
+             "is_mock":false,"ts_ms":%d,"reason":"move"}""".formatted(tsMs);
+    }
 
     @Test
     @DisplayName("인증 회원과 요청 회원이 다르면 FORBIDDEN 예외를 던지고 위치를 저장하지 않는다")
@@ -456,7 +463,7 @@ class RealtimeLocationServiceTest {
     @DisplayName("v2 위치 페이로드를 보내면 기존 실시간 경로를 돌리고 원본 저장을 요청한다")
     void v2_위치_페이로드를_보내면_실시간_경로를_돌리고_원본_저장을_요청한다() {
         // given
-        byte[] payload = RAW_FIX_PAYLOAD.getBytes(UTF_8);
+        byte[] payload = rawFixPayload(System.currentTimeMillis()).getBytes(UTF_8);
         Member member = member(1L);
         SeniorProfile seniorProfile = seniorProfile(10L, member);
 
@@ -513,7 +520,7 @@ class RealtimeLocationServiceTest {
     @DisplayName("원본 저장이 실패해도 위치 응답을 그대로 돌려준다")
     void 원본_저장이_실패해도_위치_응답을_그대로_돌려준다() {
         // given
-        byte[] payload = RAW_FIX_PAYLOAD.getBytes(UTF_8);
+        byte[] payload = rawFixPayload(System.currentTimeMillis()).getBytes(UTF_8);
         Member member = member(1L);
         SeniorProfile seniorProfile = seniorProfile(10L, member);
 
@@ -534,6 +541,83 @@ class RealtimeLocationServiceTest {
         assertThat(response.memberId()).isEqualTo(1L);
         then(messagingTemplate).should()
                 .convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
+    }
+
+    @Test
+    @DisplayName("v2 위치는 실시간 트랜잭션을 커밋한 뒤에 원본을 저장해 커넥션을 동시에 하나만 쓴다")
+    void v2_위치는_실시간_트랜잭션을_커밋한_뒤에_원본을_저장한다() {
+        // given
+        byte[] payload = rawFixPayload(System.currentTimeMillis()).getBytes(UTF_8);
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+
+        // when
+        realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        InOrder order = inOrder(transactionManager, locationFixService);
+        order.verify(transactionManager).commit(any());
+        order.verify(locationFixService).store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("15분보다 오래 전에 잰 위치는 실시간에 반영하지 않고 원본만 저장한 뒤 받은 좌표로 응답한다")
+    void 오래전에_잰_위치는_실시간에_반영하지_않고_원본만_저장한다() {
+        // given
+        long sixteenMinutesAgo = System.currentTimeMillis() - 16 * 60_000L;
+        byte[] payload = rawFixPayload(sixteenMinutesAgo).getBytes(UTF_8);
+
+        // when
+        LocationUpdateResponse response = realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        assertThat(response.latitude()).isEqualTo(37.5551);
+        assertThat(response.stayStartTime()).isNull();
+        then(seniorLocationRepository).should(never()).save(any(SeniorLocation.class));
+        then(messagingTemplate).should(never()).convertAndSend(any(String.class), any(Object.class));
+        then(eventPublisher).should(never()).publishEvent(any());
+        then(transactionManager).should(never()).getTransaction(any());
+        then(locationFixService).should()
+                .store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("지금 최신 위치보다 먼저 잰 위치는 실시간에 반영하지 않아 최신 위치를 되돌리지 않는다")
+    void 최신_위치보다_먼저_잰_위치는_실시간에_반영하지_않는다() {
+        // given
+        long now = System.currentTimeMillis();
+        given(seniorLocationRepository.findById(1L))
+                .willReturn(Optional.of(SeniorLocation.of(1L, 37.6, 127.0, now)));
+        byte[] payload = rawFixPayload(now - 60_000L).getBytes(UTF_8);
+
+        // when
+        realtimeLocationService.updateAndBroadcast(payload, 1L);
+
+        // then
+        then(seniorLocationRepository).should(never()).save(any(SeniorLocation.class));
+        then(messagingTemplate).should(never()).convertAndSend(any(String.class), any(Object.class));
+        then(locationFixService).should()
+                .store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("다른 회원의 오래된 위치도 실시간 반영 생략 전에 FORBIDDEN으로 거부하고 원본을 저장하지 않는다")
+    void 다른_회원의_오래된_위치도_FORBIDDEN으로_거부한다() {
+        // given
+        byte[] payload = rawFixPayload(System.currentTimeMillis() - 16 * 60_000L).getBytes(UTF_8);
+
+        // when & then
+        assertThatThrownBy(() -> realtimeLocationService.updateAndBroadcast(payload, 2L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        then(locationFixService).should(never())
+                .store(any(), any(LocationUpdateRequest.class), any(), anyLong(), anyLong());
     }
 
     @Test
