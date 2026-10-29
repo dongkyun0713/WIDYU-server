@@ -153,6 +153,17 @@ public class RealtimeLocationService {
         return measuredAtMs > latestMeasuredAtMs;
     }
 
+    /**
+     * 최신 위치의 비교 기준에는 미래 시각을 남기지 않는다. 기기 시계가 앞서 미래로 잰 위치가 기준이 되면
+     * 그 뒤 정상 시각의 위치가 모두 "최신보다 먼저 잰 위치"로 빠지고, TTL 갱신이 그 값을 계속 살려 둔다.
+     */
+    private static Long notAfterNow(Long measuredAtMs) {
+        if (measuredAtMs == null) {
+            return null;
+        }
+        return Math.min(measuredAtMs, System.currentTimeMillis());
+    }
+
     private void verifySelf(Long memberId, Long authenticatedMemberId) {
         if (!memberId.equals(authenticatedMemberId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "본인의 위치만 업데이트할 수 있습니다.");
@@ -209,7 +220,7 @@ public class RealtimeLocationService {
                 memberId,
                 request.resolvedLatitude(),
                 request.resolvedLongitude(),
-                request.tsMs()
+                notAfterNow(request.tsMs())
         );
         seniorLocationRepository.save(location);
         eventPublisher.publishEvent(new SeniorLocationUpdatedEvent(memberId, request.resolvedLatitude(), request.resolvedLongitude()));

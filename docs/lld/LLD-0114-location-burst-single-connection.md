@@ -58,7 +58,7 @@ STOMP `SEND /app/location/update`, ACK `/user/queue/location/ack`는 그대로�
    - `지금 - ts_ms > 15분` → 생략
    - Redis 최신 위치의 `measuredAtMs`가 있고 `ts_ms <= measuredAtMs` → 생략
    - 그 밖 → 반영
-5. 반영이면 `TransactionTemplate`으로 기존 `updateAndBroadcast(request)`를 자기 트랜잭션에서 실행하고 커밋한다(최신 위치 저장 때 `measuredAtMs` 기록). 생략이면 INFO 로그(memberId·seq만) 뒤 `LocationUpdateResponse.received`.
+5. 반영이면 `TransactionTemplate`으로 기존 `updateAndBroadcast(request)`를 자기 트랜잭션에서 실행하고 커밋한다. 최신 위치에는 `measuredAtMs = min(ts_ms, 지금)`을 기록한다. 기기 시계가 앞서 미래로 잰 위치가 비교 기준이 되면 그 뒤 정상 위치가 모두 빠지고, TTL 갱신이 그 값을 계속 살려 두기 때문이다. 생략이면 INFO 로그(memberId·seq만) 뒤 `LocationUpdateResponse.received`.
 6. v2면 실시간 트랜잭션이 끝난 뒤 `LocationFixService.store`(`REQUIRES_NEW`, 기존). 이때 쥔 커넥션은 없다. 실패해도 ACK를 막지 않는다(기존).
 
 ## 6. 예외 / 에러 처리
@@ -70,6 +70,7 @@ STOMP `SEND /app/location/update`, ACK `/user/queue/location/ack`는 그대로�
 - [x] v2 위치는 실시간 트랜잭션을 커밋한 뒤 원본을 저장한다(단위 테스트로 커밋 → 저장 순서 확인).
 - [x] 15분보다 오래 전에 잰 위치는 최신 위치 갱신·방송·이벤트 발행·실시간 트랜잭션 없이 원본만 저장하고 받은 좌표로 ACK한다.
 - [x] 지금 최신 위치보다 먼저 잰 위치는 최신 위치를 덮어쓰지 않고 방송하지 않는다.
+- [x] 미래로 잰 위치는 반영하되 최신 위치 기준 시각을 지금으로 잘라, 다음 정상 위치가 실시간에 반영된다.
 - [x] 다른 회원의 위치는 실시간 반영 생략 여부와 상관없이 `FORBIDDEN`이고 원본을 저장하지 않는다.
 - [x] 풀 10개·대기 3000ms, 16개 스레드에서 한 회원 84건·회원 20명 × 40건(최근분·1시간 밀린 분)을 동시에 처리해도 실패 0건이고 원본이 모두 저장된다(`LocationBurstConnectionPoolMySqlTest`).
 - [x] `bash scripts/harness/verify.sh`가 통과한다.

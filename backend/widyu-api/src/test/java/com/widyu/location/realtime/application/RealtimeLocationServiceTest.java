@@ -13,6 +13,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.widyu.global.config.RedisConfig;
@@ -47,6 +48,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -604,6 +606,35 @@ class RealtimeLocationServiceTest {
         then(messagingTemplate).should(never()).convertAndSend(any(String.class), any(Object.class));
         then(locationFixService).should()
                 .store(eq(1L), any(LocationUpdateRequest.class), eq(payload), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("기기 시계가 앞서 미래로 잰 위치도 반영하되 최신 위치 기준 시각은 지금으로 잘라 다음 정상 위치를 막지 않는다")
+    void 미래로_잰_위치가_와도_다음_정상_위치를_막지_않는다() {
+        // given
+        Member member = member(1L);
+        SeniorProfile seniorProfile = seniorProfile(10L, member);
+        given(seniorProfileRepository.findByMemberId(1L)).willReturn(Optional.of(seniorProfile));
+        given(redisTemplate.opsForList()).willReturn(listOperations);
+        given(listOperations.leftPush(eq("location:trail:1"), any(LocationPoint.class))).willReturn(1L);
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+        given(valueOperations.get("location:stay:1")).willReturn(null);
+        given(parentLocationRepository.findAllByMember(member)).willReturn(java.util.List.of());
+        long oneDayLater = System.currentTimeMillis() + 86_400_000L;
+        ArgumentCaptor<SeniorLocation> saved = ArgumentCaptor.forClass(SeniorLocation.class);
+        realtimeLocationService.updateAndBroadcast(rawFixPayload(oneDayLater).getBytes(UTF_8), 1L);
+        then(seniorLocationRepository).should().save(saved.capture());
+        given(seniorLocationRepository.findById(1L)).willReturn(Optional.of(saved.getValue()));
+
+        // when
+        realtimeLocationService.updateAndBroadcast(
+                rawFixPayload(System.currentTimeMillis() + 1_000L).getBytes(UTF_8), 1L);
+
+        // then
+        assertThat(saved.getValue().getMeasuredAtMs()).isLessThan(oneDayLater);
+        then(seniorLocationRepository).should(times(2)).save(any(SeniorLocation.class));
+        then(messagingTemplate).should(times(2))
+                .convertAndSend(eq("/topic/location/senior/1"), any(LocationUpdateResponse.class));
     }
 
     @Test
