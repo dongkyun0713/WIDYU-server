@@ -585,6 +585,7 @@ public interface MedicineScheduleDocs {
 
                     **특이사항:**
                     - 공공 데이터 API 연동되어 있음
+                    - 앞뒤 공백을 뺀 키워드가 2글자 미만이면 검색하지 않고 빈 목록(`medicines: []`)을 반환합니다.
                     """
     )
     @ApiResponses({
@@ -625,7 +626,7 @@ public interface MedicineScheduleDocs {
             @ApiResponse(responseCode = "401", description = "인증 실패")
     })
     ApiResponseTemplate<MedicineSearchResponse> searchMedicines(
-            @Parameter(description = "검색 키워드", required = true, example = "타이레놀")
+            @Parameter(description = "검색 키워드 (2글자 이상)", required = true, example = "타이레놀")
             @RequestParam String keyword
     );
 }

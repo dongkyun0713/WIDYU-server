@@ -22,7 +22,7 @@
 - 변경 모듈: widyu-api (goal/medicineschedule), widyu-domain (Medicine)
 - 약품 검색 API
 - 자체 DB 우선 조회
-- 2글자 이상 FULLTEXT 검색, 1글자 prefix LIKE 검색
+- 2글자 이상 FULLTEXT 검색. 2글자 미만은 검색하지 않고 빈 목록(#921, 기획상 2글자 이상부터 지원)
 - 외부 공공 API fallback
 - `itemSeq` 기준 중복 제거와 신규 약품 저장
 - 공공 API 신규 데이터 backfill 배치
@@ -91,12 +91,7 @@ WHERE MATCH(item_name) AGAINST(:keyword IN BOOLEAN MODE)
 LIMIT 10
 ```
 
-1글자 검색:
-```sql
-SELECT * FROM medicine
-WHERE item_name LIKE :prefix
-LIMIT 10
-```
+2글자 미만 검색어(앞뒤 공백 제외)는 DB·외부 API를 호출하지 않고 빈 목록을 반환한다(#921).
 
 ### 외부 API
 
@@ -125,9 +120,9 @@ GET {medicine.api.url}/getDrbEasyDrugList
 
 ```
 1. GET /api/v1/goals/medicine-schedules/search?keyword={keyword}
-2. keyword.length < 2:
-   - medicineRepository.searchByNamePrefix(keyword + "%")
-3. keyword.length >= 2:
+2. keyword.strip().length < 2:
+   - 빈 목록 반환 (DB·외부 API 호출 없음)
+3. keyword.strip().length >= 2:
    - medicineRepository.searchByNameFullText(keyword)
 4. DB 결과가 있으면 MedicineSearchResponse로 반환
 5. DB 결과가 없으면 MedicineApiClient.searchMedicines(serviceKey, keyword, 10, 1, "json")
@@ -185,7 +180,7 @@ GET {medicine.api.url}/getDrbEasyDrugList
 
 - [x] DB에 검색 결과가 있으면 외부 API를 호출하지 않는다
 - [x] 2글자 이상 키워드는 FULLTEXT `MATCH AGAINST`로 조회한다
-- [x] 1글자 키워드는 prefix LIKE로 조회한다
+- [x] 2글자 미만 키워드는 DB·외부 API를 호출하지 않고 빈 목록을 반환한다 (#921, 이전의 1글자 prefix LIKE 조회는 제거)
 - [x] DB 결과가 없으면 공공 API를 fallback으로 호출한다
 - [x] 외부 API 결과는 `itemSeq` 기준으로 신규 데이터만 저장한다
 - [x] 외부 API 응답 내부 중복 `itemSeq`는 한 번만 저장한다
