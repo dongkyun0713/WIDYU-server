@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,7 +54,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 /**
  * 약품 검색의 외부 API fallback을 실제 H2 트랜잭션 위에서 확인한다(LLD-0100). 공공 API 클라이언트만 대역이다.
  * 테스트 메서드가 트랜잭션을 열지 않아야 서비스의 트랜잭션 경계와 커밋 시점 예외를 그대로 볼 수 있다.
- * 키워드는 1글자로 둔다. 2글자 이상은 MySQL FULLTEXT 쿼리라 H2에서 실행되지 않는다.
+ * 2글자 미만은 검색하지 않으므로(#921) 키워드는 2글자로 둔다. 2글자 이상의 DB 조회는 MySQL FULLTEXT 쿼리라
+ * H2에서 실행되지 않으므로, DB에 결과가 없는 상황으로 스텁해 외부 API fallback 경로를 탄다.
  */
 @DataJpaTest
 @ActiveProfiles("test")
@@ -63,7 +65,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @DisplayName("약품 검색 외부 API fallback 트랜잭션 경계 통합 테스트")
 class MedicineSearchFallbackIntegrationTest {
 
-    private static final String KEYWORD = "타";
+    private static final String KEYWORD = "타이";
     private static final String SERVICE_KEY = "secret-service-key";
     // 다른 요청이 먼저 저장하는 약품과, 이번 검색에서만 새로 받는 약품
     private static final MedicineApiResponse.MedicineItem CONTENDED =
@@ -77,6 +79,11 @@ class MedicineSearchFallbackIntegrationTest {
     @MockBean private MedicineApiClient medicineApiClient;
     @MockBean private MedicineProperties medicineProperties;
     @MockBean private JPAQueryFactory jpaQueryFactory;
+
+    @BeforeEach
+    void noDatabaseHit() {
+        willReturn(List.of()).given(medicineRepository).searchByNameFullText(KEYWORD);
+    }
 
     @AfterEach
     void cleanup() {
