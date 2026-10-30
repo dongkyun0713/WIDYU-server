@@ -493,14 +493,15 @@ class GoalHomeServiceTest {
         // then
         assertThat(response.medicine().scheduleStatuses())
                 .extracting(
+                        SeniorGoalHomeResponse.ScheduleStatus::medicineScheduleId,
                         SeniorGoalHomeResponse.ScheduleStatus::doseTime,
                         SeniorGoalHomeResponse.ScheduleStatus::doseCount,
                         SeniorGoalHomeResponse.ScheduleStatus::taken,
                         SeniorGoalHomeResponse.ScheduleStatus::proofImageUrl)
                 .containsExactly(
-                        tuple("10:40", 1, true, "https://cdn.widyu.shop/morning.jpg"),
-                        tuple("10:45", 1, false, null),
-                        tuple("23:00", 2, false, null));
+                        tuple(1L, "10:40", 1, true, "https://cdn.widyu.shop/morning.jpg"),
+                        tuple(2L, "10:45", 1, false, null),
+                        tuple(3L, "23:00", 2, false, null));
         assertThat(response.medicine().takenCount()).isEqualTo(1);
         assertThat(response.medicine().totalCount()).isEqualTo(3);
     }

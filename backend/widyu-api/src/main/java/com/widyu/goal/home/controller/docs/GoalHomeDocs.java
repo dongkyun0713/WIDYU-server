@@ -88,7 +88,7 @@ public interface GoalHomeDocs {
                     - 예: 17:12·21:39 일정은 17:34와 17:42 정각에 17:12를 표시
                     - 모든 일정의 마감이 지났으면 오늘 마지막 일정을 표시하며, 유효한 일정이 없으면 medicine은 null
                     - 복용 인증 여부로 일정을 건너뛰지 않으며, 선택된 일정의 인증 이미지와 오늘 복용 횟수를 반환
-                    - scheduleStatuses: 오늘 유효한 일정 전체의 복용 시각·개수·인증 여부·첫 인증 이미지(알람 시각 오름차순)
+                    - scheduleStatuses: 오늘 유효한 일정 전체의 약 스케줄 ID·복용 시각·개수·인증 여부·첫 인증 이미지(알람 시각 오름차순). 복용 인증은 각 항목의 medicineScheduleId로 요청한다
 
                     **권한:**
                     - 시니어 본인만 가능
@@ -114,9 +114,9 @@ public interface GoalHomeDocs {
                                                   "nextAlarmTime": "17:00",
                                                   "proofImageUrl": "https://www.widyu.shop/img",
                                                   "scheduleStatuses": [
-                                                    { "doseTime": "08:00", "doseCount": 1, "taken": true, "proofImageUrl": "https://www.widyu.shop/img" },
-                                                    { "doseTime": "12:30", "doseCount": 1, "taken": true, "proofImageUrl": "https://www.widyu.shop/img2" },
-                                                    { "doseTime": "17:00", "doseCount": 4, "taken": false, "proofImageUrl": null }
+                                                    { "medicineScheduleId": 3, "doseTime": "08:00", "doseCount": 1, "taken": true, "proofImageUrl": "https://www.widyu.shop/img" },
+                                                    { "medicineScheduleId": 2, "doseTime": "12:30", "doseCount": 1, "taken": true, "proofImageUrl": "https://www.widyu.shop/img2" },
+                                                    { "medicineScheduleId": 1, "doseTime": "17:00", "doseCount": 4, "taken": false, "proofImageUrl": null }
                                                   ]
                                                 },
                                                 "steps": {

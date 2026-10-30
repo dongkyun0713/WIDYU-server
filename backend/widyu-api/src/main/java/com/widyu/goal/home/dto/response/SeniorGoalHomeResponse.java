@@ -77,6 +77,9 @@ public record SeniorGoalHomeResponse(
 
     @Schema(description = "일정별 복용 상태")
     public record ScheduleStatus(
+            @Schema(description = "약 스케줄 ID (오늘 유효한 버전, 복용 인증에 그대로 사용)", example = "1")
+            Long medicineScheduleId,
+
             @Schema(description = "복용 시각", example = "10:40")
             String doseTime,
 
@@ -92,6 +95,7 @@ public record SeniorGoalHomeResponse(
         /** {@code proof}는 오늘 이 일정의 대표 인증이며, 없으면 null이다. */
         public static ScheduleStatus from(MedicineSchedule schedule, MedicationProof proof) {
             return new ScheduleStatus(
+                    schedule.getId(),
                     schedule.getAlarmTime().format(TIME_FORMATTER),
                     schedule.getTotalCount(),
                     proof != null,
