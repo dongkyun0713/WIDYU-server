@@ -51,15 +51,17 @@ public record SeniorGoalHomeResponse(
             String nextAlarmTime,
 
             @Schema(description = "해당 스케줄의 복용 인증 이미지 (미복용 시 null)")
-            String proofImageUrl
-    ) {
-        private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+            String proofImageUrl,
 
+            @Schema(description = "오늘 유효한 일정별 복용 상태 (알람 시각 오름차순)")
+            List<ScheduleStatus> scheduleStatuses
+    ) {
         public static MedicineInfo from(
                 MedicineSchedule nextSchedule,
                 int takenCount,
                 int totalCount,
-                MedicationProof proof
+                MedicationProof proof,
+                List<ScheduleStatus> scheduleStatuses
         ) {
             return new MedicineInfo(
                     nextSchedule.getId(),
@@ -67,16 +69,44 @@ public record SeniorGoalHomeResponse(
                     totalCount,
                     nextSchedule.getTotalCount(),
                     nextSchedule.getAlarmTime().format(TIME_FORMATTER),
+                    firstProofImageUrl(proof),
+                    scheduleStatuses
+            );
+        }
+    }
+
+    @Schema(description = "일정별 복용 상태")
+    public record ScheduleStatus(
+            @Schema(description = "복용 시각", example = "10:40")
+            String doseTime,
+
+            @Schema(description = "이 시각에 복용할 개수", example = "1")
+            Integer doseCount,
+
+            @Schema(description = "오늘 복용 인증 여부", example = "true")
+            boolean taken,
+
+            @Schema(description = "복용 인증 이미지 (미복용 시 null)")
+            String proofImageUrl
+    ) {
+        /** {@code proof}는 오늘 이 일정의 대표 인증이며, 없으면 null이다. */
+        public static ScheduleStatus from(MedicineSchedule schedule, MedicationProof proof) {
+            return new ScheduleStatus(
+                    schedule.getAlarmTime().format(TIME_FORMATTER),
+                    schedule.getTotalCount(),
+                    proof != null,
                     firstProofImageUrl(proof)
             );
         }
+    }
 
-        private static String firstProofImageUrl(MedicationProof proof) {
-            if (proof == null || proof.getProofImageUrls().isEmpty()) {
-                return null;
-            }
-            return proof.getProofImageUrls().getFirst();
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+
+    private static String firstProofImageUrl(MedicationProof proof) {
+        if (proof == null || proof.getProofImageUrls().isEmpty()) {
+            return null;
         }
+        return proof.getProofImageUrls().getFirst();
     }
 
     @Schema(description = "걸음 수 정보")

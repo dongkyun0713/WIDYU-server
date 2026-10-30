@@ -29,7 +29,10 @@ import com.widyu.member.repository.FamilyMembershipRepository;
 import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.SeniorProfileRepository;
 import com.widyu.medicine.MedicationProof;
+import com.widyu.medicine.Medicine;
+import com.widyu.medicine.MedicineCategory;
 import com.widyu.medicine.MedicineSchedule;
+import com.widyu.medicine.MedicineScheduleDetail;
 import com.widyu.member.SeniorProfile;
 import com.widyu.walk.Walk;
 import java.time.DayOfWeek;
@@ -465,6 +468,44 @@ class GoalHomeServiceTest {
     }
 
     @Test
+    @DisplayName("오늘 일정이 셋이고 하나만 인증했으면 일정별 복용 상태를 알람 시각 순으로 모두 반환한다")
+    void 오늘_일정별_복용_상태를_알람_시각_순으로_반환한다() {
+        // given
+        LocalDate today = LocalDate.now();
+        Member member = mock(Member.class);
+        MedicineSchedule morning = dosedSchedule(member, 1L, LocalTime.of(10, 40), 1);
+        MedicineSchedule noon = dosedSchedule(member, 2L, LocalTime.of(10, 45), 1);
+        MedicineSchedule night = dosedSchedule(member, 3L, LocalTime.of(23, 0), 2);
+        MedicationProof morningProof = proof(morning, member, today.atTime(10, 42), "https://cdn.widyu.shop/morning.jpg");
+
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(member.getId()).willReturn(11L);
+        given(medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(
+                member, Status.ACTIVE, today)).willReturn(List.of(morning, noon, night));
+        given(medicationProofRepository.findByMemberIdAndDateRange(11L, today, today))
+                .willReturn(List.of(morningProof));
+        given(walkRepository.findByMemberAndWalkDate(member, today)).willReturn(Optional.empty());
+        given(healthScheduleRepository.findByMemberIdAndWeek(any(), any(), any())).willReturn(List.of());
+
+        // when
+        SeniorGoalHomeResponse response = goalHomeService.getSeniorGoalHome();
+
+        // then
+        assertThat(response.medicine().scheduleStatuses())
+                .extracting(
+                        SeniorGoalHomeResponse.ScheduleStatus::doseTime,
+                        SeniorGoalHomeResponse.ScheduleStatus::doseCount,
+                        SeniorGoalHomeResponse.ScheduleStatus::taken,
+                        SeniorGoalHomeResponse.ScheduleStatus::proofImageUrl)
+                .containsExactly(
+                        tuple("10:40", 1, true, "https://cdn.widyu.shop/morning.jpg"),
+                        tuple("10:45", 1, false, null),
+                        tuple("23:00", 2, false, null));
+        assertThat(response.medicine().takenCount()).isEqualTo(1);
+        assertThat(response.medicine().totalCount()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("오늘 지난 일정·완료 일정·남은 일정과 내일 일정이 있으면 시니어 목표 홈은 오늘 일정만 오름차순으로 담고 다음 일정은 오늘 남은 일정을 반환한다")
     void 시니어_목표_홈은_오늘_일정만_담고_다음_일정은_오늘_남은_일정이다() {
         // given
@@ -617,6 +658,14 @@ class GoalHomeServiceTest {
     private MedicineSchedule alarmSchedule(Member member, Long id, LocalTime alarmTime) {
         MedicineSchedule schedule = MedicineSchedule.create(member, alarmTime);
         ReflectionTestUtils.setField(schedule, "id", id);
+        return schedule;
+    }
+
+    private MedicineSchedule dosedSchedule(Member member, Long id, LocalTime alarmTime, int dose) {
+        MedicineSchedule schedule = alarmSchedule(member, id, alarmTime);
+        MedicineCategory category = MedicineCategory.create("식후");
+        category.addMedicine(MedicineScheduleDetail.create(mock(Medicine.class), dose));
+        schedule.addCategory(category);
         return schedule;
     }
 
