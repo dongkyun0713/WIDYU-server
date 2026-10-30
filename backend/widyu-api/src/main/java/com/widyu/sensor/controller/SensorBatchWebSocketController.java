@@ -76,27 +76,40 @@ public class SensorBatchWebSocketController {
      * {@code batch_id}·{@code seq}를 읽지 못하면 ACK를 만들 수 없어 원래 예외를 그대로 던진다(→ /user/queue/errors).
      */
     private SensorBatchResultResponse rejected(Long memberId, byte[] payload, BusinessException cause) {
+        // 거절 이유는 에러 코드로만 남긴다. 원문·샘플 값은 어떤 레벨에도 남기지 않는다(정책 1.6.7).
+        String code = cause.getErrorCode().getCode();
         JsonNode root;
         try {
             root = objectMapper.readTree(payload);
         } catch (IOException e) {
             // 예외 메시지에 샘플 값이 섞일 수 있어 어떤 레벨에도 남기지 않는다.
+            log.warn("센서 배치 거절(본문 해석 불가): memberId={}, code={}", memberId, code);
             throw cause;
         }
 
+        String stream = streamOf(root);
         JsonNode batchId = root.get("batch_id");
-        if (batchId == null || !batchId.isTextual()) {
-            throw cause;
-        }
-
         JsonNode seq = root.get("seq");
-        if (seq == null || !seq.canConvertToLong()) {
+        if (batchId == null || !batchId.isTextual() || seq == null || !seq.canConvertToLong()) {
+            log.warn("센서 배치 거절(식별자 없음): memberId={}, stream={}, code={}", memberId, stream, code);
             throw cause;
         }
 
-        log.warn("센서 배치 거절: memberId={}, batchId={}, seq={}, result={}",
-                memberId, batchId.asText(), seq.asLong(), SensorBatchResult.REJECTED);
+        log.warn("센서 배치 거절: memberId={}, batchId={}, seq={}, stream={}, code={}, result={}",
+                memberId, batchId.asText(), seq.asLong(), stream, code, SensorBatchResult.REJECTED);
         return SensorBatchResultResponse.of(batchId.asText(), seq.asLong(), SensorBatchResult.REJECTED);
+    }
+
+    /** 로그용 stream. 기기가 보낸 값이라 짧은 소문자 이름만 그대로 남기고 나머지는 가린다(로그 주입 방지). */
+    private static String streamOf(JsonNode root) {
+        JsonNode stream = root.get("stream");
+        if (stream == null || !stream.isTextual()) {
+            return null;
+        }
+        if (!stream.asText().matches("[a-z0-9_]{1,32}")) {
+            return "invalid";
+        }
+        return stream.asText();
     }
 
     /**
