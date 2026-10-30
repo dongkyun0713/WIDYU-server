@@ -479,6 +479,45 @@ class MedicineScheduleServiceTest {
     }
 
     @Test
+    @DisplayName("현재 알람이 5개면 새 알람을 생성한다")
+    void 현재_알람이_5개면_새_알람을_생성한다() {
+        // given
+        Long memberId = 1L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineScheduleRepository.countByMemberAndStatusAndEffectiveToIsNull(targetMember, Status.ACTIVE))
+                .willReturn(5L);
+        given(medicineRepository.findByItemName("타이레놀")).willReturn(Optional.of(mock(Medicine.class)));
+        givenSavedScheduleId(6L);
+
+        // when
+        MedicineScheduleIdResponse response = medicineScheduleService.createSchedule(
+                createRequest("23:59"), memberId);
+
+        // then
+        assertThat(response.medicineScheduleId()).isEqualTo(6L);
+    }
+
+    @Test
+    @DisplayName("현재 알람이 이미 6개면 새 알람 생성을 거부하고 저장·알림을 하지 않는다")
+    void 현재_알람이_6개면_새_알람_생성을_거부한다() {
+        // given
+        Long memberId = 1L;
+        Member targetMember = seniorWithId(memberId);
+        given(memberRepository.findByIdForUpdate(memberId)).willReturn(Optional.of(targetMember));
+        given(medicineScheduleRepository.countByMemberAndStatusAndEffectiveToIsNull(targetMember, Status.ACTIVE))
+                .willReturn(6L);
+
+        // when & then
+        assertThatThrownBy(() -> medicineScheduleService.createSchedule(createRequest("23:59"), memberId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("최대 6개");
+        then(medicineScheduleRepository).should(never()).save(any(MedicineSchedule.class));
+        then(fcmService).shouldHaveNoInteractions();
+        assertThat(targetMember.getMedicationAlarmRevision()).isZero();
+    }
+
+    @Test
     @DisplayName("내일 시작하는 스케줄을 수정하면 같은 버전에만 반영하고 시작일을 유지한다")
     void 내일_시작하는_스케줄을_수정하면_같은_버전에만_반영하고_시작일을_유지한다() {
         // given
