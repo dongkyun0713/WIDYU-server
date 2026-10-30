@@ -213,11 +213,18 @@ public class GoalHomeService {
 
         MedicineSchedule nextSchedule = findNextSchedule(schedules, LocalTime.now());
 
+        // 조회 쿼리가 알람 시각 오름차순이므로 순서를 그대로 쓴다.
+        List<SeniorGoalHomeResponse.ScheduleStatus> scheduleStatuses = schedules.stream()
+                .map(schedule -> SeniorGoalHomeResponse.ScheduleStatus.from(
+                        schedule, proofsByScheduleId.get(schedule.getId())))
+                .toList();
+
         return SeniorGoalHomeResponse.MedicineInfo.from(
                 nextSchedule,
                 proofsByScheduleId.size(),
                 schedules.size(),
-                proofsByScheduleId.get(nextSchedule.getId())
+                proofsByScheduleId.get(nextSchedule.getId()),
+                scheduleStatuses
         );
     }
 
