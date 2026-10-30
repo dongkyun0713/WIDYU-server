@@ -72,6 +72,9 @@ public enum ErrorCode {
     APPLE_PRIVATE_KEY_PARSING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "APPLE_5005", "애플 비밀 키 파싱에 실패하였습니다."),
     APPLE_WITHDRAW_ERROR(HttpStatus.BAD_GATEWAY, "APPLE_5006", "애플 계정 탈퇴에 실패하였습니다."),
 
+    // 도로명주소 검색
+    JUSO_COMMUNICATION_ERROR(HttpStatus.BAD_GATEWAY, "JUSO_5000", "주소 검색 서비스와 통신하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+
     // 회원 관련
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4041", "회원을 찾을 수 없습니다."),
     SENIOR_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4042", "시니어 프로필을 찾을 수 없습니다."),

@@ -25,7 +25,7 @@ public class AddressSearchService {
     private String confmKey;
 
     public AddressSearchResponse search(String keyword, int page, int size) {
-        JusoApiResponse response = jusoApiClient.searchAddress(confmKey, keyword, page, size, "json");
+        JusoApiResponse response = fetchAddresses(keyword, page, size);
 
         JusoApiResponse.Common common = response.results().common();
         if (!"0".equals(common.errorCode())) {
@@ -41,6 +41,19 @@ public class AddressSearchService {
                 AddressSearchResponse.parseIntSafe(common.currentPage()),
                 AddressSearchResponse.parseIntSafe(common.countPerPage())
         );
+    }
+
+    /**
+     * 주소 API 호출, 응답 해석 실패(타임아웃, 5xx 포함)를 정해진 오류 응답으로 바꾼다.
+     * Feign 예외 메시지에는 confmKey와 검색어가 담긴 요청 URL이 들어 있어 예외 종류만 남기고 원인으로도 넘기지 않는다.
+     */
+    private JusoApiResponse fetchAddresses(String keyword, int page, int size) {
+        try {
+            return jusoApiClient.searchAddress(confmKey, keyword, page, size, "json");
+        } catch (RuntimeException e) {
+            log.warn("주소 검색 외부 API 실패: errorType={}", e.getClass().getSimpleName());
+            throw new BusinessException(ErrorCode.JUSO_COMMUNICATION_ERROR);
+        }
     }
 
     private List<AddressItem> getAddresses(List<JusoApiResponse.JusoItem> jusoItems) {

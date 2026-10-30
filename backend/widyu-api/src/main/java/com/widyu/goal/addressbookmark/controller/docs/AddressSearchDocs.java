@@ -48,6 +48,19 @@ public interface AddressSearchDocs {
                             """)
             )
     )
+    @ApiResponse(
+            responseCode = "502",
+            description = "도로명주소 API 호출 실패(타임아웃, 연결 실패, 5xx 응답)",
+            content = @Content(
+                    schema = @Schema(implementation = ApiResponseTemplate.class),
+                    examples = @ExampleObject(value = """
+                            {
+                                "code": "JUSO_5000",
+                                "message": "주소 검색 서비스와 통신하지 못했습니다. 잠시 후 다시 시도해 주세요."
+                            }
+                            """)
+            )
+    )
     ApiResponseTemplate<AddressSearchResponse> searchAddress(
             @Parameter(description = "검색 키워드", required = true, example = "성암로 301") String keyword,
             @Parameter(description = "페이지 번호 (1부터 시작)", example = "1") int page,

@@ -2,3 +2,6 @@ juso:
   api:
     url: https://business.juso.go.kr/addrlink
     confm-key: ${JUSO_CONFM_KEY}
+    # 주소 API 타임아웃(#856). 약품 검색(LLD-0100)과 같은 값이다. 지정하지 않으면 OpenFeign 기본값(연결 10초, 읽기 60초)이 적용된다.
+    connect-timeout: 2s
+    read-timeout: 3s
