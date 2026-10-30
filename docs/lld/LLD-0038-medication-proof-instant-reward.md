@@ -2,11 +2,13 @@
 
 > Low-Level Design. 이 문서는 해당 기능 구현과 PR 본문의 **오라클(ground truth)** 이다.
 > LLD 하나 = PR 하나가 원칙. "하나의 PR에 넣기엔 diff가 너무 많다(파일 15개 이상)"면 LLD를 분리한다.
+>
+> 완주 보너스 판정은 §11(#940)이 개정한다. §5 6단계의 증분 계산과 §8의 `calculateDailyPoints` 유지 설명은 개정 전 내용이다.
 
 | 항목 | 값 |
 | --- | --- |
 | 상태 | Approved |
-| Issue | #622 |
+| Issue | #622, #940(§11 완주 보너스 날짜별 1회 개정) |
 | 관련 ADR | - |
 | 작성자 | Claude Code |
 | 작성일 | 2026-09-17 |
@@ -141,3 +143,45 @@ POST /api/v1/medicine-schedules/{scheduleId}/proof
 - [LLD-0008](LLD-0008-medicine-schedule-versioning.md) — 그날 유효 스케줄 판정
 - [LLD-0037](LLD-0037-medication-alarm-sync.md) — 인증 시 revision 증가
 - Issue #622
+
+## 11. 개정 — 완주 보너스는 복용 날짜별 한 번 (#940, 2026-10-31)
+
+### 문제
+
+§5 6단계의 증분 계산은 "이번 인증 뒤 하루 누적액 − 이번 인증 전 하루 누적액"이었다. 누적액은 이번 인증 시점의 일정 수만 보고, 그날 이미 보너스를 받았는지는 보지 않았다. [LLD-0113](LLD-0113-medicine-schedule-same-day.md)로 일정 등록이 당일 적용되면서 하루 안에 일정 수가 늘 수 있게 됐고, 그 결과 보너스가 다시 지급됐다.
+
+예) 09:00 일정 하나를 인증해 30p를 받은 뒤 10:00에 12:00 일정을 등록하고 12:00에 인증하면, 인증 수 2와 일정 수 2가 같아 다시 30p를 받는다. 하루 60p가 되고, 정상은 40p다.
+
+### 정책
+
+- 완주 보너스 20p는 **복용 날짜별로 한 번만** 준다. 그날 이미 받았으면 일정이 늘어 다시 "인증 수 = 일정 수"가 되어도 인증당 10p만 준다.
+- 이미 준 보너스는 회수하지 않는다. 활동 보상에는 환수 경로가 없다(ADR-0029).
+- 일정 삭제로 인증 수와 일정 수가 같아져도, 그 시점에는 인증이 없으므로 보너스를 주지 않는다(개정 전과 같다). 이후 그날 일정이 늘어 남은 일정을 모두 인증하면 그때 보너스를 받을 수 있다.
+- 인증 한 건의 적립액은 10p 또는 30p다. 증분 계산을 없애 음수 증분(0p 처리)이 생길 여지도 없앴다.
+
+### 판정
+
+`MedicationProofTransactionService.grantsCompletionBonus(member, date)`가 회원 행 잠금(`findByIdForUpdate`) 안에서 판정한다.
+
+1. `MedicationPointPolicy.completesDay(그날 인증 수, 그날 유효 일정 수)`가 거짓이면 보너스가 없다.
+2. 참이면 `MedicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate`로 그날 보너스를 받은 인증이 있는지 본다. 그날(`verified_date`) 회원 인증들의 적립 이력(`operationKey = "MEDICATION_PROOF:{proofId}"`) 중 인증 1회분(10p)보다 큰 금액이 있으면 받은 날이다.
+3. 받은 날이 아니면 30p를 `addGoalRewardPoints`로 적립하고 G01 이벤트를 발행한다. 받은 날이면 10p를 `addPointsToMember`로 적립하고 G01을 발행하지 않는다.
+
+새 컬럼·테이블은 없다. 보너스 건만 10p보다 큰 금액으로 기록되는 기존 이력 구조를 그대로 판정 근거로 쓴다. 날짜는 메서드 인자로 받으므로 복용 기준일 판정(#876)이 들어와도 인자만 바뀐다. 같은 회원의 인증은 회원 행 잠금으로 직렬화되므로 앞 인증의 적립 이력이 다음 인증의 판정에 보인다.
+
+`calculateDailyPoints`와 증분 계산 `calculateEarnedPoints(proofCountAfter, totalSchedules)`는 `completesDay`와 `calculateEarnedPoints(grantsCompletionBonus)`로 바뀌었다.
+
+### 한계
+
+- 시니어 프로필이 없는 회원은 적립 이력이 남지 않아 보너스를 받은 날로 판정되지 않는다. 적립 자체가 없으므로 응답 `earnedPoints`(계산값)만 30p로 다시 보일 수 있다.
+- 판정 근거가 금액이다. 인증 1회분 금액이나 보너스 금액을 바꾸면 이 판정도 함께 확인해야 한다. 두 값은 `MedicationPointPolicy`에만 있다.
+
+### 인수조건
+
+- [x] 09:00 인증 → 같은 날 12:00 일정 등록 → 12:00 인증 순서에서 하루 적립이 40p이고 보너스는 한 번이다.
+      → `오전_인증_뒤_같은_날_일정을_추가해_인증하면_하루_적립은_보너스_한_번을_포함한_40포인트다`
+- [x] 그날 보너스를 받았으면 다시 일정을 모두 채워도 10p만 `addPointsToMember`로 적립하고 G01을 발행하지 않는다.
+      → `그날_이미_완주_보너스를_받았으면_늘어난_일정까지_모두_채워도_10포인트만_적립한다`
+- [x] 보너스 판정 쿼리는 그날 그 회원의 인증 적립 이력 중 10p 초과 건만 본다(다른 날, 다른 회원, 10p 이력 제외).
+      → `MedicationProofRepositoryTest`의 `그날_인증_중_보너스를_포함한_적립_이력이_있을_때만_완주_보너스를_받은_날로_판정한다`, `다른_회원이_같은_날_받은_완주_보너스는_내_보너스_지급_여부에_영향을_주지_않는다`
+- [x] §7의 기존 인수조건 테스트가 그대로 통과한다.

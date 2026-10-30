@@ -8,7 +8,10 @@ import com.widyu.global.config.JpaAuditingConfig;
 import com.widyu.medicine.MedicationProof;
 import com.widyu.medicine.MedicineSchedule;
 import com.widyu.member.Member;
+import com.widyu.member.Family;
 import com.widyu.member.MemberType;
+import com.widyu.member.PointHistory;
+import com.widyu.member.SeniorProfile;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -146,5 +149,61 @@ class MedicationProofRepositoryTest {
         // then
         assertThat(nextDay.getId()).isNotNull();
         assertThat(otherSchedule.getId()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("그날 인증 중 보너스를 포함한 적립 이력이 있을 때만 완주 보너스를 받은 날로 판정한다")
+    void 그날_인증_중_보너스를_포함한_적립_이력이_있을_때만_완주_보너스를_받은_날로_판정한다() {
+        // given
+        Member member = persistSenior("01012121212");
+        SeniorProfile profile = persistSeniorProfile(member);
+        MedicineSchedule morning = persistSchedule(member, LocalDate.of(2026, 8, 1));
+        MedicineSchedule noon = persistSchedule(member, LocalDate.of(2026, 8, 1));
+        MedicationProof bonusDay = persistProof(morning, member, LocalDateTime.of(2026, 8, 10, 9, 0));
+        MedicationProof plainDay = persistProof(morning, member, LocalDateTime.of(2026, 8, 11, 9, 0));
+        MedicationProof plainDayNoon = persistProof(noon, member, LocalDateTime.of(2026, 8, 11, 12, 0));
+        entityManager.persist(PointHistory.earn(profile, 30L, "약 복용 인증", "MEDICATION_PROOF:" + bonusDay.getId()));
+        entityManager.persist(PointHistory.earn(profile, 10L, "약 복용 인증", "MEDICATION_PROOF:" + plainDay.getId()));
+        entityManager.persist(PointHistory.earn(profile, 10L, "약 복용 인증", "MEDICATION_PROOF:" + plainDayNoon.getId()));
+        entityManager.flush();
+
+        // when & then
+        assertThat(medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                member, LocalDate.of(2026, 8, 10), "MEDICATION_PROOF:", 10L)).isTrue();
+        assertThat(medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                member, LocalDate.of(2026, 8, 11), "MEDICATION_PROOF:", 10L)).isFalse();
+        assertThat(medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                member, LocalDate.of(2026, 8, 12), "MEDICATION_PROOF:", 10L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("다른 회원이 같은 날 받은 완주 보너스는 내 보너스 지급 여부에 영향을 주지 않는다")
+    void 다른_회원이_같은_날_받은_완주_보너스는_내_보너스_지급_여부에_영향을_주지_않는다() {
+        // given
+        Member member = persistSenior("01034343434");
+        Member other = persistSenior("01056565656");
+        SeniorProfile otherProfile = persistSeniorProfile(other);
+        persistProof(persistSchedule(member, LocalDate.of(2026, 8, 1)), member, LocalDateTime.of(2026, 8, 10, 9, 0));
+        MedicationProof otherProof = persistProof(persistSchedule(other, LocalDate.of(2026, 8, 1)), other,
+                LocalDateTime.of(2026, 8, 10, 9, 0));
+        entityManager.persist(PointHistory.earn(otherProfile, 30L, "약 복용 인증", "MEDICATION_PROOF:" + otherProof.getId()));
+        entityManager.flush();
+
+        // when
+        boolean granted = medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                member, LocalDate.of(2026, 8, 10), "MEDICATION_PROOF:", 10L);
+
+        // then
+        assertThat(granted).isFalse();
+    }
+
+    private SeniorProfile persistSeniorProfile(Member member) {
+        String code = String.valueOf(member.getId() + 100000L);
+        Family family = Family.createFamily(code.substring(0, 6));
+        entityManager.persist(family);
+        SeniorProfile profile = SeniorProfile.createSeniorProfile(member, family, "서울", code.substring(0, 6) + "7",
+                LocalDate.of(1950, 1, 1));
+        entityManager.persist(profile);
+        return profile;
     }
 }

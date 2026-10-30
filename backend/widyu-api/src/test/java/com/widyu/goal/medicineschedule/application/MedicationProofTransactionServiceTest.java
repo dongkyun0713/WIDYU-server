@@ -179,6 +179,65 @@ class MedicationProofTransactionServiceTest {
     }
 
     @Test
+    @DisplayName("그날 이미 완주 보너스를 받았으면 늘어난 일정까지 모두 채워도 10포인트만 적립한다")
+    void 그날_이미_완주_보너스를_받았으면_늘어난_일정까지_모두_채워도_10포인트만_적립한다() {
+        // given
+        Member member = lockedMember();
+        MedicineSchedule schedule = MedicineSchedule.create(member, LocalTime.now());
+        given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
+                .willReturn(Optional.of(schedule));
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(2L);
+        given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any())).willReturn(2L);
+        given(medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                eq(member), eq(LocalDate.now()), eq("MEDICATION_PROOF:"), eq(10L))).willReturn(true);
+        savedProofHasId(99L);
+
+        // when
+        var response = transactionService.verifyMedication(10L, 1L, List.of());
+
+        // then
+        assertThat(response.earnedPoints()).isEqualTo(10L);
+        then(seniorProfileService).should()
+                .addPointsToMember(10L, 10L, "약 복용 인증", "MEDICATION_PROOF:99");
+        then(seniorProfileService).should(never()).addGoalRewardPoints(any(), any(), any(), any());
+        then(eventPublisher).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("09시 인증 뒤 같은 날 12시 일정을 추가해 인증하면 하루 적립은 보너스 한 번을 포함한 40포인트다")
+    void 오전_인증_뒤_같은_날_일정을_추가해_인증하면_하루_적립은_보너스_한_번을_포함한_40포인트다() {
+        // given: 09:00 일정 하나를 인증해 보너스를 받고, 10:00에 12:00 일정을 등록해 오늘 일정이 2개가 된다.
+        Member member = lockedMember();
+        MedicineSchedule morning = MedicineSchedule.create(member, LocalTime.now());
+        MedicineSchedule noon = MedicineSchedule.create(member, LocalTime.now());
+        given(member.getSeniorProfile()).willReturn(mock(SeniorProfile.class));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(1L, Status.ACTIVE))
+                .willReturn(Optional.of(morning));
+        given(medicineScheduleRepository.findByIdAndStatusWithDetails(2L, Status.ACTIVE))
+                .willReturn(Optional.of(noon));
+        given(medicationProofRepository.countByMemberAndVerifiedDate(eq(member), any())).willReturn(1L, 2L);
+        given(medicineScheduleRepository.countEffectiveByMemberAndDate(eq(member), eq(Status.ACTIVE), any()))
+                .willReturn(1L, 2L);
+        // 첫 인증의 30p 적립 이력이 남은 뒤라 두 번째 판정에서는 보너스를 받은 날이다.
+        given(medicationProofRepository.existsCompletionBonusByMemberAndVerifiedDate(
+                eq(member), any(), any(), eq(10L))).willReturn(false, true);
+        savedProofHasId(77L);
+
+        // when
+        var morningResponse = transactionService.verifyMedication(10L, 1L, List.of());
+        var noonResponse = transactionService.verifyMedication(10L, 2L, List.of());
+
+        // then
+        assertThat(morningResponse.earnedPoints()).isEqualTo(30L);
+        assertThat(noonResponse.earnedPoints()).isEqualTo(10L);
+        assertThat(morningResponse.earnedPoints() + noonResponse.earnedPoints()).isEqualTo(40L);
+        then(seniorProfileService).should().addGoalRewardPoints(eq(10L), eq(30L), any(), any());
+        then(seniorProfileService).should().addPointsToMember(eq(10L), eq(10L), any(), any());
+        then(eventPublisher).should().publishEvent(any(GoalAchievedEvent.class));
+    }
+
+    @Test
     @DisplayName("적립을 마치면 적립 후 잔액을 현재 포인트로 반환한다")
     void 적립을_마치면_적립_후_잔액을_현재_포인트로_반환한다() {
         // given

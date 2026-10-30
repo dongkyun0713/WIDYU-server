@@ -55,4 +55,18 @@ public interface MedicationProofRepository extends JpaRepository<MedicationProof
             @Param("memberId") Long memberId,
             @Param("date") LocalDate date
     );
+
+    // 그날 인증 중 완주 보너스를 받은 건이 있는지. 인증 1건의 적립 이력은 operationKey = prefix + proofId이고,
+    // 보너스를 받은 건만 인증 1회분보다 큰 금액으로 남는다(LLD-0038 §11).
+    @Query("SELECT CASE WHEN COUNT(ph) > 0 THEN true ELSE false END FROM PointHistory ph " +
+           "WHERE ph.amount > :pointsPerMedication " +
+           "AND ph.operationKey IN (" +
+           "SELECT CONCAT(:operationKeyPrefix, CAST(mp.id AS String)) FROM MedicationProof mp " +
+           "WHERE mp.member = :member AND mp.verifiedDate = :date)")
+    boolean existsCompletionBonusByMemberAndVerifiedDate(
+            @Param("member") Member member,
+            @Param("date") LocalDate date,
+            @Param("operationKeyPrefix") String operationKeyPrefix,
+            @Param("pointsPerMedication") long pointsPerMedication
+    );
 }
