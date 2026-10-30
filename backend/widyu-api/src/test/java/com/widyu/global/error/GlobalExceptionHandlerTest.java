@@ -35,6 +35,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -266,6 +267,28 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("클라이언트가 응답 전에 연결을 끊으면 알림 대상인 ERROR 로그를 남기지 않는다")
+    void 클라이언트가_응답_전에_연결을_끊으면_ERROR_로그를_남기지_않는다() throws Exception {
+        // given
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            // when
+            mockMvc.perform(get("/test/client-disconnected"));
+
+            // then
+            assertThat(appender.list)
+                    .noneMatch(event -> event.getLevel().isGreaterOrEqual(Level.WARN));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     @DisplayName("4xx 업무 예외는 알림 대상이 아닌 WARN 업무 로그로 남긴다")
     void _4xx_업무_예외는_알림_대상이_아닌_WARN_업무_로그로_남긴다() throws Exception {
         // given
@@ -429,6 +452,11 @@ class GlobalExceptionHandlerTest {
         void notNull() {
             throw new DataIntegrityViolationException("could not execute statement",
                     new SQLException("Column 'member_fcm_token_id' cannot be null", "23000", 1048));
+        }
+
+        @GetMapping("/test/client-disconnected")
+        void clientDisconnected() throws AsyncRequestNotUsableException {
+            throw new AsyncRequestNotUsableException("ServletOutputStream failed to write: java.io.IOException: Broken pipe");
         }
 
         @GetMapping("/test/lock")

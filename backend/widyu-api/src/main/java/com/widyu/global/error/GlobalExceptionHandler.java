@@ -21,6 +21,7 @@ import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
@@ -276,6 +277,20 @@ public class GlobalExceptionHandler {
                 ErrorCode.POINT_CONCURRENT_UPDATE.getCode(),
                 ErrorCode.POINT_CONCURRENT_UPDATE.getMessage()
         );
+    }
+
+    /**
+     * 클라이언트가 응답을 받기 전에 연결을 끊어 응답 쓰기가 실패한 경우(Broken pipe 등).
+     * 서버 오류가 아니고 응답을 보낼 곳도 없으므로 시스템 오류 로그·알림으로 남기지 않는다(#938).
+     * null을 반환하면 Spring이 응답 처리를 끝난 것으로 보고 아무것도 쓰지 않는다.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<Void> handleClientDisconnected(
+            final AsyncRequestNotUsableException e,
+            final HttpServletRequest request
+    ) {
+        log.debug("클라이언트가 응답 전에 연결을 끊음: uri={}", request.getRequestURI());
+        return null;
     }
 
     @ExceptionHandler(Exception.class)
