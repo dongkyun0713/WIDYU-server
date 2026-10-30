@@ -30,6 +30,7 @@ public enum ErrorCode {
     SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.BAD_REQUEST, "AUTH_4008", "이미 연동된 소셜 계정입니다."),
     SOCIAL_ACCOUNT_ALREADY_LINKED_TO_CURRENT_USER(HttpStatus.BAD_REQUEST, "AUTH_4009", "현재 사용자에게 이미 연동된 소셜 계정입니다."),
     SOCIAL_PROVIDER_ALREADY_LINKED(HttpStatus.BAD_REQUEST, "AUTH_4019", "이미 연동된 소셜 로그인 제공자입니다."),
+    ALREADY_REGISTERED_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "AUTH_4021", "이미 가입된 전화번호입니다."),
 
     // 가족 관련
     FAMILY_LEADER_MUST_DELEGATE_BEFORE_WITHDRAW(HttpStatus.BAD_REQUEST, "FAMILY_4001", "방장 권한을 다른 구성원에게 위임한 후 탈퇴해주세요."),

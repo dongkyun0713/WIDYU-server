@@ -75,6 +75,7 @@ public interface GuardianAuthDocs {
             description = """
                     SMS 인증 후 발급받은 임시 토큰을 Authorization 헤더(스킴: `Bearer`)로 전달해야 합니다.
                     임시 토큰이 유효하면 이메일/비밀번호로 로컬 계정을 생성하고 Access/Refresh 토큰을 발급합니다.
+                    같은 전화번호로 가입된 회원(시니어, 소셜 보호자 포함)이 이미 있으면 가입하지 않고 400 `AUTH_4021`을 반환합니다.
                     """
     )
     @ApiResponse(
@@ -103,6 +104,8 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "400",
+            description = "AUTH_4001: 이미 등록된 이메일 / AUTH_4021: 이 전화번호로 가입된 회원이 이미 있음. 기존 회원에 로컬 계정을 붙이지 않는다")
     ApiResponseTemplate<LocalSignupResponse> signupLocal(
             HttpServletRequest httpServletRequest,
             @Valid @RequestBody

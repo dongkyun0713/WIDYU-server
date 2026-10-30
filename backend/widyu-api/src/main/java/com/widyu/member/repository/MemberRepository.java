@@ -32,6 +32,7 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
     int fillPhoneNumberIfEmpty(@Param("memberId") Long memberId, @Param("phoneNumber") String phoneNumber);
 
     Optional<Member> findByPhoneNumber(String phoneNumber);
+    boolean existsByPhoneNumber(String phoneNumber);
     Optional<Member> findByPhoneNumberAndName(String phoneNumber, String name);
     Optional<Member> findByPhoneNumberAndNameAndLocalAccount_Email(String phoneNumber, String name, String email);
     Optional<Member> findBySocialAccounts_Email(String email);

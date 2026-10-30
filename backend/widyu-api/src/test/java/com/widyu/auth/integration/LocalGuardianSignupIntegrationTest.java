@@ -14,6 +14,7 @@ import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
+import com.widyu.member.SocialAccount;
 import com.widyu.member.repository.LocalAccountRepository;
 import com.widyu.member.repository.MemberRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -106,21 +107,53 @@ class LocalGuardianSignupIntegrationTest {
     }
 
     @Test
-    @DisplayName("소셜 로그인으로 생성된 멤버가 이미 존재하면 기존 멤버에 로컬 계정을 연결한다")
-    void signupFlow_existingMemberWithoutLocalAccount_linksLocalAccountToExistingMember() {
-        // given - 소셜 로그인 등으로 이미 생성된 멤버 (로컬 계정 없음)
-        Member existingMember = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
-        memberRepository.save(existingMember);
-
+    @DisplayName("시니어 회원과 같은 전화번호와 이름으로 가입하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생하고 로컬 계정을 저장하지 않는다")
+    void 시니어_회원과_같은_전화번호와_이름으로_가입하면_거부한다() {
+        // given
+        memberRepository.save(Member.createMember(MemberType.SENIOR, "가상시니어", "01000000002"));
         long memberCountBefore = memberRepository.count();
-        TemporaryMember temp = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
+        TemporaryMember temp = TemporaryMember.createTemporaryMember("가상시니어", "01000000002");
 
-        // when - 같은 이름+전화번호로 로컬 계정 등록
-        localLoginService.signupGuardianWithLocal(temp, "local@test.com", "password1!");
-
-        // then - 새 멤버가 생성되지 않고 로컬 계정만 연결됨
+        // when & then
+        assertThatThrownBy(() -> localLoginService.signupGuardianWithLocal(temp, "senior-local@test.com", "password1!"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(localAccountRepository.count()).isZero();
         assertThat(memberRepository.count()).isEqualTo(memberCountBefore);
-        assertThat(localAccountRepository.existsByEmail("local@test.com")).isTrue();
+    }
+
+    @Test
+    @DisplayName("소셜 보호자와 같은 전화번호로 가입하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생하고 로컬 계정을 저장하지 않는다")
+    void 소셜_보호자와_같은_전화번호로_가입하면_거부한다() {
+        // given
+        Member socialGuardian = Member.createMember(MemberType.GUARDIAN, "가상보호자", "01000000003");
+        socialGuardian.getSocialAccounts().add(
+                SocialAccount.createSocialAccount("social@test.com", "kakao", "virtual-oauth-id", socialGuardian));
+        memberRepository.save(socialGuardian);
+        long memberCountBefore = memberRepository.count();
+        TemporaryMember temp = TemporaryMember.createTemporaryMember("다른이름", "01000000003");
+
+        // when & then
+        assertThatThrownBy(() -> localLoginService.signupGuardianWithLocal(temp, "guardian-local@test.com", "password1!"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(localAccountRepository.count()).isZero();
+        assertThat(memberRepository.count()).isEqualTo(memberCountBefore);
+    }
+
+    @Test
+    @DisplayName("로컬 계정이 있는 회원의 전화번호로 다른 이메일로 다시 가입하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생한다")
+    void 로컬_계정이_있는_회원의_전화번호로_다시_가입하면_거부한다() {
+        // given
+        localLoginService.signupGuardianWithLocal(
+                TemporaryMember.createTemporaryMember("가상보호자", "01000000004"), "first@test.com", "password1!");
+        TemporaryMember temp = TemporaryMember.createTemporaryMember("가상보호자", "01000000004");
+
+        // when & then
+        assertThatThrownBy(() -> localLoginService.signupGuardianWithLocal(temp, "second@test.com", "password2!"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(localAccountRepository.existsByEmail("second@test.com")).isFalse();
     }
 
     @Test

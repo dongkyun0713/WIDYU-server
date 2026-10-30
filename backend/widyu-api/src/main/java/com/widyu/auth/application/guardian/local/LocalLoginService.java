@@ -50,17 +50,16 @@ public class LocalLoginService {
             throw new BusinessException(ErrorCode.ALREADY_REGISTERED_EMAIL);
         }
 
-        // 전화번호와 이름으로 기존 멤버 찾기
-        Member member = memberRepository.findByPhoneNumberAndName(temp.getPhoneNumber(), temp.getName())
-                .orElseGet(() -> {
-                    // 기존 멤버가 없으면 새로 생성
-                    Member newMember = Member.createMember(
-                            MemberType.GUARDIAN,
-                            temp.getName(),
-                            temp.getPhoneNumber()
-                    );
-                    return memberRepository.save(newMember);
-                });
+        // 번호(와 이름)가 같다는 것만으로 기존 회원 본인이라고 볼 수 없다. 기존 회원에는 로그인 수단을 붙이지 않는다 (LLD-0115)
+        if (memberRepository.existsByPhoneNumber(temp.getPhoneNumber())) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        }
+
+        Member member = memberRepository.save(Member.createMember(
+                MemberType.GUARDIAN,
+                temp.getName(),
+                temp.getPhoneNumber()
+        ));
 
         // 로컬 계정 생성 및 멤버와 연결
         LocalAccount local = LocalAccount.createLocalAccount(

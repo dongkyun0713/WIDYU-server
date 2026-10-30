@@ -66,7 +66,7 @@ class LocalLoginServiceTest {
         TokenPairResponse tokenPair = TokenPairResponse.of(1L, "access-token", "refresh-token");
 
         given(localAccountRepository.existsByEmail(email)).willReturn(false);
-        given(memberRepository.findByPhoneNumberAndName("01012345678", "홍길동")).willReturn(Optional.empty());
+        given(memberRepository.existsByPhoneNumber("01012345678")).willReturn(false);
         given(memberRepository.save(any(Member.class))).willReturn(newMember);
         given(passwordEncoder.encode(rawPassword)).willReturn("encoded-password");
         given(localAccountRepository.save(any(LocalAccount.class))).willReturn(
@@ -85,29 +85,21 @@ class LocalLoginServiceTest {
     }
 
     @Test
-    @DisplayName("기존 전화번호+이름의 멤버가 있으면 새 멤버를 생성하지 않고 재사용한다")
-    void 기존_전화번호_이름의_멤버가_있으면_기존_멤버를_재사용한다() {
+    @DisplayName("같은 전화번호의 기존 회원이 있으면 회원과 로컬 계정을 저장하지 않고 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생한다")
+    void 같은_전화번호의_기존_회원이_있으면_가입을_거부한다() {
         // given
-        TemporaryMember temp = TemporaryMember.createTemporaryMember("홍길동", "01012345678");
-        String email = "new@test.com";
-        Member existingMember = Member.createMember(MemberType.GUARDIAN, "홍길동", "01012345678");
-        ReflectionTestUtils.setField(existingMember, "id", 1L);
-        TokenPairResponse tokenPair = TokenPairResponse.of(1L, "access", "refresh");
-
+        TemporaryMember temp = TemporaryMember.createTemporaryMember("가상보호자", "01000000001");
+        String email = "virtual@test.com";
         given(localAccountRepository.existsByEmail(email)).willReturn(false);
-        given(memberRepository.findByPhoneNumberAndName("01012345678", "홍길동"))
-                .willReturn(Optional.of(existingMember));
-        given(passwordEncoder.encode(any())).willReturn("encoded");
-        given(localAccountRepository.save(any())).willReturn(
-                LocalAccount.createLocalAccount(existingMember, email, "encoded")
-        );
-        given(jwtTokenProvider.generateTokenPair(any(), any(), any())).willReturn(tokenPair);
+        given(memberRepository.existsByPhoneNumber("01000000001")).willReturn(true);
 
-        // when
-        localLoginService.signupGuardianWithLocal(temp, email, "password");
-
-        // then
+        // when & then
+        assertThatThrownBy(() -> localLoginService.signupGuardianWithLocal(temp, email, "password"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
         verify(memberRepository, never()).save(any(Member.class));
+        verify(localAccountRepository, never()).save(any(LocalAccount.class));
+        verifyNoInteractions(jwtTokenProvider);
     }
 
     @Test
