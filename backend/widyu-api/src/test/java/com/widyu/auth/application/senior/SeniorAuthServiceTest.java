@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.auth.dto.request.SeniorSignInRequest;
@@ -221,8 +222,8 @@ class SeniorAuthServiceTest {
         );
         TokenPairResponse expectedToken = TokenPairResponse.of(2L, "access", "refresh");
 
-        given(seniorProfileRepository.findByInviteCodeAndMemberPhoneNumber(inviteCode, phone))
-                .willReturn(Optional.of(seniorProfile));
+        given(seniorProfileRepository.findAllByInviteCodeAndMemberPhoneNumber(inviteCode, phone))
+                .willReturn(List.of(seniorProfile));
         given(jwtTokenProvider.generateTokenPair(any(), any(), any())).willReturn(expectedToken);
 
         // when
@@ -236,8 +237,8 @@ class SeniorAuthServiceTest {
     @DisplayName("유효하지 않은 초대코드로 로그인 시 BusinessException을 던진다")
     void 유효하지_않은_초대코드로_로그인_시_예외가_발생한다() {
         // given
-        given(seniorProfileRepository.findByInviteCodeAndMemberPhoneNumber("0000000", "01011112222"))
-                .willReturn(Optional.empty());
+        given(seniorProfileRepository.findAllByInviteCodeAndMemberPhoneNumber("0000000", "01011112222"))
+                .willReturn(List.of());
 
         // when & then
         assertThatThrownBy(() -> seniorAuthService.seniorSignIn(
@@ -312,5 +313,59 @@ class SeniorAuthServiceTest {
         assertThatThrownBy(() -> seniorAuthService.seniorSignUpBulk(requests))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("한 요청 안에 같은 전화번호의 시니어가 두 번 있으면 일괄 등록을 거부하고 가족과 회원을 저장하지 않는다")
+    void 요청_안에_같은_전화번호가_있으면_시니어_일괄_등록을_거부한다() {
+        // given
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01000000009");
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        List<SeniorSignUpRequest> requests = List.of(
+                new SeniorSignUpRequest("부모님", LocalDate.of(1950, 1, 1), "01000000001", "서울", "1234567"),
+                new SeniorSignUpRequest("할머니", LocalDate.of(1948, 2, 2), "01000000001", "서울", "7654321")
+        );
+
+        // when & then
+        assertThatThrownBy(() -> seniorAuthService.seniorSignUpBulk(requests))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BAD_REQUEST);
+        verify(familyRepository, never()).save(any(Family.class));
+        verify(memberRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("다른 회원이 이미 쓰는 전화번호로 시니어를 일괄 등록하면 거부하고 가족과 회원을 저장하지 않는다")
+    void 다른_회원이_쓰는_전화번호로_시니어_일괄_등록을_하면_거부한다() {
+        // given
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01000000009");
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(memberRepository.existsByPhoneNumber("01000000001")).willReturn(false);
+        given(memberRepository.existsByPhoneNumber("01000000002")).willReturn(true);
+        List<SeniorSignUpRequest> requests = List.of(
+                new SeniorSignUpRequest("부모님", LocalDate.of(1950, 1, 1), "01000000001", "서울", "1234567"),
+                new SeniorSignUpRequest("할머니", LocalDate.of(1948, 2, 2), "01000000002", "서울", "7654321")
+        );
+
+        // when & then
+        assertThatThrownBy(() -> seniorAuthService.seniorSignUpBulk(requests))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        verify(familyRepository, never()).save(any(Family.class));
+        verify(memberRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("같은 초대코드와 전화번호의 시니어가 둘 이상이면 임의 시니어로 로그인시키지 않고 PHONE_NUMBER_SHARED_BY_MEMBERS 예외가 발생한다")
+    void 같은_초대코드와_전화번호의_시니어가_둘_이상이면_로그인을_거부한다() {
+        // given
+        given(seniorProfileRepository.findAllByInviteCodeAndMemberPhoneNumber("1234567", "01000000001"))
+                .willReturn(List.of(mock(SeniorProfile.class), mock(SeniorProfile.class)));
+
+        // when & then
+        assertThatThrownBy(() -> seniorAuthService.seniorSignIn(new SeniorSignInRequest("1234567", "01000000001")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PHONE_NUMBER_SHARED_BY_MEMBERS);
+        verify(jwtTokenProvider, never()).generateTokenPair(any(), any(), any());
     }
 }

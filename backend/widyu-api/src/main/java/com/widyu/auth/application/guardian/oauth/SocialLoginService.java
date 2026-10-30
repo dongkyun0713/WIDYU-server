@@ -82,6 +82,12 @@ public class SocialLoginService {
         TemporaryMember temporaryMember = temporaryMemberUtil.getTemporaryMemberFromRequest(httpServletRequest);
         Member member = findAppleMemberByEmail(request.email());
 
+        // 전화번호는 회원 전체에서 하나여야 한다. 다른 회원이 쓰는 번호로는 보강하지 않는다 (LLD-0116)
+        if (memberRepository.existsByPhoneNumberAndIdNot(temporaryMember.getPhoneNumber(), member.getId())) {
+            log.warn("다른 회원이 쓰는 번호로 애플 회원 번호 보강 거부: memberId={}", member.getId());
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        }
+
         if (memberRepository.fillPhoneNumberIfEmpty(member.getId(), temporaryMember.getPhoneNumber()) == 0) {
             log.warn("전화번호가 이미 있는 애플 회원의 번호 보강 거부: memberId={}", member.getId());
             throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -246,10 +252,16 @@ public class SocialLoginService {
 
     private Optional<Member> findExistingMemberByUserInfo(UserInfo userInfo) {
         if (userInfo.hasPhoneNumber()) {
-            Optional<Member> member = memberRepository.findByPhoneNumber(userInfo.phoneNumber());
-            if (member.isPresent()) {
+            List<Member> members = memberRepository.findTop2ByPhoneNumber(userInfo.phoneNumber());
+            // 같은 번호의 회원이 여럿이면 어느 쪽에 소셜 계정을 붙일지 알 수 없다. 임의로 고르거나 새 회원을 만들지 않는다 (LLD-0116)
+            if (members.size() > 1) {
+                log.warn("같은 전화번호의 회원이 여러 명이라 소셜 계정 연결 거부: phoneNumber={}",
+                        PiiMaskingUtil.maskPhoneNumber(userInfo.phoneNumber()));
+                throw new BusinessException(ErrorCode.PHONE_NUMBER_SHARED_BY_MEMBERS);
+            }
+            if (!members.isEmpty()) {
                 log.info("전화번호로 기존 회원 발견: phoneNumber={}", PiiMaskingUtil.maskPhoneNumber(userInfo.phoneNumber()));
-                return memberRepository.findWithAllAccountsById(member.get().getId());
+                return memberRepository.findWithAllAccountsById(members.get(0).getId());
             }
         }
 

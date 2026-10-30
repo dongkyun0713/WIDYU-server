@@ -10,15 +10,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.widyu.global.error.BusinessException;
+import com.widyu.global.error.ErrorCode;
 import com.widyu.global.infrastructure.s3.S3Service;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.member.Family;
 import com.widyu.member.FamilyMembership;
 import com.widyu.member.Member;
+import com.widyu.member.MemberType;
 import com.widyu.member.PointHistory;
 import com.widyu.member.PointHistoryType;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.PointHistoryRepository;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
@@ -37,6 +40,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SeniorMyPageServiceTest {
@@ -45,6 +49,7 @@ class SeniorMyPageServiceTest {
     @Mock private S3Service s3Service;
     @Mock private PointHistoryRepository pointHistoryRepository;
     @Mock private FamilyMembershipRepository familyMembershipRepository;
+    @Mock private MemberRepository memberRepository;
 
     @InjectMocks
     private SeniorMyPageService seniorMyPageService;
@@ -195,6 +200,38 @@ class SeniorMyPageServiceTest {
 
         // then
         verify(member).updatePhoneNumber("01099998888");
+    }
+
+    @Test
+    @DisplayName("다른 회원이 쓰는 번호로 전화번호를 수정하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생하고 번호가 바뀌지 않는다")
+    void 다른_회원이_쓰는_번호로_전화번호를_수정하면_거부한다() {
+        // given
+        Member member = Member.createMember(MemberType.SENIOR, "오일남", "01000000001");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000002", 1L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> seniorMyPageService.updatePhoneNumber(new UpdatePhoneRequest("01000000002")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(member.getPhoneNumber()).isEqualTo("01000000001");
+    }
+
+    @Test
+    @DisplayName("본인이 이미 쓰는 번호로 전화번호를 다시 저장하면 그대로 저장된다")
+    void 본인_번호로_전화번호를_다시_저장하면_허용한다() {
+        // given
+        Member member = Member.createMember(MemberType.SENIOR, "오일남", "01000000001");
+        ReflectionTestUtils.setField(member, "id", 1L);
+        given(memberUtil.getCurrentMember()).willReturn(member);
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000001", 1L)).willReturn(false);
+
+        // when
+        seniorMyPageService.updatePhoneNumber(new UpdatePhoneRequest("01000000001"));
+
+        // then
+        assertThat(member.getPhoneNumber()).isEqualTo("01000000001");
     }
 
     // ======================== 포인트 내역 조회 ========================

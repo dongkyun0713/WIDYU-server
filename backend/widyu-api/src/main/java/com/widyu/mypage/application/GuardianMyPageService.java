@@ -102,8 +102,8 @@ public class GuardianMyPageService {
         Member guardian = MyPageProfileService.getCurrentMember(memberUtil);
         Family family = getGuardianFamily(guardian.getId());
 
-        if (memberRepository.findByPhoneNumber(request.phoneNumber()).isPresent()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "이미 사용 중인 전화번호입니다.");
+        if (memberRepository.existsByPhoneNumber(request.phoneNumber())) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
         }
 
         Member seniorMember = Member.createMember(MemberType.SENIOR, request.name(), request.phoneNumber());
@@ -133,8 +133,8 @@ public class GuardianMyPageService {
 
     @Transactional
     public void sendPhoneChangeSms(UpdatePhoneRequest request) {
-        if (memberRepository.findByPhoneNumber(request.phoneNumber()).isPresent()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "이미 사용 중인 전화번호입니다.");
+        if (memberRepository.existsByPhoneNumber(request.phoneNumber())) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
         }
         Member currentMember = MyPageProfileService.getCurrentMember(memberUtil);
         smsService.sendVerificationSms(request.phoneNumber(), currentMember.getName());
@@ -162,6 +162,8 @@ public class GuardianMyPageService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "전화번호 인증이 완료되지 않았습니다."));
 
         Member currentMember = MyPageProfileService.getCurrentMember(memberUtil);
+        // 발송 때 확인했어도 인증하는 사이 다른 회원이 번호를 가져갈 수 있어 저장 직전에 다시 본다 (LLD-0116)
+        validatePhoneNumberNotUsedByOthers(currentMember.getId(), newPhone);
         currentMember.updatePhoneNumber(newPhone);
         phoneChangeVerifiedRepository.deleteById(newPhone);
     }
@@ -190,7 +192,16 @@ public class GuardianMyPageService {
         Member guardian = MyPageProfileService.getCurrentMember(memberUtil);
         SeniorProfile seniorProfile = getSeniorProfileWithAccessCheck(memberId, guardian.getId());
         assertIsLeader(seniorProfile, guardian.getId());
-        seniorProfile.getMember().updatePhoneNumber(request.phoneNumber());
+        Member senior = seniorProfile.getMember();
+        validatePhoneNumberNotUsedByOthers(senior.getId(), request.phoneNumber());
+        senior.updatePhoneNumber(request.phoneNumber());
+    }
+
+    // 본인이 이미 쓰는 번호를 다시 저장하는 것은 허용한다
+    private void validatePhoneNumberNotUsedByOthers(Long memberId, String phoneNumber) {
+        if (memberRepository.existsByPhoneNumberAndIdNot(phoneNumber, memberId)) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        }
     }
 
     @Transactional

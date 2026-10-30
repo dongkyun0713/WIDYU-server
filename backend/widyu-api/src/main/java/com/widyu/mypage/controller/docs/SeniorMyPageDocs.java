@@ -53,9 +53,10 @@ public interface SeniorMyPageDocs {
     })
     ApiResponseTemplate<Void> updateProfileImage(ProfileImageUploadRequest request);
 
-    @Operation(summary = "전화번호 수정", description = "시니어의 전화번호를 수정합니다.")
+    @Operation(summary = "전화번호 수정", description = "시니어의 전화번호를 수정합니다. 본인 번호를 다시 저장하는 것은 허용합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "전화번호 수정 성공"),
+            @ApiResponse(responseCode = "400", description = "AUTH_4021: 다른 회원이 이미 쓰는 전화번호"),
             @ApiResponse(responseCode = "401", description = "인증 실패")
     })
     ApiResponseTemplate<Void> updatePhoneNumber(UpdatePhoneRequest request);

@@ -260,6 +260,7 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "409", description = "MEMBER_4090: 같은 전화번호로 가입된 회원이 여러 명이라 본인을 특정할 수 없음")
     ApiResponseTemplate<SocialLoginResponse> signInSocial(
             @Parameter(
                     name = "provider",
@@ -358,6 +359,7 @@ public interface GuardianAuthDocs {
     @ApiResponse(responseCode = "401", description = "AUTH_4010·AUTH_4014: 임시 토큰 없음·만료·유효하지 않음")
     @ApiResponse(responseCode = "403", description = "AUTH_4030: 요청의 이름·전화번호가 SMS 인증 정보와 다름")
     @ApiResponse(responseCode = "404", description = "MEMBER_4041: 일치하는 회원 없음 또는 로컬 계정 없음")
+    @ApiResponse(responseCode = "409", description = "MEMBER_4090: 같은 전화번호로 가입된 회원이 여러 명이라 본인을 특정할 수 없음")
     ApiResponseTemplate<MemberInfoResponse> findMemberByPhoneNumber(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -420,6 +422,7 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "409", description = "MEMBER_4090: 같은 전화번호로 가입된 회원이 여러 명이라 본인을 특정할 수 없음")
     ApiResponseTemplate<Boolean> changePassword(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -489,6 +492,7 @@ public interface GuardianAuthDocs {
             content = @Content(schema = @Schema(implementation = ApiResponseTemplate.class))
     )
     @ApiResponse(responseCode = "404", description = "MEMBER_4041: 해당 이메일의 애플 회원 없음")
+    @ApiResponse(responseCode = "400", description = "AUTH_4021: 다른 회원이 이미 쓰는 전화번호")
     ApiResponseTemplate<Void> updatePhoneNumberIfAppleSignUp(
             @Valid @RequestBody
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -555,6 +559,7 @@ public interface GuardianAuthDocs {
                     )
             )
     )
+    @ApiResponse(responseCode = "409", description = "MEMBER_4090: 같은 전화번호로 가입된 회원이 여러 명이라 본인을 특정할 수 없음")
     ApiResponseTemplate<UserProfile> getUserProfileByTemporaryToken(
             HttpServletRequest httpServletRequest
     );

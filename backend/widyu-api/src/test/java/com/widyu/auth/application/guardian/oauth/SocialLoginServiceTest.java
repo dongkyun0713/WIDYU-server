@@ -276,4 +276,57 @@ class SocialLoginServiceTest {
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.socialTemporaryToken()).isNull();
     }
+
+    @Test
+    @DisplayName("다른 회원이 쓰는 번호로 애플 회원 번호를 보강하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생하고 번호를 채우지 않는다")
+    void 다른_회원이_쓰는_번호로_애플_회원_번호를_보강하면_거부한다() {
+        // given
+        HttpServletRequest httpRequest = mock(HttpServletRequest.class);
+        AppleSignUpRequest request = new AppleSignUpRequest("apple@apple.com");
+
+        TemporaryMember temporaryMember = TemporaryMember.createTemporaryMember("애플유저", "01000000002");
+        given(temporaryMemberUtil.getTemporaryMemberFromRequest(httpRequest)).willReturn(temporaryMember);
+
+        Member appleMember = Member.createMember(MemberType.GUARDIAN, "애플유저", null);
+        ReflectionTestUtils.setField(appleMember, "id", 1L);
+        given(memberRepository.findBySocialAccounts_EmailAndSocialAccounts_Provider("apple@apple.com", "APPLE"))
+                .willReturn(Optional.of(appleMember));
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000002", 1L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> socialLoginService.updatePhoneNumberIfAppleSignUp(request, httpRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        verify(memberRepository, never()).fillPhoneNumberIfEmpty(any(), any());
+        verify(temporaryMemberUtil, never()).deleteTemporaryMember(any());
+    }
+
+    @Test
+    @DisplayName("소셜 신규 계정의 전화번호를 쓰는 회원이 둘 이상이면 임의 회원에 연결하거나 새 회원을 만들지 않고 PHONE_NUMBER_SHARED_BY_MEMBERS 예외가 발생한다")
+    void 소셜_신규_계정의_전화번호를_쓰는_회원이_둘_이상이면_연결을_거부한다() {
+        // given
+        SocialLoginRequest request = mock(SocialLoginRequest.class);
+
+        SocialLoginStrategy strategy = mock(SocialLoginStrategy.class);
+        given(strategyFactory.getStrategy("kakao")).willReturn(strategy);
+        given(strategy.getSupportedProvider()).willReturn(OAuthProvider.KAKAO);
+
+        SocialClientResponse socialResponse = mock(SocialClientResponse.class);
+        given(socialResponse.oauthId()).willReturn("oauth-new");
+        given(strategy.getUserInfo(request)).willReturn(socialResponse);
+        given(strategy.enrichWithRefreshToken(socialResponse, request)).willReturn(socialResponse);
+        given(strategy.processUserInfo(socialResponse, request))
+                .willReturn(UserInfo.of("카카오유저", "kakao@test.com", "01000000001"));
+
+        given(memberRepository.findMemberIdByProviderAndOauthId("kakao", "oauth-new")).willReturn(Optional.empty());
+        given(memberRepository.findTop2ByPhoneNumber("01000000001")).willReturn(List.of(
+                Member.createMember(MemberType.GUARDIAN, "보호자", "01000000001"),
+                Member.createMember(MemberType.SENIOR, "시니어", "01000000001")));
+
+        // when & then
+        assertThatThrownBy(() -> socialLoginService.socialLogin("kakao", request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PHONE_NUMBER_SHARED_BY_MEMBERS);
+        verify(memberRepository, never()).save(any(Member.class));
+    }
 }

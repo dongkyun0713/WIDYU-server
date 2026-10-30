@@ -30,6 +30,7 @@ public enum ErrorCode {
     SOCIAL_ACCOUNT_ALREADY_LINKED(HttpStatus.BAD_REQUEST, "AUTH_4008", "이미 연동된 소셜 계정입니다."),
     SOCIAL_ACCOUNT_ALREADY_LINKED_TO_CURRENT_USER(HttpStatus.BAD_REQUEST, "AUTH_4009", "현재 사용자에게 이미 연동된 소셜 계정입니다."),
     SOCIAL_PROVIDER_ALREADY_LINKED(HttpStatus.BAD_REQUEST, "AUTH_4019", "이미 연동된 소셜 로그인 제공자입니다."),
+    ALREADY_REGISTERED_PHONE_NUMBER(HttpStatus.BAD_REQUEST, "AUTH_4021", "이미 가입된 전화번호입니다."),
 
     // 가족 관련
     FAMILY_LEADER_MUST_DELEGATE_BEFORE_WITHDRAW(HttpStatus.BAD_REQUEST, "FAMILY_4001", "방장 권한을 다른 구성원에게 위임한 후 탈퇴해주세요."),
@@ -76,6 +77,7 @@ public enum ErrorCode {
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4041", "회원을 찾을 수 없습니다."),
     SENIOR_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_4042", "시니어 프로필을 찾을 수 없습니다."),
     TEMPORARY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "AUTH_4041", "임시 회원을 찾을 수 없습니다."),
+    PHONE_NUMBER_SHARED_BY_MEMBERS(HttpStatus.CONFLICT, "MEMBER_4090", "같은 전화번호로 가입된 회원이 여러 명이라 본인을 확인할 수 없습니다. 고객센터로 문의해 주세요."),
 
     // 건강 일정 관련
     HEALTH_SCHEDULE_INVALID_PROGRESS_TRANSITION(HttpStatus.BAD_REQUEST, "HEALTH_SCHEDULE_4000", "완료는 방문 인증으로만 처리됩니다."),

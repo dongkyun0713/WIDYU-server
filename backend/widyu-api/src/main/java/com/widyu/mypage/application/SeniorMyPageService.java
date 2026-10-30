@@ -9,6 +9,7 @@ import com.widyu.member.Member;
 import com.widyu.member.PointHistory;
 import com.widyu.member.SeniorProfile;
 import com.widyu.member.repository.FamilyMembershipRepository;
+import com.widyu.member.repository.MemberRepository;
 import com.widyu.member.repository.PointHistoryRepository;
 import com.widyu.mypage.dto.request.UpdateNameRequest;
 import com.widyu.mypage.dto.request.UpdatePhoneRequest;
@@ -34,6 +35,7 @@ public class SeniorMyPageService {
     private final S3Service s3Service;
     private final PointHistoryRepository pointHistoryRepository;
     private final FamilyMembershipRepository familyMembershipRepository;
+    private final MemberRepository memberRepository;
 
     public SeniorInfoResponse getSeniorInfo() {
         Member member = MyPageProfileService.getCurrentMember(memberUtil);
@@ -72,6 +74,10 @@ public class SeniorMyPageService {
     @Transactional
     public void updatePhoneNumber(UpdatePhoneRequest request) {
         Member member = MyPageProfileService.getCurrentMember(memberUtil);
+        // 전화번호는 회원 전체에서 하나여야 한다. 본인 번호를 다시 저장하는 것은 허용한다 (LLD-0116)
+        if (memberRepository.existsByPhoneNumberAndIdNot(request.phoneNumber(), member.getId())) {
+            throw new BusinessException(ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        }
         member.updatePhoneNumber(request.phoneNumber());
     }
 

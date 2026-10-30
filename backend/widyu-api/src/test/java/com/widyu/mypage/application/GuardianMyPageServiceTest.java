@@ -232,7 +232,7 @@ class GuardianMyPageServiceTest {
         given(guardian.getId()).willReturn(1L);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(membership));
         given(membership.getFamily()).willReturn(family);
-        given(memberRepository.findByPhoneNumber("01011112222")).willReturn(Optional.empty());
+        given(memberRepository.existsByPhoneNumber("01011112222")).willReturn(false);
         given(geocodingService.geocode("서울시 강남구")).willReturn(new GeocodingResponse(37.55, 126.85));
 
         // when
@@ -261,7 +261,7 @@ class GuardianMyPageServiceTest {
         given(guardian.getId()).willReturn(1L);
         given(familyMembershipRepository.findByGuardianId(1L)).willReturn(Optional.of(membership));
         given(membership.getFamily()).willReturn(family);
-        given(memberRepository.findByPhoneNumber("01011112222")).willReturn(Optional.of(existingMember));
+        given(memberRepository.existsByPhoneNumber("01011112222")).willReturn(true);
 
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.addSenior(request))
@@ -437,6 +437,56 @@ class GuardianMyPageServiceTest {
 
         // then
         verify(seniorMember).updatePhoneNumber("01099998888");
+    }
+
+    @Test
+    @DisplayName("다른 회원이 쓰는 번호로 시니어 전화번호를 수정하면 ALREADY_REGISTERED_PHONE_NUMBER 예외가 발생하고 번호가 바뀌지 않는다")
+    void 다른_회원이_쓰는_번호로_시니어_전화번호를_수정하면_거부한다() {
+        // given
+        Member guardian = mock(Member.class);
+        SeniorProfile seniorProfile = mock(SeniorProfile.class);
+        Member seniorMember = Member.createMember(MemberType.SENIOR, "오일남", "01000000001");
+        ReflectionTestUtils.setField(seniorMember, "id", 10L);
+
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(guardian.getId()).willReturn(1L);
+        given(seniorProfileRepository.findByMemberId(10L)).willReturn(Optional.of(seniorProfile));
+        given(seniorProfile.getId()).willReturn(100L);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 100L)).willReturn(true);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileIdAndIsLeaderTrue(1L, 100L)).willReturn(true);
+        given(seniorProfile.getMember()).willReturn(seniorMember);
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000002", 10L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> guardianMyPageService.updateSeniorPhone(10L, new UpdatePhoneRequest("01000000002")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(seniorMember.getPhoneNumber()).isEqualTo("01000000001");
+    }
+
+    @Test
+    @DisplayName("시니어가 이미 쓰는 번호로 시니어 전화번호를 다시 저장하면 그대로 저장된다")
+    void 시니어_본인_번호로_시니어_전화번호를_다시_저장하면_허용한다() {
+        // given
+        Member guardian = mock(Member.class);
+        SeniorProfile seniorProfile = mock(SeniorProfile.class);
+        Member seniorMember = Member.createMember(MemberType.SENIOR, "오일남", "01000000001");
+        ReflectionTestUtils.setField(seniorMember, "id", 10L);
+
+        given(memberUtil.getCurrentMember()).willReturn(guardian);
+        given(guardian.getId()).willReturn(1L);
+        given(seniorProfileRepository.findByMemberId(10L)).willReturn(Optional.of(seniorProfile));
+        given(seniorProfile.getId()).willReturn(100L);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileId(1L, 100L)).willReturn(true);
+        given(familyMembershipRepository.existsByGuardianIdAndSeniorProfileIdAndIsLeaderTrue(1L, 100L)).willReturn(true);
+        given(seniorProfile.getMember()).willReturn(seniorMember);
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000001", 10L)).willReturn(false);
+
+        // when
+        guardianMyPageService.updateSeniorPhone(10L, new UpdatePhoneRequest("01000000001"));
+
+        // then
+        assertThat(seniorMember.getPhoneNumber()).isEqualTo("01000000001");
     }
 
     // ======================== 시니어 이름 수정 ========================
@@ -1190,7 +1240,7 @@ class GuardianMyPageServiceTest {
     void 전화번호_변경_SMS_발송() {
         // given
         Member currentMember = mock(Member.class);
-        given(memberRepository.findByPhoneNumber("01099998888")).willReturn(Optional.empty());
+        given(memberRepository.existsByPhoneNumber("01099998888")).willReturn(false);
         given(memberUtil.getCurrentMember()).willReturn(currentMember);
         given(currentMember.getName()).willReturn("한토마");
 
@@ -1206,7 +1256,7 @@ class GuardianMyPageServiceTest {
     void 전화번호_변경_SMS_발송_중복_번호() {
         // given
         Member existingMember = mock(Member.class);
-        given(memberRepository.findByPhoneNumber("01099998888")).willReturn(Optional.of(existingMember));
+        given(memberRepository.existsByPhoneNumber("01099998888")).willReturn(true);
 
         // when & then
         assertThatThrownBy(() -> guardianMyPageService.sendPhoneChangeSms(new UpdatePhoneRequest("01099998888")))
@@ -1276,6 +1326,28 @@ class GuardianMyPageServiceTest {
         // then
         verify(currentMember).updatePhoneNumber("01099998888");
         verify(phoneChangeVerifiedRepository).deleteById("01099998888");
+    }
+
+    @Test
+    @DisplayName("인증하는 사이 다른 회원이 그 번호를 쓰게 되면 보호자 전화번호 변경을 거부하고 번호가 바뀌지 않는다")
+    void 인증_사이_다른_회원이_번호를_쓰게_되면_보호자_전화번호_변경을_거부한다() {
+        // given
+        Member currentMember = Member.createMember(MemberType.GUARDIAN, "한토마", "01000000001");
+        ReflectionTestUtils.setField(currentMember, "id", 1L);
+        PhoneChangeVerified verified = PhoneChangeVerified.builder()
+                .phoneNumber("01000000002")
+                .ttl(300)
+                .build();
+
+        given(phoneChangeVerifiedRepository.findById("01000000002")).willReturn(Optional.of(verified));
+        given(memberUtil.getCurrentMember()).willReturn(currentMember);
+        given(memberRepository.existsByPhoneNumberAndIdNot("01000000002", 1L)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> guardianMyPageService.updatePhone(new UpdatePhoneRequest("01000000002")))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALREADY_REGISTERED_PHONE_NUMBER);
+        assertThat(currentMember.getPhoneNumber()).isEqualTo("01000000001");
     }
 
     @Test

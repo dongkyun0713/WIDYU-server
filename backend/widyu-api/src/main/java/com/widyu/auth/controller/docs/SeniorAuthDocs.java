@@ -41,7 +41,7 @@ public interface SeniorAuthDocs {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "시니어 일괄 회원가입 성공"),
-            @ApiResponse(responseCode = "400", description = "잘못된 요청 (빈 리스트, 유효하지 않은 주소 등)"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (빈 리스트, 유효하지 않은 주소, 요청 안 전화번호 중복 등) 또는 AUTH_4021: 다른 회원이 이미 쓰는 전화번호"),
             @ApiResponse(responseCode = "401", description = "인증 실패"),
             @ApiResponse(responseCode = "403", description = "보호자(GUARDIAN) 타입 회원만 시니어 등록 가능")
     })
@@ -54,6 +54,7 @@ public interface SeniorAuthDocs {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "시니어 로그인 성공"),
             @ApiResponse(responseCode = "404", description = "초대코드 또는 전화번호가 일치하지 않음"),
+            @ApiResponse(responseCode = "409", description = "MEMBER_4090: 같은 초대코드와 전화번호의 시니어가 여러 명이라 본인을 특정할 수 없음"),
             @ApiResponse(responseCode = "400", description = "잘못된 요청")
     })
     ApiResponseTemplate<TokenPairResponse> seniorSignIn(@RequestBody @Valid SeniorSignInRequest request);

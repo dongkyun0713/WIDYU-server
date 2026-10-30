@@ -29,9 +29,10 @@ public interface SeniorProfileRepository extends JpaRepository<SeniorProfile, Lo
     @Query("DELETE FROM SeniorProfile sp WHERE sp.id = :id")
     void deleteByIdDirectly(@Param("id") Long id);
 
+    // 초대코드도 전화번호도 유일 제약이 없어 여러 건이 나올 수 있다. 단건 조회 예외(500) 대신 호출부가 판단한다 (LLD-0116)
     @Query("SELECT sp FROM SeniorProfile sp WHERE sp.inviteCode = :inviteCode AND sp.member.phoneNumber = :phoneNumber")
-    Optional<SeniorProfile> findByInviteCodeAndMemberPhoneNumber(@Param("inviteCode") String inviteCode,
-                                                                   @Param("phoneNumber") String phoneNumber);
+    List<SeniorProfile> findAllByInviteCodeAndMemberPhoneNumber(@Param("inviteCode") String inviteCode,
+                                                                @Param("phoneNumber") String phoneNumber);
 
     /** 걷기 기본 목표가 있는 회원. 18시 55분 걸음 수 동기화(W03) 대상이다. */
     @Query("SELECT sp.member FROM SeniorProfile sp "

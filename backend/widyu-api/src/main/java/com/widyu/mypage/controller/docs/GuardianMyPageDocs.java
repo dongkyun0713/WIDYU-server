@@ -40,7 +40,7 @@ public interface GuardianMyPageDocs {
     @Operation(summary = "부모님(시니어) 추가", description = "기존 가족에 시니어 1명을 추가 등록합니다. 이름·출생연도·연락처·주소·초대코드(7자리 숫자)를 입력받습니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "추가 성공"),
-            @ApiResponse(responseCode = "400", description = "이미 사용 중인 전화번호"),
+            @ApiResponse(responseCode = "400", description = "AUTH_4021: 다른 회원이 이미 쓰는 전화번호"),
             @ApiResponse(responseCode = "404", description = "연결된 가족 없음")
     })
     ApiResponseTemplate<Void> addSenior(SeniorSignUpRequest request);
@@ -51,7 +51,7 @@ public interface GuardianMyPageDocs {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "SMS 발송 성공"),
-            @ApiResponse(responseCode = "400", description = "이미 사용 중인 전화번호")
+            @ApiResponse(responseCode = "400", description = "AUTH_4021: 다른 회원이 이미 쓰는 전화번호")
     })
     ApiResponseTemplate<Void> sendPhoneChangeSms(UpdatePhoneRequest request);
 
@@ -71,7 +71,7 @@ public interface GuardianMyPageDocs {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "전화번호 변경 성공"),
-            @ApiResponse(responseCode = "400", description = "인증이 완료되지 않은 번호")
+            @ApiResponse(responseCode = "400", description = "인증이 완료되지 않은 번호, 또는 AUTH_4021: 인증하는 사이 다른 회원이 쓰게 된 번호")
     })
     ApiResponseTemplate<Void> updatePhone(UpdatePhoneRequest request);
 
@@ -107,9 +107,10 @@ public interface GuardianMyPageDocs {
             @Parameter(description = "시니어 회원 ID", required = true, example = "1") Long memberId,
             UpdateNameRequest request);
 
-    @Operation(summary = "시니어 전화번호 수정", description = "방장만 호출 가능.")
+    @Operation(summary = "시니어 전화번호 수정", description = "방장만 호출 가능. 시니어 본인 번호를 다시 저장하는 것은 허용합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "수정 성공"),
+            @ApiResponse(responseCode = "400", description = "AUTH_4021: 다른 회원이 이미 쓰는 전화번호"),
             @ApiResponse(responseCode = "403", description = "방장만 수정 가능")
     })
     ApiResponseTemplate<Void> updateSeniorPhone(
