@@ -105,6 +105,26 @@ class SensorBatchWebSocketControllerTest {
     }
 
     @Test
+    @DisplayName("형식이 틀린 batch_id가 검증에 실패하면 로그에는 invalid로 가리고 ACK에는 보낸 값을 그대로 돌려준다")
+    void 형식이_틀린_batch_id는_로그에서_가리고_ACK에는_그대로_돌려준다(CapturedOutput output) {
+        // given: 줄바꿈으로 가짜 로그 줄을 만들려는 batch_id
+        String forgedBatchId = "bad\nINFO 가짜 로그";
+        String json = "{\"v\":2,\"stream\":\"imu_watch\",\"batch_id\":\"bad\\nINFO 가짜 로그\",\"seq\":" + SEQ + "}";
+        byte[] payload = json.getBytes(StandardCharsets.UTF_8);
+        willThrow(new BusinessException(ErrorCode.SENSOR_BATCH_INVALID))
+                .given(sensorBatchService).ingest(any(Long.class), any(byte[].class), anyLong());
+
+        // when
+        SensorBatchResultResponse response = controller().process(42L, payload, RECEIVED_AT_MS);
+
+        // then
+        assertThat(response.batchId()).isEqualTo(forgedBatchId);
+        assertThat(response.result()).isEqualTo(SensorBatchResult.REJECTED);
+        assertThat(output).contains("센서 배치 거절: memberId=42, batchId=invalid, seq=" + SEQ);
+        assertThat(output).doesNotContain("가짜 로그");
+    }
+
+    @Test
     @DisplayName("식별자가 없는 원문이 검증에 실패하면 stream과 거절 이유 코드를 남기고 예외를 그대로 전파한다")
     void 식별자가_없는_원문은_stream과_이유_코드를_남기고_예외를_전파한다(CapturedOutput output) {
         // given

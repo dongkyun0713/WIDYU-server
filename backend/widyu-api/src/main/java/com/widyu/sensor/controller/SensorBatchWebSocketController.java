@@ -96,8 +96,17 @@ public class SensorBatchWebSocketController {
         }
 
         log.warn("센서 배치 거절: memberId={}, batchId={}, seq={}, stream={}, code={}, result={}",
-                memberId, batchId.asText(), seq.asLong(), stream, code, SensorBatchResult.REJECTED);
+                memberId, batchIdForLog(batchId.asText()), seq.asLong(), stream, code, SensorBatchResult.REJECTED);
+        // ACK는 앱이 보낸 값을 그대로 돌려줘야 앱이 대기열에서 해당 배치를 찾는다.
         return SensorBatchResultResponse.of(batchId.asText(), seq.asLong(), SensorBatchResult.REJECTED);
+    }
+
+    /** 로그용 batch_id. 거절된 배치라 형식을 믿을 수 없으므로 수신 검증과 같은 소문자 ULID만 남긴다(로그 주입 방지). */
+    private static String batchIdForLog(String batchId) {
+        if (!batchId.matches("[a-z0-9]{26}")) {
+            return "invalid";
+        }
+        return batchId;
     }
 
     /** 로그용 stream. 기기가 보낸 값이라 짧은 소문자 이름만 그대로 남기고 나머지는 가린다(로그 주입 방지). */
