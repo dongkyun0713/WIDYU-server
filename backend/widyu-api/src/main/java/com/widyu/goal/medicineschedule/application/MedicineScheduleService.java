@@ -55,6 +55,7 @@ public class MedicineScheduleService {
     private final MemberRepository memberRepository;
     private final MemberUtil memberUtil;
     private final FcmService fcmService;
+    static final int MAX_ALARMS_PER_MEMBER = 6;
     // 알람이 오늘 끝났는지 판정하는 기준 시각. 테스트가 시각을 고정할 수 있게 필드로 둔다.
     private Clock clock = Clock.systemDefaultZone();
 
@@ -152,6 +153,12 @@ public class MedicineScheduleService {
     @Transactional
     public MedicineScheduleIdResponse createSchedule(CreateMedicineScheduleRequest request, Long memberId) {
         Member targetMember = getMemberForAlarmChange(memberId);
+        // 회원 행 잠금 뒤에 세므로 동시에 생성해도 상한을 넘지 않는다.
+        if (medicineScheduleRepository.countByMemberAndStatusAndEffectiveToIsNull(targetMember, Status.ACTIVE)
+                >= MAX_ALARMS_PER_MEMBER) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST,
+                    "약 알람은 최대 " + MAX_ALARMS_PER_MEMBER + "개까지 등록할 수 있습니다.");
+        }
         LocalDateTime now = LocalDateTime.now(clock);
 
         LocalTime alarmTime = parseAlarmTime(request.alarmTime());
