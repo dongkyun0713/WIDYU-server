@@ -1,5 +1,6 @@
 package com.widyu.home.application;
 
+import com.widyu.album.application.AlbumPermissionService;
 import com.widyu.global.entity.Status;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.error.ErrorCode;
@@ -43,6 +44,7 @@ public class SeniorHomeService {
     private final HealthScheduleRepository healthScheduleRepository;
     private final HeartRateResultRepository heartRateResultRepository;
     private final HomeAlbumRecommendationService albumRecommendationService;
+    private final AlbumPermissionService albumPermissionService;
 
     public SeniorHomeCardsResponse getHomeCards() {
         return getHomeCards(LocalDateTime.now());
@@ -127,7 +129,8 @@ public class SeniorHomeService {
 
     private List<SeniorHomeCardsResponse.AlbumInfo> getScoredAlbums(Member senior, LocalDate today) {
         return albumRecommendationService.recommendAlbums(senior, today).stream()
-                .map(SeniorHomeCardsResponse.AlbumInfo::from)
+                .map(album -> SeniorHomeCardsResponse.AlbumInfo.from(
+                        album, albumPermissionService.isUnlockedFor(album, senior)))
                 .toList();
     }
 

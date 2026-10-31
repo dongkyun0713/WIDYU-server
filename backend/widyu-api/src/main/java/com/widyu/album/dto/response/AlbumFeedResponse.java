@@ -44,12 +44,18 @@ public record AlbumFeedResponse(
                 .map(d -> String.format("%d:%02d", d / 60, d % 60))
                 .orElse(null);
 
+        // 잠금 전에는 원본 URL을 싣지 않고 썸네일만 준다(#813)
+        List<String> mediaUrls = List.of();
+        if (Boolean.TRUE.equals(isUnlocked)) {
+            mediaUrls = album.getMediaUrls();
+        }
+
         return new AlbumFeedResponse(
                 album.getId(),
                 album.getMember().getName(),
                 album.getMember().getProfileImage(),
                 album.getContent(),
-                album.getMediaUrls(),
+                mediaUrls,
                 album.getThumbnailUrls(),
                 album.getPrimaryMediaType(),
                 album.getMediaCount(),

@@ -28,6 +28,7 @@ public class AlbumCalendarService {
     private final AlbumViewRepository albumViewRepository;
     private final MemberUtil memberUtil;
     private final FamilyAccessService familyAccessService;
+    private final AlbumPermissionService albumPermissionService;
 
     public List<Integer> getDaysWithEvents(int year, int month) {
         Member member = memberUtil.getCurrentMember();
@@ -69,7 +70,8 @@ public class AlbumCalendarService {
         List<FamilyAlbumResponse> albumResponses = pageAlbums.stream()
                 .map(album -> {
                     List<Member> viewers = albumViewRepository.findMembersByAlbumId(album.getId());
-                    return FamilyAlbumResponse.from(album, viewers);
+                    boolean isUnlocked = albumPermissionService.isUnlockedFor(album, member);
+                    return FamilyAlbumResponse.from(album, viewers, isUnlocked);
                 })
                 .collect(Collectors.toList());
 

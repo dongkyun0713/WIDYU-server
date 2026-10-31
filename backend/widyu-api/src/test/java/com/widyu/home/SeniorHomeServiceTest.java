@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
+import com.widyu.album.Album;
+import com.widyu.album.application.AlbumPermissionService;
 import com.widyu.global.error.BusinessException;
 import com.widyu.global.util.MemberUtil;
 import com.widyu.goal.healthschedule.repository.HealthScheduleRepository;
@@ -21,6 +23,7 @@ import com.widyu.medicine.MedicineSchedule;
 import com.widyu.member.Member;
 import com.widyu.member.MemberType;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +46,7 @@ class SeniorHomeServiceTest {
     @Mock private HealthScheduleRepository healthScheduleRepository;
     @Mock private HeartRateResultRepository heartRateResultRepository;
     @Mock private HomeAlbumRecommendationService albumRecommendationService;
+    @Mock private AlbumPermissionService albumPermissionService;
 
     @Test
     @DisplayName("보호자가 시니어 홈을 호출하면 403 예외가 발생한다")
@@ -166,5 +170,31 @@ class SeniorHomeServiceTest {
 
         // then
         assertThat(response.albums()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("잠금 전 보호자 앨범 카드는 썸네일이 없으면 원본 URL 대신 null과 잠금 여부를 담는다")
+    void 잠금_전_보호자_앨범_카드는_원본_URL을_담지_않는다() {
+        // given
+        Member senior = Member.createMember(MemberType.SENIOR, "부모님", "01011112222");
+        Member guardian = Member.createMember(MemberType.GUARDIAN, "보호자", "01099999999");
+        Album lockedPhotoAlbum = Album.createAlbumWithMetadata(guardian, "사진",
+                new ArrayList<>(List.of("https://cdn/p.jpg")), new ArrayList<>(), new ArrayList<>());
+
+        given(memberUtil.getCurrentMember()).willReturn(senior);
+        given(medicineScheduleRepository.findEffectiveByMemberAndDateWithDetails(any(), any(), any())).willReturn(List.of());
+        given(heartRateResultRepository.findByMemberId(any())).willReturn(Optional.empty());
+        given(healthScheduleRepository.findByMemberIdAndWeek(any(), any(), any())).willReturn(List.of());
+        given(walkRepository.findByMemberAndWalkDate(any(), any())).willReturn(Optional.empty());
+        given(albumRecommendationService.recommendAlbums(any(), any())).willReturn(List.of(lockedPhotoAlbum));
+        given(albumPermissionService.isUnlockedFor(lockedPhotoAlbum, senior)).willReturn(false);
+
+        // when
+        SeniorHomeCardsResponse response = seniorHomeService.getHomeCards();
+
+        // then
+        assertThat(response.albums()).hasSize(1);
+        assertThat(response.albums().getFirst().thumbnailUrl()).isNull();
+        assertThat(response.albums().getFirst().isUnlocked()).isFalse();
     }
 }

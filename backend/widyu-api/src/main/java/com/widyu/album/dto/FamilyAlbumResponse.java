@@ -10,19 +10,22 @@ public record FamilyAlbumResponse(
         Long albumId,
         String content,
         List<String> mediaUrls,
+        List<String> thumbnailUrls,
         Integer likeCount,
         Integer commentCount,
         Integer viewCount,
         LocalDateTime createdAt,
         AuthorInfo author,
         List<ViewerInfo> viewers,
-        Long price
+        Long price,
+        boolean isUnlocked
 ) {
-    public static FamilyAlbumResponse from(Album album, List<Member> viewers) {
+    public static FamilyAlbumResponse from(Album album, List<Member> viewers, boolean isUnlocked) {
         Member member = album.getMember();
 
+        // 잠금 전에는 원본 URL을 싣지 않고 썸네일만 준다(#813)
         List<String> urls = List.of();
-        if (album.getMediaUrls() != null) {
+        if (isUnlocked && album.getMediaUrls() != null) {
             urls = List.copyOf(album.getMediaUrls());
         }
 
@@ -34,13 +37,15 @@ public record FamilyAlbumResponse(
                 album.getId(),
                 album.getContent(),
                 urls,
+                album.getThumbnailUrls(),
                 album.getLikeCount(),
                 album.getCommentCount(),
                 album.getViewCount(),
                 album.getCreatedAt(),
                 AuthorInfo.from(member),
                 viewerInfos,
-                Album.UNLOCK_PRICE
+                Album.UNLOCK_PRICE,
+                isUnlocked
         );
     }
 

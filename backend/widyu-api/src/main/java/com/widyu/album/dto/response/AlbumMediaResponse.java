@@ -14,10 +14,12 @@ public record AlbumMediaResponse(
         String thumbnailUrl,
         LocalDateTime createdAt,
         @Schema(description = "소속 앨범 전체의 잠금 해제 가격(포인트)", example = "50")
-        Long price
+        Long price,
+        @Schema(description = "소속 앨범의 잠금 해제 여부. false면 thumbnailUrl에 저장된 썸네일만 담습니다.", example = "true")
+        boolean isUnlocked
 ) {
 
-    public static List<AlbumMediaResponse> fromAlbum(Album album) {
+    public static List<AlbumMediaResponse> fromAlbum(Album album, boolean isUnlocked) {
         List<AlbumMediaResponse> albumMediaResponses = new ArrayList<>();
         List<String> mediaUrls = album.getMediaUrls();
         List<String> thumbnailUrls = album.getThumbnailUrls();
@@ -34,10 +36,12 @@ public record AlbumMediaResponse(
                 duration = durations.get(i);
             }
             
-            // 이미지인 경우 썸네일 URL을 미디어 URL로 사용, duration은 null
+            // 이미지는 duration이 없다. 해금 후에만 썸네일 자리에 원본 URL을 쓰고, 잠금 전에는 저장된 썸네일만 준다(#813)
             if (isImageUrl(mediaUrl)) {
-                thumbnailUrl = mediaUrl;
                 duration = null;
+                if (isUnlocked) {
+                    thumbnailUrl = mediaUrl;
+                }
             }
             
             String type = "video";
@@ -51,7 +55,8 @@ public record AlbumMediaResponse(
                     duration, // 동영상은 실제 duration, 이미지는 null
                     thumbnailUrl,
                     album.getCreatedAt(),
-                    Album.UNLOCK_PRICE
+                    Album.UNLOCK_PRICE,
+                    isUnlocked
             ));
         }
         

@@ -73,6 +73,8 @@ public interface AlbumCalendarDocs {
                     특정 날짜(date)에 가족(본인, 보호자, 자녀)의 앨범 피드를 커서 기반으로 조회합니다.
                     - 기본 페이지 크기는 5개이며, 추가 데이터가 있으면 `hasNext = true` 와 `nextCursor` 가 반환됩니다.
                     - `cursor` 파라미터는 마지막 앨범 ID를 의미합니다.
+                    - 시니어가 보호자 앨범을 아직 해금하지 않았으면 `isUnlocked: false`이고, 원본 `mediaUrls`는 빈 배열이며 `thumbnailUrls`만 담깁니다.
+                    - 사진은 썸네일이 원본과 같은 URL이라 잠금 전에도 사진이 보일 수 있습니다.
                     """
     )
     @ApiResponse(
@@ -92,6 +94,7 @@ public interface AlbumCalendarDocs {
                                             "albumId": 101,
                                             "content": "오늘 소풍 다녀왔어요!",
                                             "mediaUrls": ["https://s3.aws.com/album/1.jpg"],
+                                            "thumbnailUrls": ["https://s3.aws.com/album/1.jpg"],
                                             "likeCount": 12,
                                             "commentCount": 3,
                                             "viewCount": 45,
@@ -108,7 +111,8 @@ public interface AlbumCalendarDocs {
                                                 "profileImage": null
                                               }
                                             ],
-                                            "price": 50
+                                            "price": 50,
+                                            "isUnlocked": true
                                           }
                                         ],
                                         "hasNext": true,

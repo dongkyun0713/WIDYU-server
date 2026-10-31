@@ -156,6 +156,11 @@ public interface AlbumDocs {
                     - date 파라미터로 특정 날짜의 앨범만 조회 가능
                     - 형식: yyyy-MM-dd (예: 2024-12-21)
                     - 캘린더 탭에서 활용
+                    
+                    **잠금 앨범:**
+                    - 시니어가 보호자 앨범을 아직 해금하지 않았으면 `isUnlocked: false`입니다.
+                    - 이때 원본 `mediaUrls`는 빈 배열이고 `thumbnailUrls`만 담깁니다. 해금하면 원본 URL이 함께 담깁니다.
+                    - 사진은 썸네일이 원본과 같은 URL이라 잠금 전에도 사진이 보일 수 있습니다.
                     """
     )
     @ApiResponses({
@@ -177,7 +182,7 @@ public interface AlbumDocs {
                                                     "authorName": "홍길동",
                                                     "authorProfileImage": null,
                                                     "content": "가족 여행 사진입니다!",
-                                                    "mediaUrls": ["https://s3.bucket.com/albums/photos/1/photo1.jpg"],
+                                                    "mediaUrls": [],
                                                     "thumbnailUrls": ["https://s3.bucket.com/albums/photos/1/photo1.jpg"],
                                                     "primaryMediaType": "PHOTO",
                                                     "mediaCount": 1,
@@ -224,6 +229,8 @@ public interface AlbumDocs {
                     - 미디어 타입 구분 (image/video)
                     - 동영상 길이 정보 포함 (초 단위, 이미지는 null)
                     - price는 소속 앨범 전체의 잠금 해제 가격(50포인트)이며, 미디어별 별도 과금이 아닙니다.
+                    - isUnlocked는 소속 앨범의 잠금 해제 여부입니다. false면 thumbnailUrl에 저장된 썸네일만 담고 원본 URL로 대신하지 않습니다.
+                    - 사진은 썸네일이 원본과 같은 URL이라 잠금 전에도 사진이 보일 수 있습니다.
                     - 페이지 크기: 10개 고정
                     
                     **무한 스크롤 사용법:**
@@ -252,7 +259,8 @@ public interface AlbumDocs {
                                                     "duration": 52,
                                                     "thumbnailUrl": "https://s3.bucket.com/thumbnails/video_thumb.jpg",
                                                     "createdAt": "2024-12-21T14:30:00",
-                                                    "price": 50
+                                                    "price": 50,
+                                                    "isUnlocked": false
                                                   },
                                                   {
                                                     "id": 11901,
@@ -261,7 +269,8 @@ public interface AlbumDocs {
                                                     "duration": null,
                                                     "thumbnailUrl": "https://s3.bucket.com/albums/photo.jpg",
                                                     "createdAt": "2024-12-21T14:25:00",
-                                                    "price": 50
+                                                    "price": 50,
+                                                    "isUnlocked": true
                                                   }
                                                 ],
                                                 "hasNext": true,
@@ -644,6 +653,8 @@ public interface AlbumDocs {
                     - 보호자: 모든 앨범 조회 가능
                     - 부모(시니어): 본인 앨범 또는 해금한 앨범 조회 가능 (해금 비용: 50포인트)
                     - 해금하지 않은 앨범도 200으로 응답하고 `isUnlocked: false`와 해금 가격 `price`를 담습니다. 앱은 `isUnlocked`로 해금 화면을 띄웁니다.
+                    - 해금하지 않은 앨범의 원본 `mediaUrls`는 빈 배열이고 `thumbnailUrls`만 담깁니다. 해금하면 원본 URL이 함께 담깁니다.
+                    - 사진은 썸네일이 원본과 같은 URL이라 잠금 전에도 사진이 보일 수 있습니다.
                     - 해금하지 않은 상태의 조회는 조회 기록(조회수·조회자)에 남지 않습니다.
                     - 가족 외 앨범은 403 `AUTH_4030`입니다.
 
@@ -670,6 +681,9 @@ public interface AlbumDocs {
                                                 "postId": 101,
                                                 "content": "오늘 소풍 다녀왔어요!",
                                                 "mediaUrls": [
+                                                  "https://s3.aws.com/album/1.jpg"
+                                                ],
+                                                "thumbnailUrls": [
                                                   "https://s3.aws.com/album/1.jpg"
                                                 ],
                                                 "likeCount": 12,
@@ -715,7 +729,8 @@ public interface AlbumDocs {
                                                     ]
                                                   }
                                                 ],
-                                                "canEdit": true
+                                                "canEdit": true,
+                                                "isUnlocked": true
                                               }
                                             }
                                             """

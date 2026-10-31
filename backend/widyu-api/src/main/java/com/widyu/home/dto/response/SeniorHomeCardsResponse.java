@@ -142,17 +142,21 @@ public record SeniorHomeCardsResponse(
             @Schema(description = "앨범 ID", example = "10")
             Long albumId,
 
-            @Schema(description = "대표 썸네일 이미지 URL", example = "https://cdn.widyu.shop/albums/thumb_10.jpg")
-            String thumbnailUrl
+            @Schema(description = "대표 썸네일 이미지 URL. 잠금 전 앨범은 썸네일이 없으면 null", example = "https://cdn.widyu.shop/albums/thumb_10.jpg")
+            String thumbnailUrl,
+
+            @Schema(description = "앨범 잠금 해제 여부. 보호자가 올리고 아직 해금하지 않은 앨범이면 false", example = "true")
+            boolean isUnlocked
     ) {
-        public static AlbumInfo from(Album album) {
+        public static AlbumInfo from(Album album, boolean isUnlocked) {
             if (!album.getThumbnailUrls().isEmpty()) {
-                return new AlbumInfo(album.getId(), album.getThumbnailUrls().getFirst());
+                return new AlbumInfo(album.getId(), album.getThumbnailUrls().getFirst(), isUnlocked);
             }
-            if (!album.getMediaUrls().isEmpty()) {
-                return new AlbumInfo(album.getId(), album.getMediaUrls().getFirst()); // 썸네일 없는 사진 게시글 폴백
+            // 썸네일 없는 사진 게시글 폴백. 잠금 전 앨범은 원본 URL로 대신하지 않는다(#813)
+            if (isUnlocked && !album.getMediaUrls().isEmpty()) {
+                return new AlbumInfo(album.getId(), album.getMediaUrls().getFirst(), isUnlocked);
             }
-            return new AlbumInfo(album.getId(), null);
+            return new AlbumInfo(album.getId(), null, isUnlocked);
         }
     }
 

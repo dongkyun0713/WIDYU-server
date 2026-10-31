@@ -96,10 +96,12 @@ public class AlbumFeedService {
         List<Long> albumIds = idSlice.getContent();
         List<Album> albums = findAlbumsOrderedByIds(albumIds);
 
-        // 3) 앨범 -> 미디어 평탄화
+        // 3) 앨범 -> 미디어 평탄화. 잠금 판정은 앨범 피드와 같다.
+        Set<Long> unlockedAlbumIds = findUnlockedAlbumIds(albumIds, currentMember);
         List<AlbumMediaResponse> albumMediaResponses = new ArrayList<>();
         for (Album album : albums) {
-            albumMediaResponses.addAll(AlbumMediaResponse.fromAlbum(album));
+            boolean isUnlocked = isUnlockedFor(album, currentMember, unlockedAlbumIds);
+            albumMediaResponses.addAll(AlbumMediaResponse.fromAlbum(album, isUnlocked));
         }
 
         // 4) 커서는 마지막 앨범의 (createdAt, albumId)
@@ -163,8 +165,6 @@ public class AlbumFeedService {
                 .map(Album::getId)
                 .collect(Collectors.toList());
 
-        // 보호자는 잠금 대상이 아니라 해금 조회 없이 전부 열람 가능하다
-        boolean viewerExemptFromLock = currentMember.getType() == MemberType.GUARDIAN;
         Set<Long> unlockedAlbumIds = findUnlockedAlbumIds(albumIds, currentMember);
 
         Map<Long, List<AlbumFeedResponse.ViewerInfo>> viewersMap = albumViewRepository
@@ -181,9 +181,7 @@ public class AlbumFeedService {
         List<AlbumFeedResponse> result = new ArrayList<>(albums.size());
         for (Album album : albums) {
             boolean canEdit = album.getMember().getId().equals(currentMember.getId());
-            boolean isUnlocked = viewerExemptFromLock
-                    || !album.requiresUnlock()
-                    || unlockedAlbumIds.contains(album.getId());
+            boolean isUnlocked = isUnlockedFor(album, currentMember, unlockedAlbumIds);
             List<AlbumFeedResponse.ViewerInfo> viewers =
                     viewersMap.getOrDefault(album.getId(), List.of());
             result.add(AlbumFeedResponse.from(album, canEdit, isUnlocked, viewers));
@@ -191,9 +189,17 @@ public class AlbumFeedService {
         return result;
     }
 
+    // AlbumPermissionService.isUnlockedFor와 같은 규칙을 해금 기록 일괄 조회 결과로 판정한다.
+    // 보호자는 잠금 대상이 아니라 해금 조회 없이 전부 열람 가능하다.
+    private boolean isUnlockedFor(Album album, Member currentMember, Set<Long> unlockedAlbumIds) {
+        return currentMember.getType() == MemberType.GUARDIAN
+                || !album.requiresUnlock()
+                || unlockedAlbumIds.contains(album.getId());
+    }
+
     // 보호자는 잠금 대상이 아니므로 해금 기록을 조회하지 않는다.
     private Set<Long> findUnlockedAlbumIds(List<Long> albumIds, Member currentMember) {
-        if (currentMember.getType() == MemberType.GUARDIAN) {
+        if (currentMember.getType() == MemberType.GUARDIAN || albumIds.isEmpty()) {
             return Set.of();
         }
         return Set.copyOf(albumUnlockRepository.findUnlockedAlbumIdsByMemberAndAlbumIds(currentMember, albumIds));
