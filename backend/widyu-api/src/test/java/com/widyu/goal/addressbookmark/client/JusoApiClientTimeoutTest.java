@@ -12,6 +12,7 @@ import com.widyu.goal.addressbookmark.application.GeocodingService;
 import feign.RetryableException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +53,8 @@ import org.springframework.test.context.DynamicPropertySource;
 class JusoApiClientTimeoutTest {
 
     private static final long SERVER_DELAY_MS = 1_000;
+    // 비데몬 작업 스레드가 테스트 뒤에 남지 않도록 서버와 함께 종료한다.
+    private static final ExecutorService SERVER_EXECUTOR = Executors.newCachedThreadPool();
     private static final HttpServer SLOW_SERVER = startSlowServer();
 
     @Autowired private JusoApiClient jusoApiClient;
@@ -66,6 +69,7 @@ class JusoApiClientTimeoutTest {
     @AfterAll
     static void stopServer() {
         SLOW_SERVER.stop(0);
+        SERVER_EXECUTOR.shutdownNow();
     }
 
     @Test
@@ -106,7 +110,7 @@ class JusoApiClientTimeoutTest {
                     exchange.close();
                 }
             });
-            server.setExecutor(Executors.newCachedThreadPool());
+            server.setExecutor(SERVER_EXECUTOR);
             server.start();
             return server;
         } catch (IOException e) {
